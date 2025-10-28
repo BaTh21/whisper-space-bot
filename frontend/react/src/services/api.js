@@ -247,11 +247,17 @@ export const createGroup = async (data) => {
 
 export const getUserGroups = async () => {
   try {
-    const response = await api.get(`${GROUPS_URL}/`);
+    // Use the correct endpoint: /groups/my
+    const response = await api.get(`${GROUPS_URL}/my`);
     return response.data;
   } catch (error) {
-    console.error('Get user groups error:', error.response?.data);
-    throw new Error(error.response?.data?.detail || error.response?.data?.msg || 'Failed to fetch groups');
+    console.error('Get user groups error:', error.response?.data || error.message);
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      error.message ||
+      'Failed to fetch groups'
+    );
   }
 };
 
@@ -310,3 +316,92 @@ export const getPrivateChat = async (friendId) => {
     throw new Error(error.response?.data?.detail || error.response?.data?.msg || 'Failed to load messages');
   }
 };
+
+export const getGroupMembers = async (groupId) => {
+  try {
+    const response = await api.get(`${GROUPS_URL}/${groupId}/members/`);
+    return response.data;
+  } catch (error) {
+    console.error('Get members error:', error.response?.data);
+    throw new Error(error.response?.data?.detail || error.response?.data?.msg || 'Failed to load members');
+  }
+};
+
+export const getGroupDiaries = async (groupId) => {
+  try {
+    const response = await api.get(`${GROUPS_URL}/${groupId}/diaries/`);
+    return response.data;
+  } catch (error) {
+    console.error('Get group diaries error:', error.response?.data);
+    throw new Error(error.response?.data?.detail || error.response?.data?.msg || 'Failed to load group feed');
+  }
+};
+
+export const editMessage = async (msgId, content) => {
+  try {
+    const res = await api.patch(`${CHATS_URL}/private/${msgId}`, { content });
+    return res.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || 'Failed to edit');
+  }
+};
+
+export const unsendMessage = async (msgId) => {
+  try {
+    const res = await api.delete(`${CHATS_URL}/private/${msgId}/unsend`);
+    return res.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || 'Failed to unsend');
+  }
+};
+
+export const deleteMessage = async (msgId) => {
+  try {
+    await api.delete(`${CHATS_URL}/private/${msgId}`);
+    return true;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || 'Failed to delete');
+  }
+};
+
+export const inviteToGroup = (groupId, userId) =>
+  api.post(`/groups/${groupId}/invite`, { invitee_id: userId });
+
+export const createGroupWithInvites = async (data, inviteeIds = []) => {
+  try {
+    const res = await api.post(GROUPS_URL, { ...data, invitee_ids: inviteeIds });
+    return res.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || 'Failed to create group');
+  }
+};
+// Get pending invites
+export const getPendingInvites = async () => {
+  try {
+    const res = await api.get(`${GROUPS_URL}/invites/pending`);
+    return res.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || 'Failed to load invites');
+  }
+};
+
+// Accept invite
+export const acceptGroupInvite = async (inviteId) => {
+  try {
+    const res = await api.post(`${GROUPS_URL}/invites/${inviteId}/accept`);
+    return res.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || 'Failed to join');
+  }
+};
+
+// Get invite link (we'll implement backend next)
+export const getGroupInviteLink = async (groupId) => {
+  try {
+    const res = await api.get(`${GROUPS_URL}/${groupId}/invite-link`);
+    return res.data.invite_link;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || 'Failed to get link');
+  }
+};
+

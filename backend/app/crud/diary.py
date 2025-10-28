@@ -1,9 +1,41 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.models.diary import Diary, ShareType
 from app.models.diary_comment import DiaryComment
 from app.models.diary_like import DiaryLike
 from app.schemas.diary import DiaryCreate
 from typing import List, Optional
+
+from app.models.friend import Friend
+from app.models.group_member import GroupMember
+
+def get_feed(db: Session, user_id: int) -> List[Diary]:
+    # Subquery: user's friends
+    subq_friends = (
+        select(Friend.friend_id)
+        .where(Friend.user_id == user_id, Friend.status == "accepted")
+        .scalar_subquery()
+    )
+
+    # Subquery: user's group IDs
+    subq_groups = (
+        select(GroupMember.group_id)
+        .where(GroupMember.user_id == user_id)
+        .scalar_subquery()
+    )
+
+    # Explicitly wrap with select() to avoid warning
+    return (
+        db.query(Diary)
+        .filter(
+            (Diary.share_type == ShareType.public) |
+            (Diary.user_id == user_id) |
+            ((Diary.share_type == ShareType.friends) & Diary.user_id.in_(select(subq_friends))) |
+            ((Diary.share_type == ShareType.group) & Diary.group_id.in_(select(subq_groups)))
+        )
+        .order_by(Diary.created_at.desc())
+        .all()
+    )
 
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
