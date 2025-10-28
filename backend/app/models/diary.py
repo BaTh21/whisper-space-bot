@@ -3,10 +3,12 @@ from app.models.base import Base
 from datetime import datetime
 import enum
 from sqlalchemy.orm import relationship
+from app.models.diary_group import DiaryGroup
 
 class ShareType(enum.Enum):
     public = "public"
     friends = "friends"
+    personal = "personal"
     group = "group"
 
 class Diary(Base):
@@ -23,3 +25,5 @@ class Diary(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     author = relationship("User", back_populates="diaries")
+    diary_groups = relationship("DiaryGroup", back_populates="diary", cascade="all, delete-orphan")
+    groups = relationship("Group", secondary="diary_groups", viewonly=True)

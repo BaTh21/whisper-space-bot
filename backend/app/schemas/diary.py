@@ -1,10 +1,9 @@
-# app/schemas/diary.py
 from pydantic import BaseModel, ConfigDict
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 
 
-ShareTypeInput = Literal["public", "friends", "group"]
+ShareTypeInput = Literal["public", "friends", "group", "personal"]
 ShareTypeOutput = str
 
 
@@ -12,11 +11,15 @@ class DiaryCreate(BaseModel):
     title: str
     content: str
     share_type: ShareTypeInput
-    group_id: Optional[int] = None
+    group_ids: Optional[List[int]] = None
     
 class CreatorResponse(BaseModel):
     id: int
     username: str
+    
+class GroupResponse(BaseModel):
+    id: int
+    name: str
 
 class DiaryOut(TimestampMixin):
     id: int
@@ -24,7 +27,7 @@ class DiaryOut(TimestampMixin):
     title: str
     content: str
     share_type: ShareTypeOutput
-    group_id: Optional[int] = None
+    groups: List[GroupResponse]
     is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)

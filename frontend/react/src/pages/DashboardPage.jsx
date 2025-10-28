@@ -36,7 +36,8 @@ import {
   Tab,
   Tabs,
   TextField,
-  Typography
+  Typography,
+  Checkbox
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useEffect, useState } from 'react';
@@ -418,25 +419,31 @@ const DashboardPage = () => {
       title: '',
       content: '',
       share_type: 'public',
-      group_id: '',
+      group_ids: [],
     },
     validationSchema: Yup.object({
       title: Yup.string().required('Title is required'),
       content: Yup.string().required('Content is required'),
-      share_type: Yup.string().oneOf(['public', 'friends', 'group']),
+      share_type: Yup.string().oneOf(['public', 'friends', 'group', 'personal']),
+      group_ids: Yup.array().when('share_type', {
+        is: 'group',
+        then: (schema) => schema.min(1, 'Please select at least one group'),
+        otherwise: (schema) => schema.notRequired(),
+      }),
     }),
     onSubmit: async (values, { resetForm }) => {
       try {
-
         const payload = {
-          ...values,
-          group_id:
-            values.share_type === 'group' && values.group_id
-              ? Number(values.group_id)
-              : null,
+          title: values.title,
+          content: values.content,
+          share_type: values.share_type,
+          group_ids: values.share_type === 'group' ? values.group_ids : [],
         };
 
+        if (values.share_type !== 'group') delete payload.group_ids;
+
         await createDiary(payload);
+
         setSuccess('Diary created successfully');
         setDiaryDialogOpen(false);
         resetForm();
@@ -445,6 +452,7 @@ const DashboardPage = () => {
         setError(err.message || 'Failed to create diary');
       }
     },
+
   });
 
   // Group form
@@ -1243,6 +1251,7 @@ const DashboardPage = () => {
               margin="normal"
               required
             />
+
             <TextField
               label="Content"
               name="content"
@@ -1257,6 +1266,7 @@ const DashboardPage = () => {
               margin="normal"
               required
             />
+
             <FormControl fullWidth margin="normal">
               <InputLabel>Share Type</InputLabel>
               <Select
@@ -1269,21 +1279,49 @@ const DashboardPage = () => {
                 <MenuItem value="public">Public</MenuItem>
                 <MenuItem value="friends">Friends Only</MenuItem>
                 <MenuItem value="group">Group</MenuItem>
+                <MenuItem value="personal">Perosnal</MenuItem>
               </Select>
             </FormControl>
+
+            {diaryFormik.values.share_type === 'group' && (
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Select Groups</InputLabel>
+                <Select
+                  multiple
+                  name="group_ids"
+                  value={diaryFormik.values.group_ids}
+                  onChange={diaryFormik.handleChange}
+                  renderValue={(selected) =>
+                    groups
+                      .filter((group) => selected.includes(group.id))
+                      .map((g) => g.name)
+                      .join(', ')
+                  }
+                >
+                  {groups.map((group) => (
+                    <MenuItem key={group.id} value={group.id}>
+                      <Checkbox checked={diaryFormik.values.group_ids.includes(group.id)} />
+                      <ListItemText primary={group.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
           </Box>
         </DialogContent>
+
         <DialogActions>
           <Button onClick={() => setDiaryDialogOpen(false)}>Cancel</Button>
           <Button
             onClick={diaryFormik.handleSubmit}
             variant="contained"
-            disabled={!diaryFormik.isValid}
+            // disabled={!diaryFormik.isValid}
           >
             Create Diary
           </Button>
         </DialogActions>
       </Dialog>
+
 
       {/* Create Group Dialog */}
       <Dialog open={groupDialogOpen} onClose={() => setGroupDialogOpen(false)} maxWidth="sm" fullWidth>
