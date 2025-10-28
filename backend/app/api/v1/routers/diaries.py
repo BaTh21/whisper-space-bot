@@ -5,7 +5,6 @@ from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count
-from app.crud.group import exists_member
 from app.models.user import User
 from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut
 from app.services.websocket_manager import manager

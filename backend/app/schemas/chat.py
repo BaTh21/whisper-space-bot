@@ -2,6 +2,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Literal
 from app.schemas.base import TimestampMixin
+from datetime import datetime, timezone
 
 
 MessageTypeInput = Literal["text", "image", "file"]
@@ -17,7 +18,15 @@ class MessageOut(TimestampMixin):
     sender_id: int
     receiver_id: int
     content: str
-    message_type: str  # ← str
+    message_type: str
     is_read: bool = False
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda dt: (
+                dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None
+                else dt.astimezone(timezone.utc)
+            ).isoformat().replace("+00:00", "Z")
+        }
+    )

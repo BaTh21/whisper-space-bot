@@ -9,6 +9,7 @@ import {
   Group as GroupIcon,
   PersonAdd as PersonAddIcon,
   Send as SendIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import {
   Alert,
@@ -24,6 +25,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   IconButton,
   InputLabel,
@@ -36,12 +38,15 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
+import CreateGroupDialog from '../components/CreateGroupDialog';
+import GroupInviteNotification from '../components/GroupInviteNotification';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -53,6 +58,9 @@ import {
   getDiaryLikes,
   getFeed,
   getFriends,
+  getGroupDiaries,
+  // NEW: Group detail APIs
+  getGroupMembers,
   getMe,
   getPendingRequests,
   getPrivateChat,
@@ -85,11 +93,15 @@ const formatCambodiaTime = (dateString) => {
   if (!dateString) return 'Just now';
   
   try {
-    const date = new Date(dateString);
+    // Ensure it's parsed as UTC first
+    let date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      // If invalid, try forcing UTC
+      date = new Date(dateString + 'Z');
+    }
     
-    // Use browser's toLocaleString with Cambodia timezone
     const options = {
-      timeZone: 'Asia/Phnom_Penh',
+      timeZone: 'Asia/Bangkok',  // ← Use 'Asia/Bangkok' (same as Phnom Penh)
       hour12: false,
       hour: '2-digit',
       minute: '2-digit'
@@ -112,7 +124,6 @@ const formatCambodiaTime = (dateString) => {
       return `Yesterday ${messageTime}`;
     }
     
-    // For older dates, show full date and time
     const dateStr = date.toLocaleDateString('en-GB', { 
       timeZone: 'Asia/Phnom_Penh',
       day: '2-digit',
@@ -124,12 +135,7 @@ const formatCambodiaTime = (dateString) => {
     
   } catch (error) {
     console.error('Error formatting date:', error);
-    // Fallback to simple formatting
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+    return new Date(dateString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   }
 };
 
@@ -148,6 +154,133 @@ const formatCambodiaDate = (dateString) => {
     console.error('Error formatting date:', error);
     return new Date(dateString).toLocaleDateString('en-GB');
   }
+};
+
+// View Group Content Component
+const ViewGroupContent = ({ group, profile, onJoinSuccess }) => {
+  const [members, setMembers] = useState([]);
+  const [diaries, setDiaries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [joining, setJoining] = useState(false);
+
+  const isMember = members.some(m => m.id === profile?.id);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [membersData, diariesData] = await Promise.all([
+          getGroupMembers(group.id).catch(() => []),
+          getGroupDiaries(group.id).catch(() => []),
+        ]);
+        setMembers(membersData);
+        setDiaries(diariesData);
+      } catch (err) {
+        setError(err.message || 'Failed to load group details');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [group.id]);
+
+  const handleJoin = async () => {
+    setJoining(true);
+    try {
+      await joinGroup(group.id);
+      setSuccess('Joined group successfully');
+      onJoinSuccess();
+    } catch (err) {
+      setError(err.message || 'Failed to join group');
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" p={4}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
+  return (
+    <>
+      {/* Description */}
+      {group.description && (
+        <Typography paragraph sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+          "{group.description}"
+        </Typography>
+      )}
+
+      {/* Join Button */}
+      {!isMember && (
+        <Box sx={{ mb: 3, textAlign: 'right' }}>
+          <Button 
+            variant="contained" 
+            onClick={handleJoin}
+            disabled={joining}
+            startIcon={joining ? <CircularProgress size={16} /> : null}
+          >
+            {joining ? 'Joining...' : 'Join Group'}
+          </Button>
+        </Box>
+      )}
+
+      <Divider sx={{ my: 2 }} />
+
+      {/* Members */}
+      <Typography variant="subtitle1" gutterBottom>
+        Members ({members.length})
+      </Typography>
+      <List sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1, p: 1, mb: 3 }}>
+        {members.map((member) => (
+          <ListItem key={member.id}>
+            <ListItemAvatar>
+              <Avatar src={member.avatar_url} sx={{ width: 32, height: 32 }}>
+                {member.username?.[0] || 'U'}
+              </Avatar>
+            </ListItemAvatar>
+            <ListItemText
+              primary={member.username}
+              secondary={member.id === profile?.id ? 'You' : member.email}
+            />
+          </ListItem>
+        ))}
+      </List>
+
+      <Divider sx={{ my: 2 }} />
+
+      {/* Group Feed */}
+      <Typography variant="subtitle1" gutterBottom>
+        Group Feed ({diaries.length})
+      </Typography>
+      {diaries.length === 0 ? (
+        <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
+          No diaries posted in this group yet.
+        </Typography>
+      ) : (
+        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+          {diaries.map((diary) => (
+            <Card key={diary.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
+              <Typography variant="subtitle2">{diary.title}</Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                by {diary.user?.username || 'Unknown'} • {formatCambodiaDate(diary.created_at)}
+              </Typography>
+              <Typography variant="body2">{diary.content}</Typography>
+            </Card>
+          ))}
+        </Box>
+      )}
+    </>
+  );
 };
 
 const DashboardPage = () => {
@@ -186,6 +319,8 @@ const DashboardPage = () => {
   // Dialog states
   const [diaryDialogOpen, setDiaryDialogOpen] = useState(false);
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [viewGroupDialogOpen, setViewGroupDialogOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -195,7 +330,7 @@ const DashboardPage = () => {
     fetchDashboardData();
   }, [isAuthenticated, navigate]);
 
-  // Enhanced polling for real-time updates (Primary solution)
+  // Enhanced polling for real-time updates
   useEffect(() => {
     if (!selectedFriend) return;
 
@@ -212,12 +347,11 @@ const DashboardPage = () => {
             new Date(a.created_at) - new Date(b.created_at)
           );
           
-          // Only update if messages actually changed
           if (JSON.stringify(sortedMessages) !== JSON.stringify(messages)) {
             setMessages(sortedMessages);
             setLastMessageUpdate(Date.now());
           }
-          retryCount = 0; // Reset retry count on success
+          retryCount = 0;
         }
       } catch (error) {
         console.error('Polling error:', error);
@@ -229,11 +363,8 @@ const DashboardPage = () => {
         }
       }
     };
-
-    // Initial poll
-    pollMessages();
     
-    // Set up interval polling - every 2 seconds for real-time feel
+    pollMessages();
     const pollInterval = setInterval(pollMessages, 2000);
 
     return () => {
@@ -260,7 +391,6 @@ const DashboardPage = () => {
       setDiaries(feedData || []);
       setGroups(groupsData || []);
 
-      // Initialize diary likes state
       const initialLikes = {};
       const initialComments = {};
       feedData?.forEach(diary => {
@@ -278,7 +408,7 @@ const DashboardPage = () => {
     }
   };
 
-  // Message handler functions
+  // Message handlers
   const handleSelectFriend = async (friend) => {
     setSelectedFriend(friend);
     setNewMessage('');
@@ -305,34 +435,29 @@ const DashboardPage = () => {
     setMessageLoading(true);
     
     try {
-      // Create temporary message for immediate UI update
       const tempMessage = {
-        id: Date.now(), // Temporary ID
+        id: Date.now(),
         sender_id: profile.id,
         receiver_id: selectedFriend.id,
         content: messageContent,
         message_type: 'text',
         is_read: false,
         created_at: new Date().toISOString(),
-        is_temp: true // Mark as temporary
+        is_temp: true
       };
 
-      // Add temporary message immediately for real-time feel
       setMessages(prev => {
         const newMessages = [...prev, tempMessage];
         return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       });
 
-      // Clear input
       setNewMessage('');
 
-      // Send to server
       const sentMessage = await sendPrivateMessage(selectedFriend.id, { 
         content: messageContent, 
         message_type: 'text' 
       });
 
-      // Replace temporary message with server message
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.is_temp);
         const newMessages = [...filtered, {
@@ -346,9 +471,7 @@ const DashboardPage = () => {
 
     } catch (err) {
       setError(err.message || 'Failed to send message');
-      // Remove temporary message if send failed
       setMessages(prev => prev.filter(msg => !msg.is_temp));
-      // Restore the message content
       setNewMessage(messageContent);
     } finally {
       setMessageLoading(false);
@@ -374,7 +497,7 @@ const DashboardPage = () => {
       setLoading(true);
       try {
         const updateData = Object.fromEntries(
-          Object.entries(values).filter(([_, value]) => value !== '')
+          Object.entries(values).filter(([, value]) => value !== '')
         );
         
         const response = await updateMe(updateData);
@@ -390,7 +513,6 @@ const DashboardPage = () => {
     },
   });
 
-  // Initialize profile form when profile data is loaded
   useEffect(() => {
     if (profile) {
       profileFormik.setValues({
@@ -427,7 +549,7 @@ const DashboardPage = () => {
     },
   });
 
-  // Group form
+  // Group form - UPDATED: Instant UI update + Join from View
   const groupFormik = useFormik({
     initialValues: {
       name: '',
@@ -438,11 +560,11 @@ const DashboardPage = () => {
     }),
     onSubmit: async (values, { resetForm }) => {
       try {
-        await createGroup(values);
+        const newGroup = await createGroup(values);  // returns response.data
+        setGroups(prev => [...prev, newGroup]);      // Instant UI update
         setSuccess('Group created successfully');
         setGroupDialogOpen(false);
         resetForm();
-        fetchDashboardData();
       } catch (err) {
         setError(err.message || 'Failed to create group');
       }
@@ -598,6 +720,12 @@ const DashboardPage = () => {
     }
   };
 
+  // View Group Handler
+  const handleViewGroup = (group) => {
+    setSelectedGroup(group);
+    setViewGroupDialogOpen(true);
+  };
+
   if (!profile) {
     return (
       <Layout>
@@ -615,6 +743,9 @@ const DashboardPage = () => {
       </Backdrop>
 
       <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', p: 2 }}>
+        {/* SHOW PENDING INVITES */}
+      <GroupInviteNotification onJoin={fetchDashboardData} />
+
         {/* Header */}
         <Card sx={{ mb: 3, p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
@@ -642,7 +773,6 @@ const DashboardPage = () => {
             </IconButton>
           </Box>
 
-          {/* Alerts */}
           <Collapse in={!!error}>
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
               {error}
@@ -654,7 +784,6 @@ const DashboardPage = () => {
             </Alert>
           </Collapse>
 
-          {/* Profile Edit Form */}
           <Collapse in={editing}>
             <Card sx={{ p: 3, mt: 2 }}>
               <Typography variant="h6" gutterBottom>
@@ -773,7 +902,6 @@ const DashboardPage = () => {
                     {diary.content}
                   </Typography>
 
-                  {/* Like and Comment Actions */}
                   <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: expandedDiary === diary.id ? 0 : 2 }}>
                     <Button
                       startIcon={likedDiaries.has(diary.id) ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
@@ -801,10 +929,8 @@ const DashboardPage = () => {
                     </Button>
                   </Box>
 
-                  {/* Comments Section */}
                   <Collapse in={expandedDiary === diary.id}>
                     <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                      {/* Comment Input */}
                       <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                         <TextField
                           fullWidth
@@ -830,7 +956,6 @@ const DashboardPage = () => {
                         </Button>
                       </Box>
 
-                      {/* Comments List */}
                       {diaryComments[diary.id]?.length > 0 ? (
                         <List sx={{ maxHeight: 200, overflow: 'auto' }}>
                           {diaryComments[diary.id].map((comment) => (
@@ -875,7 +1000,6 @@ const DashboardPage = () => {
           {/* Messages Tab */}
           <TabPanel value={activeTab} index={1}>
             <Box sx={{ display: 'flex', height: 500 }}>
-              {/* Friends List */}
               <Box sx={{ width: 300, borderRight: 1, borderColor: 'divider', pr: 2 }}>
                 <Typography variant="h6" gutterBottom>
                   Friends {messageLoading && <CircularProgress size={16} sx={{ ml: 1 }} />}
@@ -884,7 +1008,6 @@ const DashboardPage = () => {
                   {friends.map((friend) => (
                     <ListItem
                       key={friend.id}
-                      button
                       selected={selectedFriend?.id === friend.id}
                       onClick={() => handleSelectFriend(friend)}
                       disabled={messageLoading}
@@ -903,7 +1026,6 @@ const DashboardPage = () => {
                 </List>
               </Box>
 
-              {/* Chat Area */}
               <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', pl: 2 }}>
                 {selectedFriend ? (
                   <>
@@ -927,7 +1049,6 @@ const DashboardPage = () => {
                       </Typography>
                     </Box>
                     
-                    {/* Messages Container */}
                     <Box sx={{ 
                       flexGrow: 1, 
                       overflow: 'auto', 
@@ -994,7 +1115,6 @@ const DashboardPage = () => {
                       )}
                     </Box>
                     
-                    {/* Message Input */}
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
                       <TextField
                         fullWidth
@@ -1049,7 +1169,6 @@ const DashboardPage = () => {
               Friends
             </Typography>
 
-            {/* Pending Requests */}
             {pendingRequests.length > 0 && (
               <Box sx={{ mb: 3 }}>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1078,7 +1197,6 @@ const DashboardPage = () => {
               </Box>
             )}
 
-            {/* Friends List */}
             <Typography variant="h6" gutterBottom>
               Your Friends ({friends.length})
             </Typography>
@@ -1113,7 +1231,7 @@ const DashboardPage = () => {
             )}
           </TabPanel>
 
-          {/* Groups Tab */}
+          {/* Groups Tab - UPDATED */}
           <TabPanel value={activeTab} index={3}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h5">Groups</Typography>
@@ -1133,20 +1251,72 @@ const DashboardPage = () => {
             ) : (
               groups.map((group) => (
                 <Card key={group.id} sx={{ p: 3, mb: 2 }}>
-                  <Typography variant="h6" gutterBottom>
-                    {group.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Created {formatCambodiaDate(group.created_at)}
-                  </Typography>
-                  {group.description && (
-                    <Typography variant="body1" sx={{ mt: 1, mb: 2 }}>
-                      {group.description}
-                    </Typography>
-                  )}
-                  <Button variant="outlined" size="small">
-                    View Group
-                  </Button>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        {group.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Created {formatCambodiaDate(group.created_at)}
+                      </Typography>
+                      {group.description && (
+                        <Typography variant="body1" sx={{ mt: 1, mb: 2, fontStyle: 'italic' }}>
+                          {group.description}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => handleViewGroup(group)}
+                    >
+                      View Group
+                    </Button>
+                  </Box>
+                </Card>
+              ))
+            )}
+          </TabPanel>
+          {/* === GROUPS TAB === */}
+          <TabPanel value={activeTab} index={3}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h5">Groups</Typography>
+              <Button variant="contained" onClick={() => setGroupDialogOpen(true)} startIcon={<GroupIcon />}>
+                Create Group
+              </Button>
+            </Box>
+
+            {groups.length === 0 ? (
+              <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+                No groups yet. Create one!
+              </Typography>
+            ) : (
+              groups.map((group) => (
+                <Card key={group.id} sx={{ p: 3, mb: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box>
+                      <Typography variant="h6">{group.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Created {formatCambodiaDate(group.created_at)}
+                      </Typography>
+                      {group.description && (
+                        <Typography sx={{ mt: 1, fontStyle: 'italic' }}>{group.description}</Typography>
+                      )}
+                    </Box>
+                    <Box>
+                      <Tooltip title="View Group">
+                        <IconButton onClick={() => handleViewGroup(group)}>
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Open Chat">
+                        <IconButton component={Link} to={`/group/${group.id}`}>
+                          <ChatIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
                 </Card>
               ))
             )}
@@ -1261,47 +1431,105 @@ const DashboardPage = () => {
       </Dialog>
 
       {/* Create Group Dialog */}
-      <Dialog open={groupDialogOpen} onClose={() => setGroupDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={groupDialogOpen}
+        onClose={() => setGroupDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Create New Group</DialogTitle>
         <DialogContent>
           <Box component="form" sx={{ mt: 1 }}>
             <TextField
               label="Group Name"
               name="name"
+              required
+              fullWidth
+              margin="normal"
               value={groupFormik.values.name}
               onChange={groupFormik.handleChange}
               onBlur={groupFormik.handleBlur}
               error={groupFormik.touched.name && !!groupFormik.errors.name}
               helperText={groupFormik.touched.name && groupFormik.errors.name}
-              fullWidth
-              margin="normal"
-              required
             />
             <TextField
               label="Description"
               name="description"
               multiline
               rows={3}
+              fullWidth
+              margin="normal"
               value={groupFormik.values.description}
               onChange={groupFormik.handleChange}
               onBlur={groupFormik.handleBlur}
-              fullWidth
-              margin="normal"
             />
           </Box>
         </DialogContent>
+
         <DialogActions>
           <Button onClick={() => setGroupDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={groupFormik.handleSubmit} 
+          <Button
             variant="contained"
-            disabled={!groupFormik.isValid}
+            onClick={groupFormik.handleSubmit}
+            disabled={!groupFormik.isValid || groupFormik.isSubmitting}
           >
             Create Group
           </Button>
         </DialogActions>
       </Dialog>
-    </Layout>
+
+      {/* View Group Dialog */}
+      <Dialog
+        open={viewGroupDialogOpen}
+        onClose={() => setViewGroupDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="h6">{selectedGroup?.name}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Created {selectedGroup && formatCambodiaDate(selectedGroup.created_at)}
+              </Typography>
+            </Box>
+            <IconButton onClick={() => setViewGroupDialogOpen(false)}>
+              <VisibilityIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedGroup ? (
+            <ViewGroupContent 
+              group={selectedGroup} 
+              profile={profile} 
+              onJoinSuccess={() => {
+                setViewGroupDialogOpen(false);
+                fetchDashboardData();
+              }}
+            />
+          ) : (
+            <Typography>Loading...</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewGroupDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      {/* === CREATE GROUP DIALOG === */}
+      <CreateGroupDialog
+        open={groupDialogOpen}
+        onClose={() => setGroupDialogOpen(false)}
+        onSuccess={(newGroup) => {
+          // Add the new group to the list AND refresh everything
+          setGroups(prev => [...prev, newGroup]);
+          fetchDashboardData();          // <-- THIS LINE MAKES BOTH USERS SEE SAME GROUP
+          setGroupDialogOpen(false);
+        }}
+        friends={friends}
+      />
+          </Layout>
+    
   );
 };
 
