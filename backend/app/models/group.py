@@ -1,4 +1,6 @@
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Integer
+# app/models/group.py
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy.orm import relationship
 from app.models.base import Base
 from datetime import datetime
 from sqlalchemy.orm import relationship
@@ -14,3 +16,11 @@ class Group(Base):
 
     diary_groups = relationship("DiaryGroup", back_populates="group")
     diaries = relationship("Diary", secondary="diary_groups", viewonly=True)
+    description = Column(String(500))
+    creator_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    creator = relationship("User")
+    members = relationship("GroupMember", back_populates="group")
+    messages = relationship("GroupMessage", back_populates="group")
+    invites = relationship("GroupInvite", back_populates="group")
