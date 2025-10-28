@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer
 from app.models.base import Base
 from datetime import datetime
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "users"
@@ -15,3 +16,5 @@ class User(Base):
     online_status = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    diaries = relationship("Diary", back_populates="author")

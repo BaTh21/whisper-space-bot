@@ -38,8 +38,9 @@ import {
   Tab,
   Tabs,
   TextField,
-  Tooltip,
-  Typography
+  Typography,
+  Checkbox,
+  Tooltip
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useEffect, useState } from 'react';
@@ -91,7 +92,7 @@ function TabPanel({ children, value, index, ...other }) {
 // Time formatting helper functions
 const formatCambodiaTime = (dateString) => {
   if (!dateString) return 'Just now';
-  
+
   try {
     // Ensure it's parsed as UTC first
     let date = new Date(dateString);
@@ -106,20 +107,20 @@ const formatCambodiaTime = (dateString) => {
       hour: '2-digit',
       minute: '2-digit'
     };
-    
+
     const now = new Date();
     const messageTime = date.toLocaleString('en-US', options);
     const today = now.toLocaleDateString('en-US', { timeZone: 'Asia/Phnom_Penh' });
     const messageDate = date.toLocaleDateString('en-US', { timeZone: 'Asia/Phnom_Penh' });
-    
+
     if (today === messageDate) {
       return messageTime;
     }
-    
+
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toLocaleDateString('en-US', { timeZone: 'Asia/Phnom_Penh' });
-    
+
     if (yesterdayStr === messageDate) {
       return `Yesterday ${messageTime}`;
     }
@@ -130,9 +131,9 @@ const formatCambodiaTime = (dateString) => {
       month: '2-digit',
       year: 'numeric'
     });
-    
+
     return `${dateStr} ${messageTime}`;
-    
+
   } catch (error) {
     console.error('Error formatting date:', error);
     return new Date(dateString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -141,7 +142,7 @@ const formatCambodiaTime = (dateString) => {
 
 const formatCambodiaDate = (dateString) => {
   if (!dateString) return 'Unknown date';
-  
+
   try {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-GB', {
@@ -305,7 +306,11 @@ const DashboardPage = () => {
   const [newMessage, setNewMessage] = useState('');
 
   // Diary interaction states
-  const [expandedDiary, setExpandedDiary] = useState(null);
+  const [expandedDiary, setExpandedDiary] = useState(() => {
+    const saved = localStorage.getItem('expandedDiary');
+    return saved ? Number(saved) : null;
+  });
+
   const [diaryComments, setDiaryComments] = useState({});
   const [diaryLikes, setDiaryLikes] = useState({});
   const [commentTexts, setCommentTexts] = useState({});
@@ -327,6 +332,13 @@ const DashboardPage = () => {
       navigate('/login');
       return;
     }
+
+    const diaryId = localStorage.getItem('expandedDiary');
+
+    if (diaryId) {
+      handleExpandDiary(Number(diaryId));
+    }
+
     fetchDashboardData();
   }, [isAuthenticated, navigate]);
 
@@ -341,9 +353,9 @@ const DashboardPage = () => {
     const pollMessages = async () => {
       try {
         const chatMessages = await getPrivateChat(selectedFriend.id);
-        
+
         if (isSubscribed) {
-          const sortedMessages = chatMessages.sort((a, b) => 
+          const sortedMessages = chatMessages.sort((a, b) =>
             new Date(a.created_at) - new Date(b.created_at)
           );
           
@@ -356,7 +368,7 @@ const DashboardPage = () => {
       } catch (error) {
         console.error('Polling error:', error);
         retryCount++;
-        
+
         if (retryCount >= maxRetries) {
           console.log('Max polling retries reached, stopping');
           return;
@@ -378,14 +390,14 @@ const DashboardPage = () => {
     try {
       const profileData = await getMe();
       setProfile(profileData);
-      
+
       const [friendsData, pendingData, feedData, groupsData] = await Promise.all([
         getFriends().catch(err => { console.error('Friends error:', err); return []; }),
         getPendingRequests().catch(err => { console.error('Pending error:', err); return []; }),
         getFeed().catch(err => { console.error('Feed error:', err); return []; }),
         getUserGroups().catch(err => { console.error('Groups error:', err); return []; }),
       ]);
-      
+
       setFriends(friendsData || []);
       setPendingRequests(pendingData || []);
       setDiaries(feedData || []);
@@ -395,7 +407,7 @@ const DashboardPage = () => {
       const initialComments = {};
       feedData?.forEach(diary => {
         initialLikes[diary.id] = 0;
-        initialComments[diary.id] = [];
+        initialComments[diary.id] = diaryComments[diary.id] || [];
       });
       setDiaryLikes(initialLikes);
       setDiaryComments(initialComments);
@@ -415,7 +427,7 @@ const DashboardPage = () => {
     setMessageLoading(true);
     try {
       const chatMessages = await getPrivateChat(friend.id);
-      const sortedMessages = chatMessages.sort((a, b) => 
+      const sortedMessages = chatMessages.sort((a, b) =>
         new Date(a.created_at) - new Date(b.created_at)
       );
       setMessages(sortedMessages);
@@ -431,9 +443,9 @@ const DashboardPage = () => {
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || !selectedFriend) return;
-    
+
     setMessageLoading(true);
-    
+
     try {
       const tempMessage = {
         id: Date.now(),
@@ -499,7 +511,7 @@ const DashboardPage = () => {
         const updateData = Object.fromEntries(
           Object.entries(values).filter(([, value]) => value !== '')
         );
-        
+
         const response = await updateMe(updateData);
         setProfile(response);
         setEditing(false);
@@ -529,16 +541,31 @@ const DashboardPage = () => {
       title: '',
       content: '',
       share_type: 'public',
-      group_id: '',
+      group_ids: [],
     },
     validationSchema: Yup.object({
       title: Yup.string().required('Title is required'),
       content: Yup.string().required('Content is required'),
-      share_type: Yup.string().oneOf(['public', 'friends', 'group']),
+      share_type: Yup.string().oneOf(['public', 'friends', 'group', 'personal']),
+      group_ids: Yup.array().when('share_type', {
+        is: 'group',
+        then: (schema) => schema.min(1, 'Please select at least one group'),
+        otherwise: (schema) => schema.notRequired(),
+      }),
     }),
     onSubmit: async (values, { resetForm }) => {
       try {
-        await createDiary(values);
+        const payload = {
+          title: values.title,
+          content: values.content,
+          share_type: values.share_type,
+          group_ids: values.share_type === 'group' ? values.group_ids : [],
+        };
+
+        if (values.share_type !== 'group') delete payload.group_ids;
+
+        await createDiary(payload);
+
         setSuccess('Diary created successfully');
         setDiaryDialogOpen(false);
         resetForm();
@@ -547,6 +574,7 @@ const DashboardPage = () => {
         setError(err.message || 'Failed to create diary');
       }
     },
+
   });
 
   // Group form - UPDATED: Instant UI update + Join from View
@@ -575,7 +603,7 @@ const DashboardPage = () => {
   const handleLikeDiary = async (diaryId) => {
     try {
       await likeDiary(diaryId);
-      
+
       const newLikedDiaries = new Set(likedDiaries);
       if (newLikedDiaries.has(diaryId)) {
         newLikedDiaries.delete(diaryId);
@@ -605,7 +633,7 @@ const DashboardPage = () => {
 
     try {
       const newComment = await commentOnDiary(diaryId, commentText);
-      
+
       setDiaryComments(prev => ({
         ...prev,
         [diaryId]: [...(prev[diaryId] || []), {
@@ -630,22 +658,22 @@ const DashboardPage = () => {
   };
 
   const handleExpandDiary = async (diaryId) => {
-    if (expandedDiary === diaryId) {
-      setExpandedDiary(null);
-      return;
-    }
+
+    if (!diaryId) return;
 
     setExpandedDiary(diaryId);
-    
+    localStorage.setItem('expandedDiary', diaryId);
+
+
     try {
       const [comments, likes] = await Promise.all([
-        getDiaryComments(diaryId).catch(err => { 
-          console.error('Comments error:', err); 
-          return []; 
+        getDiaryComments(diaryId).catch(err => {
+          console.error('Comments error:', err);
+          return [];
         }),
-        getDiaryLikes(diaryId).catch(err => { 
-          console.error('Likes error:', err); 
-          return []; 
+        getDiaryLikes(diaryId).catch(err => {
+          console.error('Likes error:', err);
+          return [];
         }),
       ]);
 
@@ -829,8 +857,8 @@ const DashboardPage = () => {
                   <Button type="submit" variant="contained">
                     Save
                   </Button>
-                  <Button 
-                    variant="outlined" 
+                  <Button
+                    variant="outlined"
                     onClick={() => {
                       setEditing(false);
                       profileFormik.resetForm();
@@ -846,8 +874,8 @@ const DashboardPage = () => {
 
         {/* Main Content with Tabs */}
         <Card>
-          <Tabs 
-            value={activeTab} 
+          <Tabs
+            value={activeTab}
             onChange={(e, newValue) => setActiveTab(newValue)}
             variant="scrollable"
             scrollButtons="auto"
@@ -863,8 +891,8 @@ const DashboardPage = () => {
           <TabPanel value={activeTab} index={0}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h5">Your Feed</Typography>
-              <Button 
-                variant="contained" 
+              <Button
+                variant="contained"
                 onClick={() => setDiaryDialogOpen(true)}
                 startIcon={<ArticleIcon />}
               >
@@ -884,17 +912,22 @@ const DashboardPage = () => {
                       <Typography variant="h6" gutterBottom>
                         {diary.title}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        By User #{diary.user_id} • {formatCambodiaDate(diary.created_at)}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ color: 'green', fontWeight: 'bold' }}>
+                          By {diary.author.username}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          • {formatCambodiaDate(diary.created_at)}
+                        </Typography>
+                      </Box>
                     </Box>
-                    <Chip 
-                      label={diary.share_type} 
-                      size="small" 
+                    <Chip
+                      label={diary.share_type}
+                      size="small"
                       color={
-                        diary.share_type === 'public' ? 'primary' : 
-                        diary.share_type === 'friends' ? 'secondary' : 'default'
-                      } 
+                        diary.share_type === 'public' ? 'primary' :
+                          diary.share_type === 'friends' ? 'secondary' : 'default'
+                      }
                     />
                   </Box>
 
@@ -908,12 +941,12 @@ const DashboardPage = () => {
                       onClick={() => handleLikeDiary(diary.id)}
                       color={likedDiaries.has(diary.id) ? 'error' : 'inherit'}
                       size="small"
-                      sx={{ 
+                      sx={{
                         minWidth: 'auto',
                         color: likedDiaries.has(diary.id) ? 'error.main' : 'text.secondary'
                       }}
                     >
-                      {likedDiaries.has(diary.id) ? 'Liked' : 'Like'} 
+                      {likedDiaries.has(diary.id) ? 'Liked' : 'Like'}
                       {(diaryLikes[diary.id] > 0) && ` (${diaryLikes[diary.id]})`}
                     </Button>
 
@@ -946,8 +979,8 @@ const DashboardPage = () => {
                           }}
                           disabled={commentLoading[diary.id]}
                         />
-                        <Button 
-                          variant="contained" 
+                        <Button
+                          variant="contained"
                           onClick={() => handleAddComment(diary.id)}
                           disabled={!commentTexts[diary.id]?.trim() || commentLoading[diary.id]}
                           sx={{ minWidth: '60px' }}
@@ -968,7 +1001,7 @@ const DashboardPage = () => {
                               <ListItemText
                                 primary={
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Typography variant="body2" component="span" fontWeight="bold">
+                                    <Typography variant="body2" component="span" fontWeight="bold" color='green'>
                                       {comment.user?.username || `User ${comment.user_id}`}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
@@ -1017,8 +1050,8 @@ const DashboardPage = () => {
                           {friend.username?.charAt(0)}
                         </Avatar>
                       </ListItemAvatar>
-                      <ListItemText 
-                        primary={friend.username} 
+                      <ListItemText
+                        primary={friend.username}
                         secondary={friend.email}
                       />
                     </ListItem>
@@ -1034,16 +1067,16 @@ const DashboardPage = () => {
                         <Typography variant="h6">
                           Chat with {selectedFriend.username}
                         </Typography>
-                        <Chip 
-                          label="Real-time" 
-                          size="small" 
-                          color="success" 
+                        <Chip
+                          label="Real-time"
+                          size="small"
+                          color="success"
                           variant="outlined"
                         />
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {messages.length > 0 ? 
-                          `${messages.length} messages • Last updated: ${formatCambodiaTime(new Date().toISOString())}` : 
+                        {messages.length > 0 ?
+                          `${messages.length} messages • Last updated: ${formatCambodiaTime(new Date().toISOString())}` :
                           'No messages yet'
                         }
                       </Typography>
@@ -1097,10 +1130,10 @@ const DashboardPage = () => {
                                   <CircularProgress size={12} sx={{ ml: 1 }} />
                                 )}
                               </Typography>
-                              <Typography 
-                                variant="caption" 
-                                sx={{ 
-                                  mt: 0.5, 
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  mt: 0.5,
                                   display: 'block',
                                   color: message.sender_id === profile?.id ? 'primary.contrastText' : 'text.secondary',
                                   opacity: 0.8,
@@ -1132,8 +1165,8 @@ const DashboardPage = () => {
                         maxRows={3}
                         disabled={messageLoading}
                       />
-                      <Button 
-                        variant="contained" 
+                      <Button
+                        variant="contained"
                         onClick={handleSendMessage}
                         disabled={!newMessage.trim() || messageLoading}
                         sx={{ minWidth: '60px', height: '40px' }}
@@ -1143,10 +1176,10 @@ const DashboardPage = () => {
                     </Box>
                   </>
                 ) : (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     height: '100%',
                     flexDirection: 'column'
                   }}>
@@ -1231,53 +1264,6 @@ const DashboardPage = () => {
             )}
           </TabPanel>
 
-          {/* Groups Tab - UPDATED */}
-          <TabPanel value={activeTab} index={3}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h5">Groups</Typography>
-              <Button 
-                variant="contained" 
-                onClick={() => setGroupDialogOpen(true)}
-                startIcon={<GroupIcon />}
-              >
-                Create Group
-              </Button>
-            </Box>
-
-            {groups.length === 0 ? (
-              <Typography color="text.secondary" sx={{ py: 4 }} align="center">
-                You're not in any groups yet. Create one or join existing groups!
-              </Typography>
-            ) : (
-              groups.map((group) => (
-                <Card key={group.id} sx={{ p: 3, mb: 2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Box>
-                      <Typography variant="h6" gutterBottom>
-                        {group.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Created {formatCambodiaDate(group.created_at)}
-                      </Typography>
-                      {group.description && (
-                        <Typography variant="body1" sx={{ mt: 1, mb: 2, fontStyle: 'italic' }}>
-                          {group.description}
-                        </Typography>
-                      )}
-                    </Box>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={<VisibilityIcon />}
-                      onClick={() => handleViewGroup(group)}
-                    >
-                      View Group
-                    </Button>
-                  </Box>
-                </Card>
-              ))
-            )}
-          </TabPanel>
           {/* === GROUPS TAB === */}
           <TabPanel value={activeTab} index={3}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -1388,6 +1374,7 @@ const DashboardPage = () => {
               margin="normal"
               required
             />
+
             <TextField
               label="Content"
               name="content"
@@ -1402,6 +1389,7 @@ const DashboardPage = () => {
               margin="normal"
               required
             />
+
             <FormControl fullWidth margin="normal">
               <InputLabel>Share Type</InputLabel>
               <Select
@@ -1414,21 +1402,49 @@ const DashboardPage = () => {
                 <MenuItem value="public">Public</MenuItem>
                 <MenuItem value="friends">Friends Only</MenuItem>
                 <MenuItem value="group">Group</MenuItem>
+                <MenuItem value="personal">Perosnal</MenuItem>
               </Select>
             </FormControl>
+
+            {diaryFormik.values.share_type === 'group' && (
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Select Groups</InputLabel>
+                <Select
+                  multiple
+                  name="group_ids"
+                  value={diaryFormik.values.group_ids}
+                  onChange={diaryFormik.handleChange}
+                  renderValue={(selected) =>
+                    groups
+                      .filter((group) => selected.includes(group.id))
+                      .map((g) => g.name)
+                      .join(', ')
+                  }
+                >
+                  {groups.map((group) => (
+                    <MenuItem key={group.id} value={group.id}>
+                      <Checkbox checked={diaryFormik.values.group_ids.includes(group.id)} />
+                      <ListItemText primary={group.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
           </Box>
         </DialogContent>
+
         <DialogActions>
           <Button onClick={() => setDiaryDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={diaryFormik.handleSubmit} 
+          <Button
+            onClick={diaryFormik.handleSubmit}
             variant="contained"
-            disabled={!diaryFormik.isValid}
+            // disabled={!diaryFormik.isValid}
           >
             Create Diary
           </Button>
         </DialogActions>
       </Dialog>
+
 
       {/* Create Group Dialog */}
       <Dialog

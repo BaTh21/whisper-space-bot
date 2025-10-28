@@ -1,13 +1,14 @@
-# app/api/v1/routers/diaries.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count
 from app.models.user import User
-from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut
+from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse
 from app.services.websocket_manager import manager
+from app.models.diary import Diary
+from app.models.friend import Friend, FriendshipStatus
 
 router = APIRouter()
 
@@ -18,48 +19,71 @@ def create_diary_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Group validation
-    if diary_in.share_type == "group":
-        if not diary_in.group_id:
-            raise HTTPException(400, "group_id is required for group share")
-        if not exists_member(db, diary_in.group_id, current_user.id):
-            raise HTTPException(403, "You are not a member of this group")
+    if diary_in.share_type == " group":
+        if not diary_in.group_ids or len(diary_in.group_ids) == 0:
+            raise HTTPException(status_code=400, detail="group_ids are required for group share")
 
+        for group_id in diary_in.group_ids:
+            if not exists_member(db, group_id, current_user.id):
+                raise HTTPException(status_code=403, detail=f"You are not a member of group {group_id}")
+
+    elif diary_in.share_type == "friends":
+        friends = db.query(Friend).filter(
+            ((Friend.user_id == current_user.id) | (Friend.friend_id == current_user.id)),
+            Friend.status == FriendshipStatus.accepted
+        ).all()
+
+        if not friends:
+            raise HTTPException(status_code=400, detail="You do not have friend yet")
+    
     diary = create_diary(db, current_user.id, diary_in)
 
     return DiaryOut(
         id=diary.id,
-        user_id=diary.user_id,
+        author={"id": current_user.id, "username": current_user.username},
         title=diary.title,
         content=diary.content,
         share_type=diary.share_type.value,
-        group_id=diary.group_id,
+        groups=[
+            {"id": g.id, "name": g.name} for g in diary.groups
+        ],
         is_deleted=diary.is_deleted,
         created_at=diary.created_at,
         updated_at=diary.updated_at
     )
-
 
 @router.get("/feed", response_model=List[DiaryOut])
 def get_feed(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diaries = get_visible(db, current_user.id)
-    return [
-        DiaryOut(
-            id=d.id,
-            user_id=d.user_id,
-            title=d.title,
-            content=d.content,
-            share_type=d.share_type.value,
-            group_id=d.group_id,
-            is_deleted=d.is_deleted,
-            created_at=d.created_at,
-            updated_at=d.updated_at
+    diaries = (
+        db.query(Diary)
+        .options(joinedload(Diary.author), joinedload(Diary.groups))
+        .filter(Diary.id.in_([d.id for d in get_visible(db, current_user.id)]))
+        .order_by(Diary.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for d in diaries:
+        result.append(
+            DiaryOut(
+                id=d.id,
+                author=CreatorResponse(
+                    id=d.author.id,
+                    username=d.author.username
+                ),
+                title=d.title,
+                content=d.content,
+                share_type=d.share_type.value,
+                groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups],
+                is_deleted=d.is_deleted,
+                created_at=d.created_at,
+                updated_at=d.updated_at
+            )
         )
-        for d in diaries
-    ]
+    return result
 
 
 @router.post("/{diary_id}/comment", response_model=DiaryCommentOut)
@@ -79,7 +103,7 @@ def comment_on_diary(
     return DiaryCommentOut(
         id=comment.id,
         diary_id=comment.diary_id,
-        user_id=comment.user_id,
+        user=comment.user_id,
         content=comment.content,
         username=current_user.username,
         created_at=comment.created_at.isoformat() if comment.created_at else None
@@ -118,7 +142,7 @@ def get_diary_comments_endpoint(
         comment_list.append(DiaryCommentOut(
             id=comment.id,
             diary_id=comment.diary_id,
-            user_id=comment.user_id,
+            user=CreatorResponse(id=comment.user.id, username=comment.user.username),
             content=comment.content,
             username=comment.user.username if comment.user else f"User {comment.user_id}",
             created_at=comment.created_at.isoformat() if comment.created_at else None

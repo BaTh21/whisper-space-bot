@@ -3,8 +3,12 @@ from sqlalchemy.orm import Session
 from app.models.diary import Diary, ShareType
 from app.models.diary_comment import DiaryComment
 from app.models.diary_like import DiaryLike
+from app.models.diary_group import DiaryGroup
 from app.schemas.diary import DiaryCreate
 from typing import List, Optional
+from app.models.friend import Friend, FriendshipStatus
+from app.models.group_member import GroupMember
+from sqlalchemy import or_, and_
 
 from app.models.friend import Friend
 from app.models.group_member import GroupMember
@@ -44,9 +48,17 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
         title=diary_in.title,
         content=diary_in.content,
         share_type=ShareType(diary_in.share_type),
-        group_id=diary_in.group_id
     )
     db.add(diary)
+    db.flush()
+
+    if diary_in.share_type == "group" and diary_in.group_ids:
+        diary_groups = [
+            DiaryGroup(diary_id=diary.id, group_id=group_id)
+            for group_id in diary_in.group_ids
+        ]
+        db.add_all(diary_groups)
+
     db.commit()
     db.refresh(diary)
     return diary
@@ -55,24 +67,50 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
 def get_by_id(db: Session, diary_id: int) -> Optional[Diary]:
     return db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
 
-
 def get_visible(db: Session, user_id: int) -> List[Diary]:
-    from app.models.friend import Friend, FriendshipStatus   # <-- absolute import
-    from app.models.group_member import GroupMember
-
-    subq_friends = db.query(Friend.friend_id).filter(
-        Friend.user_id == user_id, Friend.status == FriendshipStatus.accepted
-    ).subquery()
-    subq_groups = db.query(GroupMember.group_id).filter(GroupMember.user_id == user_id).subquery()
-
-    return db.query(Diary).filter(
-        Diary.is_deleted == False,
-        (
-            (Diary.share_type == ShareType.public) |
-            ((Diary.share_type == ShareType.friends) & Diary.user_id.in_(subq_friends)) |
-            ((Diary.share_type == ShareType.group) & Diary.group_id.in_(subq_groups))
+    subq_friends = (
+        db.query(Friend.friend_id)
+        .filter(
+            Friend.user_id == user_id,
+            Friend.status == FriendshipStatus.accepted
         )
-    ).order_by(Diary.created_at.desc()).all()
+        .subquery()
+    )
+
+    subq_groups = (
+        db.query(GroupMember.group_id)
+        .filter(GroupMember.user_id == user_id)
+        .subquery()
+    )
+
+    subq_group_diaries = (
+        db.query(DiaryGroup.diary_id)
+        .filter(DiaryGroup.group_id.in_(subq_groups))
+        .subquery()
+    )
+
+    diaries = (
+        db.query(Diary)
+        .filter(
+            Diary.is_deleted == False,
+            or_(
+                Diary.share_type == ShareType.public,
+                and_(
+                    Diary.share_type == ShareType.friends,
+                    Diary.user_id.in_(subq_friends)
+                ),
+                and_(
+                    Diary.share_type == ShareType.group,
+                    Diary.id.in_(subq_group_diaries)
+                ),
+                Diary.user_id == user_id
+            )
+        )
+        .order_by(Diary.created_at.desc())
+        .all()
+    )
+
+    return diaries
 
 
 def can_view(db: Session, diary: Diary, user_id: int) -> bool:
