@@ -80,3 +80,13 @@ def create_like(db: Session, diary_id: int, user_id: int) -> None:
         like = DiaryLike(diary_id=diary_id, user_id=user_id)
         db.add(like)
         db.commit()
+
+def get_diary_comments(db: Session, diary_id: int) -> List[DiaryComment]:
+    return db.query(DiaryComment).filter(
+        DiaryComment.diary_id == diary_id
+    ).order_by(DiaryComment.created_at.asc()).all()
+
+def get_diary_likes_count(db: Session, diary_id: int) -> int:
+    return db.query(DiaryLike).filter(
+        DiaryLike.diary_id == diary_id
+    ).count()
