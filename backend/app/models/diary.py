@@ -2,6 +2,7 @@ from sqlalchemy import Column, Enum, String, Text, Boolean, DateTime, ForeignKey
 from app.models.base import Base
 from datetime import datetime
 import enum
+from sqlalchemy.orm import relationship
 
 class ShareType(enum.Enum):
     public = "public"
@@ -20,3 +21,5 @@ class Diary(Base):
     is_deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    author = relationship("User", back_populates="diaries")

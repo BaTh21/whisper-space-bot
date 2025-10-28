@@ -7,7 +7,7 @@ from app.core.security import get_current_user
 from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count
 from app.crud.group import exists_member
 from app.models.user import User
-from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut
+from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse
 from app.services.websocket_manager import manager
 
 router = APIRouter()
@@ -47,20 +47,23 @@ def get_feed(
     current_user: User = Depends(get_current_user)
 ):
     diaries = get_visible(db, current_user.id)
-    return [
-        DiaryOut(
-            id=d.id,
-            user_id=d.user_id,
-            title=d.title,
-            content=d.content,
-            share_type=d.share_type.value,
-            group_id=d.group_id,
-            is_deleted=d.is_deleted,
-            created_at=d.created_at,
-            updated_at=d.updated_at
+    result = []
+    for d in diaries:
+        user = db.query(User).filter(User.id == d.user_id).first()
+        result.append(
+            DiaryOut(
+                id=d.id,
+                author=CreatorResponse(id=user.id, username=user.username),
+                title=d.title,
+                content=d.content,
+                share_type=d.share_type.value,
+                group_id=d.group_id,
+                is_deleted=d.is_deleted,
+                created_at=d.created_at,
+                updated_at=d.updated_at
+            )
         )
-        for d in diaries
-    ]
+    return result
 
 
 @router.post("/{diary_id}/comment", response_model=DiaryCommentOut)
@@ -80,7 +83,7 @@ def comment_on_diary(
     return DiaryCommentOut(
         id=comment.id,
         diary_id=comment.diary_id,
-        user_id=comment.user_id,
+        user=comment.user_id,
         content=comment.content,
         username=current_user.username,
         created_at=comment.created_at.isoformat() if comment.created_at else None
@@ -119,7 +122,7 @@ def get_diary_comments_endpoint(
         comment_list.append(DiaryCommentOut(
             id=comment.id,
             diary_id=comment.diary_id,
-            user_id=comment.user_id,
+            user=CreatorResponse(id=comment.user.id, username=comment.user.username),
             content=comment.content,
             username=comment.user.username if comment.user else f"User {comment.user_id}",
             created_at=comment.created_at.isoformat() if comment.created_at else None

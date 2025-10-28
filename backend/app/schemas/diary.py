@@ -13,11 +13,14 @@ class DiaryCreate(BaseModel):
     content: str
     share_type: ShareTypeInput
     group_id: Optional[int] = None
-
+    
+class CreatorResponse(BaseModel):
+    id: int
+    username: str
 
 class DiaryOut(TimestampMixin):
     id: int
-    user_id: int
+    author : CreatorResponse
     title: str
     content: str
     share_type: ShareTypeOutput
@@ -34,7 +37,7 @@ class DiaryCommentCreate(BaseModel):
 class DiaryCommentOut(TimestampMixin):
     id: int
     diary_id: int
-    user_id: int
+    user: CreatorResponse
     content: str
     username: Optional[str] = None  # Add username field instead of full user object
     created_at: str  # Make sure this is included
