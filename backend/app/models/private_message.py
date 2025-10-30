@@ -22,6 +22,7 @@ class PrivateMessage(Base):
     is_unsent = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
-
+    reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
+    reply_to = relationship("PrivateMessage", remote_side=[id], uselist=False)
     sender = relationship("User", foreign_keys=[sender_id])
     receiver = relationship("User", foreign_keys=[receiver_id])

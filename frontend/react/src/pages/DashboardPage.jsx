@@ -2,6 +2,7 @@
 import {
   Article as ArticleIcon,
   Chat as ChatIcon,
+  Close as CloseIcon,
   Comment as CommentIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
@@ -10,6 +11,7 @@ import {
   Group as GroupIcon,
   MoreVert as MoreVertIcon,
   PersonAdd as PersonAddIcon,
+  Reply as ReplyIcon,
   Send as SendIcon,
   Visibility as VisibilityIcon
 } from '@mui/icons-material';
@@ -46,7 +48,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useFormik } from 'formik';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
 import CreateGroupDialog from '../components/CreateGroupDialog';
@@ -160,8 +162,8 @@ const formatCambodiaDate = (dateString) => {
   }
 };
 
-// ChatMessage Component
-const ChatMessage = ({ message, isMine, onUpdate, onDelete  }) => {
+// ChatMessage Component - SIMPLIFIED VERSION WITH TOOLTIP
+const ChatMessage = ({ message, isMine, onUpdate, onDelete, onReply, profile }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
@@ -173,7 +175,7 @@ const ChatMessage = ({ message, isMine, onUpdate, onDelete  }) => {
     if (editText.trim() && editText !== message.content) {
       try {
         if (onUpdate) {
-          onUpdate(message.id, editText);
+          await onUpdate(message.id, editText);
         }
       } catch (err) {
         console.error('Failed to edit message:', err);
@@ -183,12 +185,11 @@ const ChatMessage = ({ message, isMine, onUpdate, onDelete  }) => {
     handleClose();
   };
 
-
   const handleDelete = async () => {
     if (window.confirm('Delete this message permanently?')) {
       try {
         if (onDelete) {
-          onDelete(message.id);
+          await onDelete(message.id);
         }
       } catch (err) {
         console.error('Failed to delete message:', err);
@@ -197,6 +198,14 @@ const ChatMessage = ({ message, isMine, onUpdate, onDelete  }) => {
     handleClose();
   };
 
+  const handleReplyClick = () => {
+    if (onReply) {
+      onReply(message);
+    }
+    handleClose();
+  };
+
+  const showMenu = !message.is_temp;
 
   return (
     <Box
@@ -226,95 +235,135 @@ const ChatMessage = ({ message, isMine, onUpdate, onDelete  }) => {
           </Box>
         </Box>
       ) : (
-        <Box
-          sx={{
-            bgcolor: isMine ? 'primary.light' : 'grey.100',
-            color: isMine ? 'white' : 'text.primary',
-            p: 1.5,
-            borderRadius: 2,
-            position: 'relative',
-            '&:hover': {
-              bgcolor: isMine ? 'primary.main' : 'grey.200',
-            },
-          }}
+        <Tooltip 
+          title="Click (⋮) to reply to this message" 
+          placement="top"
+          arrow
+          enterDelay={500}
+          leaveDelay={200}
         >
-          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-            {message.content}
-          </Typography>
-          
-          {/* Message timestamp */}
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              display: 'block',
-              mt: 0.5,
-              opacity: 0.7,
-              fontSize: '0.7rem'
+          <Box
+            sx={{
+              bgcolor: isMine ? 'primary.light' : 'grey.100',
+              color: isMine ? 'white' : 'text.primary',
+              p: 1.5,
+              borderRadius: 2,
+              position: 'relative',
+              '&:hover': {
+                bgcolor: isMine ? 'primary.main' : 'grey.200',
+              },
             }}
           >
-            {formatCambodiaTime(message.created_at)}
-          </Typography>
-
-          {/* Message actions menu - only show for own messages */}
-          {isMine && !message.is_temp && (
-            <>
-              <IconButton
-                size="small"
-                onClick={handleMenu}
+            {/* Reply preview */}
+            {message.reply_to && (
+              <Box 
                 sx={{ 
-                  position: 'absolute', 
-                  top: 4, 
-                  right: 4, 
-                  color: 'rgba(255,255,255,0.7)',
-                  opacity: 0,
-                  transition: 'opacity 0.2s',
-                  '.MuiBox-root:hover &': {
-                    opacity: 1,
-                  }
+                  mb: 1, 
+                  p: 1, 
+                  bgcolor: 'rgba(0,0,0,0.1)', 
+                  borderRadius: 1,
+                  borderLeft: '3px solid',
+                  borderColor: 'primary.main'
                 }}
               >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-              <Menu 
-                anchorEl={anchorEl} 
-                open={Boolean(anchorEl)} 
-                onClose={handleClose}
-                anchorOrigin={{
-                  vertical: 'top',
-                  horizontal: 'right',
-                }}
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'right',
-                }}
-              >
-                <MenuItem 
-                  onClick={() => { 
-                    setEditing(true); 
-                    handleClose(); 
+                <Typography variant="caption" sx={{ opacity: 0.7, display: 'block' }}>
+                  Replying to: {message.reply_to.content}
+                </Typography>
+              </Box>
+            )}
+
+            <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+              {message.content}
+            </Typography>
+            
+            {/* Message timestamp */}
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                display: 'block',
+                mt: 0.5,
+                opacity: 0.7,
+                fontSize: '0.7rem'
+              }}
+            >
+              {formatCambodiaTime(message.created_at)}
+              {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
+            </Typography>
+
+            {/* Message actions menu */}
+            {showMenu && (
+              <>
+                <IconButton
+                  size="small"
+                  onClick={handleMenu}
+                  sx={{ 
+                    position: 'absolute', 
+                    top: 4, 
+                    right: 4, 
+                    color: isMine ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)',
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                    '.MuiBox-root:hover &': {
+                      opacity: 1,
+                    }
                   }}
                 >
-                  <EditIcon fontSize="small" sx={{ mr: 1 }} />
-                  Edit
-                </MenuItem>
-                <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
-                  <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-                  Delete
-                </MenuItem>
-              </Menu>
-            </>
-          )}
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+                <Menu 
+                  anchorEl={anchorEl} 
+                  open={Boolean(anchorEl)} 
+                  onClose={handleClose}
+                  anchorOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                >
+                  {/* For my own messages: Show Edit, Reply, Delete */}
+                  {isMine && (
+                    <MenuItem 
+                      onClick={() => { 
+                        setEditing(true); 
+                        handleClose(); 
+                      }}
+                    >
+                      <EditIcon fontSize="small" sx={{ mr: 1 }} />
+                      Edit
+                    </MenuItem>
+                  )}
+                  
+                  {/* For all messages: Show Reply option */}
+                  <MenuItem onClick={handleReplyClick}>
+                    <ReplyIcon fontSize="small" sx={{ mr: 1 }} />
+                    Reply
+                  </MenuItem>
 
-          {/* Loading indicator for temporary messages */}
-          {message.is_temp && (
-            <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-              <Typography variant="caption" sx={{ opacity: 0.7, mr: 1 }}>
-                Sending...
-              </Typography>
-              <CircularProgress size={12} />
-            </Box>
-          )}
-        </Box>
+                  {/* For my own messages: Show Delete option */}
+                  {isMine && (
+                    <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
+                      <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+                      Delete
+                    </MenuItem>
+                  )}
+                </Menu>
+              </>
+            )}
+
+            {/* Loading indicator for temporary messages */}
+            {message.is_temp && (
+              <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                <Typography variant="caption" sx={{ opacity: 0.7, mr: 1 }}>
+                  Sending...
+                </Typography>
+                <CircularProgress size={12} />
+              </Box>
+            )}
+          </Box>
+        </Tooltip>
       )}
     </Box>
   );
@@ -477,7 +526,8 @@ const DashboardPage = () => {
 
   // Message states
   const [messageLoading, setMessageLoading] = useState(false);
-  const [lastMessageUpdate, setLastMessageUpdate] = useState(Date.now());
+  const [replyingTo, setReplyingTo] = useState(null);
+  const messagesEndRef = useRef(null);
 
   // Dialog states
   const [diaryDialogOpen, setDiaryDialogOpen] = useState(false);
@@ -513,7 +563,6 @@ const DashboardPage = () => {
           
           if (JSON.stringify(sortedMessages) !== JSON.stringify(messages)) {
             setMessages(sortedMessages);
-            setLastMessageUpdate(Date.now());
           }
           retryCount = 0;
         }
@@ -536,6 +585,11 @@ const DashboardPage = () => {
       clearInterval(pollInterval);
     };
   }, [selectedFriend, messages.length]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -573,53 +627,58 @@ const DashboardPage = () => {
   };
 
   // Message operation handlers
-  // In DashboardPage.jsx - update handleEditMessage
-const handleEditMessage = async (messageId, newContent) => {
-  try {
-    // Call API to edit message
-    const updatedMessage = await editMessage(messageId, newContent);
-    
-    // Update local state
-    setMessages(prev => 
-      prev.map(msg => 
-        msg.id === messageId 
-          ? { ...msg, content: newContent, updated_at: new Date().toISOString() }
-          : msg
-      )
-    );
-    
-    setSuccess('Message updated successfully');
-  } catch (err) {
-    console.error('Edit message error:', err);
-    setError(err.message || 'Failed to edit message');
-  }
-};
+  const handleEditMessage = async (messageId, newContent) => {
+    try {
+      const updatedMessage = await editMessage(messageId, newContent);
+      
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === messageId 
+            ? { ...updatedMessage, is_temp: false }
+            : msg
+        )
+      );
+      
+      setSuccess('Message updated successfully');
+    } catch (err) {
+      console.error('Edit message error:', err);
+      setError(err.message || 'Failed to edit message');
+    }
+  };
 
+  const handleDeleteMessage = async (messageId) => {
+    console.log('Deleting message:', messageId);
+    
+    // Immediately remove from UI by filtering it out
+    setMessages(prev => prev.filter(msg => String(msg.id) !== String(messageId)));
+    
+    // Show success message
+    setSuccess('Message deleted successfully');
+    
+    // Call backend delete
+    try {
+      await deleteMessage(messageId);
+      console.log('Backend delete successful');
+    } catch (err) {
+      console.error('Backend delete failed:', err);
+      setError('Failed to delete message on server');
+    }
+  };
 
-// Separate function for delete (if needed)
-const handleDeleteMessage = async (messageId) => {
-  console.log('Deleting message:', messageId);
-  
-  // Immediately remove from UI by filtering it out
-  setMessages(prev => prev.filter(msg => String(msg.id) !== String(messageId)));
-  
-  // Show success message
-  setSuccess('Message deleted successfully');
-  
-  // Call backend delete
-  try {
-    await deleteMessage(messageId);
-    console.log('Backend delete successful');
-  } catch (err) {
-    console.error('Backend delete failed:', err);
-    // Optional: You can choose to revert here if backend fails
-    // setError('Failed to delete message on server');
-  }
-};
+  // Reply handler - when user clicks Reply on a message
+  const handleReply = (message) => {
+    setReplyingTo(message);
+  };
+
+  // Clear reply
+  const clearReply = () => {
+    setReplyingTo(null);
+  };
 
   // Message handlers
   const handleSelectFriend = async (friend) => {
     setSelectedFriend(friend);
+    setReplyingTo(null);
     setNewMessage('');
     setMessageLoading(true);
     try {
@@ -628,7 +687,6 @@ const handleDeleteMessage = async (messageId) => {
         new Date(a.created_at) - new Date(b.created_at)
       );
       setMessages(sortedMessages);
-      setLastMessageUpdate(Date.now());
     } catch (err) {
       console.error('Chat error:', err);
       setError(err.message || 'Failed to load messages');
@@ -637,6 +695,7 @@ const handleDeleteMessage = async (messageId) => {
     }
   };
 
+  // Send message with reply - UPDATED
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || !selectedFriend) return;
@@ -652,34 +711,37 @@ const handleDeleteMessage = async (messageId) => {
         message_type: 'text',
         is_read: false,
         created_at: new Date().toISOString(),
-        is_temp: true
+        is_temp: true,
+        reply_to_id: replyingTo?.id || null,  // This links to the original message
+        reply_to: replyingTo || null,  // This shows the preview
       };
 
+      // Add temporary message to UI immediately
       setMessages(prev => {
         const newMessages = [...prev, tempMessage];
         return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       });
 
       setNewMessage('');
+      setReplyingTo(null); // Clear reply after sending
 
+      // Send to backend
       const sentMessage = await sendPrivateMessage(selectedFriend.id, { 
         content: messageContent, 
-        message_type: 'text' 
+        message_type: 'text',
+        reply_to_id: replyingTo?.id || null, // Send reply reference to backend
       });
 
+      // Replace temporary message with real one from backend
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.is_temp);
-        const newMessages = [...filtered, {
-          ...sentMessage,
-          created_at: sentMessage.created_at || new Date().toISOString()
-        }];
+        const newMessages = [...filtered, { ...sentMessage, is_temp: false }];
         return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       });
 
-      setLastMessageUpdate(Date.now());
-
     } catch (err) {
       setError(err.message || 'Failed to send message');
+      // Remove temporary message on error
       setMessages(prev => prev.filter(msg => !msg.is_temp));
       setNewMessage(messageContent);
     } finally {
@@ -1265,6 +1327,45 @@ const handleDeleteMessage = async (messageId) => {
                       </Typography>
                     </Box>
                     
+                    {/* Reply Preview Bar - FIXED POSITION */}
+                    {replyingTo && (
+                      <Box sx={{ 
+                        p: 1.5, 
+                        bgcolor: 'primary.light', 
+                        color: 'white',
+                        borderRadius: 1,
+                        mb: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                          <ReplyIcon sx={{ mr: 1, fontSize: '1rem' }} />
+                          <Box>
+                            <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
+                              Replying to:
+                            </Typography>
+                            <Typography variant="body2" sx={{ 
+                              whiteSpace: 'nowrap', 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis',
+                              maxWidth: 400
+                            }}>
+                              {replyingTo.content}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <IconButton 
+                          size="small" 
+                          onClick={clearReply}
+                          sx={{ color: 'white' }}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    )}
+                    
+                    {/* Messages Container */}
                     <Box sx={{ 
                       flexGrow: 1, 
                       overflow: 'auto', 
@@ -1284,25 +1385,36 @@ const handleDeleteMessage = async (messageId) => {
                           </Typography>
                         </Box>
                       ) : (
-                        messages
-                        .filter(message => !message.is_unsent)  // Hide unsent messages
-                        .map((message) => (
-                          <ChatMessage
-                            key={message.id}
-                            message={message}
-                            isMine={message.sender_id === profile?.id}
-                            onUpdate={handleEditMessage}
-                            onDelete={handleDeleteMessage}
-                          />
-                        ))
+                        <>
+                          {messages
+                            .filter(message => !message.is_unsent)
+                            .map((message) => (
+                              <ChatMessage
+                                key={message.id}
+                                message={message}
+                                isMine={message.sender_id === profile?.id}
+                                onUpdate={handleEditMessage}
+                                onDelete={handleDeleteMessage}
+                                onReply={handleReply}
+                                profile={profile}
+                              />
+                            ))
+                          }
+                          <div ref={messagesEndRef} />
+                        </>
                       )}
                     </Box>
                     
+                    {/* Message Input */}
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="Type a message... (Press Enter to send)"
+                        placeholder={
+                          replyingTo 
+                            ? `Replying to: ${replyingTo.content.substring(0, 30)}...` 
+                            : "Type a message... (Press Enter to send)"
+                        }
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyPress={(e) => {
@@ -1336,9 +1448,6 @@ const handleDeleteMessage = async (messageId) => {
                     <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
                     <Typography color="text.secondary" align="center">
                       Select a friend to start chatting
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" align="center" sx={{ mt: 1 }}>
-                      Messages update in real-time automatically
                     </Typography>
                   </Box>
                 )}

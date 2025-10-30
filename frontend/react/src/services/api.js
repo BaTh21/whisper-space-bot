@@ -442,3 +442,12 @@ export const deleteMessage = async (msgId) => {
     throw new Error(detail);
   }
 };
+
+export const sendMessage = async (friendId, { content, message_type = 'text', reply_to_id = null }) => {
+  const res = await api.post(`/private/${friendId}`, {
+    content,
+    message_type,
+    reply_to_id,
+  });
+  return res.data;
+};
