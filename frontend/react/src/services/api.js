@@ -337,30 +337,59 @@ export const getGroupDiaries = async (groupId) => {
   }
 };
 
+// services/api.js - USE THIS VERSION
 export const editMessage = async (msgId, content) => {
   try {
-    const res = await api.patch(`${CHATS_URL}/private/${msgId}`, { content });
+    console.log('Editing message:', { msgId, content });
+    
+    const res = await api.patch(`${CHATS_URL}/private/${msgId}`, { 
+      content: content 
+    });
+    
     return res.data;
   } catch (err) {
-    throw new Error(err.response?.data?.detail || 'Failed to edit');
+    // Get the actual error message from the response
+    const errorData = err.response?.data;
+    console.error('Edit message FULL error response:', errorData);
+    
+    let errorMessage = 'Failed to edit message';
+    
+    // Handle the case where detail is an array
+    if (errorData?.detail && Array.isArray(errorData.detail)) {
+      errorMessage = errorData.detail.join(', ');
+    } else if (errorData?.detail) {
+      errorMessage = errorData.detail;
+    } else if (errorData?.message) {
+      errorMessage = errorData.message;
+    } else if (typeof errorData === 'string') {
+      errorMessage = errorData;
+    } else if (errorData) {
+      errorMessage = JSON.stringify(errorData);
+    }
+    
+    console.error('Extracted error message:', errorMessage);
+    throw new Error(errorMessage);
   }
 };
 
-export const unsendMessage = async (msgId) => {
+// Group message operations
+// Group message operations
+export const editGroupMessage = async (messageId, content) => {
   try {
-    const res = await api.delete(`${CHATS_URL}/private/${msgId}/unsend`);
-    return res.data;
+    const response = await api.put(`${CHATS_URL}/group/${messageId}`, { content });
+    return response.data;
   } catch (err) {
-    throw new Error(err.response?.data?.detail || 'Failed to unsend');
+    throw new Error(err.response?.data?.detail || 'Failed to edit group message');
   }
 };
 
-export const deleteMessage = async (msgId) => {
+
+export const deleteGroupMessage = async (messageId) => {
   try {
-    await api.delete(`${CHATS_URL}/private/${msgId}`);
+    await api.delete(`${CHATS_URL}/group/${messageId}`);
     return true;
   } catch (err) {
-    throw new Error(err.response?.data?.detail || 'Failed to delete');
+    throw new Error(err.response?.data?.detail || 'Failed to delete group message');
   }
 };
 
@@ -405,3 +434,11 @@ export const getGroupInviteLink = async (groupId) => {
   }
 };
 
+export const deleteMessage = async (msgId) => {
+  try {
+    await api.delete(`${CHATS_URL}/private/${msgId}`);
+  } catch (err) {
+    const detail = err.response?.data?.detail || "Failed to delete message";
+    throw new Error(detail);
+  }
+};

@@ -6,7 +6,7 @@ from app.core.security import get_current_user
 from app.crud.friend import is_friend
 from app.models.user import User
 from app.schemas.chat import MessageCreate, MessageOut
-from app.crud.chat import create_private_message, delete_message_for_user, edit_private_message, get_private_messages, unsend_private_message
+from app.crud.chat import create_private_message, delete_message_for_user, delete_message_forever, edit_private_message, get_private_messages
 from app.services.websocket_manager import manager
 from datetime import timezone
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -73,15 +73,17 @@ async def edit_message(message_id: int, data: MessageCreate, db: Session = Depen
     await manager.broadcast(chat_id, message_out.dict())
     return message_out
 
-@router.delete("/private/{message_id}/unsend", response_model=MessageOut)
-async def unsend_message(message_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    msg = unsend_private_message(db, message_id, current_user.id)
-    message_out = MessageOut.from_orm(msg)
-    chat_id = _chat_id(msg.sender_id, msg.receiver_id)
-    await manager.broadcast(chat_id, message_out.dict())
-    return message_out
-
 @router.delete("/private/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_message(message_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    delete_message_for_user(db, message_id, current_user.id)
-    return None  
+def delete_message_forever_endpoint(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = delete_message_forever(db, message_id, current_user.id)
+
+    chat_id = f"private_{min(current_user.id, result['receiver_id'])}_{max(current_user.id, result['receiver_id'])}"
+    manager.broadcast(
+        chat_id,
+        {"action": "delete", "message_id": message_id},
+    )
+    return None
