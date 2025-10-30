@@ -3,13 +3,15 @@ import {
   Article as ArticleIcon,
   Chat as ChatIcon,
   Comment as CommentIcon,
+  Delete as DeleteIcon,
   Edit as EditIcon,
   FavoriteBorder as FavoriteBorderIcon,
   Favorite as FavoriteIcon,
   Group as GroupIcon,
+  MoreVert as MoreVertIcon,
   PersonAdd as PersonAddIcon,
   Send as SendIcon,
-  Visibility as VisibilityIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import {
   Alert,
@@ -18,6 +20,7 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Chip,
   CircularProgress,
   Collapse,
@@ -33,14 +36,14 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
+  Menu,
   MenuItem,
   Select,
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
-  Checkbox,
-  Tooltip
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useEffect, useState } from 'react';
@@ -50,17 +53,19 @@ import CreateGroupDialog from '../components/CreateGroupDialog';
 import GroupInviteNotification from '../components/GroupInviteNotification';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+
 import {
   acceptFriendRequest,
   commentOnDiary,
   createDiary,
   createGroup,
+  deleteMessage,
+  editMessage,
   getDiaryComments,
   getDiaryLikes,
   getFeed,
   getFriends,
   getGroupDiaries,
-  // NEW: Group detail APIs
   getGroupMembers,
   getMe,
   getPendingRequests,
@@ -94,15 +99,13 @@ const formatCambodiaTime = (dateString) => {
   if (!dateString) return 'Just now';
 
   try {
-    // Ensure it's parsed as UTC first
     let date = new Date(dateString);
     if (isNaN(date.getTime())) {
-      // If invalid, try forcing UTC
       date = new Date(dateString + 'Z');
     }
     
     const options = {
-      timeZone: 'Asia/Bangkok',  // ← Use 'Asia/Bangkok' (same as Phnom Penh)
+      timeZone: 'Asia/Bangkok',
       hour12: false,
       hour: '2-digit',
       minute: '2-digit'
@@ -157,12 +160,171 @@ const formatCambodiaDate = (dateString) => {
   }
 };
 
+// ChatMessage Component
+const ChatMessage = ({ message, isMine, onUpdate, onDelete  }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(message.content);
+
+  const handleMenu = (e) => setAnchorEl(e.currentTarget);
+  const handleClose = () => setAnchorEl(null);
+
+  const handleEdit = async () => {
+    if (editText.trim() && editText !== message.content) {
+      try {
+        if (onUpdate) {
+          onUpdate(message.id, editText);
+        }
+      } catch (err) {
+        console.error('Failed to edit message:', err);
+      }
+    }
+    setEditing(false);
+    handleClose();
+  };
+
+
+  const handleDelete = async () => {
+    if (window.confirm('Delete this message permanently?')) {
+      try {
+        if (onDelete) {
+          onDelete(message.id);
+        }
+      } catch (err) {
+        console.error('Failed to delete message:', err);
+      }
+    }
+    handleClose();
+  };
+
+
+  return (
+    <Box
+      sx={{
+        alignSelf: isMine ? 'flex-end' : 'flex-start',
+        maxWidth: '70%',
+        mb: 1,
+      }}
+    >
+      {editing ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 300 }}>
+          <TextField
+            size="small"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            multiline
+            maxRows={4}
+            autoFocus
+          />
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+            <Button size="small" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button size="small" variant="contained" onClick={handleEdit}>
+              Save
+            </Button>
+          </Box>
+        </Box>
+      ) : (
+        <Box
+          sx={{
+            bgcolor: isMine ? 'primary.light' : 'grey.100',
+            color: isMine ? 'white' : 'text.primary',
+            p: 1.5,
+            borderRadius: 2,
+            position: 'relative',
+            '&:hover': {
+              bgcolor: isMine ? 'primary.main' : 'grey.200',
+            },
+          }}
+        >
+          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+            {message.content}
+          </Typography>
+          
+          {/* Message timestamp */}
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              display: 'block',
+              mt: 0.5,
+              opacity: 0.7,
+              fontSize: '0.7rem'
+            }}
+          >
+            {formatCambodiaTime(message.created_at)}
+          </Typography>
+
+          {/* Message actions menu - only show for own messages */}
+          {isMine && !message.is_temp && (
+            <>
+              <IconButton
+                size="small"
+                onClick={handleMenu}
+                sx={{ 
+                  position: 'absolute', 
+                  top: 4, 
+                  right: 4, 
+                  color: 'rgba(255,255,255,0.7)',
+                  opacity: 0,
+                  transition: 'opacity 0.2s',
+                  '.MuiBox-root:hover &': {
+                    opacity: 1,
+                  }
+                }}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+              <Menu 
+                anchorEl={anchorEl} 
+                open={Boolean(anchorEl)} 
+                onClose={handleClose}
+                anchorOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+              >
+                <MenuItem 
+                  onClick={() => { 
+                    setEditing(true); 
+                    handleClose(); 
+                  }}
+                >
+                  <EditIcon fontSize="small" sx={{ mr: 1 }} />
+                  Edit
+                </MenuItem>
+                <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
+                  <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+                  Delete
+                </MenuItem>
+              </Menu>
+            </>
+          )}
+
+          {/* Loading indicator for temporary messages */}
+          {message.is_temp && (
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+              <Typography variant="caption" sx={{ opacity: 0.7, mr: 1 }}>
+                Sending...
+              </Typography>
+              <CircularProgress size={12} />
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
 // View Group Content Component
-const ViewGroupContent = ({ group, profile, onJoinSuccess }) => {
+const ViewGroupContent = ({ group, profile, onJoinSuccess, setSuccess, setError }) => {
   const [members, setMembers] = useState([]);
   const [diaries, setDiaries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
 
   const isMember = members.some(m => m.id === profile?.id);
@@ -185,7 +347,7 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess }) => {
       }
     };
     fetchData();
-  }, [group.id]);
+  }, [group.id, setError]);
 
   const handleJoin = async () => {
     setJoining(true);
@@ -206,10 +368,6 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess }) => {
         <CircularProgress />
       </Box>
     );
-  }
-
-  if (error) {
-    return <Alert severity="error">{error}</Alert>;
   }
 
   return (
@@ -333,12 +491,6 @@ const DashboardPage = () => {
       return;
     }
 
-    const diaryId = localStorage.getItem('expandedDiary');
-
-    if (diaryId) {
-      handleExpandDiary(Number(diaryId));
-    }
-
     fetchDashboardData();
   }, [isAuthenticated, navigate]);
 
@@ -419,6 +571,51 @@ const DashboardPage = () => {
       setLoading(false);
     }
   };
+
+  // Message operation handlers
+  // In DashboardPage.jsx - update handleEditMessage
+const handleEditMessage = async (messageId, newContent) => {
+  try {
+    // Call API to edit message
+    const updatedMessage = await editMessage(messageId, newContent);
+    
+    // Update local state
+    setMessages(prev => 
+      prev.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, content: newContent, updated_at: new Date().toISOString() }
+          : msg
+      )
+    );
+    
+    setSuccess('Message updated successfully');
+  } catch (err) {
+    console.error('Edit message error:', err);
+    setError(err.message || 'Failed to edit message');
+  }
+};
+
+
+// Separate function for delete (if needed)
+const handleDeleteMessage = async (messageId) => {
+  console.log('Deleting message:', messageId);
+  
+  // Immediately remove from UI by filtering it out
+  setMessages(prev => prev.filter(msg => String(msg.id) !== String(messageId)));
+  
+  // Show success message
+  setSuccess('Message deleted successfully');
+  
+  // Call backend delete
+  try {
+    await deleteMessage(messageId);
+    console.log('Backend delete successful');
+  } catch (err) {
+    console.error('Backend delete failed:', err);
+    // Optional: You can choose to revert here if backend fails
+    // setError('Failed to delete message on server');
+  }
+};
 
   // Message handlers
   const handleSelectFriend = async (friend) => {
@@ -574,10 +771,9 @@ const DashboardPage = () => {
         setError(err.message || 'Failed to create diary');
       }
     },
-
   });
 
-  // Group form - UPDATED: Instant UI update + Join from View
+  // Group form
   const groupFormik = useFormik({
     initialValues: {
       name: '',
@@ -588,8 +784,8 @@ const DashboardPage = () => {
     }),
     onSubmit: async (values, { resetForm }) => {
       try {
-        const newGroup = await createGroup(values);  // returns response.data
-        setGroups(prev => [...prev, newGroup]);      // Instant UI update
+        const newGroup = await createGroup(values);
+        setGroups(prev => [...prev, newGroup]);
         setSuccess('Group created successfully');
         setGroupDialogOpen(false);
         resetForm();
@@ -658,12 +854,10 @@ const DashboardPage = () => {
   };
 
   const handleExpandDiary = async (diaryId) => {
-
     if (!diaryId) return;
 
     setExpandedDiary(diaryId);
     localStorage.setItem('expandedDiary', diaryId);
-
 
     try {
       const [comments, likes] = await Promise.all([
@@ -738,17 +932,6 @@ const DashboardPage = () => {
     }
   };
 
-  const handleJoinGroup = async (groupId) => {
-    try {
-      await joinGroup(groupId);
-      setSuccess('Joined group successfully');
-      fetchDashboardData();
-    } catch (err) {
-      setError(err.message || 'Failed to join group');
-    }
-  };
-
-  // View Group Handler
   const handleViewGroup = (group) => {
     setSelectedGroup(group);
     setViewGroupDialogOpen(true);
@@ -772,7 +955,7 @@ const DashboardPage = () => {
 
       <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', p: 2 }}>
         {/* SHOW PENDING INVITES */}
-      <GroupInviteNotification onJoin={fetchDashboardData} />
+        <GroupInviteNotification onJoin={fetchDashboardData} />
 
         {/* Header */}
         <Card sx={{ mb: 3, p: 3 }}>
@@ -914,7 +1097,7 @@ const DashboardPage = () => {
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ color: 'green', fontWeight: 'bold' }}>
-                          By {diary.author.username}
+                          By {diary.author?.username || 'Unknown'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           • {formatCambodiaDate(diary.created_at)}
@@ -1087,11 +1270,11 @@ const DashboardPage = () => {
                       overflow: 'auto', 
                       mb: 2, 
                       maxHeight: 300,
-                      display: 'flex',
-                      flexDirection: 'column-reverse',
                       p: 1,
                       bgcolor: 'grey.50',
-                      borderRadius: 1
+                      borderRadius: 1,
+                      display: 'flex',
+                      flexDirection: 'column'
                     }}>
                       {messages.length === 0 ? (
                         <Box sx={{ textAlign: 'center', mt: 4 }}>
@@ -1099,51 +1282,18 @@ const DashboardPage = () => {
                           <Typography color="text.secondary">
                             No messages yet. Start a conversation!
                           </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                            Messages update automatically every 2 seconds
-                          </Typography>
                         </Box>
                       ) : (
-                        [...messages].reverse().map((message) => (
-                          <Box
+                        messages
+                        .filter(message => !message.is_unsent)  // Hide unsent messages
+                        .map((message) => (
+                          <ChatMessage
                             key={message.id}
-                            sx={{
-                              display: 'flex',
-                              justifyContent: message.sender_id === profile?.id ? 'flex-end' : 'flex-start',
-                              mb: 1,
-                            }}
-                          >
-                            <Card
-                              sx={{
-                                p: 1.5,
-                                maxWidth: '70%',
-                                bgcolor: message.sender_id === profile?.id ? 'primary.light' : 'white',
-                                color: message.sender_id === profile?.id ? 'primary.contrastText' : 'text.primary',
-                                border: message.is_temp ? '2px dashed' : 'none',
-                                borderColor: message.is_temp ? 'primary.main' : 'none',
-                                opacity: message.is_temp ? 0.8 : 1
-                              }}
-                            >
-                              <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-                                {message.content}
-                                {message.is_temp && (
-                                  <CircularProgress size={12} sx={{ ml: 1 }} />
-                                )}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  mt: 0.5,
-                                  display: 'block',
-                                  color: message.sender_id === profile?.id ? 'primary.contrastText' : 'text.secondary',
-                                  opacity: 0.8,
-                                  fontSize: '0.7rem'
-                                }}
-                              >
-                                {formatCambodiaTime(message.created_at)}
-                              </Typography>
-                            </Card>
-                          </Box>
+                            message={message}
+                            isMine={message.sender_id === profile?.id}
+                            onUpdate={handleEditMessage}
+                            onDelete={handleDeleteMessage}
+                          />
                         ))
                       )}
                     </Box>
@@ -1264,7 +1414,7 @@ const DashboardPage = () => {
             )}
           </TabPanel>
 
-          {/* === GROUPS TAB === */}
+          {/* Groups Tab */}
           <TabPanel value={activeTab} index={3}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h5">Groups</Typography>
@@ -1402,7 +1552,7 @@ const DashboardPage = () => {
                 <MenuItem value="public">Public</MenuItem>
                 <MenuItem value="friends">Friends Only</MenuItem>
                 <MenuItem value="group">Group</MenuItem>
-                <MenuItem value="personal">Perosnal</MenuItem>
+                <MenuItem value="personal">Personal</MenuItem>
               </Select>
             </FormControl>
 
@@ -1438,13 +1588,11 @@ const DashboardPage = () => {
           <Button
             onClick={diaryFormik.handleSubmit}
             variant="contained"
-            // disabled={!diaryFormik.isValid}
           >
             Create Diary
           </Button>
         </DialogActions>
       </Dialog>
-
 
       {/* Create Group Dialog */}
       <Dialog
@@ -1523,6 +1671,8 @@ const DashboardPage = () => {
                 setViewGroupDialogOpen(false);
                 fetchDashboardData();
               }}
+              setSuccess={setSuccess}
+              setError={setError}
             />
           ) : (
             <Typography>Loading...</Typography>
@@ -1532,20 +1682,19 @@ const DashboardPage = () => {
           <Button onClick={() => setViewGroupDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-      {/* === CREATE GROUP DIALOG === */}
+
+      {/* Create Group Dialog Component */}
       <CreateGroupDialog
         open={groupDialogOpen}
         onClose={() => setGroupDialogOpen(false)}
         onSuccess={(newGroup) => {
-          // Add the new group to the list AND refresh everything
           setGroups(prev => [...prev, newGroup]);
-          fetchDashboardData();          // <-- THIS LINE MAKES BOTH USERS SEE SAME GROUP
+          fetchDashboardData();
           setGroupDialogOpen(false);
         }}
         friends={friends}
       />
-          </Layout>
-    
+    </Layout>
   );
 };
 
