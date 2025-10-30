@@ -9,14 +9,21 @@ from fastapi import HTTPException,status
 from app.models.user_message_status import UserMessageStatus
 
 
-def create_private_message(db: Session, sender_id: int, receiver_id: int, content: str, msg_type: str = "text") -> PrivateMessage:
-    from datetime import datetime, timezone  # Add timezone import
+def create_private_message(
+    db: Session,
+    sender_id: int,
+    receiver_id: int,
+    content: str,
+    msg_type: str = "text",
+    reply_to_id: int | None = None,          # <-- NEW
+) -> PrivateMessage:
     msg = PrivateMessage(
         sender_id=sender_id,
         receiver_id=receiver_id,
         content=content,
         message_type=MessageType(msg_type),
-        created_at=datetime.now(timezone.utc)  # ← Explicit UTC
+        reply_to_id=reply_to_id,             # <-- NEW
+        created_at=datetime.now(timezone.utc),
     )
     db.add(msg)
     db.commit()
