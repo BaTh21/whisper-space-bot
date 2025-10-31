@@ -1,3 +1,4 @@
+// pages/LoginPage.jsx
 import LoginForm from '../components/LoginForm';
 import Layout from '../components/Layout';
 
