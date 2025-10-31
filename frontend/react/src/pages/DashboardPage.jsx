@@ -319,7 +319,6 @@ const ViewGroupContent = ({ group, profile }) => {
   };
 
   const handleLikeGroupDiary = async (diaryId) => {
-    // Optimistically update UI
     setDiaries((prevDiaries) =>
       prevDiaries.map((d) => {
         if (d.id !== diaryId) return d;
@@ -328,10 +327,8 @@ const ViewGroupContent = ({ group, profile }) => {
         let updatedLikes;
 
         if (isLiked) {
-          // User already liked → remove their like
           updatedLikes = d.likes.filter((like) => like.user.id !== profile.id);
         } else {
-          // User not liked → add new like
           updatedLikes = [
             ...d.likes,
             { id: Date.now(), user: { id: profile.id, username: profile.username } },
@@ -343,12 +340,10 @@ const ViewGroupContent = ({ group, profile }) => {
     );
 
     try {
-      // Sync with backend
       await likeDiary(diaryId);
     } catch (error) {
       console.error("Failed to like diary:", error.message);
 
-      // Rollback on failure
       setDiaries((prevDiaries) =>
         prevDiaries.map((d) => {
           if (d.id !== diaryId) return d;
