@@ -8,6 +8,7 @@ import {
   Edit as EditIcon,
   FavoriteBorder as FavoriteBorderIcon,
   Favorite as FavoriteIcon,
+  Forward as ForwardIcon,
   Group as GroupIcon,
   MoreVert as MoreVertIcon,
   PersonAdd as PersonAddIcon,
@@ -162,13 +163,17 @@ const formatCambodiaDate = (dateString) => {
   }
 };
 
-// ChatMessage Component - SIMPLIFIED VERSION WITH TOOLTIP
-const ChatMessage = ({ message, isMine, onUpdate, onDelete, onReply, profile }) => {
+// ChatMessage Component - UPDATED WITH ALL FIXES
+const ChatMessage = ({ message, isMine, onUpdate, onDelete, onReply, onForward, profile, currentFriend }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
 
-  const handleMenu = (e) => setAnchorEl(e.currentTarget);
+  const handleMenu = (e) => {
+    e.stopPropagation();
+    setAnchorEl(e.currentTarget);
+  };
+  
   const handleClose = () => setAnchorEl(null);
 
   const handleEdit = async () => {
@@ -205,167 +210,549 @@ const ChatMessage = ({ message, isMine, onUpdate, onDelete, onReply, profile }) 
     handleClose();
   };
 
+  const handleForwardClick = () => {
+    if (onForward) {
+      onForward(message);
+    }
+    handleClose();
+  };
+
   const showMenu = !message.is_temp;
+
+  // Get sender information - FIXED
+  const getSenderInfo = () => {
+    // If message has sender data, use it (highest priority)
+    if (message.sender && message.sender.username) {
+      return {
+        username: message.sender.username,
+        avatar_url: message.sender.avatar_url,
+        initial: message.sender.username.charAt(0).toUpperCase()
+      };
+    }
+    
+    // If it's my message, use my profile
+    if (isMine) {
+      return {
+        username: profile?.username || 'Me',
+        avatar_url: profile?.avatar_url,
+        initial: (profile?.username?.charAt(0) || 'M').toUpperCase()
+      };
+    }
+    
+    // If we have currentFriend data (for received messages), use it
+    if (currentFriend) {
+      return {
+        username: currentFriend.username || 'Friend',
+        avatar_url: currentFriend.avatar_url,
+        initial: (currentFriend.username?.charAt(0) || 'F').toUpperCase()
+      };
+    }
+    
+    // Final fallback
+    return {
+      username: 'Unknown User',
+      avatar_url: null,
+      initial: 'U'
+    };
+  };
+
+  const senderInfo = getSenderInfo();
 
   return (
     <Box
       sx={{
-        alignSelf: isMine ? 'flex-end' : 'flex-start',
-        maxWidth: '70%',
-        mb: 1,
+        display: 'flex',
+        justifyContent: isMine ? 'flex-end' : 'flex-start',
+        mb: 2,
+        px: 1,
       }}
     >
-      {editing ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 300 }}>
-          <TextField
-            size="small"
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            multiline
-            maxRows={4}
-            autoFocus
-          />
-          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-            <Button size="small" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-            <Button size="small" variant="contained" onClick={handleEdit}>
-              Save
-            </Button>
-          </Box>
-        </Box>
-      ) : (
-        <Tooltip 
-          title="Click (⋮) to reply to this message" 
-          placement="top"
-          arrow
-          enterDelay={500}
-          leaveDelay={200}
+      {!isMine && (
+        <Avatar 
+          src={senderInfo.avatar_url} 
+          sx={{ 
+            width: 32, 
+            height: 32, 
+            mr: 1,
+            mt: 'auto',
+            fontSize: '0.8rem',
+            bgcolor: 'primary.main'
+          }}
+          imgProps={{ 
+            onError: (e) => { 
+              e.target.style.display = 'none';
+            } 
+          }}
         >
-          <Box
-            sx={{
-              bgcolor: isMine ? 'primary.light' : 'grey.100',
-              color: isMine ? 'white' : 'text.primary',
-              p: 1.5,
-              borderRadius: 2,
-              position: 'relative',
-              '&:hover': {
-                bgcolor: isMine ? 'primary.main' : 'grey.200',
-              },
+          {senderInfo.initial}
+        </Avatar>
+      )}
+      
+      <Box sx={{ maxWidth: '70%', display: 'flex', flexDirection: 'column' }}>
+        {!isMine && (
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              color: 'text.secondary',
+              mb: 0.5,
+              ml: 1,
+              fontWeight: 500
             }}
           >
-            {/* Reply preview */}
+            {senderInfo.username}
+          </Typography>
+        )}
+        
+        {editing ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 300 }}>
+            <TextField
+              size="small"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              multiline
+              maxRows={4}
+              autoFocus
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '12px',
+                }
+              }}
+            />
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              <Button size="small" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              <Button size="small" variant="contained" onClick={handleEdit}>
+                Save
+              </Button>
+            </Box>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              position: 'relative',
+              '&:hover .message-actions': {
+                opacity: 1,
+              }
+            }}
+          >
+            {/* Reply preview - IMPROVED */}
             {message.reply_to && (
               <Box 
                 sx={{ 
                   mb: 1, 
-                  p: 1, 
-                  bgcolor: 'rgba(0,0,0,0.1)', 
-                  borderRadius: 1,
+                  p: 1.5, 
+                  bgcolor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', 
+                  borderRadius: '8px',
                   borderLeft: '3px solid',
-                  borderColor: 'primary.main'
+                  borderColor: isMine ? 'rgba(255,255,255,0.5)' : 'primary.main',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: isMine ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
+                  }
                 }}
+                onClick={handleReplyClick}
               >
-                <Typography variant="caption" sx={{ opacity: 0.7, display: 'block' }}>
-                  Replying to: {message.reply_to.content}
+                <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', fontWeight: 500 }}>
+                  Replying to {message.reply_to.sender_id === profile?.id ? 'yourself' : senderInfo.username}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8, fontStyle: 'italic' }}>
+                  {message.reply_to.content}
                 </Typography>
               </Box>
             )}
 
-            <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-              {message.content}
-            </Typography>
-            
-            {/* Message timestamp */}
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                display: 'block',
-                mt: 0.5,
-                opacity: 0.7,
-                fontSize: '0.7rem'
+            {/* Message bubble */}
+            <Box
+              sx={{
+                bgcolor: isMine ? '#0088cc' : '#f0f0f0',
+                color: isMine ? 'white' : 'text.primary',
+                p: 2,
+                borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                position: 'relative',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                },
               }}
             >
-              {formatCambodiaTime(message.created_at)}
-              {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
-            </Typography>
+              {/* Forward indicator */}
+              {message.is_forwarded && (
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, opacity: 0.8 }}>
+                  <ForwardIcon fontSize="small" sx={{ mr: 0.5, fontSize: '1rem' }} />
+                  <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
+                    Forwarded {message.original_sender && `from ${message.original_sender}`}
+                  </Typography>
+                </Box>
+              )}
 
-            {/* Message actions menu */}
-            {showMenu && (
-              <>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  wordBreak: 'break-word',
+                  lineHeight: 1.4,
+                  fontSize: '0.9rem'
+                }}
+              >
+                {message.content}
+              </Typography>
+              
+              {/* Message timestamp and status - IMPROVED READ RECEIPTS */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 1, gap: 0.5 }}>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    opacity: 0.7,
+                    fontSize: '0.7rem',
+                    lineHeight: 1
+                  }}
+                >
+                  {formatCambodiaTime(message.created_at)}
+                  {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
+                </Typography>
+                
+                {/* FIX 2: Improved read receipts */}
+                {isMine && (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    {message.is_read ? (
+                      <Box sx={{ 
+                        color: isMine ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.6)', 
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}>
+                        ✓✓
+                      </Box>
+                    ) : (
+                      <Box sx={{ 
+                        color: isMine ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', 
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}>
+                        ✓
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+
+              {/* Message actions menu */}
+              {showMenu && (
                 <IconButton
                   size="small"
                   onClick={handleMenu}
+                  className="message-actions"
                   sx={{ 
                     position: 'absolute', 
-                    top: 4, 
-                    right: 4, 
-                    color: isMine ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)',
+                    top: -8, 
+                    right: isMine ? -8 : 'auto',
+                    left: isMine ? 'auto' : -8,
+                    bgcolor: isMine ? '#0088cc' : '#f0f0f0',
+                    color: isMine ? 'white' : 'text.primary',
                     opacity: 0,
-                    transition: 'opacity 0.2s',
-                    '.MuiBox-root:hover &': {
-                      opacity: 1,
+                    transition: 'opacity 0.2s, transform 0.2s',
+                    width: 24,
+                    height: 24,
+                    '&:hover': {
+                      bgcolor: isMine ? '#0077b3' : '#e0e0e0',
+                      transform: 'scale(1.1)',
                     }
                   }}
                 >
                   <MoreVertIcon fontSize="small" />
                 </IconButton>
-                <Menu 
-                  anchorEl={anchorEl} 
-                  open={Boolean(anchorEl)} 
-                  onClose={handleClose}
-                  anchorOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                  }}
-                  transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                  }}
-                >
-                  {/* For my own messages: Show Edit, Reply, Delete */}
-                  {isMine && (
-                    <MenuItem 
-                      onClick={() => { 
-                        setEditing(true); 
-                        handleClose(); 
-                      }}
-                    >
-                      <EditIcon fontSize="small" sx={{ mr: 1 }} />
-                      Edit
-                    </MenuItem>
-                  )}
-                  
-                  {/* For all messages: Show Reply option */}
-                  <MenuItem onClick={handleReplyClick}>
-                    <ReplyIcon fontSize="small" sx={{ mr: 1 }} />
-                    Reply
-                  </MenuItem>
-
-                  {/* For my own messages: Show Delete option */}
-                  {isMine && (
-                    <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
-                      <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-                      Delete
-                    </MenuItem>
-                  )}
-                </Menu>
-              </>
-            )}
-
-            {/* Loading indicator for temporary messages */}
-            {message.is_temp && (
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                <Typography variant="caption" sx={{ opacity: 0.7, mr: 1 }}>
-                  Sending...
-                </Typography>
-                <CircularProgress size={12} />
-              </Box>
-            )}
+              )}
+            </Box>
           </Box>
-        </Tooltip>
+        )}
+
+        {/* Message actions menu */}
+        {showMenu && (
+          <Menu 
+            anchorEl={anchorEl} 
+            open={Boolean(anchorEl)} 
+            onClose={handleClose}
+            anchorOrigin={{
+              vertical: 'top',
+              horizontal: isMine ? 'left' : 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: isMine ? 'right' : 'left',
+            }}
+            PaperProps={{
+              sx: {
+                borderRadius: '12px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+              }
+            }}
+          >
+            {/* For my own messages: Show Edit, Reply, Forward, Delete */}
+            {isMine && (
+              <MenuItem 
+                onClick={() => { 
+                  setEditing(true); 
+                  handleClose(); 
+                }}
+                sx={{ borderRadius: '8px', my: 0.5, mx: 1 }}
+              >
+                <EditIcon fontSize="small" sx={{ mr: 1.5, color: 'primary.main' }} />
+                Edit
+              </MenuItem>
+            )}
+            
+            {/* For all messages: Show Reply option */}
+            <MenuItem 
+              onClick={handleReplyClick}
+              sx={{ borderRadius: '8px', my: 0.5, mx: 1 }}
+            >
+              <ReplyIcon fontSize="small" sx={{ mr: 1.5, color: 'primary.main' }} />
+              Reply
+            </MenuItem>
+
+            {/* For all messages: Show Forward option */}
+            <MenuItem 
+              onClick={handleForwardClick}
+              sx={{ borderRadius: '8px', my: 0.5, mx: 1 }}
+            >
+              <ForwardIcon fontSize="small" sx={{ mr: 1.5, color: 'primary.main' }} />
+              Forward
+            </MenuItem>
+
+            {/* For my own messages: Show Delete option */}
+            {isMine && (
+              <MenuItem 
+                onClick={handleDelete} 
+                sx={{ 
+                  borderRadius: '8px', 
+                  my: 0.5, 
+                  mx: 1,
+                  color: 'error.main',
+                  '&:hover': {
+                    bgcolor: 'error.light',
+                    color: 'error.dark'
+                  }
+                }}
+              >
+                <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
+                Delete
+              </MenuItem>
+            )}
+          </Menu>
+        )}
+
+        {/* Loading indicator for temporary messages */}
+        {message.is_temp && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5, justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+            <Typography variant="caption" sx={{ opacity: 0.7, mr: 1, fontSize: '0.7rem' }}>
+              Sending...
+            </Typography>
+            <CircularProgress size={10} />
+          </Box>
+        )}
+      </Box>
+
+      {isMine && (
+        <Avatar 
+          src={profile?.avatar_url} 
+          sx={{ 
+            width: 32, 
+            height: 32, 
+            ml: 1,
+            mt: 'auto',
+            fontSize: '0.8rem',
+            bgcolor: 'secondary.main'
+          }}
+          imgProps={{ 
+            onError: (e) => { 
+              e.target.style.display = 'none';
+            } 
+          }}
+        >
+          {(profile?.username?.charAt(0) || 'M').toUpperCase()}
+        </Avatar>
       )}
     </Box>
+  );
+};
+
+// Forward Message Dialog Component
+const ForwardMessageDialog = ({ open, onClose, message, friends, onForward }) => {
+  const [selectedFriends, setSelectedFriends] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredFriends = friends.filter(friend =>
+    friend.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    friend.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleToggleFriend = (friendId) => {
+    setSelectedFriends(prev =>
+      prev.includes(friendId)
+        ? prev.filter(id => id !== friendId)
+        : [...prev, friendId]
+    );
+  };
+
+  const handleForward = () => {
+    if (selectedFriends.length > 0 && message) {
+      onForward(message, selectedFriends);
+      setSelectedFriends([]);
+      setSearchTerm('');
+      onClose();
+    }
+  };
+
+  const handleCloseDialog = () => {
+    setSelectedFriends([]);
+    setSearchTerm('');
+    onClose();
+  };
+
+  return (
+    <Dialog 
+      open={open} 
+      onClose={handleCloseDialog} 
+      maxWidth="sm" 
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: '16px',
+        }
+      }}
+    >
+      <DialogTitle sx={{ pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ForwardIcon color="primary" />
+          <Typography variant="h6" fontWeight="600">Forward Message</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        {/* Message Preview */}
+        <Card 
+          sx={{ 
+            p: 2, 
+            mb: 2, 
+            bgcolor: 'grey.50',
+            borderRadius: '12px',
+            border: '1px solid',
+            borderColor: 'divider'
+          }}
+        >
+          <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 1, opacity: 0.8 }}>
+            Forwarding:
+          </Typography>
+          <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
+            {message?.content}
+          </Typography>
+          {message?.reply_to && (
+            <Box sx={{ mt: 1, p: 1.5, bgcolor: 'rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+              <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 500 }}>
+                Replying to: {message.reply_to.content}
+              </Typography>
+            </Box>
+          )}
+        </Card>
+
+        {/* Search */}
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search friends..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ mb: 2 }}
+          InputProps={{
+            sx: {
+              borderRadius: '12px',
+            }
+          }}
+        />
+
+        {/* Friends List */}
+        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+          Select friends to forward to:
+        </Typography>
+        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+          {filteredFriends.length === 0 ? (
+            <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
+              No friends found
+            </Typography>
+          ) : (
+            filteredFriends.map((friend) => (
+              <ListItem
+                key={friend.id}
+                sx={{
+                  border: '1px solid',
+                  borderColor: selectedFriends.includes(friend.id) ? 'primary.main' : 'divider',
+                  borderRadius: '12px',
+                  mb: 1,
+                  bgcolor: selectedFriends.includes(friend.id) ? 'primary.light' : 'background.paper',
+                  color: selectedFriends.includes(friend.id) ? 'primary.contrastText' : 'text.primary',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  }
+                }}
+                onClick={() => handleToggleFriend(friend.id)}
+                button
+              >
+                <ListItemAvatar>
+                  <Avatar 
+                    src={friend.avatar_url}
+                    sx={{
+                      width: 40,
+                      height: 40,
+                    }}
+                    imgProps={{ 
+                      onError: (e) => { 
+                        e.target.style.display = 'none';
+                      } 
+                    }}
+                  >
+                    {friend.username?.charAt(0)?.toUpperCase() || 'F'}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Typography variant="body1" fontWeight="500">
+                      {friend.username}
+                    </Typography>
+                  }
+                  secondary={friend.email}
+                />
+                <Checkbox
+                  checked={selectedFriends.includes(friend.id)}
+                  onChange={() => handleToggleFriend(friend.id)}
+                  color="primary"
+                />
+              </ListItem>
+            ))
+          )}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, pt: 1 }}>
+        <Button 
+          onClick={handleCloseDialog}
+          sx={{ borderRadius: '8px' }}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleForward}
+          disabled={selectedFriends.length === 0}
+          startIcon={<ForwardIcon />}
+          sx={{ borderRadius: '8px' }}
+        >
+          Forward to {selectedFriends.length} {selectedFriends.length === 1 ? 'friend' : 'friends'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
@@ -423,7 +810,7 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess, setSuccess, setError 
     <>
       {/* Description */}
       {group.description && (
-        <Typography paragraph sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+        <Typography paragraph sx={{ fontStyle: 'italic', color: 'text.secondary', lineHeight: 1.6 }}>
           "{group.description}"
         </Typography>
       )}
@@ -436,6 +823,7 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess, setSuccess, setError 
             onClick={handleJoin}
             disabled={joining}
             startIcon={joining ? <CircularProgress size={16} /> : null}
+            sx={{ borderRadius: '8px' }}
           >
             {joining ? 'Joining...' : 'Join Group'}
           </Button>
@@ -445,19 +833,31 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess, setSuccess, setError 
       <Divider sx={{ my: 2 }} />
 
       {/* Members */}
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
         Members ({members.length})
       </Typography>
-      <List sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1, p: 1, mb: 3 }}>
+      <List sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: '12px', p: 1, mb: 3 }}>
         {members.map((member) => (
-          <ListItem key={member.id}>
+          <ListItem key={member.id} sx={{ borderRadius: '8px', mb: 0.5 }}>
             <ListItemAvatar>
-              <Avatar src={member.avatar_url} sx={{ width: 32, height: 32 }}>
-                {member.username?.[0] || 'U'}
+              <Avatar 
+                src={member.avatar_url} 
+                sx={{ width: 32, height: 32 }}
+                imgProps={{ 
+                  onError: (e) => { 
+                    e.target.style.display = 'none';
+                  } 
+                }}
+              >
+                {member.username?.[0]?.toUpperCase() || 'U'}
               </Avatar>
             </ListItemAvatar>
             <ListItemText
-              primary={member.username}
+              primary={
+                <Typography variant="body2" fontWeight="500">
+                  {member.username}
+                </Typography>
+              }
               secondary={member.id === profile?.id ? 'You' : member.email}
             />
           </ListItem>
@@ -467,7 +867,7 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess, setSuccess, setError 
       <Divider sx={{ my: 2 }} />
 
       {/* Group Feed */}
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
         Group Feed ({diaries.length})
       </Typography>
       {diaries.length === 0 ? (
@@ -477,12 +877,22 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess, setSuccess, setError 
       ) : (
         <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
           {diaries.map((diary) => (
-            <Card key={diary.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
-              <Typography variant="subtitle2">{diary.title}</Typography>
+            <Card 
+              key={diary.id} 
+              variant="outlined" 
+              sx={{ 
+                p: 2, 
+                mb: 2, 
+                borderRadius: '12px',
+                border: '1px solid',
+                borderColor: 'divider'
+              }}
+            >
+              <Typography variant="subtitle2" fontWeight="600">{diary.title}</Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 by {diary.user?.username || 'Unknown'} • {formatCambodiaDate(diary.created_at)}
               </Typography>
-              <Typography variant="body2">{diary.content}</Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.6 }}>{diary.content}</Typography>
             </Card>
           ))}
         </Box>
@@ -527,7 +937,10 @@ const DashboardPage = () => {
   // Message states
   const [messageLoading, setMessageLoading] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [forwardingMessage, setForwardingMessage] = useState(null);
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const messagesEndRef = useRef(null);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   // Dialog states
   const [diaryDialogOpen, setDiaryDialogOpen] = useState(false);
@@ -544,52 +957,88 @@ const DashboardPage = () => {
     fetchDashboardData();
   }, [isAuthenticated, navigate]);
 
+  // Clear chat state helper
+  const clearChatState = () => {
+    setMessages([]);
+    setReplyingTo(null);
+    setNewMessage('');
+  };
+
   // Enhanced polling for real-time updates
   useEffect(() => {
-    if (!selectedFriend) return;
+    if (!selectedFriend) {
+      setMessages([]);
+      return;
+    }
 
     let isSubscribed = true;
-    let retryCount = 0;
-    const maxRetries = 5;
 
     const pollMessages = async () => {
       try {
         const chatMessages = await getPrivateChat(selectedFriend.id);
-
+        
         if (isSubscribed) {
-          const sortedMessages = chatMessages.sort((a, b) =>
+          // Enhanced message processing with proper sender info
+          const enhancedMessages = chatMessages.map(message => {
+            const isMyMessage = message.sender_id === profile?.id;
+            
+            return {
+              ...message,
+              // FIX 1: Ensure proper sender information
+              sender: {
+                username: isMyMessage 
+                  ? profile?.username 
+                  : selectedFriend?.username || 'Unknown User',
+                avatar_url: isMyMessage 
+                  ? profile?.avatar_url 
+                  : selectedFriend?.avatar_url,
+                id: isMyMessage ? profile?.id : selectedFriend?.id
+              },
+              // FIX 2: Ensure proper read status
+              is_read: message.is_read || false
+            };
+          });
+          
+          const sortedMessages = enhancedMessages.sort((a, b) =>
             new Date(a.created_at) - new Date(b.created_at)
           );
           
-          if (JSON.stringify(sortedMessages) !== JSON.stringify(messages)) {
-            setMessages(sortedMessages);
-          }
-          retryCount = 0;
+          // Only update if messages actually changed
+          setMessages(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(sortedMessages)) {
+              return prev;
+            }
+            return sortedMessages;
+          });
         }
       } catch (error) {
         console.error('Polling error:', error);
-        retryCount++;
-
-        if (retryCount >= maxRetries) {
-          console.log('Max polling retries reached, stopping');
-          return;
-        }
       }
     };
     
-    pollMessages();
-    const pollInterval = setInterval(pollMessages, 2000);
+    // Poll every 1.5 seconds
+    const pollInterval = setInterval(pollMessages, 1500);
 
     return () => {
       isSubscribed = false;
       clearInterval(pollInterval);
     };
-  }, [selectedFriend, messages.length]);
+  }, [selectedFriend?.id, profile]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Handle tab changes - clear chat when leaving messages tab
+  const handleTabChange = (e, newValue) => {
+    // If leaving the messages tab, clear the chat state
+    if (activeTab === 1 && newValue !== 1) {
+      clearChatState();
+      setSelectedFriend(null);
+    }
+    setActiveTab(newValue);
+  };
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -631,10 +1080,25 @@ const DashboardPage = () => {
     try {
       const updatedMessage = await editMessage(messageId, newContent);
       
+      // Enhanced updated message with proper sender info
+      const isMyMessage = updatedMessage.sender_id === profile?.id;
+      const enhancedMessage = {
+        ...updatedMessage,
+        sender: {
+          username: isMyMessage 
+            ? profile?.username 
+            : selectedFriend?.username || 'Unknown User',
+          avatar_url: isMyMessage 
+            ? profile?.avatar_url 
+            : selectedFriend?.avatar_url,
+          id: isMyMessage ? profile?.id : selectedFriend?.id
+        }
+      };
+      
       setMessages(prev => 
         prev.map(msg => 
           msg.id === messageId 
-            ? { ...updatedMessage, is_temp: false }
+            ? { ...enhancedMessage, is_temp: false }
             : msg
         )
       );
@@ -668,34 +1132,101 @@ const DashboardPage = () => {
   // Reply handler - when user clicks Reply on a message
   const handleReply = (message) => {
     setReplyingTo(message);
+    // Auto-focus on input when replying
+    setTimeout(() => {
+      const input = document.querySelector('textarea');
+      if (input) input.focus();
+    }, 100);
   };
 
-  // Clear reply
+  // Forward handler - when user clicks Forward on a message
+  const handleForward = (message) => {
+    setForwardingMessage(message);
+    setForwardDialogOpen(true);
+  };
+
+  // Handle actual forwarding to multiple friends
+  const handleForwardMessage = async (message, friendIds) => {
+    try {
+      setMessageLoading(true);
+      
+      // Send the message to each selected friend
+      const forwardPromises = friendIds.map(friendId =>
+        sendPrivateMessage(friendId, {
+          content: message.content,
+          message_type: 'text',
+          is_forwarded: true,
+          original_sender: message.sender?.username || profile?.username || 'Unknown',
+          reply_to_id: message.reply_to_id || null,
+        })
+      );
+
+      await Promise.all(forwardPromises);
+      
+      setSuccess(`Message forwarded to ${friendIds.length} ${friendIds.length === 1 ? 'friend' : 'friends'}`);
+      setForwardingMessage(null);
+      setForwardDialogOpen(false);
+      
+    } catch (err) {
+      setError(err.message || 'Failed to forward message');
+    } finally {
+      setMessageLoading(false);
+    }
+  };
+
+  // Clear reply - FIX 3: Improved reply clearing
   const clearReply = () => {
     setReplyingTo(null);
+    // Auto-focus back to input
+    setTimeout(() => {
+      const input = document.querySelector('textarea');
+      if (input) input.focus();
+    }, 100);
   };
 
-  // Message handlers
+  // Optimized friend selection with immediate feedback
   const handleSelectFriend = async (friend) => {
+    // Clear all message-related states first
+    clearChatState();
     setSelectedFriend(friend);
-    setReplyingTo(null);
-    setNewMessage('');
-    setMessageLoading(true);
+    setIsLoadingMessages(true);
+    
     try {
       const chatMessages = await getPrivateChat(friend.id);
-      const sortedMessages = chatMessages.sort((a, b) =>
+      
+      // Enhanced message processing with proper sender info
+      const enhancedMessages = chatMessages.map(message => {
+        const isMyMessage = message.sender_id === profile?.id;
+        
+        return {
+          ...message,
+          sender: {
+            username: isMyMessage 
+              ? profile?.username 
+              : friend?.username || 'Unknown User',
+            avatar_url: isMyMessage 
+              ? profile?.avatar_url 
+              : friend?.avatar_url,
+            id: isMyMessage ? profile?.id : friend?.id
+          },
+          is_read: message.is_read || false
+        };
+      });
+      
+      const sortedMessages = enhancedMessages.sort((a, b) =>
         new Date(a.created_at) - new Date(b.created_at)
       );
       setMessages(sortedMessages);
     } catch (err) {
       console.error('Chat error:', err);
       setError(err.message || 'Failed to load messages');
+      setMessages([]);
     } finally {
-      setMessageLoading(false);
+      setIsLoadingMessages(false);
     }
   };
 
-  // Send message with reply - UPDATED
+  // Send message with reply
   const handleSendMessage = async () => {
     const messageContent = newMessage.trim();
     if (!messageContent || !selectedFriend) return;
@@ -712,8 +1243,13 @@ const DashboardPage = () => {
         is_read: false,
         created_at: new Date().toISOString(),
         is_temp: true,
-        reply_to_id: replyingTo?.id || null,  // This links to the original message
-        reply_to: replyingTo || null,  // This shows the preview
+        reply_to_id: replyingTo?.id || null,
+        reply_to: replyingTo || null,
+        sender: { // Enhanced sender info for immediate display
+          username: profile.username,
+          avatar_url: profile.avatar_url,
+          id: profile.id
+        }
       };
 
       // Add temporary message to UI immediately
@@ -723,19 +1259,31 @@ const DashboardPage = () => {
       });
 
       setNewMessage('');
-      setReplyingTo(null); // Clear reply after sending
+      setReplyingTo(null);
 
       // Send to backend
       const sentMessage = await sendPrivateMessage(selectedFriend.id, { 
         content: messageContent, 
         message_type: 'text',
-        reply_to_id: replyingTo?.id || null, // Send reply reference to backend
+        reply_to_id: replyingTo?.id || null,
       });
 
-      // Replace temporary message with real one from backend
+      // Replace temporary message with real one from backend (with enhanced sender info)
+      const enhancedSentMessage = {
+        ...sentMessage,
+        sender: {
+          username: profile.username,
+          avatar_url: profile.avatar_url,
+          id: profile.id
+        },
+        is_temp: false,
+        // FIX 2: Ensure read status is properly set
+        is_read: sentMessage.is_read || false
+      };
+
       setMessages(prev => {
         const filtered = prev.filter(msg => !msg.is_temp);
-        const newMessages = [...filtered, { ...sentMessage, is_temp: false }];
+        const newMessages = [...filtered, enhancedSentMessage];
         return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       });
 
@@ -746,6 +1294,13 @@ const DashboardPage = () => {
       setNewMessage(messageContent);
     } finally {
       setMessageLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -1020,25 +1575,30 @@ const DashboardPage = () => {
         <GroupInviteNotification onJoin={fetchDashboardData} />
 
         {/* Header */}
-        <Card sx={{ mb: 3, p: 3 }}>
+        <Card sx={{ mb: 3, p: 3, borderRadius: '16px' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
             <Avatar
               src={profile?.avatar_url}
               alt={profile?.username}
               sx={{ width: 80, height: 80, mr: 3 }}
+              imgProps={{ 
+                onError: (e) => { 
+                  e.target.style.display = 'none';
+                } 
+              }}
             />
             <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h4" gutterBottom>
+              <Typography variant="h4" gutterBottom fontWeight="600">
                 Welcome back, {profile?.username}!
               </Typography>
-              <Typography variant="body1" color="text.secondary">
+              <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6 }}>
                 {profile?.bio || 'No bio yet.'}
               </Typography>
               <Chip
                 label={profile?.is_verified ? 'Verified' : 'Not Verified'}
                 color={profile?.is_verified ? 'success' : 'default'}
                 size="small"
-                sx={{ mt: 1 }}
+                sx={{ mt: 1, borderRadius: '8px' }}
               />
             </Box>
             <IconButton onClick={() => setEditing(!editing)}>
@@ -1047,19 +1607,19 @@ const DashboardPage = () => {
           </Box>
 
           <Collapse in={!!error}>
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+            <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
               {error}
             </Alert>
           </Collapse>
           <Collapse in={!!success}>
-            <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
+            <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setSuccess(null)}>
               {success}
             </Alert>
           </Collapse>
 
           <Collapse in={editing}>
-            <Card sx={{ p: 3, mt: 2 }}>
-              <Typography variant="h6" gutterBottom>
+            <Card sx={{ p: 3, mt: 2, borderRadius: '12px' }}>
+              <Typography variant="h6" gutterBottom fontWeight="600">
                 Edit Profile
               </Typography>
               <Box component="form" onSubmit={profileFormik.handleSubmit}>
@@ -1073,6 +1633,9 @@ const DashboardPage = () => {
                   helperText={profileFormik.touched.username && profileFormik.errors.username}
                   fullWidth
                   margin="normal"
+                  InputProps={{
+                    sx: { borderRadius: '8px' }
+                  }}
                 />
                 <TextField
                   label="Bio"
@@ -1086,6 +1649,9 @@ const DashboardPage = () => {
                   helperText={profileFormik.touched.bio && profileFormik.errors.bio}
                   fullWidth
                   margin="normal"
+                  InputProps={{
+                    sx: { borderRadius: '8px' }
+                  }}
                 />
                 <TextField
                   label="Avatar URL"
@@ -1097,9 +1663,12 @@ const DashboardPage = () => {
                   helperText={profileFormik.touched.avatar_url && profileFormik.errors.avatar_url}
                   fullWidth
                   margin="normal"
+                  InputProps={{
+                    sx: { borderRadius: '8px' }
+                  }}
                 />
                 <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                  <Button type="submit" variant="contained">
+                  <Button type="submit" variant="contained" sx={{ borderRadius: '8px' }}>
                     Save
                   </Button>
                   <Button
@@ -1108,6 +1677,7 @@ const DashboardPage = () => {
                       setEditing(false);
                       profileFormik.resetForm();
                     }}
+                    sx={{ borderRadius: '8px' }}
                   >
                     Cancel
                   </Button>
@@ -1118,12 +1688,18 @@ const DashboardPage = () => {
         </Card>
 
         {/* Main Content with Tabs */}
-        <Card>
+        <Card sx={{ borderRadius: '16px', overflow: 'hidden' }}>
           <Tabs
             value={activeTab}
-            onChange={(e, newValue) => setActiveTab(newValue)}
+            onChange={handleTabChange}
             variant="scrollable"
             scrollButtons="auto"
+            sx={{
+              '& .MuiTab-root': {
+                borderRadius: '8px 8px 0 0',
+                minHeight: 60,
+              }
+            }}
           >
             <Tab icon={<ArticleIcon />} label="Feed" />
             <Tab icon={<ChatIcon />} label="Messages" />
@@ -1135,11 +1711,12 @@ const DashboardPage = () => {
           {/* Feed Tab */}
           <TabPanel value={activeTab} index={0}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h5">Your Feed</Typography>
+              <Typography variant="h5" fontWeight="600">Your Feed</Typography>
               <Button
                 variant="contained"
                 onClick={() => setDiaryDialogOpen(true)}
                 startIcon={<ArticleIcon />}
+                sx={{ borderRadius: '8px' }}
               >
                 New Diary
               </Button>
@@ -1151,15 +1728,15 @@ const DashboardPage = () => {
               </Typography>
             ) : (
               diaries.map((diary) => (
-                <Card key={diary.id} sx={{ p: 3, mb: 2 }}>
+                <Card key={diary.id} sx={{ p: 3, mb: 2, borderRadius: '12px' }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Box>
-                      <Typography variant="h6" gutterBottom>
+                      <Typography variant="h6" gutterBottom fontWeight="600">
                         {diary.title}
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ color: 'green', fontWeight: 'bold' }}>
-                          By {diary.author?.username || 'Unknown'}
+                        <Typography variant="body2" color="text.secondary" sx={{ color: 'green', fontWeight: '600' }}>
+                          By {diary.author?.username || ''}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           • {formatCambodiaDate(diary.created_at)}
@@ -1173,10 +1750,11 @@ const DashboardPage = () => {
                         diary.share_type === 'public' ? 'primary' :
                           diary.share_type === 'friends' ? 'secondary' : 'default'
                       }
+                      sx={{ borderRadius: '8px' }}
                     />
                   </Box>
 
-                  <Typography variant="body1" sx={{ mb: 3 }}>
+                  <Typography variant="body1" sx={{ mb: 3, lineHeight: 1.6 }}>
                     {diary.content}
                   </Typography>
 
@@ -1188,7 +1766,8 @@ const DashboardPage = () => {
                       size="small"
                       sx={{
                         minWidth: 'auto',
-                        color: likedDiaries.has(diary.id) ? 'error.main' : 'text.secondary'
+                        color: likedDiaries.has(diary.id) ? 'error.main' : 'text.secondary',
+                        borderRadius: '8px'
                       }}
                     >
                       {likedDiaries.has(diary.id) ? 'Liked' : 'Like'}
@@ -1200,7 +1779,7 @@ const DashboardPage = () => {
                       onClick={() => handleExpandDiary(diary.id)}
                       size="small"
                       color={expandedDiary === diary.id ? 'primary' : 'inherit'}
-                      sx={{ minWidth: 'auto' }}
+                      sx={{ minWidth: 'auto', borderRadius: '8px' }}
                     >
                       Comment
                       {diaryComments[diary.id]?.length > 0 && ` (${diaryComments[diary.id].length})`}
@@ -1208,7 +1787,7 @@ const DashboardPage = () => {
                   </Box>
 
                   <Collapse in={expandedDiary === diary.id}>
-                    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '12px' }}>
                       <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                         <TextField
                           fullWidth
@@ -1223,12 +1802,15 @@ const DashboardPage = () => {
                             }
                           }}
                           disabled={commentLoading[diary.id]}
+                          InputProps={{
+                            sx: { borderRadius: '8px' }
+                          }}
                         />
                         <Button
                           variant="contained"
                           onClick={() => handleAddComment(diary.id)}
                           disabled={!commentTexts[diary.id]?.trim() || commentLoading[diary.id]}
-                          sx={{ minWidth: '60px' }}
+                          sx={{ minWidth: '60px', borderRadius: '8px' }}
                         >
                           {commentLoading[diary.id] ? <CircularProgress size={20} /> : <SendIcon />}
                         </Button>
@@ -1240,13 +1822,13 @@ const DashboardPage = () => {
                             <ListItem key={comment.id} sx={{ px: 0, py: 1 }}>
                               <ListItemAvatar>
                                 <Avatar sx={{ width: 32, height: 32, fontSize: '0.8rem' }}>
-                                  {comment.user?.username?.charAt(0) || 'U'}
+                                  {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
                                 </Avatar>
                               </ListItemAvatar>
                               <ListItemText
                                 primary={
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Typography variant="body2" component="span" fontWeight="bold" color='green'>
+                                    <Typography variant="body2" component="span" fontWeight="600" color='green'>
                                       {comment.user?.username || `User ${comment.user_id}`}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
@@ -1255,7 +1837,7 @@ const DashboardPage = () => {
                                   </Box>
                                 }
                                 secondary={
-                                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                  <Typography variant="body2" sx={{ mt: 0.5, lineHeight: 1.5 }}>
                                     {comment.content}
                                   </Typography>
                                 }
@@ -1275,28 +1857,61 @@ const DashboardPage = () => {
             )}
           </TabPanel>
 
-          {/* Messages Tab */}
+          {/* Messages Tab - UPDATED WITH ALL FIXES */}
           <TabPanel value={activeTab} index={1}>
-            <Box sx={{ display: 'flex', height: 500 }}>
-              <Box sx={{ width: 300, borderRight: 1, borderColor: 'divider', pr: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  Friends {messageLoading && <CircularProgress size={16} sx={{ ml: 1 }} />}
+            <Box sx={{ display: 'flex', height: 600, borderRadius: '8px', overflow: 'hidden' }}>
+              {/* Friends List Sidebar */}
+              <Box sx={{ 
+                width: 300, 
+                borderRight: 1, 
+                borderColor: 'divider', 
+                pr: 2,
+                bgcolor: 'background.paper'
+              }}>
+                <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600 }}>
+                  Friends {isLoadingMessages && <CircularProgress size={16} sx={{ ml: 1 }} />}
                 </Typography>
-                <List sx={{ maxHeight: 350, overflow: 'auto' }}>
+                <List sx={{ maxHeight: 520, overflow: 'auto' }}>
                   {friends.map((friend) => (
                     <ListItem
                       key={friend.id}
                       selected={selectedFriend?.id === friend.id}
                       onClick={() => handleSelectFriend(friend)}
-                      disabled={messageLoading}
+                      disabled={isLoadingMessages}
+                      sx={{
+                        borderRadius: '12px',
+                        mb: 1,
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                          transform: 'translateX(4px)',
+                        },
+                        '&.Mui-selected': {
+                          bgcolor: 'primary.light',
+                          color: 'primary.contrastText',
+                        }
+                      }}
                     >
                       <ListItemAvatar>
-                        <Avatar src={friend.avatar_url} alt={friend.username}>
-                          {friend.username?.charAt(0)}
+                        <Avatar 
+                          src={friend.avatar_url} 
+                          alt={friend.username} 
+                          sx={{ width: 40, height: 40 }}
+                          imgProps={{ 
+                            onError: (e) => { 
+                              e.target.style.display = 'none';
+                            } 
+                          }}
+                        >
+                          {friend.username?.charAt(0)?.toUpperCase() || 'F'}
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText
-                        primary={friend.username}
+                        primary={
+                          <Typography variant="body1" fontWeight="500">
+                            {friend.username}
+                          </Typography>
+                        }
                         secondary={friend.email}
                       />
                     </ListItem>
@@ -1304,52 +1919,82 @@ const DashboardPage = () => {
                 </List>
               </Box>
 
-              <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', pl: 2 }}>
+              {/* Chat Area */}
+              <Box sx={{ 
+                flexGrow: 1, 
+                display: 'flex', 
+                flexDirection: 'column',
+                bgcolor: '#f8f9fa'
+              }}>
                 {selectedFriend ? (
                   <>
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider', pb: 1, mb: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Typography variant="h6">
-                          Chat with {selectedFriend.username}
+                    {/* Chat Header */}
+                    <Box sx={{ 
+                      p: 2, 
+                      borderBottom: 1, 
+                      borderColor: 'divider', 
+                      bgcolor: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2
+                    }}>
+                      <Avatar 
+                        src={selectedFriend.avatar_url} 
+                        sx={{ 
+                          width: 44, 
+                          height: 44, 
+                          bgcolor: 'primary.main',
+                          fontSize: '1.2rem',
+                          fontWeight: 'bold'
+                        }}
+                        imgProps={{ 
+                          onError: (e) => { 
+                            e.target.style.display = 'none';
+                          } 
+                        }}
+                      >
+                        {selectedFriend.username?.charAt(0)?.toUpperCase() || 'F'}
+                      </Avatar>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Typography variant="h6" fontWeight="600">
+                          {selectedFriend.username || 'Friend'}
                         </Typography>
-                        <Chip
-                          label="Real-time"
-                          size="small"
-                          color="success"
-                          variant="outlined"
-                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {isLoadingMessages ? 'Loading messages...' : 
+                           messages.length > 0 ? 'Online • Last seen recently' : 'Start a conversation'}
+                        </Typography>
                       </Box>
-                      <Typography variant="caption" color="text.secondary">
-                        {messages.length > 0 ?
-                          `${messages.length} messages • Last updated: ${formatCambodiaTime(new Date().toISOString())}` :
-                          'No messages yet'
-                        }
-                      </Typography>
+                      <Chip
+                        label="Real-time"
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        sx={{ borderRadius: '8px' }}
+                      />
                     </Box>
                     
-                    {/* Reply Preview Bar - FIXED POSITION */}
+                    {/* Reply Preview Bar - IMPROVED */}
                     {replyingTo && (
                       <Box sx={{ 
-                        p: 1.5, 
+                        p: 2, 
                         bgcolor: 'primary.light', 
-                        color: 'white',
-                        borderRadius: 1,
-                        mb: 2,
+                        color: 'primary.contrastText',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        borderBottom: '1px solid',
+                        borderColor: 'divider'
                       }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                          <ReplyIcon sx={{ mr: 1, fontSize: '1rem' }} />
-                          <Box>
-                            <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
-                              Replying to:
+                        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                          <ReplyIcon sx={{ mr: 1.5, fontSize: '1.2rem', flexShrink: 0 }} />
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Typography variant="caption" sx={{ opacity: 0.9, display: 'block', fontWeight: 500 }}>
+                              Replying to {replyingTo.sender_id === profile?.id ? 'yourself' : selectedFriend.username}
                             </Typography>
                             <Typography variant="body2" sx={{ 
                               whiteSpace: 'nowrap', 
                               overflow: 'hidden', 
                               textOverflow: 'ellipsis',
-                              maxWidth: 400
                             }}>
                               {replyingTo.content}
                             </Typography>
@@ -1358,7 +2003,11 @@ const DashboardPage = () => {
                         <IconButton 
                           size="small" 
                           onClick={clearReply}
-                          sx={{ color: 'white' }}
+                          sx={{ 
+                            color: 'primary.contrastText',
+                            flexShrink: 0,
+                            ml: 1
+                          }}
                         >
                           <CloseIcon fontSize="small" />
                         </IconButton>
@@ -1369,25 +2018,37 @@ const DashboardPage = () => {
                     <Box sx={{ 
                       flexGrow: 1, 
                       overflow: 'auto', 
-                      mb: 2, 
-                      maxHeight: 300,
-                      p: 1,
-                      bgcolor: 'grey.50',
-                      borderRadius: 1,
+                      p: 2,
                       display: 'flex',
-                      flexDirection: 'column'
+                      flexDirection: 'column',
+                      background: 'linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)'
                     }}>
-                      {messages.length === 0 ? (
-                        <Box sx={{ textAlign: 'center', mt: 4 }}>
-                          <ChatIcon sx={{ fontSize: 48, color: 'grey.300', mb: 2 }} />
+                      {isLoadingMessages ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                          <CircularProgress />
+                        </Box>
+                      ) : messages.length === 0 ? (
+                        <Box sx={{ 
+                          textAlign: 'center', 
+                          mt: 4,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '100%'
+                        }}>
+                          <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                          <Typography variant="h6" color="text.secondary" gutterBottom>
+                            No messages yet
+                          </Typography>
                           <Typography color="text.secondary">
-                            No messages yet. Start a conversation!
+                            Start a conversation with {selectedFriend.username}
                           </Typography>
                         </Box>
                       ) : (
                         <>
                           {messages
-                            .filter(message => !message.is_unsent)
+                            .filter(message => !message.is_unsent && !message.is_temp)
                             .map((message) => (
                               <ChatMessage
                                 key={message.id}
@@ -1396,7 +2057,9 @@ const DashboardPage = () => {
                                 onUpdate={handleEditMessage}
                                 onDelete={handleDeleteMessage}
                                 onReply={handleReply}
+                                onForward={handleForward}
                                 profile={profile}
+                                currentFriend={selectedFriend}
                               />
                             ))
                           }
@@ -1406,34 +2069,53 @@ const DashboardPage = () => {
                     </Box>
                     
                     {/* Message Input */}
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+                    <Box sx={{ 
+                      p: 2, 
+                      borderTop: 1, 
+                      borderColor: 'divider', 
+                      bgcolor: 'white',
+                      display: 'flex', 
+                      gap: 1, 
+                      alignItems: 'flex-end' 
+                    }}>
                       <TextField
                         fullWidth
                         size="small"
                         placeholder={
                           replyingTo 
-                            ? `Replying to: ${replyingTo.content.substring(0, 30)}...` 
+                            ? `Replying to ${replyingTo.sender_id === profile?.id ? 'yourself' : selectedFriend.username}...` 
                             : "Type a message... (Press Enter to send)"
                         }
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage();
-                          }
-                        }}
+                        onKeyPress={handleKeyPress}
                         multiline
                         maxRows={3}
                         disabled={messageLoading}
+                        InputProps={{
+                          sx: { 
+                            borderRadius: '24px',
+                            bgcolor: '#f8f9fa'
+                          }
+                        }}
+                        // FIX 3: Auto-focus when replying
+                        autoFocus={!!replyingTo}
                       />
                       <Button
                         variant="contained"
                         onClick={handleSendMessage}
                         disabled={!newMessage.trim() || messageLoading}
-                        sx={{ minWidth: '60px', height: '40px' }}
+                        sx={{ 
+                          minWidth: '48px', 
+                          height: '48px', 
+                          borderRadius: '50%',
+                          bgcolor: '#0088cc',
+                          '&:hover': {
+                            bgcolor: '#0077b3'
+                          }
+                        }}
                       >
-                        {messageLoading ? <CircularProgress size={20} /> : <SendIcon />}
+                        {messageLoading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <SendIcon />}
                       </Button>
                     </Box>
                   </>
@@ -1443,36 +2125,66 @@ const DashboardPage = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     height: '100%',
-                    flexDirection: 'column'
+                    flexDirection: 'column',
+                    bgcolor: '#f8f9fa'
                   }}>
-                    <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
-                    <Typography color="text.secondary" align="center">
+                    <ChatIcon sx={{ fontSize: 96, color: 'grey.300', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
                       Select a friend to start chatting
+                    </Typography>
+                    <Typography color="text.secondary" align="center">
+                      Choose a friend from the list to begin your conversation
                     </Typography>
                   </Box>
                 )}
               </Box>
             </Box>
+
+            {/* Forward Message Dialog */}
+            <ForwardMessageDialog
+              open={forwardDialogOpen}
+              onClose={() => setForwardDialogOpen(false)}
+              message={forwardingMessage}
+              friends={friends.filter(friend => friend.id !== selectedFriend?.id)}
+              onForward={handleForwardMessage}
+            />
           </TabPanel>
 
           {/* Friends Tab */}
           <TabPanel value={activeTab} index={2}>
-            <Typography variant="h5" gutterBottom>
+            <Typography variant="h5" gutterBottom fontWeight="600">
               Friends
             </Typography>
 
             {pendingRequests.length > 0 && (
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" gutterBottom color="primary">
+                <Typography variant="h6" gutterBottom color="primary" fontWeight="600">
                   Pending Requests ({pendingRequests.length})
                 </Typography>
                 {pendingRequests.map((request) => (
-                  <Card key={request.id} sx={{ p: 2, mb: 1, display: 'flex', alignItems: 'center' }}>
-                    <Avatar src={request.avatar_url} sx={{ mr: 2 }}>
-                      {request.username?.charAt(0)}
+                  <Card 
+                    key={request.id} 
+                    sx={{ 
+                      p: 2, 
+                      mb: 1, 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      borderRadius: '12px'
+                    }}
+                  >
+                    <Avatar 
+                      src={request.avatar_url} 
+                      sx={{ mr: 2, width: 48, height: 48 }}
+                      imgProps={{ 
+                        onError: (e) => { 
+                          e.target.style.display = 'none';
+                        } 
+                      }}
+                    >
+                      {request.username?.charAt(0)?.toUpperCase() || 'U'}
                     </Avatar>
                     <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body1">{request.username}</Typography>
+                      <Typography variant="body1" fontWeight="500">{request.username}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         {request.email}
                       </Typography>
@@ -1481,6 +2193,7 @@ const DashboardPage = () => {
                       variant="contained"
                       size="small"
                       onClick={() => handleAcceptRequest(request.id)}
+                      sx={{ borderRadius: '8px' }}
                     >
                       Accept
                     </Button>
@@ -1489,7 +2202,7 @@ const DashboardPage = () => {
               </Box>
             )}
 
-            <Typography variant="h6" gutterBottom>
+            <Typography variant="h6" gutterBottom fontWeight="600">
               Your Friends ({friends.length})
             </Typography>
             {friends.length === 0 ? (
@@ -1498,12 +2211,34 @@ const DashboardPage = () => {
               </Typography>
             ) : (
               friends.map((friend) => (
-                <Card key={friend.id} sx={{ p: 2, mb: 1, display: 'flex', alignItems: 'center' }}>
-                  <Avatar src={friend.avatar_url} sx={{ mr: 2 }}>
-                    {friend.username?.charAt(0)}
+                <Card 
+                  key={friend.id} 
+                  sx={{ 
+                    p: 2, 
+                    mb: 1, 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    borderRadius: '12px',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }
+                  }}
+                >
+                  <Avatar 
+                    src={friend.avatar_url} 
+                    sx={{ mr: 2, width: 48, height: 48 }}
+                    imgProps={{ 
+                      onError: (e) => { 
+                        e.target.style.display = 'none';
+                      } 
+                    }}
+                  >
+                    {friend.username?.charAt(0)?.toUpperCase() || 'F'}
                   </Avatar>
                   <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="body1">{friend.username}</Typography>
+                    <Typography variant="body1" fontWeight="500">{friend.username}</Typography>
                     <Typography variant="body2" color="text.secondary">
                       {friend.email}
                     </Typography>
@@ -1515,6 +2250,7 @@ const DashboardPage = () => {
                       handleSelectFriend(friend);
                       setActiveTab(1);
                     }}
+                    sx={{ borderRadius: '8px' }}
                   >
                     Message
                   </Button>
@@ -1526,8 +2262,13 @@ const DashboardPage = () => {
           {/* Groups Tab */}
           <TabPanel value={activeTab} index={3}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h5">Groups</Typography>
-              <Button variant="contained" onClick={() => setGroupDialogOpen(true)} startIcon={<GroupIcon />}>
+              <Typography variant="h5" fontWeight="600">Groups</Typography>
+              <Button 
+                variant="contained" 
+                onClick={() => setGroupDialogOpen(true)} 
+                startIcon={<GroupIcon />}
+                sx={{ borderRadius: '8px' }}
+              >
                 Create Group
               </Button>
             </Box>
@@ -1538,25 +2279,55 @@ const DashboardPage = () => {
               </Typography>
             ) : (
               groups.map((group) => (
-                <Card key={group.id} sx={{ p: 3, mb: 2 }}>
+                <Card 
+                  key={group.id} 
+                  sx={{ 
+                    p: 3, 
+                    mb: 2, 
+                    borderRadius: '12px',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }
+                  }}
+                >
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <Box>
-                      <Typography variant="h6">{group.name}</Typography>
+                      <Typography variant="h6" fontWeight="600">{group.name}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         Created {formatCambodiaDate(group.created_at)}
                       </Typography>
                       {group.description && (
-                        <Typography sx={{ mt: 1, fontStyle: 'italic' }}>{group.description}</Typography>
+                        <Typography sx={{ mt: 1, fontStyle: 'italic', lineHeight: 1.6 }}>{group.description}</Typography>
                       )}
                     </Box>
                     <Box>
                       <Tooltip title="View Group">
-                        <IconButton onClick={() => handleViewGroup(group)}>
+                        <IconButton 
+                          onClick={() => handleViewGroup(group)}
+                          sx={{ 
+                            bgcolor: 'primary.light',
+                            color: 'primary.contrastText',
+                            '&:hover': { bgcolor: 'primary.main' },
+                            borderRadius: '8px',
+                            mr: 1
+                          }}
+                        >
                           <VisibilityIcon />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Open Chat">
-                        <IconButton component={Link} to={`/group/${group.id}`}>
+                        <IconButton 
+                          component={Link} 
+                          to={`/group/${group.id}`}
+                          sx={{ 
+                            bgcolor: 'secondary.light',
+                            color: 'secondary.contrastText',
+                            '&:hover': { bgcolor: 'secondary.main' },
+                            borderRadius: '8px'
+                          }}
+                        >
                           <ChatIcon />
                         </IconButton>
                       </Tooltip>
@@ -1569,7 +2340,7 @@ const DashboardPage = () => {
 
           {/* Search Users Tab */}
           <TabPanel value={activeTab} index={4}>
-            <Typography variant="h5" gutterBottom>
+            <Typography variant="h5" gutterBottom fontWeight="600">
               Search Users
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
@@ -1579,8 +2350,15 @@ const DashboardPage = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                InputProps={{
+                  sx: { borderRadius: '8px' }
+                }}
               />
-              <Button variant="contained" onClick={handleSearch}>
+              <Button 
+                variant="contained" 
+                onClick={handleSearch}
+                sx={{ borderRadius: '8px' }}
+              >
                 Search
               </Button>
             </Box>
@@ -1592,12 +2370,34 @@ const DashboardPage = () => {
             )}
 
             {searchResults.map((user) => (
-              <Card key={user.id} sx={{ p: 2, mb: 1, display: 'flex', alignItems: 'center' }}>
-                <Avatar src={user.avatar_url} sx={{ mr: 2 }}>
-                  {user.username?.charAt(0)}
+              <Card 
+                key={user.id} 
+                sx={{ 
+                  p: 2, 
+                  mb: 1, 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  borderRadius: '12px',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  }
+                }}
+              >
+                <Avatar 
+                  src={user.avatar_url} 
+                  sx={{ mr: 2, width: 48, height: 48 }}
+                  imgProps={{ 
+                    onError: (e) => { 
+                      e.target.style.display = 'none';
+                    } 
+                  }}
+                >
+                  {user.username?.charAt(0)?.toUpperCase() || 'U'}
                 </Avatar>
                 <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="body1">{user.username}</Typography>
+                  <Typography variant="body1" fontWeight="500">{user.username}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     {user.email}
                   </Typography>
@@ -1607,6 +2407,7 @@ const DashboardPage = () => {
                   size="small"
                   startIcon={<PersonAddIcon />}
                   onClick={() => handleSendFriendRequest(user.id)}
+                  sx={{ borderRadius: '8px' }}
                 >
                   Add Friend
                 </Button>
@@ -1617,8 +2418,18 @@ const DashboardPage = () => {
       </Box>
 
       {/* Create Diary Dialog */}
-      <Dialog open={diaryDialogOpen} onClose={() => setDiaryDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Create New Diary</DialogTitle>
+      <Dialog 
+        open={diaryDialogOpen} 
+        onClose={() => setDiaryDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 600 }}>Create New Diary</DialogTitle>
         <DialogContent>
           <Box component="form" sx={{ mt: 1 }}>
             <TextField
@@ -1632,6 +2443,9 @@ const DashboardPage = () => {
               fullWidth
               margin="normal"
               required
+              InputProps={{
+                sx: { borderRadius: '8px' }
+              }}
             />
 
             <TextField
@@ -1647,6 +2461,9 @@ const DashboardPage = () => {
               fullWidth
               margin="normal"
               required
+              InputProps={{
+                sx: { borderRadius: '8px' }
+              }}
             />
 
             <FormControl fullWidth margin="normal">
@@ -1657,6 +2474,7 @@ const DashboardPage = () => {
                 onChange={diaryFormik.handleChange}
                 onBlur={diaryFormik.handleBlur}
                 label="Share Type"
+                sx={{ borderRadius: '8px' }}
               >
                 <MenuItem value="public">Public</MenuItem>
                 <MenuItem value="friends">Friends Only</MenuItem>
@@ -1679,6 +2497,7 @@ const DashboardPage = () => {
                       .map((g) => g.name)
                       .join(', ')
                   }
+                  sx={{ borderRadius: '8px' }}
                 >
                   {groups.map((group) => (
                     <MenuItem key={group.id} value={group.id}>
@@ -1692,11 +2511,17 @@ const DashboardPage = () => {
           </Box>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={() => setDiaryDialogOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={() => setDiaryDialogOpen(false)}
+            sx={{ borderRadius: '8px' }}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={diaryFormik.handleSubmit}
             variant="contained"
+            sx={{ borderRadius: '8px' }}
           >
             Create Diary
           </Button>
@@ -1709,8 +2534,13 @@ const DashboardPage = () => {
         onClose={() => setGroupDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+          }
+        }}
       >
-        <DialogTitle>Create New Group</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 600 }}>Create New Group</DialogTitle>
         <DialogContent>
           <Box component="form" sx={{ mt: 1 }}>
             <TextField
@@ -1724,6 +2554,9 @@ const DashboardPage = () => {
               onBlur={groupFormik.handleBlur}
               error={groupFormik.touched.name && !!groupFormik.errors.name}
               helperText={groupFormik.touched.name && groupFormik.errors.name}
+              InputProps={{
+                sx: { borderRadius: '8px' }
+              }}
             />
             <TextField
               label="Description"
@@ -1735,16 +2568,25 @@ const DashboardPage = () => {
               value={groupFormik.values.description}
               onChange={groupFormik.handleChange}
               onBlur={groupFormik.handleBlur}
+              InputProps={{
+                sx: { borderRadius: '8px' }
+              }}
             />
           </Box>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={() => setGroupDialogOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={() => setGroupDialogOpen(false)}
+            sx={{ borderRadius: '8px' }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={groupFormik.handleSubmit}
             disabled={!groupFormik.isValid || groupFormik.isSubmitting}
+            sx={{ borderRadius: '8px' }}
           >
             Create Group
           </Button>
@@ -1757,17 +2599,25 @@ const DashboardPage = () => {
         onClose={() => setViewGroupDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+          }
+        }}
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
-              <Typography variant="h6">{selectedGroup?.name}</Typography>
+              <Typography variant="h6" fontWeight="600">{selectedGroup?.name}</Typography>
               <Typography variant="body2" color="text.secondary">
                 Created {selectedGroup && formatCambodiaDate(selectedGroup.created_at)}
               </Typography>
             </Box>
-            <IconButton onClick={() => setViewGroupDialogOpen(false)}>
-              <VisibilityIcon />
+            <IconButton 
+              onClick={() => setViewGroupDialogOpen(false)}
+              sx={{ borderRadius: '8px' }}
+            >
+              <CloseIcon />
             </IconButton>
           </Box>
         </DialogTitle>
@@ -1787,8 +2637,13 @@ const DashboardPage = () => {
             <Typography>Loading...</Typography>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewGroupDialogOpen(false)}>Close</Button>
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={() => setViewGroupDialogOpen(false)}
+            sx={{ borderRadius: '8px' }}
+          >
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
 

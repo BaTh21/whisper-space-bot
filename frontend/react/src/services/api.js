@@ -451,3 +451,4 @@ export const sendMessage = async (friendId, { content, message_type = 'text', re
   });
   return res.data;
 };
+
