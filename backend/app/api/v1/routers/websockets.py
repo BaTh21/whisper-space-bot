@@ -18,8 +18,8 @@ def _chat_id(user_a: int, user_b: int) -> str:
     return f"private_{a}_{b}"
 
 
-    @router.websocket("/private/{friend_id}")
-    async def ws_private_chat(
+@router.websocket("/private/{friend_id}")
+async def ws_private_chat(
         websocket: WebSocket,
         friend_id: int,
         db: Session = Depends(get_db),
