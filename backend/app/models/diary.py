@@ -27,3 +27,5 @@ class Diary(Base):
     author = relationship("User", back_populates="diaries")
     diary_groups = relationship("DiaryGroup", back_populates="diary", cascade="all, delete-orphan")
     groups = relationship("Group", secondary="diary_groups", viewonly=True)
+    
+    likes = relationship("DiaryLike", back_populates="diary", cascade="all, delete-orphan")

@@ -1,4 +1,4 @@
-// Pages/DashboardPage.jsx
+import CloseIcon from '@mui/icons-material/Close';
 import {
   Article as ArticleIcon,
   Chat as ChatIcon,
@@ -43,7 +43,7 @@ import {
   Tooltip
 } from '@mui/material';
 import { useFormik } from 'formik';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useActionState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
 import CreateGroupDialog from '../components/CreateGroupDialog';
@@ -65,6 +65,7 @@ import {
   getMe,
   getPendingRequests,
   getPrivateChat,
+  getGroupMessage,
   getUserGroups,
   joinGroup,
   likeDiary,
@@ -100,7 +101,7 @@ const formatCambodiaTime = (dateString) => {
       // If invalid, try forcing UTC
       date = new Date(dateString + 'Z');
     }
-    
+
     const options = {
       timeZone: 'Asia/Bangkok',  // ← Use 'Asia/Bangkok' (same as Phnom Penh)
       hour12: false,
@@ -124,8 +125,8 @@ const formatCambodiaTime = (dateString) => {
     if (yesterdayStr === messageDate) {
       return `Yesterday ${messageTime}`;
     }
-    
-    const dateStr = date.toLocaleDateString('en-GB', { 
+
+    const dateStr = date.toLocaleDateString('en-GB', {
       timeZone: 'Asia/Phnom_Penh',
       day: '2-digit',
       month: '2-digit',
@@ -157,15 +158,26 @@ const formatCambodiaDate = (dateString) => {
   }
 };
 
-// View Group Content Component
-const ViewGroupContent = ({ group, profile, onJoinSuccess }) => {
+const ViewGroupContent = ({ group, profile }) => {
   const [members, setMembers] = useState([]);
   const [diaries, setDiaries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [joining, setJoining] = useState(false);
+  const [tab, setTab] = useState(0);
+  const [messages, setMessages] = useState([]);
+  const [newGroupMessage, setNewGroupMessage] = useState("");
+  const wsRef = useRef(null);
+  const BASE_URI = import.meta.env.VITE_API_URL;
+  const token = localStorage.getItem("accessToken");
+  const messagesEndRef = useRef(null);
+  const [expendedGroupDiary, setExpendGroupDiary] = useState(null);
+  const [diaryGroupComments, setDiaryGroupComments] = useState({});
+  const [newComment, setNewComment] = useState({});
+  const [postingComment, setPostingComment] = useState({});
 
-  const isMember = members.some(m => m.id === profile?.id);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -187,18 +199,177 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess }) => {
     fetchData();
   }, [group.id]);
 
-  const handleJoin = async () => {
-    setJoining(true);
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const data = await getGroupMessage(group.id);
+        setMessages(data);
+      } catch (err) {
+        console.error("Failed to fetch messages:", err);
+      }
+    };
+    fetchMessages();
+  }, [group.id]);
+
+  useEffect(() => {
+    let ws;
+    let reconnectTimeout;
+
+    const connect = () => {
+      const wsUrl = `${BASE_URI.replace(/^http/, 'ws')}/ws/group/${group.id}?token=${token}`;
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("Connected to group chat");
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        setMessages(prev => [...prev, msg]);
+      };
+
+      ws.onclose = (event) => {
+        console.log("Disconnected from chat", event.reason);
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        ws.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      if (ws) ws.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
+  }, [group.id, token]);
+
+
+  const handleSendNewMessage = () => {
+    if (!newGroupMessage.trim() || !wsRef.current) return;
+
+    const msgData = {
+      type: "message",
+      content: newGroupMessage,
+    };
+
+    const tempMessage = {
+      id: `temp-${Date.now()}`,
+      sender: profile,
+      content: newGroupMessage,
+    };
+    setMessages(prev => [...prev, tempMessage]);
+
+    wsRef.current.send(JSON.stringify(msgData));
+    setNewGroupMessage("");
+  };
+
+  const formatMessageDateTime = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    return date.toLocaleString("en-US", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const handleToggleComments = async (diaryId) => {
+    if (expendedGroupDiary === diaryId) {
+      setExpendGroupDiary(null);
+    } else {
+      setExpendGroupDiary(diaryId);
+
+      if (!diaryGroupComments[diaryId]) {
+        try {
+          const data = await getDiaryComments(diaryId);
+          setDiaryGroupComments(prev => ({ ...prev, [diaryId]: data }));
+        } catch (error) {
+          setDiaryGroupComments(prev => ({ ...prev, [diaryId]: [] }));
+        }
+      }
+    }
+  }
+
+  const handleAddComment = async (diaryId) => {
+    const content = newComment[diaryId]?.trim();
+    if (!content) return;
+
+    setPostingComment((prev) => ({ ...prev, [diaryId]: true }));
+
     try {
-      await joinGroup(group.id);
-      setSuccess('Joined group successfully');
-      onJoinSuccess();
+      const newCmt = await commentOnDiary(diaryId, content);
+      setDiaryGroupComments((prev) => ({
+        ...prev,
+        [diaryId]: [...(prev[diaryId] || []), newCmt],
+      }));
+      setNewComment((prev) => ({ ...prev, [diaryId]: "" }));
     } catch (err) {
-      setError(err.message || 'Failed to join group');
+      console.error("Failed to add comment:", err);
     } finally {
-      setJoining(false);
+      setPostingComment((prev) => ({ ...prev, [diaryId]: false }));
     }
   };
+
+  const handleLikeGroupDiary = async (diaryId) => {
+    // Optimistically update UI
+    setDiaries((prevDiaries) =>
+      prevDiaries.map((d) => {
+        if (d.id !== diaryId) return d;
+
+        const isLiked = d.likes?.some((like) => like.user.id === profile.id);
+        let updatedLikes;
+
+        if (isLiked) {
+          // User already liked → remove their like
+          updatedLikes = d.likes.filter((like) => like.user.id !== profile.id);
+        } else {
+          // User not liked → add new like
+          updatedLikes = [
+            ...d.likes,
+            { id: Date.now(), user: { id: profile.id, username: profile.username } },
+          ];
+        }
+
+        return { ...d, likes: updatedLikes };
+      })
+    );
+
+    try {
+      // Sync with backend
+      await likeDiary(diaryId);
+    } catch (error) {
+      console.error("Failed to like diary:", error.message);
+
+      // Rollback on failure
+      setDiaries((prevDiaries) =>
+        prevDiaries.map((d) => {
+          if (d.id !== diaryId) return d;
+          const isLiked = d.likes?.some((like) => like.user.id === profile.id);
+          let updatedLikes;
+
+          if (isLiked) {
+            updatedLikes = d.likes.filter((like) => like.user.id !== profile.id);
+          } else {
+            updatedLikes = [
+              ...d.likes,
+              { id: Date.now(), user: { id: profile.id, username: profile.username } },
+            ];
+          }
+          return { ...d, likes: updatedLikes };
+        })
+      );
+    }
+  };
+
+
 
   if (loading) {
     return (
@@ -208,81 +379,217 @@ const ViewGroupContent = ({ group, profile, onJoinSuccess }) => {
     );
   }
 
-  if (error) {
-    return <Alert severity="error">{error}</Alert>;
-  }
+  if (error) return <Alert severity="error">{error}</Alert>;
 
   return (
-    <>
-      {/* Description */}
-      {group.description && (
-        <Typography paragraph sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-          "{group.description}"
-        </Typography>
-      )}
+    <Box sx={{ display: 'flex', gap: 2 }}>
+      <Box sx={{ width: 600 }}>
+        <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 2 }}>
+          <Tab label={`Members (${members.length})`} />
+          <Tab label={`Group Feed (${diaries.length})`} />
+        </Tabs>
 
-      {/* Join Button */}
-      {!isMember && (
-        <Box sx={{ mb: 3, textAlign: 'right' }}>
-          <Button 
-            variant="contained" 
-            onClick={handleJoin}
-            disabled={joining}
-            startIcon={joining ? <CircularProgress size={16} /> : null}
+        {tab === 0 && (
+          <List sx={{ maxHeight: 200, overflow: 'auto' }}>
+            {members.map(m => (
+              <ListItem key={m.id} sx={{ backgroundColor: 'grey.100', borderRadius: 2, my: 1 }}>
+                <ListItemAvatar>
+                  <Avatar src={m.avatar_url}>{m.username?.[0] || 'U'}</Avatar>
+                </ListItemAvatar>
+                <ListItemText primary={m.username} secondary={m.id === profile?.id ? 'You' : m.email} />
+              </ListItem>
+            ))}
+          </List>
+        )}
+
+        {tab === 1 && (
+
+          <Box
+            sx={{
+              maxHeight: "75vh",
+              overflow: "auto",
+              scrollbarWidth: "none",
+              "&::-webkit-scrollbar": { display: "none" },
+            }}
           >
-            {joining ? 'Joining...' : 'Join Group'}
-          </Button>
-        </Box>
-      )}
+            {diaries.length === 0 ? (
+              <Typography>No diaries posted yet.</Typography>
+            ) : (
+              diaries.map((d) => {
+                const isExpanded = expendedGroupDiary === d.id;
+                const diaryComments = diaryGroupComments[d.id] || [];
+                console.log("Diary Id: ", d.id)
+                const isLiked = d.likes?.some((like) => like.user.id === profile.id);
+                const totalLikes = d?.likes?.length;
 
-      <Divider sx={{ my: 2 }} />
+                return (
+                  <Card key={d.id} sx={{ p: 2, mb: 2, boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }}>
+                    <Typography sx={{ fontSize: 20, fontWeight: "bold" }} variant="subtitle2">
+                      {d.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {d.author?.username || "Unknown"} • {formatCambodiaDate(d.created_at)}
+                    </Typography>
+                    <Typography sx={{ mb: 1 }}>{d.content}</Typography>
 
-      {/* Members */}
-      <Typography variant="subtitle1" gutterBottom>
-        Members ({members.length})
-      </Typography>
-      <List sx={{ maxHeight: 200, overflow: 'auto', bgcolor: 'grey.50', borderRadius: 1, p: 1, mb: 3 }}>
-        {members.map((member) => (
-          <ListItem key={member.id}>
-            <ListItemAvatar>
-              <Avatar src={member.avatar_url} sx={{ width: 32, height: 32 }}>
-                {member.username?.[0] || 'U'}
-              </Avatar>
-            </ListItemAvatar>
-            <ListItemText
-              primary={member.username}
-              secondary={member.id === profile?.id ? 'You' : member.email}
+                    <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+                      <Box sx={{ display: 'flex', alignItems: "center" }}>
+                        <Typography
+                          sx={{
+                            transition: "all 0.2s ease-in-out",
+                            transform: isLiked ? "scale(1.2)" : "scale(1)",
+                          }}
+                        >
+                          {totalLikes}
+                        </Typography>
+
+                        <Button
+                          startIcon={
+                            <FavoriteIcon sx={{ color: isLiked ? "red" : "grey" }} />
+                          }
+                          size="small"
+                          sx={{
+                            minWidth: "auto",
+                            color: isLiked ? "red" : "grey",
+                          }}
+                          onClick={() => handleLikeGroupDiary(d.id)}
+                        >
+                          {isLiked ? "Liked" : "Like"}
+                        </Button>
+                      </Box>
+
+                      <Button
+                        startIcon={<CommentIcon />}
+                        size="small"
+                        sx={{ minWidth: "auto", color: "grey" }}
+                        onClick={() => handleToggleComments(d.id)}
+                      >
+                        Comment
+                      </Button>
+                    </Box>
+
+                    <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                      <Box sx={{ mt: 2 }}>
+
+                        <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            placeholder="Write a comment..."
+                            value={newComment[d.id] || ""}
+                            onChange={(e) =>
+                              setNewComment((prev) => ({ ...prev, [d.id]: e.target.value }))
+                            }
+                          />
+                          <Button
+                            variant="contained"
+                            onClick={() => handleAddComment(d.id)}
+                            sx={{ minWidth: "80px" }}
+                          >
+                            {postingComment ? 'Post' : 'Posting'}
+                          </Button>
+                        </Box>
+                        {diaryComments.length === 0 ? (
+                          <Typography variant="body2" color="text.secondary">
+                            No comments yet.
+                          </Typography>
+                        ) : (
+                          diaryComments.map((c) => (
+                            <Box key={c.id} sx={{ mb: 1 }}>
+                              <Typography variant="subtitle2">{c.author?.username || "Anonymous"}</Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                {formatCambodiaDate(c.created_at)}
+                              </Typography>
+                              <Typography variant="body2" sx={{ ml: 1, backgroundColor: 'grey.200', padding: 1.5, my: 1, borderRadius: 2 }}>
+                                {c.content}
+                              </Typography>
+                            </Box>
+                          ))
+                        )}
+                      </Box>
+                    </Collapse>
+                  </Card>
+                );
+              })
+            )}
+          </Box>
+
+
+        )}
+      </Box>
+      <Box sx={{ width: '100%', backgroundColor: 'grey.100', borderRadius: 1, padding: 2 }}>
+        <Box sx={{ flex: 1, height: '75vh', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <Box sx={{ flex: 1, overflowY: "auto", mb: 1, p: 1, scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
+            {messages.map((msg) => {
+              const isOwn = msg.sender?.id === profile?.id;
+
+              return (
+                <Box
+                  key={msg.id}
+                  sx={{
+                    display: "flex",
+                    justifyContent: isOwn ? "flex-end" : "flex-start",
+                    mb: 1,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      maxWidth: "70%",
+                    }}
+                  >
+                    {!isOwn && (
+                      <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                        {msg.sender?.username || "Unkown"}
+                      </Typography>
+                    )}
+                    <Box
+                      sx={{
+                        bgcolor: isOwn ? "primary.main" : "white",
+                        color: isOwn ? "white" : "black",
+                        borderRadius: 2,
+                        p: 1.5,
+                        my: 1,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      <Typography variant="body2">{msg.content}</Typography>
+                    </Box>
+
+                    <Typography variant="body2">{formatMessageDateTime(msg.created_at)}</Typography>
+                  </Box>
+                </Box>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Type a message..."
+              value={newGroupMessage}
+              onChange={e => setNewGroupMessage(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendNewMessage();
+                }
+              }}
+              multiline
+              maxRows={3}
             />
-          </ListItem>
-        ))}
-      </List>
-
-      <Divider sx={{ my: 2 }} />
-
-      {/* Group Feed */}
-      <Typography variant="subtitle1" gutterBottom>
-        Group Feed ({diaries.length})
-      </Typography>
-      {diaries.length === 0 ? (
-        <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
-          No diaries posted in this group yet.
-        </Typography>
-      ) : (
-        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-          {diaries.map((diary) => (
-            <Card key={diary.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
-              <Typography variant="subtitle2">{diary.title}</Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                by {diary.user?.username || 'Unknown'} • {formatCambodiaDate(diary.created_at)}
-              </Typography>
-              <Typography variant="body2">{diary.content}</Typography>
-            </Card>
-          ))}
+            <Button variant="contained" onClick={handleSendNewMessage} sx={{ minWidth: '60px', height: '40px' }}>
+              <SendIcon />
+            </Button>
+          </Box>
         </Box>
-      )}
-    </>
+      </Box>
+
+    </Box>
   );
 };
+
 
 const DashboardPage = () => {
   const { isAuthenticated } = useAuth();
@@ -306,10 +613,7 @@ const DashboardPage = () => {
   const [newMessage, setNewMessage] = useState('');
 
   // Diary interaction states
-  const [expandedDiary, setExpandedDiary] = useState(() => {
-    const saved = localStorage.getItem('expandedDiary');
-    return saved ? Number(saved) : null;
-  });
+  const [expandedDiary, setExpandedDiary] = useState(null);
 
   const [diaryComments, setDiaryComments] = useState({});
   const [diaryLikes, setDiaryLikes] = useState({});
@@ -333,12 +637,6 @@ const DashboardPage = () => {
       return;
     }
 
-    const diaryId = localStorage.getItem('expandedDiary');
-
-    if (diaryId) {
-      handleExpandDiary(Number(diaryId));
-    }
-
     fetchDashboardData();
   }, [isAuthenticated, navigate]);
 
@@ -358,7 +656,7 @@ const DashboardPage = () => {
           const sortedMessages = chatMessages.sort((a, b) =>
             new Date(a.created_at) - new Date(b.created_at)
           );
-          
+
           if (JSON.stringify(sortedMessages) !== JSON.stringify(messages)) {
             setMessages(sortedMessages);
             setLastMessageUpdate(Date.now());
@@ -375,7 +673,7 @@ const DashboardPage = () => {
         }
       }
     };
-    
+
     pollMessages();
     const pollInterval = setInterval(pollMessages, 2000);
 
@@ -465,9 +763,9 @@ const DashboardPage = () => {
 
       setNewMessage('');
 
-      const sentMessage = await sendPrivateMessage(selectedFriend.id, { 
-        content: messageContent, 
-        message_type: 'text' 
+      const sentMessage = await sendPrivateMessage(selectedFriend.id, {
+        content: messageContent,
+        message_type: 'text'
       });
 
       setMessages(prev => {
@@ -662,8 +960,6 @@ const DashboardPage = () => {
     if (!diaryId) return;
 
     setExpandedDiary(diaryId);
-    localStorage.setItem('expandedDiary', diaryId);
-
 
     try {
       const [comments, likes] = await Promise.all([
@@ -772,7 +1068,7 @@ const DashboardPage = () => {
 
       <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', p: 2 }}>
         {/* SHOW PENDING INVITES */}
-      <GroupInviteNotification onJoin={fetchDashboardData} />
+        <GroupInviteNotification onJoin={fetchDashboardData} />
 
         {/* Header */}
         <Card sx={{ mb: 3, p: 3 }}>
@@ -1081,11 +1377,11 @@ const DashboardPage = () => {
                         }
                       </Typography>
                     </Box>
-                    
-                    <Box sx={{ 
-                      flexGrow: 1, 
-                      overflow: 'auto', 
-                      mb: 2, 
+
+                    <Box sx={{
+                      flexGrow: 1,
+                      overflow: 'auto',
+                      mb: 2,
                       maxHeight: 300,
                       display: 'flex',
                       flexDirection: 'column-reverse',
@@ -1147,7 +1443,7 @@ const DashboardPage = () => {
                         ))
                       )}
                     </Box>
-                    
+
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
                       <TextField
                         fullWidth
@@ -1438,7 +1734,7 @@ const DashboardPage = () => {
           <Button
             onClick={diaryFormik.handleSubmit}
             variant="contained"
-            // disabled={!diaryFormik.isValid}
+          // disabled={!diaryFormik.isValid}
           >
             Create Diary
           </Button>
@@ -1494,31 +1790,35 @@ const DashboardPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* View Group Dialog */}
       <Dialog
         open={viewGroupDialogOpen}
         onClose={() => setViewGroupDialogOpen(false)}
-        maxWidth="md"
+        maxWidth="xl"
+        fullScreen
         fullWidth
       >
-        <DialogTitle>
+        <DialogTitle sx={{
+          '&:hover': {
+            backgroundColor: '#F8F8FF'
+          }
+        }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Box>
+            <Box >
               <Typography variant="h6">{selectedGroup?.name}</Typography>
               <Typography variant="body2" color="text.secondary">
                 Created {selectedGroup && formatCambodiaDate(selectedGroup.created_at)}
               </Typography>
             </Box>
             <IconButton onClick={() => setViewGroupDialogOpen(false)}>
-              <VisibilityIcon />
+              <CloseIcon />
             </IconButton>
           </Box>
         </DialogTitle>
         <DialogContent dividers>
           {selectedGroup ? (
-            <ViewGroupContent 
-              group={selectedGroup} 
-              profile={profile} 
+            <ViewGroupContent
+              group={selectedGroup}
+              profile={profile}
               onJoinSuccess={() => {
                 setViewGroupDialogOpen(false);
                 fetchDashboardData();
@@ -1528,24 +1828,23 @@ const DashboardPage = () => {
             <Typography>Loading...</Typography>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewGroupDialogOpen(false)}>Close</Button>
-        </DialogActions>
       </Dialog>
-      {/* === CREATE GROUP DIALOG === */}
+
+
+
+
       <CreateGroupDialog
         open={groupDialogOpen}
         onClose={() => setGroupDialogOpen(false)}
         onSuccess={(newGroup) => {
-          // Add the new group to the list AND refresh everything
           setGroups(prev => [...prev, newGroup]);
-          fetchDashboardData();          // <-- THIS LINE MAKES BOTH USERS SEE SAME GROUP
+          fetchDashboardData();
           setGroupDialogOpen(false);
         }}
         friends={friends}
       />
-          </Layout>
-    
+    </Layout>
+
   );
 };
 

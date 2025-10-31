@@ -317,6 +317,11 @@ export const getPrivateChat = async (friendId) => {
   }
 };
 
+export const getGroupMessage = async (groupId) => {
+  const res = await api.get(`${GROUPS_URL}/${groupId}/message`);
+  return res.data;
+}
+
 export const getGroupMembers = async (groupId) => {
   try {
     const response = await api.get(`${GROUPS_URL}/${groupId}/members/`);
@@ -330,6 +335,7 @@ export const getGroupMembers = async (groupId) => {
 export const getGroupDiaries = async (groupId) => {
   try {
     const response = await api.get(`${GROUPS_URL}/${groupId}/diaries/`);
+    console.log(response.data)
     return response.data;
   } catch (error) {
     console.error('Get group diaries error:', error.response?.data);
