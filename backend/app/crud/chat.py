@@ -1,13 +1,10 @@
-
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.group_message import GroupMessage
 from typing import List
 from fastapi import HTTPException,status
-
 from app.models.user_message_status import UserMessageStatus
-
 
 def create_private_message(
     db: Session,
@@ -15,14 +12,18 @@ def create_private_message(
     receiver_id: int,
     content: str,
     msg_type: str = "text",
-    reply_to_id: int | None = None,          # <-- NEW
+    reply_to_id: int | None = None,
+    is_forwarded: bool = False,  # NEW: Forward parameter
+    original_sender: str | None = None  # NEW: Original sender parameter
 ) -> PrivateMessage:
     msg = PrivateMessage(
         sender_id=sender_id,
         receiver_id=receiver_id,
         content=content,
         message_type=MessageType(msg_type),
-        reply_to_id=reply_to_id,             # <-- NEW
+        reply_to_id=reply_to_id,
+        is_forwarded=is_forwarded,  # NEW: Set forward flag
+        original_sender=original_sender,  # NEW: Set original sender
         created_at=datetime.now(timezone.utc),
     )
     db.add(msg)
@@ -30,13 +31,11 @@ def create_private_message(
     db.refresh(msg)
     return msg
 
-
 def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int = 50, offset: int = 0) -> List[PrivateMessage]:
     return db.query(PrivateMessage).filter(
         ((PrivateMessage.sender_id == user_id) & (PrivateMessage.receiver_id == friend_id)) |
         ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == user_id))
     ).order_by(PrivateMessage.created_at.desc()).offset(offset).limit(limit).all()
-
 
 def create_group_message(
     db: Session, 
@@ -56,7 +55,6 @@ def create_group_message(
     db.commit()
     db.refresh(msg)
     return msg
-
 
 def get_group_messages(
     db: Session, 
@@ -80,7 +78,6 @@ def edit_private_message(db: Session, message_id: int, user_id: int, new_content
     db.commit()
     db.refresh(msg)
     return msg
-
 
 def delete_message_for_user(db: Session, message_id: int, user_id: int):
     status = UserMessageStatus(user_id=user_id, message_id=message_id, is_deleted=True)
