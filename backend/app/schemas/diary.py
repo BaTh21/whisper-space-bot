@@ -21,6 +21,10 @@ class GroupResponse(BaseModel):
     id: int
     name: str
 
+class DiaryLikeResponse(BaseModel):
+    id: int
+    user: CreatorResponse
+    
 class DiaryOut(TimestampMixin):
     id: int
     author : CreatorResponse
@@ -28,6 +32,7 @@ class DiaryOut(TimestampMixin):
     content: str
     share_type: ShareTypeOutput
     groups: List[GroupResponse]
+    likes: list[DiaryLikeResponse]
     is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
@@ -36,13 +41,11 @@ class DiaryOut(TimestampMixin):
 class DiaryCommentCreate(BaseModel):
     content: str
 
-
 class DiaryCommentOut(TimestampMixin):
     id: int
     diary_id: int
-    user: CreatorResponse
+    author: CreatorResponse
     content: str
-    username: Optional[str] = None  # Add username field instead of full user object
-    created_at: str  # Make sure this is included
+    created_at: str
 
     model_config = ConfigDict(from_attributes=True)

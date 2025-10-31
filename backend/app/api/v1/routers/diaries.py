@@ -5,10 +5,11 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count
 from app.models.user import User
-from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse
+from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse, DiaryLikeResponse
 from app.services.websocket_manager import manager
 from app.models.diary import Diary
 from app.models.friend import Friend, FriendshipStatus
+from app.models.diary_like import DiaryLike
 
 router = APIRouter()
 
@@ -57,9 +58,14 @@ def get_feed(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Fetch visible diaries with related author, groups, and likes
     diaries = (
         db.query(Diary)
-        .options(joinedload(Diary.author), joinedload(Diary.groups))
+        .options(
+            joinedload(Diary.author),
+            joinedload(Diary.groups),
+            joinedload(Diary.likes).joinedload(DiaryLike.user)  # preload user for likes
+        )
         .filter(Diary.id.in_([d.id for d in get_visible(db, current_user.id)]))
         .order_by(Diary.created_at.desc())
         .all()
@@ -67,23 +73,33 @@ def get_feed(
 
     result = []
     for d in diaries:
-        result.append(
-            DiaryOut(
-                id=d.id,
-                author=CreatorResponse(
-                    id=d.author.id,
-                    username=d.author.username
-                ),
-                title=d.title,
-                content=d.content,
-                share_type=d.share_type.value,
-                groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups],
-                is_deleted=d.is_deleted,
-                created_at=d.created_at,
-                updated_at=d.updated_at
-            )
+        diary_out = DiaryOut(
+            id=d.id,
+            author=CreatorResponse(
+                id=d.author.id,
+                username=d.author.username
+            ),
+            title=d.title,
+            content=d.content,
+            share_type=d.share_type.value,
+            groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups],
+            likes=[
+                DiaryLikeResponse(
+                    id=l.id,
+                    user=CreatorResponse(
+                        id=l.user.id,
+                        username=l.user.username
+                    )
+                ) for l in d.likes
+            ],
+            is_deleted=d.is_deleted,
+            created_at=d.created_at,
+            updated_at=d.updated_at
         )
+        result.append(diary_out)
+
     return result
+
 
 
 @router.post("/{diary_id}/comment", response_model=DiaryCommentOut)
@@ -99,18 +115,19 @@ def comment_on_diary(
 
     comment = create_comment(db, diary_id, current_user.id, comment_in.content)
     
-    # Return with username
     return DiaryCommentOut(
         id=comment.id,
         diary_id=comment.diary_id,
-        user=comment.user_id,
+        author=CreatorResponse(
+            id=current_user.id,
+            username=current_user.username
+            ),
         content=comment.content,
-        username=current_user.username,
         created_at=comment.created_at.isoformat() if comment.created_at else None
     )
 
 
-@router.post("/{diary_id}/like", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{diary_id}/like")
 def like_diary_endpoint(
     diary_id: int,
     db: Session = Depends(get_db),
@@ -121,7 +138,7 @@ def like_diary_endpoint(
         raise HTTPException(404, "Diary not found or not visible")
 
     create_like(db, diary_id, current_user.id)
-    return None
+    return {"message": "Like toggled successfully"}
 
 
 @router.get("/{diary_id}/comments", response_model=List[DiaryCommentOut])
@@ -136,15 +153,13 @@ def get_diary_comments_endpoint(
     
     comments = get_diary_comments(db, diary_id)
     
-    # Convert comments to proper format
     comment_list = []
     for comment in comments:
         comment_list.append(DiaryCommentOut(
             id=comment.id,
             diary_id=comment.diary_id,
-            user=CreatorResponse(id=comment.user.id, username=comment.user.username),
+            author=CreatorResponse(id=comment.user.id, username=comment.user.username),
             content=comment.content,
-            username=comment.user.username if comment.user else f"User {comment.user_id}",
             created_at=comment.created_at.isoformat() if comment.created_at else None
         ))
     

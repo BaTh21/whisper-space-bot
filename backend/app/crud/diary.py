@@ -8,7 +8,7 @@ from app.schemas.diary import DiaryCreate
 from typing import List, Optional
 from app.models.friend import Friend, FriendshipStatus
 from app.models.group_member import GroupMember
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, select
 
 from app.models.friend import Friend
 from app.models.group_member import GroupMember
@@ -68,6 +68,7 @@ def get_by_id(db: Session, diary_id: int) -> Optional[Diary]:
     return db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
 
 def get_visible(db: Session, user_id: int) -> List[Diary]:
+    # Get IDs of friends
     subq_friends = (
         db.query(Friend.friend_id)
         .filter(
@@ -77,31 +78,34 @@ def get_visible(db: Session, user_id: int) -> List[Diary]:
         .subquery()
     )
 
+    # Get IDs of groups the user is in
     subq_groups = (
         db.query(GroupMember.group_id)
         .filter(GroupMember.user_id == user_id)
         .subquery()
     )
 
+    # Get diary IDs that belong to those groups
     subq_group_diaries = (
         db.query(DiaryGroup.diary_id)
-        .filter(DiaryGroup.group_id.in_(subq_groups))
+        .filter(DiaryGroup.group_id.in_(select(subq_groups.c.group_id)))
         .subquery()
     )
 
+    # Fetch diaries visible to the user
     diaries = (
         db.query(Diary)
         .filter(
-            Diary.is_deleted == False,
+            Diary.is_deleted.is_(False),
             or_(
                 Diary.share_type == ShareType.public,
                 and_(
                     Diary.share_type == ShareType.friends,
-                    Diary.user_id.in_(subq_friends)
+                    Diary.user_id.in_(select(subq_friends.c.friend_id))
                 ),
                 and_(
                     Diary.share_type == ShareType.group,
-                    Diary.id.in_(subq_group_diaries)
+                    Diary.id.in_(select(subq_group_diaries.c.diary_id))
                 ),
                 Diary.user_id == user_id
             )
@@ -116,6 +120,8 @@ def get_visible(db: Session, user_id: int) -> List[Diary]:
 def can_view(db: Session, diary: Diary, user_id: int) -> bool:
     if diary.share_type == ShareType.public:
         return True
+    if diary.share_type == ShareType.personal:
+        return diary.user_id == user_id
     if diary.share_type == ShareType.friends:
         from app.models.friend import Friend, FriendshipStatus
         return db.query(Friend).filter(
@@ -125,8 +131,10 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
         ).first() is not None
     if diary.share_type == ShareType.group:
         from app.models.group_member import GroupMember
+        group_ids = [diary.group_id] if diary.group_id else []
+        group_ids += [g.id for g in diary.groups]
         return db.query(GroupMember).filter(
-            GroupMember.group_id == diary.group_id,
+            GroupMember.group_id.in_(group_ids),
             GroupMember.user_id == user_id
         ).first() is not None
     return False
@@ -142,14 +150,17 @@ def create_comment(db: Session, diary_id: int, user_id: int, content: str) -> Di
 
 def create_like(db: Session, diary_id: int, user_id: int) -> None:
     # Prevent duplicate likes
-    exists = db.query(DiaryLike).filter(
+    like = db.query(DiaryLike).filter(
         DiaryLike.diary_id == diary_id,
         DiaryLike.user_id == user_id
     ).first()
-    if not exists:
+    if like:
+        db.delete(like)
+    else:
         like = DiaryLike(diary_id=diary_id, user_id=user_id)
         db.add(like)
-        db.commit()
+    
+    db.commit()
 
 def get_diary_comments(db: Session, diary_id: int) -> List[DiaryComment]:
     return db.query(DiaryComment).filter(

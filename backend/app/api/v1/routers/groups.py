@@ -4,12 +4,15 @@ from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupMessageOut, GroupOut
+from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut
 from app.services.websocket_manager import manager
 from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups
 from app.schemas.diary import DiaryOut
 from app.schemas.user import UserOut
 from fastapi import APIRouter, Depends, HTTPException, status
+from app.crud.chat import get_group_messages
+from app.models.group_message import GroupMessage
+from app.schemas.chat import GroupMessageOut
 
 from app.models.group_invite import GroupInvite
 
@@ -81,10 +84,18 @@ async def send_group_message(
         created_at=msg.created_at
     )
     
-@router.get("/invites", response_model=List[GroupOut])
-def list_invites(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    invites = get_group_invites(db, current_user.id)
-    return [GroupOut.from_orm(i.group) for i in invites]
+from typing import List
+
+@router.get("/{group_id}/message", response_model=List[GroupMessageOut])
+def get_group_messages_(
+    group_id: int,
+    db: Session = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0,
+):
+    messages = get_group_messages(db, group_id, limit, offset)
+    return messages
+
 
 @router.post("/{token}/accept")
 def accept_invite(token: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

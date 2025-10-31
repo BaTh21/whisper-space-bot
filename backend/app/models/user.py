@@ -18,3 +18,4 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     diaries = relationship("Diary", back_populates="author")
+    diary_likes = relationship("DiaryLike", back_populates="user", cascade="all, delete-orphan")

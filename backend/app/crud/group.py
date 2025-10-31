@@ -13,8 +13,10 @@ from app.models.diary import Diary
 from app.models.user import User
 from app.schemas.group import GroupCreate
 from app.models.friend import Friend
+from app.models.diary_group import DiaryGroup
 from app.models.group_invite import GroupInvite, InviteStatus
 import string
+from sqlalchemy.orm import joinedload
 
 from app.models.group_invite_link import GroupInviteLink
 
@@ -108,11 +110,13 @@ def get_group_diaries(db: Session, group_id: int, user_id: int) -> List[Diary]:
         GroupMember.user_id == user_id
     ).first()
     if not member_check:
-        return []
+        raise HTTPException(status_code=400, detail="You are not member of this group")
 
     return (
         db.query(Diary)
-        .filter(Diary.group_id == group_id)
+        .join(DiaryGroup, Diary.id == DiaryGroup.diary_id)
+        .filter(DiaryGroup.group_id == group_id)
+        .options(joinedload(Diary.groups)) 
         .order_by(Diary.created_at.desc())
         .all()
     )

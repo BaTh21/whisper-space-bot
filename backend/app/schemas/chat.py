@@ -49,3 +49,17 @@ class MessageOut(TimestampMixin):
             ).isoformat().replace("+00:00", "Z")
         }
     )
+    
+class AuthorResponse(BaseModel):
+    id: int
+    username: str
+    
+class GroupMessageOut(BaseModel):
+    id: int
+    sender: AuthorResponse
+    group_id: int
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

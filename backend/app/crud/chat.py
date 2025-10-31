@@ -2,7 +2,21 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.group_message import GroupMessage
+from app.models.group_member import GroupMember
 from typing import List
+
+from fastapi import HTTPException
+from app.schemas.chat import MessageCreate
+
+from app.models.user_message_status import UserMessageStatus
+
+def is_group_member(db: Session, group_id: int, user_id: int) -> bool:
+    return db.query(GroupMember).filter_by(group_id=group_id, user_id=user_id).first() is not None
+
+
+def create_private_message(db: Session, sender_id: int, receiver_id: int, content: str, msg_type: str = "text") -> PrivateMessage:
+    from datetime import datetime, timezone  # Add timezone import
+=======
 from fastapi import HTTPException,status
 from app.models.user_message_status import UserMessageStatus
 
@@ -16,6 +30,7 @@ def create_private_message(
     is_forwarded: bool = False,  # NEW: Forward parameter
     original_sender: str | None = None  # NEW: Original sender parameter
 ) -> PrivateMessage:
+
     msg = PrivateMessage(
         sender_id=sender_id,
         receiver_id=receiver_id,
@@ -42,18 +57,26 @@ def create_group_message(
     sender_id: int, 
     group_id: int, 
     content: str, 
-    msg_type: str = "text"
+    # msg_type: str = "text"
 ) -> GroupMessage:
+    
     msg = GroupMessage(
         sender_id=sender_id, 
         group_id=group_id, 
         content=content, 
-        message_type=MessageType(msg_type),
-        created_at=datetime.now(timezone.utc)
+        # message_type=MessageType(msg_type),
+        created_at=datetime.utcnow()
     )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
+    try:
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+        print(f"[DB] Message saved: {msg.id}")
+        
+    except Exception as e:
+        db.rollback()
+        print(f"[DB Error] Failed to save message: {e}")
+    
     return msg
 
 def get_group_messages(
