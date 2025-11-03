@@ -120,11 +120,63 @@ export const searchUsers = async (query) => {
 // Friend endpoints
 export const sendFriendRequest = async (userId) => {
   try {
+    console.log('🚀 Sending friend request to user ID:', userId);
     const response = await api.post(`${FRIENDS_URL}/request/${userId}`);
+    console.log('✅ Friend request successful:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Send friend request error:', error.response?.data);
-    throw new Error(error.response?.data?.detail || error.response?.data?.msg || 'Failed to send friend request');
+    console.error('❌ Send friend request error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    // Handle specific backend errors
+    if (error.response?.status === 400) {
+      const detail = error.response?.data?.detail;
+      if (detail?.includes('Already friends')) {
+        throw new Error('You are already friends with this user');
+      } else if (detail?.includes('Cannot send')) {
+        throw new Error('Cannot send friend request to yourself');
+      } else if (detail?.includes('blocked')) {
+        throw new Error('This friendship is blocked');
+      } else {
+        throw new Error(detail || 'Invalid request');
+      }
+    }
+    
+    if (error.response?.status === 409) {
+      const detail = error.response?.data?.detail;
+      // For 409 conflicts, return a success-like response since the request already exists
+      return { 
+        success: true, 
+        message: detail || 'Friend request already sent',
+        alreadyExists: true
+      };
+    }
+    
+    if (error.response?.status === 404) {
+      throw new Error('User not found');
+    }
+    
+    if (error.response?.status === 500) {
+      const detail = error.response?.data?.detail;
+      if (detail?.includes('already exists') || detail?.includes('duplicate')) {
+        return { 
+          success: true, 
+          message: 'Friend request already sent',
+          alreadyExists: true
+        };
+      }
+      throw new Error('Server error. Please try again.');
+    }
+
+    // Network errors
+    if (error.message === 'Network Error' || error.message === 'Failed to fetch') {
+      throw new Error('Cannot connect to server. Please check your internet connection.');
+    }
+
+    throw new Error(error.response?.data?.detail || 'Failed to send friend request');
   }
 };
 
@@ -150,11 +202,26 @@ export const getPendingRequests = async () => {
 
 export const acceptFriendRequest = async (requesterId) => {
   try {
+    console.log('✅ Accepting friend request from:', requesterId);
     const response = await api.post(`${FRIENDS_URL}/accept/${requesterId}`);
+    console.log('✅ Friend request accepted:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Accept friend request error:', error.response?.data);
-    throw new Error(error.response?.data?.detail || error.response?.data?.msg || 'Failed to accept friend request');
+    console.error('❌ Accept friend request error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    if (error.response?.status === 404) {
+      throw new Error('Friend request not found');
+    } else if (error.response?.status === 400) {
+      throw new Error(error.response?.data?.detail || 'Friend request already processed');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while accepting friend request');
+    }
+    
+    throw new Error(error.response?.data?.detail || 'Failed to accept friend request');
   }
 };
 
@@ -496,3 +563,79 @@ export const sendMessage = async (friendId, { content, message_type = 'text', re
   return res.data;
 };
 
+export const unfriend = async (friendId) => {
+  try {
+    const response = await api.post(`${FRIENDS_URL}/unfriend/${friendId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Unfriend error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    if (error.response?.status === 404) {
+      throw new Error('Friendship not found');
+    } else if (error.response?.status === 400) {
+      throw new Error(error.response?.data?.detail || 'Not friends with this user');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while unfriending');
+    }
+    
+    throw new Error(error.response?.data?.detail || 'Failed to unfriend');
+  }
+};
+
+export const blockUser = async (userId) => {
+  try {
+    const response = await api.post(`${FRIENDS_URL}/block/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Block user error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    if (error.response?.status === 400) {
+      throw new Error(error.response?.data?.detail || 'Cannot block this user');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while blocking user');
+    }
+    
+    throw new Error(error.response?.data?.detail || 'Failed to block user');
+  }
+};
+
+export const unblockUser = async (userId) => {
+  try {
+    const response = await api.post(`${FRIENDS_URL}/unblock/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Unblock user error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    if (error.response?.status === 404) {
+      throw new Error('User is not blocked');
+    } else if (error.response?.status === 400) {
+      throw new Error(error.response?.data?.detail || 'User is not blocked');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while unblocking user');
+    }
+    
+    throw new Error(error.response?.data?.detail || 'Failed to unblock user');
+  }
+};
+
+export const getBlockedUsers = async () => {
+  try {
+    const response = await api.get(`${FRIENDS_URL}/blocked`);
+    return response.data;
+  } catch (error) {
+    console.error('Get blocked users error:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to fetch blocked users');
+  }
+};
