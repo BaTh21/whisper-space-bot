@@ -48,6 +48,7 @@ def create_diary_endpoint(
         groups=[
             {"id": g.id, "name": g.name} for g in diary.groups
         ],
+        likes=getattr(diary, "likes", 0),
         is_deleted=diary.is_deleted,
         created_at=diary.created_at,
         updated_at=diary.updated_at
@@ -100,8 +101,6 @@ def get_feed(
 
     return result
 
-
-
 @router.post("/{diary_id}/comment", response_model=DiaryCommentOut)
 def comment_on_diary(
     diary_id: int,
@@ -111,7 +110,7 @@ def comment_on_diary(
 ):
     diary = get_by_id(db, diary_id)
     if not diary or not can_view(db, diary, current_user.id):
-        raise HTTPException(404, "Diary not found or not visible")
+        raise HTTPException(status_code=404, detail="Diary not found or not visible")
 
     comment = create_comment(db, diary_id, current_user.id, comment_in.content)
     
@@ -121,7 +120,7 @@ def comment_on_diary(
         author=CreatorResponse(
             id=current_user.id,
             username=current_user.username
-            ),
+        ),
         content=comment.content,
         created_at=comment.created_at.isoformat() if comment.created_at else None
     )

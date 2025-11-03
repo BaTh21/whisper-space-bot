@@ -12,6 +12,7 @@ from sqlalchemy import or_, and_, select
 
 from app.models.friend import Friend
 from app.models.group_member import GroupMember
+from app.models.friend import Friend, FriendshipStatus
 
 def get_feed(db: Session, user_id: int) -> List[Diary]:
     # Subquery: user's friends
@@ -123,10 +124,11 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
     if diary.share_type == ShareType.personal:
         return diary.user_id == user_id
     if diary.share_type == ShareType.friends:
-        from app.models.friend import Friend, FriendshipStatus
         return db.query(Friend).filter(
-            ((Friend.user_id == user_id) & (Friend.friend_id == diary.user_id)) |
-            ((Friend.user_id == diary.user_id) & (Friend.friend_id == user_id)),
+            or_(
+                and_(Friend.user_id == user_id, Friend.friend_id == diary.user_id),
+                and_(Friend.user_id == diary.user_id, Friend.friend_id == user_id)
+            ),
             Friend.status == FriendshipStatus.accepted
         ).first() is not None
     if diary.share_type == ShareType.group:
