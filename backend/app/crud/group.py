@@ -1,6 +1,6 @@
 # app/crud/group.py
 import secrets
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.group import Group
 from app.models.group_member import GroupMember
@@ -57,6 +57,14 @@ def get_user_groups(db: Session, user_id: int) -> List[Group]:
         .filter(GroupMember.user_id == user_id)
         .all()
     )
+    
+def get_group(db: Session, group_id: int):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Group not found")
+        
+    return group
 
 def get_pending_invites(db: Session, user_id: int):
     from sqlalchemy.orm import joinedload

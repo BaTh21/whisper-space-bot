@@ -6,7 +6,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut
 from app.services.websocket_manager import manager
-from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups
+from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group
 from app.schemas.diary import DiaryOut
 from app.schemas.user import UserOut
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -36,7 +36,10 @@ def list_my_groups(
     groups = get_user_groups(db, current_user.id)
     return groups
 
-
+@router.get("/{group_id}", response_model=GroupOut)
+def get_group_by_id(group_id: int, db: Session = Depends(get_db)):
+    return get_group(db, group_id)
+    
 
 @router.post("/{group_id}/join")
 def join_group(

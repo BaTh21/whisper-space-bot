@@ -7,7 +7,6 @@ import {
   Avatar,
   Box,
   Button,
-  Card,
   CircularProgress,
   IconButton,
   TextField,
@@ -18,13 +17,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getGroupMembers, getGroupMessage } from '../services/api';
+import { getGroupMembers, getGroupMessage, getGroupById } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
+import GroupSideComponent from '../components/group/GroupSideComponent';
 
 const GroupChatPage = () => {
   const { groupId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { auth } = useAuth();
+  const user = auth?.user;
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [group, setGroup] = useState(null);
@@ -57,22 +58,23 @@ const GroupChatPage = () => {
   const fetchGroupData = async () => {
     try {
       setLoading(true);
-      const [messagesData, membersData] = await Promise.all([
+      const results = await Promise.allSettled([
         getGroupMessage(groupId),
-        getGroupMembers(groupId)
+        getGroupMembers(groupId),
+        getGroupById(groupId)
       ]);
-      
+
+      const messagesData = results[0].status === 'fulfilled' ? results[0].value : [];
+      const membersData = results[1].status === 'fulfilled' ? results[1].value : [];
+      const groupData = results[2].status === 'fulfilled' ? results[2].value : { id: groupId, name: `Group ${groupId}` };
+
       setMessages(messagesData);
       setMembers(membersData);
-      
-      // Find group info from members data or create basic object
-      if (membersData.length > 0) {
-        setGroup({
-          id: groupId,
-          name: `Group ${groupId}`,
-          members: membersData
-        });
-      }
+      setGroup({
+        ...groupData,
+        members: membersData
+      });
+
     } catch (error) {
       console.error('Failed to fetch group data:', error);
     } finally {
@@ -100,12 +102,12 @@ const GroupChatPage = () => {
       };
 
       ws.onerror = (error) => {
-        console.log('WebSocket connection failed, using fallback polling',error);
+        console.log('WebSocket connection failed, using fallback polling', error);
         // Fallback to HTTP polling if WebSocket fails
         setupPolling();
       };
     } catch (error) {
-      console.log('WebSocket setup failed, using fallback polling',error);
+      console.log('WebSocket setup failed, using fallback polling', error);
       setupPolling();
     }
   };
@@ -170,126 +172,170 @@ const GroupChatPage = () => {
   }
 
   return (
-    <Layout>
-      <Card sx={{ height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <AppBar position="static" color="default" elevation={1}>
-          <Toolbar>
-            <IconButton
-              edge="start"
-              color="inherit"
-              onClick={() => navigate('/dashboard')}
-              sx={{ mr: 2 }}
-            >
-              <ArrowBackIcon />
-            </IconButton>
-            <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-              {group?.name?.charAt(0) || 'G'}
-            </Avatar>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6" fontWeight="600">
-                {group?.name || 'Group Chat'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {members.length} members
-              </Typography>
-            </Box>
-          </Toolbar>
-        </AppBar>
+    <>
+      <AppBar position="static" color="default" elevation={2}>
+        <Toolbar>
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={() => navigate('/dashboard')}
+            sx={{
+              mr: 2,
+              '&:hover': { bgcolor: 'grey.200' },
+            }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Avatar sx={{ mr: 2, bgcolor: 'primary.main', width: 40, height: 40 }}>
+            {group?.name?.charAt(0) || 'G'}
+          </Avatar>
+          <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+            <Typography variant="h6" fontWeight={600} noWrap>
+              {group?.name || 'Group Chat'}
+            </Typography>
 
-        {/* Messages */}
-        <Box sx={{ flex: 1, overflow: 'auto', p: 2, bgcolor: 'grey.50' }}>
-          {messages.length === 0 ? (
-            <Box 
-              display="flex" 
-              justifyContent="center" 
-              alignItems="center" 
-              height="100%"
-              flexDirection="column"
-            >
-              <Typography variant="h6" color="text.secondary" gutterBottom>
-                No messages yet
-              </Typography>
-              <Typography color="text.secondary">
-                Start a conversation with the group
-              </Typography>
-            </Box>
-          ) : (
-            messages.map((message) => {
-              const isOwn = message.sender?.id === user?.id;
-              
-              return (
-                <Box
-                  key={message.id}
-                  sx={{
-                    display: 'flex',
-                    justifyContent: isOwn ? 'flex-end' : 'flex-start',
-                    mb: 2
-                  }}
-                >
-                  <Box sx={{ maxWidth: '70%' }}>
-                    {!isOwn && (
-                      <Typography variant="caption" sx={{ fontWeight: 600, ml: 1 }}>
-                        {message.sender?.username || 'Unknown User'}
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {members.length} members
+            </Typography>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
+        <GroupSideComponent />
+
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            ml: 3,
+            overflow: 'hidden',
+            borderLeft: '1px solid #dcdcdcff'
+          }}
+        >
+          <Box
+            sx={{
+              flex: 1,
+              overflowY: 'auto',
+              p: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1.5,
+              // Hide scrollbar
+              '&::-webkit-scrollbar': {
+                display: 'none', // Chrome, Safari, Edge
+              },
+              scrollbarWidth: 'none', // Firefox
+            }}
+          >
+            {messages.length === 0 ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                  flexDirection: 'column',
+                  color: 'text.secondary',
+                }}
+              >
+                <Typography variant="h6" gutterBottom>
+                  No messages yet
+                </Typography>
+                <Typography>Start a conversation with the group</Typography>
+              </Box>
+            ) : (
+              messages.map((message) => {
+                const isOwn = message.sender?.id === user?.id;
+
+                return (
+                  <Box
+                    key={message.id}
+                    sx={{
+                      display: 'flex',
+                      justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                    }}
+                  >
+                    <Box sx={{ maxWidth: '70%' }}>
+                      {!isOwn && (
+                        <Typography
+                          variant="caption"
+                          sx={{ fontWeight: 600, ml: 1 }}
+                        >
+                          {message.sender?.username || 'Unknown User'}
+                        </Typography>
+                      )}
+                      <Box
+                        sx={{
+                          bgcolor: isOwn ? 'primary.main' : 'white',
+                          color: isOwn ? 'white' : 'text.primary',
+                          p: 2,
+                          borderRadius: 3,
+                          boxShadow: 1,
+                          wordBreak: 'break-word',
+                          transition: 'all 0.2s',
+                          '&:hover': {
+                            boxShadow: 3,
+                          },
+                        }}
+                      >
+                        <Typography variant="body2">{message.content}</Typography>
+                      </Box>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          display: 'block',
+                          textAlign: isOwn ? 'right' : 'left',
+                          mt: 0.5,
+                          mx: 1,
+                        }}
+                      >
+                        {formatCambodiaTime(message.created_at)}
+                        {message.is_temp && ' • Sending...'}
                       </Typography>
-                    )}
-                    <Box
-                      sx={{
-                        bgcolor: isOwn ? 'primary.main' : 'white',
-                        color: isOwn ? 'white' : 'text.primary',
-                        p: 2,
-                        borderRadius: 2,
-                        boxShadow: 1
-                      }}
-                    >
-                      <Typography variant="body2">{message.content}</Typography>
                     </Box>
-                    <Typography 
-                      variant="caption" 
-                      color="text.secondary" 
-                      sx={{ 
-                        display: 'block',
-                        textAlign: isOwn ? 'right' : 'left',
-                        mt: 0.5,
-                        mx: 1
-                      }}
-                    >
-                      {formatCambodiaTime(message.created_at)}
-                      {message.is_temp && ' • Sending...'}
-                    </Typography>
                   </Box>
-                </Box>
-              );
-            })
-          )}
-          <div ref={messagesEndRef} />
-        </Box>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </Box>
 
-        {/* Message Input */}
-        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Type a message..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              multiline
-              maxRows={3}
-            />
-            <Button
-              variant="contained"
-              onClick={handleSendMessage}
-              disabled={!newMessage.trim()}
-              sx={{ minWidth: '60px' }}
-            >
-              <SendIcon />
-            </Button>
+          <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white' }}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Type a message..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                multiline
+                maxRows={4}
+                sx={{
+                  bgcolor: 'grey.100',
+                  borderRadius: 2,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    border: 'none',
+                  },
+                }}
+              />
+              <Button
+                variant="contained"
+                onClick={handleSendMessage}
+                disabled={!newMessage.trim()}
+                sx={{ minWidth: 60, borderRadius: 2 }}
+              >
+                <SendIcon />
+              </Button>
+            </Box>
           </Box>
         </Box>
-      </Card>
-    </Layout>
+      </Box>
+    </>
+
   );
 };
 

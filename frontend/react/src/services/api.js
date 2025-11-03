@@ -266,6 +266,21 @@ export const getUserGroups = async () => {
   }
 };
 
+export const getGroupById = async (groupId) => {
+  try {
+    const response = await api.get(`${GROUPS_URL}/${groupId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Get user groups error:', error.response?.data || error.message);
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      error.message ||
+      'Failed to fetch groups'
+    );
+  }
+};
+
 export const joinGroup = async (groupId) => {
   try {
     const response = await api.post(`${GROUPS_URL}/${groupId}/join`);
