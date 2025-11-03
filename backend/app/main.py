@@ -12,7 +12,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,6 +25,7 @@ app.include_router(diaries.router, prefix="/api/v1/diaries", tags=["diaries"])
 app.include_router(groups.router, prefix="/api/v1/groups", tags=["groups"])
 app.include_router(friends.router, prefix="/api/v1/friends", tags=["friends"]) 
 app.include_router(websockets.router, prefix="/api/v1", tags=["websockets"])
+app.include_router(groups.router, prefix="/api/v1")
 
 
 @app.get("/")

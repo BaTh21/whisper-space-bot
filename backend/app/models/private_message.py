@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Enum, Boolean, DateTime, ForeignKey, Text, Integer
+from sqlalchemy import Column, Enum, Boolean, DateTime, ForeignKey, Text, Integer, String
+from sqlalchemy.orm import relationship
 from app.models.base import Base
 from datetime import datetime
 import enum
@@ -17,4 +18,13 @@ class PrivateMessage(Base):
     content = Column(Text, nullable=False)
     message_type = Column(Enum(MessageType), default=MessageType.text)
     is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    is_unsent = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
+    is_forwarded = Column(Boolean, default=False)  # NEW: Forward flag
+    original_sender = Column(String(255), nullable=True)  # NEW: Original sender username
+    
+    reply_to = relationship("PrivateMessage", remote_side=[id], uselist=False)
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])
