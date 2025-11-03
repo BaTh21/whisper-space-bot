@@ -32,7 +32,7 @@ const FriendsTab = ({
   const [processingAction, setProcessingAction] = useState(null);
 
   // Use the avatar hook
-  const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
+  const { getUserAvatar, getUserInitials } = useAvatar();
 
   const handleAcceptRequest = async (requesterId) => {
     setAcceptingId(requesterId);
@@ -127,12 +127,20 @@ const FriendsTab = ({
                 borderRadius: '12px'
               }}
             >
-              <Avatar 
-                src={getUserAvatar(request)} 
-                sx={{ mr: 2, width: 48, height: 48 }}
-              >
-                {getUserInitials(request.username)}
-              </Avatar>
+              <ListItemAvatar>
+                <Avatar 
+                  src={getUserAvatar(request)} 
+                  sx={{ width: 48, height: 48 }}
+                  imgProps={{
+                    onError: (e) => {
+                      // Hide the image and show initials if avatar fails to load
+                      e.target.style.display = 'none';
+                    }
+                  }}
+                >
+                  {getUserInitials(request.username)}
+                </Avatar>
+              </ListItemAvatar>
               <Box sx={{ flexGrow: 1 }}>
                 <Typography variant="body1" fontWeight="500">{request.username}</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -156,7 +164,6 @@ const FriendsTab = ({
           ))}
         </Box>
       )}
-
 
       <Typography variant="h6" gutterBottom fontWeight="600">
         Your Friends ({friends.length})
@@ -185,8 +192,14 @@ const FriendsTab = ({
             >
               <ListItemAvatar>
                 <Avatar 
-                  src={getAvatarUrl(friend)} 
+                  src={getUserAvatar(friend)} 
                   sx={{ width: 48, height: 48 }}
+                  imgProps={{
+                    onError: (e) => {
+                      // Hide the image and show initials if avatar fails to load
+                      e.target.style.display = 'none';
+                    }
+                  }}
                 >
                   {getUserInitials(friend.username)}
                 </Avatar>
@@ -212,6 +225,7 @@ const FriendsTab = ({
                   onClick={(e) => handleActionMenuOpen(e, friend)}
                   disabled={processingAction === friend.id}
                   sx={{ borderRadius: '8px' }}
+                  aria-label="friend actions"
                 >
                   {processingAction === friend.id ? (
                     <CircularProgress size={20} />

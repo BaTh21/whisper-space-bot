@@ -71,35 +71,41 @@ const SearchUsersTab = ({
   };
 
   const handleSendFriendRequest = async (user) => {
-    if (sendingRequests.has(user.id)) return;
+  if (sendingRequests.has(user.id)) return;
 
-    setSendingRequests(prev => new Set(prev).add(user.id));
+  setSendingRequests(prev => new Set(prev).add(user.id));
+  
+  try {
+    const result = await sendFriendRequest(user.id);
     
-    try {
-      const result = await sendFriendRequest(user.id);
-      
-      if (result.alreadyExists) {
+    // Check the result structure properly
+    if (result.success) {
+      if (result.code === 'ALREADY_EXISTS') {
         setSuccess(result.message || 'Friend request already sent');
       } else {
-        setSuccess(result.msg || result.message || 'Friend request sent successfully');
+        setSuccess(result.message || 'Friend request sent successfully');
       }
       
       // Remove user from search results after sending request
       setSearchResults(prev => prev.filter(u => u.id !== user.id));
       
       if (onDataUpdate) onDataUpdate();
-      
-    } catch (err) {
-      console.error('Send request failed:', err);
-      setError(err.message);
-    } finally {
-      setSendingRequests(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(user.id);
-        return newSet;
-      });
+    } else {
+      // Handle failure cases
+      setError(result.message || 'Failed to send friend request');
     }
-  };
+    
+  } catch (err) {
+    console.error('Send request failed:', err);
+    setError(err.message || 'An unexpected error occurred');
+  } finally {
+    setSendingRequests(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(user.id);
+      return newSet;
+    });
+  }
+};
 
   const shouldShowAddButton = (user) => {
     if (!currentUser) return false;
