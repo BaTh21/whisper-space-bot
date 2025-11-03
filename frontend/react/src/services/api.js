@@ -548,3 +548,79 @@ export const sendMessage = async (friendId, { content, message_type = 'text', re
   return res.data;
 };
 
+export const unfriend = async (friendId) => {
+  try {
+    const response = await api.post(`${FRIENDS_URL}/unfriend/${friendId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Unfriend error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    if (error.response?.status === 404) {
+      throw new Error('Friendship not found');
+    } else if (error.response?.status === 400) {
+      throw new Error(error.response?.data?.detail || 'Not friends with this user');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while unfriending');
+    }
+    
+    throw new Error(error.response?.data?.detail || 'Failed to unfriend');
+  }
+};
+
+export const blockUser = async (userId) => {
+  try {
+    const response = await api.post(`${FRIENDS_URL}/block/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Block user error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    if (error.response?.status === 400) {
+      throw new Error(error.response?.data?.detail || 'Cannot block this user');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while blocking user');
+    }
+    
+    throw new Error(error.response?.data?.detail || 'Failed to block user');
+  }
+};
+
+export const unblockUser = async (userId) => {
+  try {
+    const response = await api.post(`${FRIENDS_URL}/unblock/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Unblock user error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    if (error.response?.status === 404) {
+      throw new Error('User is not blocked');
+    } else if (error.response?.status === 400) {
+      throw new Error(error.response?.data?.detail || 'User is not blocked');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while unblocking user');
+    }
+    
+    throw new Error(error.response?.data?.detail || 'Failed to unblock user');
+  }
+};
+
+export const getBlockedUsers = async () => {
+  try {
+    const response = await api.get(`${FRIENDS_URL}/blocked`);
+    return response.data;
+  } catch (error) {
+    console.error('Get blocked users error:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to fetch blocked users');
+  }
+};

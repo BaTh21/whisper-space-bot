@@ -23,6 +23,7 @@ import GroupInviteNotification from '../components/GroupInviteNotification';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
+import BlockedUsersTab from '../components/BlockedUsersTab';
 
 // Tab panel component
 function TabPanel({ children, value, index, ...other }) {
@@ -40,7 +41,7 @@ function TabPanel({ children, value, index, ...other }) {
 }
 
 const DashboardPage = () => {
-  const { isAuthenticated, auth } = useAuth();
+  const { isAuthenticated, auth, user: currentUser } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -65,7 +66,7 @@ const DashboardPage = () => {
     setLoading(true);
     try {
       // Use profile from auth context if available, otherwise fetch it
-      let profileData = auth.user;
+      let profileData = auth?.user;
       if (!profileData) {
         profileData = await getMe();
         setProfile(profileData);
@@ -90,7 +91,7 @@ const DashboardPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [auth.user]);
+  }, [auth?.user]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -110,10 +111,22 @@ const DashboardPage = () => {
     setViewGroupDialogOpen(true);
   };
 
-  if (!profile) {
+  // FIXED: Added proper loading state and null checks
+  if (loading && !profile) {
     return (
       <Layout>
-        <Backdrop open={loading} sx={{ zIndex: 1300, color: '#40C4FF' }}>
+        <Backdrop open={true} sx={{ zIndex: 1300, color: '#40C4FF' }}>
+          <CircularProgress color="inherit" />
+        </Backdrop>
+      </Layout>
+    );
+  }
+
+  // FIXED: Added check for authentication and profile
+  if (!isAuthenticated || !profile) {
+    return (
+      <Layout>
+        <Backdrop open={true} sx={{ zIndex: 1300, color: '#40C4FF' }}>
           <CircularProgress color="inherit" />
         </Backdrop>
       </Layout>
@@ -160,6 +173,7 @@ const DashboardPage = () => {
             <Tab label="Friends" />
             <Tab label="Groups" />
             <Tab label="Search Users" />
+            <Tab label="Blocked Users" />
           </Tabs>
 
           {/* Feed Tab */}
@@ -211,6 +225,18 @@ const DashboardPage = () => {
           {/* Search Users Tab */}
           <TabPanel value={activeTab} index={4}>
             <SearchUsersTab
+              setError={setError}
+              setSuccess={setSuccess}
+              onDataUpdate={fetchDashboardData}
+              friends={friends}
+              pendingRequests={pendingRequests}
+              currentUser={currentUser || profile}
+            />
+          </TabPanel>
+
+          {/* Blocked Users Tab */}
+          <TabPanel value={activeTab} index={5}>
+            <BlockedUsersTab
               setError={setError}
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}

@@ -3,6 +3,7 @@ import {
   Avatar,
   Box,
   Button,
+  Chip,
   CircularProgress,
   List,
   ListItem,
@@ -14,11 +15,18 @@ import {
 import { useState } from 'react';
 import { searchUsers, sendFriendRequest } from '../../services/api';
 
-const SearchUsersTab = ({ setError, setSuccess, onDataUpdate, friends = [], pendingRequests = [] }) => {
+const SearchUsersTab = ({ 
+  setError, 
+  setSuccess, 
+  onDataUpdate, 
+  friends = [], 
+  pendingRequests = [], 
+  currentUser 
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sendingRequests, setSendingRequests] = useState(new Set()); // Track multiple requests
+  const [sendingRequests, setSendingRequests] = useState(new Set());
 
   const handleSearch = async () => {
     if (searchQuery.trim().length < 2) {
@@ -39,78 +47,71 @@ const SearchUsersTab = ({ setError, setSuccess, onDataUpdate, friends = [], pend
     }
   };
 
-const handleSendFriendRequest = async (user) => {
-  if (sendingRequests.has(user.id)) return;
+  const handleSendFriendRequest = async (user) => {
+    if (sendingRequests.has(user.id)) return;
 
-  console.log('👤 Checking user status:', {
-    user: user.username,
-    userId: user.id,
-    friends: friends.map(f => ({ id: f.id, username: f.username })),
-    pendingRequests: pendingRequests
-  });
-
-  // Check if already friends
-  const isAlreadyFriend = friends.some(friend => friend.id === user.id);
-  if (isAlreadyFriend) {
-    setError(`You are already friends with ${user.username}`);
-    return;
-  }
-
-  // Check if pending request exists
-  const hasPendingRequest = pendingRequests.some(request => request.id === user.id);
-  if (hasPendingRequest) {
-    setError(`Friend request already pending with ${user.username}`);
-    return;
-  }
-
-  setSendingRequests(prev => new Set(prev).add(user.id));
-  
-  try {
-    console.log('📤 Sending friend request to:', user.id);
-    const result = await sendFriendRequest(user.id);
-    console.log('✅ Request result:', result);
+    setSendingRequests(prev => new Set(prev).add(user.id));
     
-    // Handle both success and "already exists" cases
-    if (result.alreadyExists) {
-      setSuccess(result.message || 'Friend request already sent');
-      // Remove user from search results since request already exists
+    try {
+      const result = await sendFriendRequest(user.id);
+      
+      if (result.alreadyExists) {
+        setSuccess(result.message || 'Friend request already sent');
+      } else {
+        setSuccess(result.msg || result.message || 'Friend request sent successfully');
+      }
+      
+      // Remove user from search results after sending request
       setSearchResults(prev => prev.filter(u => u.id !== user.id));
-    } else {
-      setSuccess(result.msg || result.message || 'Friend request sent successfully');
-      // Remove user from search results after successful request
-      setSearchResults(prev => prev.filter(u => u.id !== user.id));
+      
+      if (onDataUpdate) onDataUpdate();
+      
+    } catch (err) {
+      console.error('Send request failed:', err);
+      setError(err.message);
+    } finally {
+      setSendingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(user.id);
+        return newSet;
+      });
     }
-    
-    if (onDataUpdate) onDataUpdate();
-    
-  } catch (err) {
-    console.error('❌ Send request failed:', err);
-    setError(err.message);
-  } finally {
-    setSendingRequests(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(user.id);
-      return newSet;
-    });
-  }
-};
+  };
 
-  const getButtonState = (user) => {
-  const isAlreadyFriend = friends.some(friend => friend.id === user.id);
-  const hasPendingRequest = pendingRequests.some(request => request.id === user.id);
-  const isSending = sendingRequests.has(user.id);
+  const shouldShowAddButton = (user) => {
+    if (!currentUser) return false;
+    
+    const isCurrentUser = user.id === currentUser.id;
+    const isAlreadyFriend = friends.some(friend => friend.id === user.id);
+    const hasPendingRequest = pendingRequests.some(request => request.id === user.id);
+    const isSending = sendingRequests.has(user.id);
 
-  if (isAlreadyFriend) {
-    return { disabled: true, text: 'Already Friends' };
-  }
-  if (hasPendingRequest) {
-    return { disabled: true, text: 'Request Pending' };
-  }
-  if (isSending) {
-    return { disabled: true, text: 'Sending...' };
-  }
-  return { disabled: false, text: 'Add Friend' };
-};
+    return !isCurrentUser && !isAlreadyFriend && !hasPendingRequest && !isSending;
+  };
+
+  const getUserStatusText = (user) => {
+    if (!currentUser) return 'Add Friend';
+    
+    const isCurrentUser = user.id === currentUser.id;
+    const isAlreadyFriend = friends.some(friend => friend.id === user.id);
+    const hasPendingRequest = pendingRequests.some(request => request.id === user.id);
+    const isSending = sendingRequests.has(user.id);
+
+    if (isCurrentUser) return 'You';
+    if (isAlreadyFriend) return 'Friends';
+    if (hasPendingRequest) return 'Request Sent';
+    if (isSending) return 'Sending...';
+    return 'Add Friend';
+  };
+
+  const getStatusColor = (statusText) => {
+    switch (statusText) {
+      case 'Friends': return 'success';
+      case 'Request Sent': return 'warning';
+      case 'You': return 'default';
+      default: return 'default';
+    }
+  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -146,8 +147,10 @@ const handleSendFriendRequest = async (user) => {
 
       <List>
         {searchResults.map((user) => {
-          const buttonState = getButtonState(user);
-          
+          const showAddButton = shouldShowAddButton(user);
+          const statusText = getUserStatusText(user);
+          const isSending = sendingRequests.has(user.id);
+
           return (
             <ListItem
               key={user.id}
@@ -185,20 +188,30 @@ const handleSendFriendRequest = async (user) => {
                 }
                 secondary={user.email}
               />
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={
-                  buttonState.text === 'Sending...' ? 
-                    <CircularProgress size={16} /> : 
-                    <PersonAddIcon />
-                }
-                onClick={() => handleSendFriendRequest(user)}
-                disabled={buttonState.disabled}
-                sx={{ borderRadius: '8px', minWidth: 120 }}
-              >
-                {buttonState.text}
-              </Button>
+              
+              {showAddButton ? (
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={
+                    isSending ? 
+                      <CircularProgress size={16} /> : 
+                      <PersonAddIcon />
+                  }
+                  onClick={() => handleSendFriendRequest(user)}
+                  disabled={isSending}
+                  sx={{ borderRadius: '8px', minWidth: 120 }}
+                >
+                  {statusText}
+                </Button>
+              ) : (
+                <Chip 
+                  label={statusText} 
+                  color={getStatusColor(statusText)}
+                  variant="outlined"
+                  size="small"
+                />
+              )}
             </ListItem>
           );
         })}

@@ -1,4 +1,3 @@
-// components/dashboard/FriendsTab.jsx
 import {
   Avatar,
   Box,
@@ -9,10 +8,14 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Typography
+  Typography,
+  IconButton,
+  Menu,
+  MenuItem
 } from '@mui/material';
+import { MoreVert as MoreVertIcon, Block as BlockIcon } from '@mui/icons-material';
 import { useState } from 'react';
-import { acceptFriendRequest } from '../../services/api';
+import { acceptFriendRequest, unfriend, blockUser } from '../../services/api';
 
 const FriendsTab = ({ 
   friends, 
@@ -23,13 +26,16 @@ const FriendsTab = ({
   onDataUpdate 
 }) => {
   const [acceptingId, setAcceptingId] = useState(null);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
+  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [processingAction, setProcessingAction] = useState(null);
 
   const handleAcceptRequest = async (requesterId) => {
     setAcceptingId(requesterId);
     try {
       await acceptFriendRequest(requesterId);
       setSuccess('Friend request accepted successfully!');
-      onDataUpdate(); // Refresh the data
+      onDataUpdate();
     } catch (err) {
       console.error('Accept request failed:', err);
       setError(err.message || 'Failed to accept friend request');
@@ -38,16 +44,56 @@ const FriendsTab = ({
     }
   };
 
+  const handleActionMenuOpen = (event, friend) => {
+    setActionMenuAnchor(event.currentTarget);
+    setSelectedFriend(friend);
+  };
+
+  const handleActionMenuClose = () => {
+    setActionMenuAnchor(null);
+    setSelectedFriend(null);
+  };
+
+  const handleUnfriend = async () => {
+    if (!selectedFriend) return;
+    
+    setProcessingAction('unfriend');
+    try {
+      await unfriend(selectedFriend.id);
+      setSuccess(`Unfriended ${selectedFriend.username}`);
+      onDataUpdate();
+    } catch (err) {
+      console.error('Unfriend failed:', err);
+      setError(err.message || 'Failed to unfriend');
+    } finally {
+      setProcessingAction(null);
+      handleActionMenuClose();
+    }
+  };
+
+  const handleBlock = async () => {
+    if (!selectedFriend) return;
+    
+    setProcessingAction('block');
+    try {
+      await blockUser(selectedFriend.id);
+      setSuccess(`Blocked ${selectedFriend.username}`);
+      onDataUpdate();
+    } catch (err) {
+      console.error('Block failed:', err);
+      setError(err.message || 'Failed to block user');
+    } finally {
+      setProcessingAction(null);
+      handleActionMenuClose();
+    }
+  };
+
   const handleMessageFriend = (friend) => {
     console.log('Message button clicked for friend:', friend);
     
     if (typeof setActiveTab === 'function') {
-      // Store the selected friend for MessagesTab to use
       localStorage.setItem('selectedFriend', JSON.stringify(friend));
-      
-      // Switch to Messages tab (index 1)
       setActiveTab(1);
-      
       setSuccess(`Opening chat with ${friend.username}`);
     } else {
       console.error('setActiveTab is not a function');
@@ -158,18 +204,57 @@ const FriendsTab = ({
                 }
                 secondary={friend.email}
               />
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => handleMessageFriend(friend)}
-                sx={{ borderRadius: '8px' }}
-              >
-                Message
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => handleMessageFriend(friend)}
+                  sx={{ borderRadius: '8px' }}
+                >
+                  Message
+                </Button>
+                <IconButton
+                  onClick={(e) => handleActionMenuOpen(e, friend)}
+                  disabled={processingAction === friend.id}
+                  sx={{ borderRadius: '8px' }}
+                >
+                  {processingAction === friend.id ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <MoreVertIcon />
+                  )}
+                </IconButton>
+              </Box>
             </ListItem>
           ))}
         </List>
       )}
+
+      {/* Action Menu */}
+      <Menu
+        anchorEl={actionMenuAnchor}
+        open={Boolean(actionMenuAnchor)}
+        onClose={handleActionMenuClose}
+        PaperProps={{
+          sx: { borderRadius: '8px' }
+        }}
+      >
+        <MenuItem 
+          onClick={handleUnfriend}
+          disabled={processingAction === 'unfriend'}
+          sx={{ color: 'error.main' }}
+        >
+          {processingAction === 'unfriend' ? 'Unfriending...' : 'Unfriend'}
+        </MenuItem>
+        <MenuItem 
+          onClick={handleBlock}
+          disabled={processingAction === 'block'}
+          sx={{ color: 'error.main' }}
+        >
+          <BlockIcon sx={{ mr: 1, fontSize: 20 }} />
+          {processingAction === 'block' ? 'Blocking...' : 'Block User'}
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };

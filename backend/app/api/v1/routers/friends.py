@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.friend import create, update_status, get_friends, get_pending_requests, is_friend, get_friend_request
+from app.crud.friend import create, update_status, get_friends, get_pending_requests, is_friend, get_friend_request, delete, get_blocked_users_list
 from app.models.user import User
-from app.models.friend import FriendshipStatus  # Add this import
+from app.models.friend import Friend, FriendshipStatus
 
 router = APIRouter()
 
@@ -27,7 +27,6 @@ def send_friend_request(
         # Check if friend request already exists in either direction
         existing_request = get_friend_request(db, current_user.id, user_id)
         if existing_request:
-            # FIXED: Compare with enum value, not string
             if existing_request.status == FriendshipStatus.pending:
                 if existing_request.user_id == current_user.id:
                     raise HTTPException(status_code=409, detail="Friend request already sent")
@@ -43,10 +42,8 @@ def send_friend_request(
         return {"msg": "Friend request sent successfully"}
         
     except HTTPException:
-        # Re-raise HTTP exceptions
         raise
     except Exception as e:
-        # Log the actual error for debugging
         print(f"Server error in send_friend_request: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
@@ -63,11 +60,9 @@ def accept_request(
         if not friend_request:
             raise HTTPException(status_code=404, detail="Friend request not found")
         
-        # FIXED: Compare with enum value
         if friend_request.status != FriendshipStatus.pending:
             raise HTTPException(status_code=400, detail="Friend request already processed")
         
-        # FIXED: Use enum value
         update_status(db, requester_id, current_user.id, "accepted")
         return {"msg": "Friend request accepted successfully"}
         
@@ -76,6 +71,88 @@ def accept_request(
     except Exception as e:
         print(f"Server error in accept_request: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("/unfriend/{friend_id}")
+def unfriend(
+    friend_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # Check if friendship exists
+        friendship = get_friend_request(db, current_user.id, friend_id)
+        if not friendship:
+            raise HTTPException(status_code=404, detail="Friendship not found")
+        
+        if friendship.status != FriendshipStatus.accepted:
+            raise HTTPException(status_code=400, detail="You are not friends with this user")
+        
+        # Delete the friendship
+        delete(db, current_user.id, friend_id)
+        return {"msg": "Unfriended successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Server error in unfriend: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/block/{user_id}")
+def block_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        if user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot block yourself")
+        
+        # Check if relationship already exists
+        existing = get_friend_request(db, current_user.id, user_id)
+        
+        if existing:
+            # Update existing relationship to blocked
+            existing.status = FriendshipStatus.blocked
+            db.commit()
+        else:
+            # Create new blocked relationship
+            create(db, current_user.id, user_id, FriendshipStatus.blocked)
+        
+        return {"msg": "User blocked successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Server error in block_user: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/unblock/{user_id}")
+def unblock_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # Check if blocked relationship exists
+        blocked_relationship = get_friend_request(db, current_user.id, user_id)
+        if not blocked_relationship:
+            raise HTTPException(status_code=404, detail="User is not blocked")
+        
+        if blocked_relationship.status != FriendshipStatus.blocked:
+            raise HTTPException(status_code=400, detail="User is not blocked")
+        
+        # Delete the blocked relationship
+        delete(db, current_user.id, user_id)
+        return {"msg": "User unblocked successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Server error in unblock_user: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/", response_model=list[dict])
@@ -102,8 +179,33 @@ def pending_requests(
             "id": u.id, 
             "username": u.username, 
             "email": u.email,
-            "requester_id": u.id  # Since these are the users who sent requests
+            "requester_id": u.id
         } for u in requests]
     except Exception as e:
         print(f"Server error in pending_requests: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/blocked")
+def get_blocked_users_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # Direct query without using CRUD function
+        blocked_users = db.query(User).join(
+            Friend, User.id == Friend.friend_id
+        ).filter(
+            Friend.user_id == current_user.id,
+            Friend.status == FriendshipStatus.blocked
+        ).all()
+        
+        return [{
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        } for user in blocked_users]
+        
+    except Exception as e:
+        print(f"Server error in get_blocked_users_route: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
