@@ -25,14 +25,31 @@ def update_me(
     return UserOut.from_orm(updated)
 
 
-@router.get("/search", response_model=List[UserOut])
+@router.get("/search")
 def search_users(
-    q: str = "",
+    query: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if len(q.strip()) < 2:
-        raise HTTPException(400, "Query too short")
-    
-    users = search(db, q.strip())  # ← no exclude
-    return [UserOut.from_orm(u) for u in users]
+    try:
+        from sqlalchemy import or_
+        
+        users = db.query(User).filter(
+            or_(
+                User.username.ilike(f"%{query}%"),
+                User.email.ilike(f"%{query}%")
+            ),
+            User.id != current_user.id
+        ).limit(20).all()
+        
+        return [{
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "avatar_url": user.avatar_url,  # Make sure this is included
+            "is_verified": getattr(user, 'is_verified', False)
+        } for user in users]
+        
+    except Exception as e:
+        print(f"Server error in search_users: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

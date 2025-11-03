@@ -1,16 +1,14 @@
 // services/api.js
 import axios from 'axios';
-
-const API_BASE = 'http://localhost:8000/api/v1';
-const AUTH_URL = `${API_BASE}/auth`;
-const USERS_URL = `${API_BASE}/users`;
-const FRIENDS_URL = `${API_BASE}/friends`;
-const DIARIES_URL = `${API_BASE}/diaries`;
-const GROUPS_URL = `${API_BASE}/groups`;
-const CHATS_URL = `${API_BASE}/chats`;
+const AUTH_URL = `${import.meta.env.VITE_API_URL}/auth`;
+const USERS_URL = `${import.meta.env.VITE_API_URL}/users`;
+const FRIENDS_URL = `${import.meta.env.VITE_API_URL}/friends`;
+const DIARIES_URL = `${import.meta.env.VITE_API_URL}/diaries`;
+const GROUPS_URL = `${import.meta.env.VITE_API_URL}/groups`;
+const CHATS_URL = `${import.meta.env.VITE_API_URL}/chats`;
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -106,6 +104,19 @@ export const updateMe = async (data) => {
     throw new Error(error.response?.data?.detail || error.response?.data?.msg || 'Failed to update profile');
   }
 };
+
+export const uploadAvatar = async (file) => {
+  const formData = new FormData();
+  formData.append('avatar', file);
+  
+  const response = await api.post('/avatars/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
 
 export const searchUsers = async (query) => {
   try {
@@ -624,3 +635,4 @@ export const getBlockedUsers = async () => {
     throw new Error(error.response?.data?.detail || 'Failed to fetch blocked users');
   }
 };
+

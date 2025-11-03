@@ -1,49 +1,86 @@
-import { useState } from 'react';
+import { CloudUpload as CloudUploadIcon, Edit as EditIcon } from '@mui/icons-material';
 import {
-  Card,
-  Box,
+  Alert,
   Avatar,
-  Typography,
-  Chip,
-  IconButton,
-  Collapse,
-  TextField,
+  Box,
   Button,
-  Alert
+  Card,
+  Chip,
+  Collapse,
+  IconButton,
+  TextField,
+  Typography
 } from '@mui/material';
-import { Edit as EditIcon } from '@mui/icons-material';
 import { useFormik } from 'formik';
+import { useRef, useState } from 'react';
 import * as Yup from 'yup';
-import { updateMe } from '../../services/api';
+import { useAvatar } from '../../hooks/useAvatar';
+import { updateMe, uploadAvatar } from '../../services/api';
 
 const ProfileSection = ({ profile, setProfile, error, success, setError, setSuccess }) => {
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Use the avatar hook
+  const { getAvatarUrl, getUserInitials } = useAvatar();
 
   const formik = useFormik({
     initialValues: {
       username: profile?.username || '',
       bio: profile?.bio || '',
-      avatar_url: profile?.avatar_url || '',
     },
     validationSchema: Yup.object({
       username: Yup.string().min(3, 'Username must be at least 3 characters').required('Required'),
       bio: Yup.string().max(500, 'Bio must be less than 500 characters'),
-      avatar_url: Yup.string().url('Must be a valid URL'),
     }),
     enableReinitialize: true,
     onSubmit: async (values) => {
       setError(null);
       setSuccess(null);
       setLoading(true);
+
       try {
-        const updateData = Object.fromEntries(
-          Object.entries(values).filter(([, value]) => value !== '')
+        let avatarUrl = profile?.avatar_url;
+        
+        if (selectedFile) {
+          setUploading(true);
+          try {
+            const uploadResponse = await uploadAvatar(selectedFile);
+            avatarUrl = uploadResponse.avatar_url;
+          } catch (uploadError) {
+            setError(uploadError.message || 'Failed to upload avatar');
+            setLoading(false);
+            setUploading(false);
+            return;
+          }
+          setUploading(false);
+        }
+
+        const updateData = {
+          username: values.username,
+          bio: values.bio,
+          ...(avatarUrl && { avatar_url: avatarUrl })
+        };
+
+        const cleanData = Object.fromEntries(
+          Object.entries(updateData).filter(([, value]) => value !== '' && value !== null)
         );
-        const response = await updateMe(updateData);
+
+        const response = await updateMe(cleanData);
         setProfile(response);
         setEditing(false);
-        setSuccess('Profile updated successfully');
+        setSuccess(selectedFile ? 'Profile and avatar updated successfully!' : 'Profile updated successfully');
+        
+        setSelectedFile(null);
+        setImagePreview(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+
       } catch (err) {
         setError(err.message || 'Failed to update profile');
       } finally {
@@ -52,19 +89,74 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     },
   });
 
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      setError('Please select a valid image file (PNG or JPG only)');
+      return;
+    }
+
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError('Image size must be less than 2MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+    
+    setSelectedFile(file);
+    setError(null);
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const removeSelectedImage = () => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setSelectedFile(null);
+    setImagePreview(null);
+    setError(null);
+    formik.resetForm();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Current avatar: preview > formik > profile
+  const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
+
   return (
     <Card sx={{ mb: 3, p: 3, borderRadius: '16px' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Avatar
-          src={profile?.avatar_url}
+          src={currentAvatarUrl}
           alt={profile?.username}
-          sx={{ width: 80, height: 80, mr: 3 }}
-          imgProps={{ 
-            onError: (e) => { 
-              e.target.style.display = 'none';
-            } 
+          sx={{ 
+            width: 80, 
+            height: 80, 
+            mr: 3,
+            border: imagePreview ? '2px solid' : 'none',
+            borderColor: imagePreview ? 'primary.main' : 'transparent',
           }}
-        />
+        >
+          {getUserInitials(profile?.username)}
+        </Avatar>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h4" gutterBottom fontWeight="600">
             Welcome back, {profile?.username}!
@@ -84,11 +176,21 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         </IconButton>
       </Box>
 
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept="image/jpeg,image/jpg,image/png"
+        style={{ display: 'none' }}
+      />
+
       <Collapse in={!!error}>
         <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
           {error}
         </Alert>
       </Collapse>
+      
       <Collapse in={!!success}>
         <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setSuccess(null)}>
           {success}
@@ -112,6 +214,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               fullWidth
               margin="normal"
             />
+            
             <TextField
               label="Bio"
               name="bio"
@@ -124,33 +227,72 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               helperText={formik.touched.bio && formik.errors.bio}
               fullWidth
               margin="normal"
+              placeholder="Tell us a bit about yourself..."
             />
-            <TextField
-              label="Avatar URL"
-              name="avatar_url"
-              value={formik.values.avatar_url}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              error={formik.touched.avatar_url && !!formik.errors.avatar_url}
-              helperText={formik.touched.avatar_url && formik.errors.avatar_url}
-              fullWidth
-              margin="normal"
-            />
-            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+
+            {/* Avatar Upload Section */}
+            <Box sx={{ mb: 2, mt: 2 }}>
+              <Typography variant="subtitle2" gutterBottom fontWeight="600">
+                Profile Picture
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                <Avatar
+                  src={currentAvatarUrl}
+                  sx={{
+                    width: 60,
+                    height: 60,
+                    border: imagePreview ? '2px solid' : 'none',
+                    borderColor: imagePreview ? 'primary.main' : 'transparent',
+                  }}
+                >
+                  {getUserInitials(profile?.username)}
+                </Avatar>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<CloudUploadIcon />}
+                    onClick={handleAvatarClick}
+                    disabled={uploading}
+                    sx={{ borderRadius: '8px' }}
+                  >
+                    {uploading ? 'Uploading...' : 'Choose Image'}
+                  </Button>
+                  {selectedFile && (
+                    <Typography variant="caption" color="text.secondary">
+                      Selected: {selectedFile.name}
+                    </Typography>
+                  )}
+                  {(selectedFile || imagePreview) && (
+                    <Button
+                      variant="text"
+                      color="error"
+                      size="small"
+                      onClick={removeSelectedImage}
+                      sx={{ borderRadius: '8px' }}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </Box>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Supported formats: PNG, JPG. Max size: 2MB
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 1, mt: 3 }}>
               <Button 
                 type="submit" 
                 variant="contained" 
-                disabled={loading}
-                sx={{ borderRadius: '8px' }}
+                disabled={loading || uploading}
+                sx={{ borderRadius: '8px', minWidth: 120 }}
               >
-                {loading ? 'Saving...' : 'Save'}
+                {uploading ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}
               </Button>
               <Button
                 variant="outlined"
-                onClick={() => {
-                  setEditing(false);
-                  formik.resetForm();
-                }}
+                onClick={handleCancel}
+                disabled={loading || uploading}
                 sx={{ borderRadius: '8px' }}
               >
                 Cancel

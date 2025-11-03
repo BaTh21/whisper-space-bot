@@ -1,35 +1,41 @@
-// src/components/GroupInviteNotification.jsx
+import { Refresh as RefreshIcon } from '@mui/icons-material';
+import { Box, Button, Card, CardContent, IconButton, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { Box, Card, CardContent, Typography, Button } from '@mui/material';
-import { getPendingInvites, acceptGroupInvite } from '../services/api';
+import { acceptGroupInvite, getPendingInvites } from '../services/api';
 
 export default function GroupInviteNotification({ onJoin }) {
   const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
       const res = await getPendingInvites();
       setInvites(res.data || []);
     } catch (_) {}
+    setLoading(false);
   };
 
   useEffect(() => {
     load();
-    const i = setInterval(load, 8000);
-    return () => clearInterval(i);
   }, []);
 
   const accept = async (id) => {
     await acceptGroupInvite(id);
     setInvites(prev => prev.filter(x => x.id !== id));
-    onJoin();                 // refresh groups for the invitee
+    onJoin();
   };
 
   if (!invites.length) return null;
 
   return (
     <Box sx={{ mb: 3 }}>
-      <Typography variant="h6" gutterBottom>Group Invites</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <Typography variant="h6">Group Invites</Typography>
+        <IconButton size="small" onClick={load} disabled={loading}>
+          <RefreshIcon />
+        </IconButton>
+      </Box>
       {invites.map(i => (
         <Card key={i.id} sx={{ mb: 1 }}>
           <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
