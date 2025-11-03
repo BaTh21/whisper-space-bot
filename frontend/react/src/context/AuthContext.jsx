@@ -1,4 +1,6 @@
-import { createContext, useState, useContext } from 'react';
+// context/AuthContext.jsx
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { getMe } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -16,20 +18,65 @@ export const AuthProvider = ({ children }) => {
     refreshToken: localStorage.getItem('refreshToken') || null,
     user: null
   });
+  const [loading, setLoading] = useState(true);
 
-  const login = (tokens) => {
-    // tokens should be an object with access_token and refresh_token
-    if (tokens && tokens.access_token && tokens.refresh_token) {
-      localStorage.setItem('accessToken', tokens.access_token);
-      localStorage.setItem('refreshToken', tokens.refresh_token);
-      setAuth({
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        user: null // user data would be fetched separately if needed
-      });
-      return true;
+  // Memoize checkAuthStatus to prevent unnecessary re-renders
+  const checkAuthStatus = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      // Only fetch user data if we don't have it already
+      if (!auth.user) {
+        const userData = await getMe();
+        setAuth(prev => ({
+          ...prev,
+          user: userData
+        }));
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      logout();
+    } finally {
+      setLoading(false);
     }
-    return false;
+  }, [auth.user]);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
+
+  const login = async (tokens, userData = null) => {
+    try {
+      if (tokens && tokens.access_token) {
+        localStorage.setItem('accessToken', tokens.access_token);
+        if (tokens.refresh_token) {
+          localStorage.setItem('refreshToken', tokens.refresh_token);
+        }
+
+        let user = userData;
+        
+        if (!user) {
+          user = await getMe();
+        }
+
+        setAuth({
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token || null,
+          user: user
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Login failed:', error);
+      logout();
+      return false;
+    }
   };
 
   const logout = () => {
@@ -42,10 +89,20 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+  const updateUser = (userData) => {
+    setAuth(prev => ({
+      ...prev,
+      user: userData
+    }));
+  };
+
   const value = {
     auth,
     login,
     logout,
+    updateUser,
+    checkAuthStatus,
+    loading,
     isAuthenticated: !!auth.accessToken
   };
 

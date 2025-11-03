@@ -1,23 +1,87 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
-export function useWebSocket(roomId) {
-  const [lastMessage, setLastMessage] = useState(null);
-  const ws = useRef(null);
+export const useWebSocket = (url, onMessage, onOpen, onClose, onError) => {
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${protocol}://${window.location.host}/ws/chat/${roomId}/`;
-    const socket = new WebSocket(url);
+    let isSubscribed = true;
 
-    socket.onopen = () => console.log('WS connected:', roomId);
-    socket.onmessage = (e) => setLastMessage(e);
-    socket.onerror = (err) => console.error('WS error', err);
-    socket.onclose = () => console.log('WS closed');
+    const connect = () => {
+      if (!isSubscribed) return;
 
-    ws.current = socket;
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
 
-    return () => socket.close();
-  }, [roomId]);
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+        if (onOpen) onOpen();
+      };
 
-  return { lastMessage };
-}
+      ws.onmessage = (event) => {
+        if (onMessage) {
+          try {
+            const data = JSON.parse(event.data);
+            onMessage(data);
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log('WebSocket disconnected:', event.reason);
+        if (onClose) onClose(event);
+
+        // Attempt to reconnect after 3 seconds
+        if (isSubscribed) {
+          reconnectTimeoutRef.current = setTimeout(connect, 3000);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        if (onError) onError(error);
+        ws.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      isSubscribed = false;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [url, onMessage, onOpen, onClose, onError]);
+
+  const sendMessage = (message) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(message));
+      return true;
+    }
+    return false;
+  };
+
+  const closeConnection = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+  };
+
+  return {
+    sendMessage,
+    closeConnection,
+    readyState: wsRef.current?.readyState
+  };
+};
