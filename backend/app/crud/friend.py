@@ -5,6 +5,11 @@ from app.models.user import User
 
 
 def create(db: Session, user_id: int, friend_id: int, status: str = "pending") -> Friend:
+    # Check if friendship already exists before creating
+    existing = get_friend_request(db, user_id, friend_id)
+    if existing:
+        return existing
+    
     friendship = Friend(user_id=user_id, friend_id=friend_id, status=FriendshipStatus(status))
     db.add(friendship)
     db.commit()
@@ -58,3 +63,11 @@ def get_friends(db: Session, user_id: int) -> List[User]:
 def get_pending_requests(db: Session, user_id: int) -> List[User]:
     return db.query(User).join(Friend, Friend.user_id == User.id)\
         .filter(Friend.friend_id == user_id, Friend.status == FriendshipStatus.pending).all()
+
+
+def get_friend_request(db: Session, user_id: int, friend_id: int) -> Optional[Friend]:
+    # FIXED: Changed Friends to Friend
+    return db.query(Friend).filter(
+        ((Friend.user_id == user_id) & (Friend.friend_id == friend_id)) |
+        ((Friend.user_id == friend_id) & (Friend.friend_id == user_id))
+    ).first()

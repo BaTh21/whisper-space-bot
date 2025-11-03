@@ -1,15 +1,17 @@
 // components/dashboard/FriendsTab.jsx
 import {
-  Box,
-  Typography,
-  Card,
   Avatar,
+  Box,
   Button,
+  Card,
+  CircularProgress,
   List,
   ListItem,
   ListItemAvatar,
-  ListItemText
+  ListItemText,
+  Typography
 } from '@mui/material';
+import { useState } from 'react';
 import { acceptFriendRequest } from '../../services/api';
 
 const FriendsTab = ({ 
@@ -20,22 +22,27 @@ const FriendsTab = ({
   setSuccess, 
   onDataUpdate 
 }) => {
+  const [acceptingId, setAcceptingId] = useState(null);
+
   const handleAcceptRequest = async (requesterId) => {
+    setAcceptingId(requesterId);
     try {
       await acceptFriendRequest(requesterId);
-      setSuccess('Friend request accepted');
-      onDataUpdate();
+      setSuccess('Friend request accepted successfully!');
+      onDataUpdate(); // Refresh the data
     } catch (err) {
+      console.error('Accept request failed:', err);
       setError(err.message || 'Failed to accept friend request');
+    } finally {
+      setAcceptingId(null);
     }
   };
 
   const handleMessageFriend = (friend) => {
     console.log('Message button clicked for friend:', friend);
     
-    // Check if setActiveTab is a function
     if (typeof setActiveTab === 'function') {
-      // Store the selected friend in localStorage or context for MessagesTab to use
+      // Store the selected friend for MessagesTab to use
       localStorage.setItem('selectedFriend', JSON.stringify(friend));
       
       // Switch to Messages tab (index 1)
@@ -91,9 +98,14 @@ const FriendsTab = ({
                 variant="contained"
                 size="small"
                 onClick={() => handleAcceptRequest(request.id)}
-                sx={{ borderRadius: '8px' }}
+                disabled={acceptingId === request.id}
+                sx={{ borderRadius: '8px', minWidth: 100 }}
               >
-                Accept
+                {acceptingId === request.id ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  'Accept'
+                )}
               </Button>
             </Card>
           ))}
