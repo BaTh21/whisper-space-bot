@@ -1,20 +1,20 @@
 import {
-    Delete as DeleteIcon,
-    Edit as EditIcon,
-    Forward as ForwardIcon,
-    MoreVert as MoreVertIcon,
-    Reply as ReplyIcon
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  Forward as ForwardIcon,
+  MoreVert as MoreVertIcon,
+  Reply as ReplyIcon
 } from '@mui/icons-material';
 import {
-    Avatar,
-    Box,
-    Button,
-    CircularProgress,
-    IconButton,
-    Menu,
-    MenuItem,
-    TextField,
-    Typography
+  Avatar,
+  Box,
+  Button,
+  CircularProgress,
+  IconButton,
+  Menu,
+  MenuItem,
+  TextField,
+  Typography
 } from '@mui/material';
 import { useState } from 'react';
 import { formatCambodiaTime } from '../../utils/dateUtils';
@@ -27,7 +27,9 @@ const ChatMessage = ({
   onReply, 
   onForward, 
   profile, 
-  currentFriend 
+  currentFriend,
+  getAvatarUrl,
+  getUserInitials 
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -83,31 +85,39 @@ const ChatMessage = ({
 
   const showMenu = !message.is_temp;
 
+  // Get proper sender information with avatar - FIXED VERSION
   const getSenderInfo = () => {
+    // If message already has sender data with avatar, use it
     if (message.sender && message.sender.username) {
+      const avatarUrl = message.sender.avatar_url || message.sender.avatar;
       return {
         username: message.sender.username,
-        avatar_url: message.sender.avatar_url,
-        initial: message.sender.username.charAt(0).toUpperCase()
+        avatar_url: getAvatarUrl ? getAvatarUrl(avatarUrl) : avatarUrl,
+        initial: getUserInitials ? getUserInitials(message.sender.username) : (message.sender.username?.charAt(0) || 'U').toUpperCase()
       };
     }
     
+    // For my messages
     if (isMine) {
+      const avatarUrl = profile?.avatar_url || profile?.avatar;
       return {
         username: profile?.username || 'Me',
-        avatar_url: profile?.avatar_url,
-        initial: (profile?.username?.charAt(0) || 'M').toUpperCase()
+        avatar_url: getAvatarUrl ? getAvatarUrl(avatarUrl) : avatarUrl,
+        initial: getUserInitials ? getUserInitials(profile?.username) : (profile?.username?.charAt(0) || 'M').toUpperCase()
       };
     }
     
+    // For friend's messages
     if (currentFriend) {
+      const avatarUrl = currentFriend.avatar_url || currentFriend.avatar;
       return {
         username: currentFriend.username || 'Friend',
-        avatar_url: currentFriend.avatar_url,
-        initial: (currentFriend.username?.charAt(0) || 'F').toUpperCase()
+        avatar_url: getAvatarUrl ? getAvatarUrl(avatarUrl) : avatarUrl,
+        initial: getUserInitials ? getUserInitials(currentFriend.username) : (currentFriend.username?.charAt(0) || 'F').toUpperCase()
       };
     }
     
+    // Fallback
     return {
       username: 'Unknown User',
       avatar_url: null,
@@ -116,6 +126,17 @@ const ChatMessage = ({
   };
 
   const senderInfo = getSenderInfo();
+
+  // Get my profile avatar for display on my messages - FIXED VERSION
+  const getMyAvatar = () => {
+    const avatarUrl = profile?.avatar_url || profile?.avatar;
+    return {
+      avatar_url: getAvatarUrl ? getAvatarUrl(avatarUrl) : avatarUrl,
+      initial: getUserInitials ? getUserInitials(profile?.username) : (profile?.username?.charAt(0) || 'M').toUpperCase()
+    };
+  };
+
+  const myAvatar = getMyAvatar();
 
   return (
     <Box
@@ -126,6 +147,7 @@ const ChatMessage = ({
         px: 1,
       }}
     >
+      {/* Friend's avatar (left side for their messages) */}
       {!isMine && (
         <Avatar 
           src={senderInfo.avatar_url} 
@@ -135,12 +157,14 @@ const ChatMessage = ({
             mr: 1,
             mt: 'auto',
             fontSize: '0.8rem',
-            bgcolor: 'primary.main'
+            bgcolor: 'grey.400' // Neutral grey background
           }}
           imgProps={{ 
             onError: (e) => { 
+              console.log('Friend avatar failed to load:', senderInfo.avatar_url);
               e.target.style.display = 'none';
-            } 
+            },
+            onLoad: () => console.log('Friend avatar loaded:', senderInfo.avatar_url)
           }}
         >
           {senderInfo.initial}
@@ -148,6 +172,7 @@ const ChatMessage = ({
       )}
       
       <Box sx={{ maxWidth: '70%', display: 'flex', flexDirection: 'column' }}>
+        {/* Friend's username */}
         {!isMine && (
           <Typography 
             variant="caption" 
@@ -191,6 +216,7 @@ const ChatMessage = ({
               }
             }}
           >
+            {/* Reply preview */}
             {message.reply_to && (
               <Box 
                 sx={{ 
@@ -216,6 +242,7 @@ const ChatMessage = ({
               </Box>
             )}
 
+            {/* Message bubble */}
             <Box
               sx={{
                 bgcolor: isMine ? '#0088cc' : '#f0f0f0',
@@ -230,6 +257,7 @@ const ChatMessage = ({
                 },
               }}
             >
+              {/* Forwarded indicator */}
               {message.is_forwarded && (
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, opacity: 0.8 }}>
                   <ForwardIcon fontSize="small" sx={{ mr: 0.5, fontSize: '1rem' }} />
@@ -239,6 +267,7 @@ const ChatMessage = ({
                 </Box>
               )}
 
+              {/* Message content */}
               <Typography 
                 variant="body2" 
                 sx={{ 
@@ -250,6 +279,7 @@ const ChatMessage = ({
                 {message.content}
               </Typography>
               
+              {/* Message timestamp and status */}
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 1, gap: 0.5 }}>
                 <Typography 
                   variant="caption" 
@@ -263,6 +293,7 @@ const ChatMessage = ({
                   {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
                 </Typography>
                 
+                {/* Read receipts for my messages */}
                 {isMine && (
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     {message.is_read ? (
@@ -288,6 +319,7 @@ const ChatMessage = ({
                 )}
               </Box>
 
+              {/* Message actions menu */}
               {showMenu && (
                 <IconButton
                   size="small"
@@ -317,6 +349,7 @@ const ChatMessage = ({
           </Box>
         )}
 
+        {/* Message actions menu */}
         {showMenu && (
           <Menu 
             anchorEl={anchorEl} 
@@ -334,6 +367,7 @@ const ChatMessage = ({
               sx: { borderRadius: '12px' }
             }}
           >
+            {/* Edit option (only for my messages) */}
             {isMine && (
               <MenuItem 
                 onClick={() => { 
@@ -346,16 +380,19 @@ const ChatMessage = ({
               </MenuItem>
             )}
             
+            {/* Reply option */}
             <MenuItem onClick={handleReplyClick}>
               <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
               Reply
             </MenuItem>
 
+            {/* Forward option */}
             <MenuItem onClick={handleForwardClick}>
               <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
               Forward
             </MenuItem>
 
+            {/* Delete option (only for my messages) */}
             {isMine && (
               <MenuItem 
                 onClick={handleDelete} 
@@ -368,6 +405,7 @@ const ChatMessage = ({
           </Menu>
         )}
 
+        {/* Loading indicator for temporary messages */}
         {message.is_temp && (
           <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5, justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
             <Typography variant="caption" sx={{ opacity: 0.7, mr: 1, fontSize: '0.7rem' }}>
@@ -378,24 +416,27 @@ const ChatMessage = ({
         )}
       </Box>
 
+      {/* My avatar (right side for my messages) */}
       {isMine && (
         <Avatar 
-          src={profile?.avatar_url} 
+          src={myAvatar.avatar_url} 
           sx={{ 
             width: 32, 
             height: 32, 
             ml: 1,
             mt: 'auto',
             fontSize: '0.8rem',
-            bgcolor: 'secondary.main'
+            bgcolor: 'grey.400' // Neutral grey background
           }}
           imgProps={{ 
             onError: (e) => { 
+              console.log('My avatar failed to load:', myAvatar.avatar_url);
               e.target.style.display = 'none';
-            } 
+            },
+            onLoad: () => console.log('My avatar loaded:', myAvatar.avatar_url)
           }}
         >
-          {(profile?.username?.charAt(0) || 'M').toUpperCase()}
+          {myAvatar.initial}
         </Avatar>
       )}
     </Box>

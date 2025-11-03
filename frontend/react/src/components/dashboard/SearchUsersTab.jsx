@@ -27,6 +27,29 @@ const SearchUsersTab = ({
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sendingRequests, setSendingRequests] = useState(new Set());
+  const [failedImages, setFailedImages] = useState(new Set());
+
+  // Function to get full avatar URL with cache busting
+  const getAvatarUrl = (url) => {
+    if (!url || failedImages.has(url)) {
+      return null;
+    }
+
+    // If it's already a full URL, add cache busting
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return `${url}?v=${Date.now()}`;
+    }
+
+    // For relative paths, construct full URL
+    const baseUrl = 'http://localhost:8000';
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    return `${baseUrl}${cleanUrl}?v=${Date.now()}`;
+  };
+
+  const handleImageError = (url) => {
+    console.log('Image failed to load:', url);
+    setFailedImages(prev => new Set([...prev, url]));
+  };
 
   const handleSearch = async () => {
     if (searchQuery.trim().length < 2) {
@@ -169,12 +192,11 @@ const SearchUsersTab = ({
             >
               <ListItemAvatar>
                 <Avatar 
-                  src={user.avatar_url} 
+                  src={getAvatarUrl(user.avatar_url)} 
                   sx={{ width: 48, height: 48 }}
-                  imgProps={{ 
-                    onError: (e) => { 
-                      e.target.style.display = 'none';
-                    } 
+                  imgProps={{
+                    onError: () => handleImageError(user.avatar_url),
+                    onLoad: () => console.log('Search user image loaded:', user.avatar_url)
                   }}
                 >
                   {user.username?.charAt(0)?.toUpperCase() || 'U'}

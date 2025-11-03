@@ -1,20 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { Chat as ChatIcon, Close as CloseIcon, Reply as ReplyIcon, Send as SendIcon } from '@mui/icons-material';
 import {
+  Avatar,
   Box,
-  Typography,
+  Button,
+  Chip,
+  CircularProgress,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Avatar,
   TextField,
-  Button,
-  CircularProgress,
-  Chip,
-  IconButton
+  Typography
 } from '@mui/material';
-import { Send as SendIcon, Chat as ChatIcon, Close as CloseIcon, Reply as ReplyIcon } from '@mui/icons-material';
-import { getPrivateChat, sendPrivateMessage, editMessage, deleteMessage } from '../../services/api';
+import { useEffect, useRef, useState } from 'react';
+import { useAvatar } from '../../hooks/useAvatar';
+import { deleteMessage, editMessage, getPrivateChat, sendPrivateMessage } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 
@@ -29,6 +30,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Use the avatar hook - single instance for all avatars
+  const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
+
   // Clear chat state helper
   const clearChatState = () => {
     setMessages([]);
@@ -42,9 +46,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     if (storedFriend) {
       try {
         const friend = JSON.parse(storedFriend);
-        console.log('Found stored friend from FriendsTab:', friend);
         handleSelectFriend(friend);
-        // Clear the stored friend after using it
         localStorage.removeItem('selectedFriend');
       } catch (error) {
         console.error('Error parsing stored friend:', error);
@@ -52,6 +54,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, []);
 
+  // FIXED: No more polling - only load when selectedFriend changes
   useEffect(() => {
     if (!selectedFriend) {
       setMessages([]);
@@ -60,75 +63,70 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     let isSubscribed = true;
 
-    const pollMessages = async () => {
+    const loadMessages = async () => {
       try {
         const chatMessages = await getPrivateChat(selectedFriend.id);
         
         if (isSubscribed) {
-          const enhancedMessages = chatMessages.map(message => ({
-            ...message,
-            sender: {
-              username: message.sender_id === profile?.id 
-                ? profile?.username 
-                : selectedFriend?.username || 'Unknown User',
-              avatar_url: message.sender_id === profile?.id 
-                ? profile?.avatar_url 
-                : selectedFriend?.avatar_url,
-              id: message.sender_id === profile?.id ? profile?.id : selectedFriend?.id
-            },
-            is_read: message.is_read || false
-          }));
+          const enhancedMessages = chatMessages.map(message => {
+            const isMyMessage = message.sender_id === profile?.id;
+            const sender = isMyMessage ? profile : selectedFriend;
+            
+            return {
+              ...message,
+              sender: {
+                username: sender?.username || 'Unknown User',
+                avatar_url: getUserAvatar(sender),
+                id: sender?.id
+              },
+              is_read: message.is_read || false
+            };
+          });
           
           const sortedMessages = enhancedMessages.sort((a, b) =>
             new Date(a.created_at) - new Date(b.created_at)
           );
 
-          setMessages(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(sortedMessages)) {
-              return prev;
-            }
-            return sortedMessages;
-          });
+          setMessages(sortedMessages);
         }
       } catch (error) {
-        console.error('Polling error:', error);
+        console.error('Failed to load messages:', error);
       }
     };
 
-    pollMessages();
-    const pollInterval = setInterval(pollMessages, 5000);
+    loadMessages();
 
     return () => {
       isSubscribed = false;
-      clearInterval(pollInterval);
     };
-  }, [selectedFriend?.id, profile]);
+  }, [selectedFriend?.id, profile, getUserAvatar]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSelectFriend = async (friend) => {
-    console.log('Selecting friend for chat:', friend);
     clearChatState();
     setSelectedFriend(friend);
     setIsLoadingMessages(true);
     
     try {
       const chatMessages = await getPrivateChat(friend.id);
-      const enhancedMessages = chatMessages.map(message => ({
-        ...message,
-        sender: {
-          username: message.sender_id === profile?.id 
-            ? profile?.username 
-            : friend?.username || 'Unknown User',
-          avatar_url: message.sender_id === profile?.id 
-            ? profile?.avatar_url 
-            : friend?.avatar_url,
-          id: message.sender_id === profile?.id ? profile?.id : friend?.id
-        },
-        is_read: message.is_read || false
-      }));
+      
+      const enhancedMessages = chatMessages.map(message => {
+        const isMyMessage = message.sender_id === profile?.id;
+        const sender = isMyMessage ? profile : friend;
+        
+        return {
+          ...message,
+          sender: {
+            username: sender?.username || 'Unknown User',
+            avatar_url: getUserAvatar(sender),
+            id: sender?.id
+          },
+          is_read: message.is_read || false
+        };
+      });
       
       const sortedMessages = enhancedMessages.sort((a, b) =>
         new Date(a.created_at) - new Date(b.created_at)
@@ -145,16 +143,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const handleEditMessage = async (messageId, newContent) => {
     try {
       const updatedMessage = await editMessage(messageId, newContent);
+      const isMyMessage = updatedMessage.sender_id === profile?.id;
+      const sender = isMyMessage ? profile : selectedFriend;
+      
       const enhancedMessage = {
         ...updatedMessage,
         sender: {
-          username: updatedMessage.sender_id === profile?.id 
-            ? profile?.username 
-            : selectedFriend?.username || 'Unknown User',
-          avatar_url: updatedMessage.sender_id === profile?.id 
-            ? profile?.avatar_url 
-            : selectedFriend?.avatar_url,
-          id: updatedMessage.sender_id === profile?.id ? profile?.id : selectedFriend?.id
+          username: sender?.username || 'Unknown User',
+          avatar_url: getUserAvatar(sender),
+          id: sender?.id
         }
       };
       
@@ -246,7 +243,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         reply_to: replyingTo || null,
         sender: {
           username: profile.username,
-          avatar_url: profile.avatar_url,
+          avatar_url: getUserAvatar(profile),
           id: profile.id
         }
       };
@@ -265,7 +262,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         ...sentMessage,
         sender: {
           username: profile.username,
-          avatar_url: profile.avatar_url,
+          avatar_url: getUserAvatar(profile),
           id: profile.id
         },
         is_temp: false,
@@ -330,16 +327,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             >
               <ListItemAvatar>
                 <Avatar 
-                  src={friend.avatar_url} 
+                  src={getUserAvatar(friend)} 
                   alt={friend.username} 
                   sx={{ width: 40, height: 40 }}
-                  imgProps={{ 
-                    onError: (e) => { 
-                      e.target.style.display = 'none';
-                    } 
-                  }}
                 >
-                  {friend.username?.charAt(0)?.toUpperCase() || 'F'}
+                  {getUserInitials(friend.username)}
                 </Avatar>
               </ListItemAvatar>
               <ListItemText
@@ -375,21 +367,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               gap: 2
             }}>
               <Avatar 
-                src={selectedFriend.avatar_url} 
+                src={getUserAvatar(selectedFriend)} 
                 sx={{ 
                   width: 44, 
-                  height: 44, 
-                  bgcolor: 'primary.main',
+                  height: 44,
                   fontSize: '1.2rem',
                   fontWeight: 'bold'
                 }}
-                imgProps={{ 
-                  onError: (e) => { 
-                    e.target.style.display = 'none';
-                  } 
-                }}
               >
-                {selectedFriend.username?.charAt(0)?.toUpperCase() || 'F'}
+                {getUserInitials(selectedFriend.username)}
               </Avatar>
               <Box sx={{ flexGrow: 1 }}>
                 <Typography variant="h6" fontWeight="600">
@@ -401,9 +387,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 </Typography>
               </Box>
               <Chip
-                label="Real-time"
+                label="Manual refresh"
                 size="small"
-                color="success"
+                color="primary"
                 variant="outlined"
                 sx={{ borderRadius: '8px' }}
               />
@@ -496,6 +482,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         onForward={handleForward}
                         profile={profile}
                         currentFriend={selectedFriend}
+                        getAvatarUrl={getAvatarUrl}
+                        getUserInitials={getUserInitials}
                       />
                     ))
                   }
@@ -579,6 +567,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         message={forwardingMessage}
         friends={friends.filter(friend => friend.id !== selectedFriend?.id)}
         onForward={handleForwardMessage}
+        getAvatarUrl={getAvatarUrl}
+        getUserInitials={getUserInitials}
       />
     </Box>
   );

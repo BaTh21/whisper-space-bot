@@ -1,21 +1,22 @@
+import { Block as BlockIcon, MoreVert as MoreVertIcon } from '@mui/icons-material';
 import {
   Avatar,
   Box,
   Button,
   Card,
   CircularProgress,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Typography,
-  IconButton,
   Menu,
-  MenuItem
+  MenuItem,
+  Typography
 } from '@mui/material';
-import { MoreVert as MoreVertIcon, Block as BlockIcon } from '@mui/icons-material';
 import { useState } from 'react';
-import { acceptFriendRequest, unfriend, blockUser } from '../../services/api';
+import { useAvatar } from '../../hooks/useAvatar';
+import { acceptFriendRequest, blockUser, unfriend } from '../../services/api';
 
 const FriendsTab = ({ 
   friends, 
@@ -29,6 +30,9 @@ const FriendsTab = ({
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [processingAction, setProcessingAction] = useState(null);
+
+  // Use the avatar hook
+  const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
 
   const handleAcceptRequest = async (requesterId) => {
     setAcceptingId(requesterId);
@@ -124,15 +128,10 @@ const FriendsTab = ({
               }}
             >
               <Avatar 
-                src={request.avatar_url} 
+                src={getUserAvatar(request)} 
                 sx={{ mr: 2, width: 48, height: 48 }}
-                imgProps={{ 
-                  onError: (e) => { 
-                    e.target.style.display = 'none';
-                  } 
-                }}
               >
-                {request.username?.charAt(0)?.toUpperCase() || 'U'}
+                {getUserInitials(request.username)}
               </Avatar>
               <Box sx={{ flexGrow: 1 }}>
                 <Typography variant="body1" fontWeight="500">{request.username}</Typography>
@@ -157,6 +156,7 @@ const FriendsTab = ({
           ))}
         </Box>
       )}
+
 
       <Typography variant="h6" gutterBottom fontWeight="600">
         Your Friends ({friends.length})
@@ -185,15 +185,10 @@ const FriendsTab = ({
             >
               <ListItemAvatar>
                 <Avatar 
-                  src={friend.avatar_url} 
+                  src={getAvatarUrl(friend)} 
                   sx={{ width: 48, height: 48 }}
-                  imgProps={{ 
-                    onError: (e) => { 
-                      e.target.style.display = 'none';
-                    } 
-                  }}
                 >
-                  {friend.username?.charAt(0)?.toUpperCase() || 'F'}
+                  {getUserInitials(friend.username)}
                 </Avatar>
               </ListItemAvatar>
               <ListItemText
