@@ -1,5 +1,7 @@
 import {
   Delete as DeleteIcon,
+  DoneAll as DoneAllIcon,
+  Done as DoneIcon,
   Edit as EditIcon,
   Forward as ForwardIcon,
   MoreVert as MoreVertIcon,
@@ -85,11 +87,11 @@ const ChatMessage = ({
 
   const showMenu = !message.is_temp;
 
-  // Get proper sender information with avatar - FIXED VERSION
+  // Get proper sender information with avatar - IMPROVED VERSION
   const getSenderInfo = () => {
     // If message already has sender data with avatar, use it
     if (message.sender && message.sender.username) {
-      const avatarUrl = message.sender.avatar_url || message.sender.avatar;
+      const avatarUrl = message.sender.avatar_url;
       return {
         username: message.sender.username,
         avatar_url: getAvatarUrl ? getAvatarUrl(avatarUrl) : avatarUrl,
@@ -127,7 +129,7 @@ const ChatMessage = ({
 
   const senderInfo = getSenderInfo();
 
-  // Get my profile avatar for display on my messages - FIXED VERSION
+  // Get my profile avatar for display on my messages - IMPROVED VERSION
   const getMyAvatar = () => {
     const avatarUrl = profile?.avatar_url || profile?.avatar;
     return {
@@ -149,27 +151,27 @@ const ChatMessage = ({
     >
       {/* Friend's avatar (left side for their messages) */}
       {!isMine && (
-        <Avatar 
-          src={senderInfo.avatar_url} 
-          sx={{ 
-            width: 32, 
-            height: 32, 
-            mr: 1,
-            mt: 'auto',
-            fontSize: '0.8rem',
-            bgcolor: 'grey.400' // Neutral grey background
-          }}
-          imgProps={{ 
-            onError: (e) => { 
-              console.log('Friend avatar failed to load:', senderInfo.avatar_url);
-              e.target.style.display = 'none';
-            },
-            onLoad: () => console.log('Friend avatar loaded:', senderInfo.avatar_url)
-          }}
-        >
-          {senderInfo.initial}
-        </Avatar>
-      )}
+          <Avatar 
+            src={senderInfo.avatar_url} 
+            sx={{ 
+              width: 32, 
+              height: 32, 
+              mr: 1,
+              mt: 'auto',
+              fontSize: '0.8rem',
+              bgcolor: 'primary.main',
+              fontWeight: 'bold'
+            }}
+            imgProps={{ 
+              onError: (e) => { 
+                console.log('Avatar load failed, using initials');
+                e.target.style.display = 'none';
+              }
+            }}
+          >
+            {senderInfo.initial}
+          </Avatar>
+        )}
       
       <Box sx={{ maxWidth: '70%', display: 'flex', flexDirection: 'column' }}>
         {/* Friend's username */}
@@ -293,27 +295,39 @@ const ChatMessage = ({
                   {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
                 </Typography>
                 
-                {/* Read receipts for my messages */}
+                {/* Enhanced Read receipts for my messages */}
                 {isMine && (
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    {message.is_read ? (
-                      <Box sx={{ 
-                        color: isMine ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.6)', 
-                        fontSize: '0.8rem',
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}>
-                        ✓✓
-                      </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+                    {message.is_sent === false ? (
+                      // Message not sent yet
+                      <CircularProgress size={10} sx={{ color: 'rgba(255,255,255,0.5)' }} />
+                    ) : message.is_read ? (
+                      // Message read by recipient (double tick - blue)
+                      <DoneAllIcon 
+                        fontSize="small" 
+                        sx={{ 
+                          fontSize: '1rem',
+                          color: '#34B7F1' // Blue color for read
+                        }} 
+                      />
+                    ) : message.is_delivered ? (
+                      // Message delivered but not read (double tick - grey)
+                      <DoneAllIcon 
+                        fontSize="small" 
+                        sx={{ 
+                          fontSize: '1rem',
+                          color: 'rgba(255,255,255,0.5)'
+                        }} 
+                      />
                     ) : (
-                      <Box sx={{ 
-                        color: isMine ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)', 
-                        fontSize: '0.8rem',
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}>
-                        ✓
-                      </Box>
+                      // Message sent but not delivered (single tick)
+                      <DoneIcon 
+                        fontSize="small" 
+                        sx={{ 
+                          fontSize: '1rem',
+                          color: 'rgba(255,255,255,0.5)'
+                        }} 
+                      />
                     )}
                   </Box>
                 )}
@@ -426,7 +440,8 @@ const ChatMessage = ({
             ml: 1,
             mt: 'auto',
             fontSize: '0.8rem',
-            bgcolor: 'grey.400' // Neutral grey background
+            bgcolor: myAvatar.avatar_url ? 'transparent' : 'primary.main',
+            fontWeight: 'bold'
           }}
           imgProps={{ 
             onError: (e) => { 
