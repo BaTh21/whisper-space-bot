@@ -159,7 +159,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         </Avatar>
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h4" gutterBottom fontWeight="600">
-            Welcome back, {profile?.username}!
+            {profile?.username}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6 }}>
             {profile?.bio || 'No bio yet.'}
