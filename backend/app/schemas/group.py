@@ -50,3 +50,25 @@ class GroupMessageOut(TimestampMixin):
             ).isoformat().replace("+00:00", "Z")
         }
     )
+    
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+    
+class GroupInviteResponse(BaseModel):
+    id: int
+    group: GroupResponse
+    inviter: UserResponse
+    invitee: UserResponse
+    status: str
+    invite_token: str
+    created_at: datetime
+    expires_at: datetime

@@ -11,7 +11,7 @@ import uuid
 
 from app.models.diary import Diary
 from app.models.user import User
-from app.schemas.group import GroupCreate
+from app.schemas.group import GroupCreate, GroupUpdate
 from app.models.friend import Friend
 from app.models.diary_group import DiaryGroup
 from app.models.group_invite import GroupInvite, InviteStatus
@@ -39,14 +39,15 @@ def get_or_create_invite_link(db: Session, group_id: int, user_id: int):
     ).first()
 
     if existing:
-        return f"{BASE_URL}/join-group/{existing.token}"
+        return existing.token
 
     # Create new
     token = generate_invite_token()
     link = GroupInviteLink(group_id=group_id, token=token)
     db.add(link)
     db.commit()
-    return f"{BASE_URL}/join-group/{token}"
+    return token
+
 def get_user_groups(db: Session, user_id: int) -> List[Group]:
     """
     Get all groups the current user is a member of.
@@ -65,6 +66,28 @@ def get_group(db: Session, group_id: int):
                             detail="Group not found")
         
     return group
+
+def update_group(group_id: int, db: Session, group_data: GroupUpdate, current_user_id: int):
+    
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Group not found")
+        
+    if group.creator_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only owner can update this group")
+        
+    group.updated_at = datetime.utcnow()
+        
+    update_data = group_data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(group, key, value)
+
+    db.commit()
+    db.refresh(group)
+    return group
+    
 
 def get_pending_invites(db: Session, user_id: int):
     from sqlalchemy.orm import joinedload
@@ -190,23 +213,48 @@ def create_group_with_invites(
     db.refresh(db_group)
     return db_group
 
-def get_group_invites(db: Session, user_id: int) -> List[GroupInvite]:
-    return db.query(GroupInvite).filter(
+def get_group_invites(db: Session, user_id: int):
+    invites = db.query(GroupInvite).filter(
         GroupInvite.invitee_id == user_id,
         GroupInvite.status == InviteStatus.pending
     ).all()
+    if not invites:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="You have no invite yet")
+        
+    return invites
 
-def accept_group_invite(db: Session, token: str, user_id: int):
-    invite = db.query(GroupInvite).filter(
-        GroupInvite.invite_token == token,
-        GroupInvite.invitee_id == user_id,
-        GroupInvite.status == InviteStatus.pending
-    ).first()
+def accept_group_invite(db: Session, invite_id: id, user_id: int):
+    
+    invite = db.query(GroupInvite).filter(GroupInvite.id == invite_id).first()
     if not invite:
-        raise HTTPException(404, "Invalid or expired invite")
-    add_member(db, invite.group_id, user_id)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Invite not found")
+        
+    check_user = db.query(GroupInvite).filter(GroupInvite.user_id == user_id).first()
+    if not check_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="You are not inviting to this group")
+        
+    check_expired = db.query(GroupInvite.expires_at < datetime.utcnow())
+    if check_expired:
+        raise HTTPException(status_code=status.HTTP_410_GONE,
+                            detail="Token is expired")
+        
+    check_status = db.query(GroupInvite.status == InviteStatus.pending)
+    if not check_status:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Invite can use only once time")
+        
+    save_invite = GroupMember(
+        group_id = invite.group_id,
+        user_id = user_id,
+        joined_at = datetime.utcnow()
+    )
+    
     invite.status = InviteStatus.accepted
     db.commit()
+    return {"datail": "You have joined the group successfully"}
 
 def get_group_invite_link(db: Session, group_id: int, user_id: int):
     group = db.query(Group).filter(Group.id == group_id, Group.creator_id == user_id).first()
@@ -241,3 +289,69 @@ def create_group_with_invites(db: Session, group_in: GroupCreate, creator_id: in
     db.commit()
     db.refresh(db_group)
     return db_group
+
+def invite_user(group_id: int, user_id: int, db: Session, current_user_id: int):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Group not found")
+        
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found")
+        
+    new_invite = GroupInvite(
+        group_id=group_id,
+        inviter_id=current_user_id,
+        invitee_id=user_id,
+        status=InviteStatus.pending,
+        invite_token=secrets.token_urlsafe(16),
+        created_at=datetime.utcnow(),
+        expires_at=datetime.utcnow() + timedelta(minutes=5)
+    )
+    db.add(new_invite)
+    db.commit()
+    db.refresh(new_invite)
+    
+    return new_invite
+def remove_member(
+    group_id: int,
+    member_id: int,
+    db: Session,
+    current_user_id: int
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Group not found")
+        
+    if group.creator_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only creator can remove members") 
+        
+    member = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == member_id
+    ).first()
+
+    if not member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Member not found")
+        
+    db.delete(member)
+    db.commit()
+    return None
+
+def leave_group(group_id: int, db: Session, current_user_id: int):
+    member = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == current_user_id
+    ).first()
+    if not member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="You are not member of this group")
+        
+    db.delete(member)
+    db.commit()
+    return None

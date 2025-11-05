@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { getGroupMembers, getGroupMessage, getGroupById } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
 import GroupSideComponent from '../components/group/GroupSideComponent';
+import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
 
 const GroupChatPage = () => {
   const { groupId } = useParams();
@@ -36,6 +37,7 @@ const GroupChatPage = () => {
   const pollingIntervalRef = useRef(null);
   const BASE_URI = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const token = localStorage.getItem('accessToken');
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     fetchGroupData();
@@ -161,6 +163,10 @@ const GroupChatPage = () => {
     }
   };
 
+  const handleSuccess = () => {
+    fetchGroupData();
+  }
+
   if (loading) {
     return (
       <Layout>
@@ -173,7 +179,12 @@ const GroupChatPage = () => {
 
   return (
     <>
-      <AppBar position="static" color="default" elevation={2}>
+      <AppBar
+        position="static" color="default" elevation={2} onClick={() => setOpen(true)}
+        sx={{
+          '&:hover': { bgcolor: 'grey.200' },
+        }}
+      >
         <Toolbar>
           <IconButton
             edge="start"
@@ -334,6 +345,12 @@ const GroupChatPage = () => {
           </Box>
         </Box>
       </Box>
+      <GroupMenuDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        group={group}
+        onSuccess={handleSuccess}
+      />
     </>
 
   );

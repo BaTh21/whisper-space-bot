@@ -24,11 +24,14 @@ import {
     getGroupDiaries,
     likeDiary,
     commentOnDiary,
-    getDiaryComments
+    getDiaryComments,
+    getGroupById,
+    removeGroupMember
 } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
 import { useParams } from 'react-router-dom';
+import DeleteDialog from '../dialogs/DeleteDialog';
 
 const GroupSideComponent = () => {
     const { groupId } = useParams();
@@ -42,20 +45,22 @@ const GroupSideComponent = () => {
     const [postingComment, setPostingComment] = useState({});
     const { auth } = useAuth();
     const user = auth?.user;
+    const [group, setGroup] = useState(null);
+    const [open, setOpen] = useState(false);
+    const [selectedMember, setSelectedMember] = useState(null);
 
     useEffect(() => {
         const fetchGroupData = async () => {
             setLoading(true);
             try {
-                const [membersData, diariesData] = await Promise.all([
+                const [membersData, diariesData, groupData] = await Promise.all([
                     getGroupMembers(groupId),
-                    getGroupDiaries(groupId)
+                    getGroupDiaries(groupId),
+                    getGroupById(groupId)
                 ]);
                 setMembers(membersData);
                 setDiaries(diariesData);
-                console.log(membersData)
-                console.log(diariesData)
-
+                setGroup(groupData);
             } catch (err) {
                 console.log(err);
             } finally {
@@ -129,6 +134,31 @@ const GroupSideComponent = () => {
         }
     };
 
+    const handleRemoveMember = async (groupId, memberId) => {
+        try {
+            await removeGroupMember(groupId, memberId);
+        } catch (error) {
+            console.error(error);
+            alert(error.message);
+        }
+    }
+
+    const handleConfirmRemove = async () => {
+        if (selectedMember) {
+            try {
+                await handleRemoveMember(group.id, selectedMember.id);
+                setMembers(prev => prev.filter(m => m.id !== selectedMember.id));
+
+                setSelectedMember(null);
+                setOpen(false);
+            } catch (error) {
+                console.error(error);
+                alert("Failed to remove member");
+            }
+        }
+    };
+
+
     if (loading) {
         return (
             <Box display="flex" justifyContent="center" p={4}>
@@ -147,23 +177,38 @@ const GroupSideComponent = () => {
             {tab === 0 && (
                 <List sx={{ maxHeight: 200, overflow: 'auto', borderRadius: '12px', p: 1 }}>
                     {members.map((member) => (
-                        <ListItem key={member.id} sx={{ borderRadius: '8px', mb: 1, bgcolor: 'grey.100', }}>
-                            <ListItemAvatar>
-                                <Avatar
-                                    src={member.avatar_url}
-                                    sx={{ width: 32, height: 32 }}
+                        <ListItem key={member.id} sx={{ borderRadius: '8px', mb: 1, bgcolor: 'grey.100', display: 'flex', justifyContent: 'space-between' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <ListItemAvatar>
+                                    <Avatar
+                                        src={member.avatar_url}
+                                        sx={{ width: 32, height: 32 }}
+                                    >
+                                        {member.username?.[0]?.toUpperCase() || 'U'}
+                                    </Avatar>
+                                </ListItemAvatar>
+                                <ListItemText
+                                    primary={
+                                        <Typography variant="body2" fontWeight="500">
+                                            {member.username}
+                                        </Typography>
+                                    }
+                                    secondary={member.id === user?.id ? 'You' : member.email}
+                                />
+                            </Box>
+                            {group?.creator_id === user?.id && member.id !== user?.id && (
+                                <Button
+                                    size="small"
+                                    color="error"
+                                    onClick={() => {
+                                        setSelectedMember(member);
+                                        setOpen(true);
+                                    }}
                                 >
-                                    {member.username?.[0]?.toUpperCase() || 'U'}
-                                </Avatar>
-                            </ListItemAvatar>
-                            <ListItemText
-                                primary={
-                                    <Typography variant="body2" fontWeight="500">
-                                        {member.username}
-                                    </Typography>
-                                }
-                                secondary={member.id === user?.id ? 'You' : member.email}
-                            />
+                                    Kick Out
+                                </Button>
+                            )}
+
                         </ListItem>
                     ))}
                 </List>
@@ -194,13 +239,13 @@ const GroupSideComponent = () => {
                                     <Typography sx={{ fontSize: 20, fontWeight: "bold" }}>
                                         {d.title}
                                     </Typography>
-                                    <Box display={{display: 'flex', justifyContent: 'space-between'}}>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {d.author?.username || "Unknown"}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {formatCambodiaDate(d.created_at)}
-                                    </Typography>
+                                    <Box display={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {d.author?.username || "Unknown"}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {formatCambodiaDate(d.created_at)}
+                                        </Typography>
                                     </Box>
                                     <Typography sx={{ mb: 1 }}>{d.content}</Typography>
 
@@ -272,6 +317,18 @@ const GroupSideComponent = () => {
                     )}
                 </Box>
             )}
+
+            <DeleteDialog
+                open={open}
+                onClose={() => setOpen(false)}
+                title="Remove member"
+                description={
+                    selectedMember
+                        ? `Are you sure you want to remove ${selectedMember.username} from ${group.name}?`
+                        : ""
+                }
+                onConfirm={handleConfirmRemove}
+            />
         </Box>
     );
 };

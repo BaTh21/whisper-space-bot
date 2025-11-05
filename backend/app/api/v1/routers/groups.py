@@ -4,15 +4,16 @@ from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut
+from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut, GroupUpdate, GroupInviteResponse
 from app.services.websocket_manager import manager
-from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group
+from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user
 from app.schemas.diary import DiaryOut
 from app.schemas.user import UserOut
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.crud.chat import get_group_messages
 from app.models.group_message import GroupMessage
 from app.schemas.chat import GroupMessageOut
+from app.crud.group import get_or_create_invite_link
 
 from app.models.group_invite import GroupInvite
 
@@ -39,7 +40,14 @@ def list_my_groups(
 @router.get("/{group_id}", response_model=GroupOut)
 def get_group_by_id(group_id: int, db: Session = Depends(get_db)):
     return get_group(db, group_id)
-    
+
+@router.patch("/{group_id}", response_model=GroupOut)
+def update_by_id(group_id: int, 
+                 group_data: GroupUpdate,
+                 db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)
+                 ):
+    return update_group(group_id, db, group_data, current_user.id)    
 
 @router.post("/{group_id}/join")
 def join_group(
@@ -102,8 +110,8 @@ def get_group_messages_(
 
 @router.post("/{token}/accept")
 def accept_invite(token: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    accept_group_invite(db, token, current_user.id)
-    return {"msg": "Joined group"}
+    return accept_group_invite(db, token, current_user.id)
+    
 
 @router.get("/{group_id}/invite-link")
 def get_invite_link(
@@ -111,7 +119,7 @@ def get_invite_link(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.crud.group import get_or_create_invite_link
+    
     try:
         link = get_or_create_invite_link(db, group_id, current_user.id)
         return {"invite_link": link}
@@ -140,27 +148,12 @@ def get_group_diaries_endpoint(
     diaries = get_group_diaries(db, group_id, current_user.id)
     return diaries
 
-@router.get("/invites/pending")
-def get_pending_invites(
+@router.get("/invites/pending", response_model=GroupInviteResponse)
+def get_pending_invites_(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if not current_user:
-        raise HTTPException(401, "Not authenticated")
-
-    invites = db.query(GroupInvite).filter(
-        GroupInvite.invitee_id == current_user.id,
-        GroupInvite.status == "pending"
-    ).all()
-
-    return [
-        {
-            "id": i.id,
-            "group": {"id": i.group.id, "name": i.group.name},
-            "inviter": {"id": i.inviter.id, "username": i.inviter.username}
-        }
-        for i in invites
-    ]
+    return get_group_invites(db, current_user.id)
 
 @router.post("/invites/{invite_id}/accept")
 def accept_invite(
@@ -168,5 +161,23 @@ def accept_invite(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    group = accept_group_invite(db, invite_id, current_user.id)
-    return {"detail": "Joined group", "group": GroupOut.from_orm(group)}
+    return accept_group_invite(db, invite_id, current_user.id)
+
+@router.post("/{group_id}/invites/{user_id}", response_model=GroupInviteResponse)
+def invite_user_by_id(group_id: int, 
+                      user_id: int, 
+                      db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)
+                      ):
+    return invite_user(group_id, user_id, db, current_user.id)
+
+@router.delete("/remove/{group_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_member_by_id(group_id: int,
+                        member_id: int,
+                        db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_user)):
+    return remove_member(group_id, member_id, db, current_user.id)
+
+@router.delete("/leave/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def leave_group_by_id(group_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return leave_group(group_id, db, current_user.id)
