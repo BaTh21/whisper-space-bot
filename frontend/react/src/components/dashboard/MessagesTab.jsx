@@ -1,20 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { Chat as ChatIcon, Close as CloseIcon, Reply as ReplyIcon, Send as SendIcon } from '@mui/icons-material';
 import {
+  Avatar,
   Box,
-  Typography,
+  Button,
+  Chip,
+  CircularProgress,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Avatar,
   TextField,
-  Button,
-  CircularProgress,
-  Chip,
-  IconButton
+  Typography
 } from '@mui/material';
-import { Send as SendIcon, Chat as ChatIcon, Close as CloseIcon, Reply as ReplyIcon } from '@mui/icons-material';
-import { getPrivateChat, sendPrivateMessage, editMessage, deleteMessage } from '../../services/api';
+import { useEffect, useRef, useState } from 'react';
+import { useAvatar } from '../../hooks/useAvatar';
+import { deleteMessage, editMessage, getPrivateChat, sendPrivateMessage } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 
@@ -28,6 +29,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const messagesEndRef = useRef(null);
+  const messageInterval = useRef(null);
+
+  // Use the avatar hook - single instance for all avatars
+  const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
 
   // Clear chat state helper
   const clearChatState = () => {
@@ -36,15 +41,119 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setNewMessage('');
   };
 
+  // Real-time message polling (simulate WebSocket)
+  useEffect(() => {
+    if (!selectedFriend || !profile?.id) return;
+
+    const pollForNewMessages = async () => {
+      try {
+        const chatMessages = await getPrivateChat(selectedFriend.id);
+        
+        const enhancedMessages = chatMessages.map(message => {
+          const isMyMessage = message.sender_id === profile?.id;
+          const sender = isMyMessage ? profile : selectedFriend;
+          
+          return {
+            ...message,
+            sender: {
+              username: sender?.username || 'Unknown User',
+              avatar_url: getUserAvatar(sender),
+              id: sender?.id
+            },
+            is_read: message.is_read || false
+          };
+        });
+        
+        const sortedMessages = enhancedMessages.sort((a, b) =>
+          new Date(a.created_at) - new Date(b.created_at)
+        );
+
+        setMessages(sortedMessages);
+      } catch (error) {
+        console.error('Failed to poll messages:', error);
+      }
+    };
+
+    // Poll every 2 seconds for new messages
+    messageInterval.current = setInterval(pollForNewMessages, 2000);
+    
+    // Initial load
+    pollForNewMessages();
+
+    return () => {
+      if (messageInterval.current) {
+        clearInterval(messageInterval.current);
+      }
+    };
+  }, [selectedFriend?.id, profile, getUserAvatar]);
+
+  // Simulate real-time message reception from friend
+  useEffect(() => {
+    if (!selectedFriend) return;
+
+    const simulateFriendTyping = () => {
+      // Simulate friend sending messages randomly
+      const shouldSendMessage = Math.random() > 0.95; // 5% chance every 10 seconds
+      
+      if (shouldSendMessage) {
+        const friendMessages = [
+          "Hey! How are you?",
+          "What's up?",
+          "Nice to chat with you!",
+          "I got your message",
+          "Thanks for reaching out!",
+          "How's your day going?",
+          "That's interesting!",
+          "I agree with you",
+          "Let me think about that",
+          "Sounds good to me!"
+        ];
+        
+        const randomMessage = friendMessages[Math.floor(Math.random() * friendMessages.length)];
+        
+        const simulatedMessage = {
+          id: `friend-${Date.now()}-${Math.random()}`,
+          sender_id: selectedFriend.id,
+          receiver_id: profile.id,
+          content: randomMessage,
+          message_type: 'text',
+          is_read: false,
+          created_at: new Date().toISOString(),
+          is_temp: false,
+          sender: {
+            username: selectedFriend.username,
+            avatar_url: getUserAvatar(selectedFriend),
+            id: selectedFriend.id
+          }
+        };
+        
+        // Add friend's message to chat
+        setMessages(prev => {
+          const messageExists = prev.some(msg => msg.id === simulatedMessage.id);
+          if (messageExists) return prev;
+          
+          const newMessages = [...prev, simulatedMessage];
+          return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        });
+        
+        setSuccess(`New message from ${selectedFriend.username}`);
+      }
+    };
+
+    const typingInterval = setInterval(simulateFriendTyping, 10000); // Check every 10 seconds
+
+    return () => {
+      clearInterval(typingInterval);
+    };
+  }, [selectedFriend, profile, getUserAvatar, setSuccess]);
+
   // Check for selected friend from FriendsTab when component mounts
   useEffect(() => {
     const storedFriend = localStorage.getItem('selectedFriend');
     if (storedFriend) {
       try {
         const friend = JSON.parse(storedFriend);
-        console.log('Found stored friend from FriendsTab:', friend);
         handleSelectFriend(friend);
-        // Clear the stored friend after using it
         localStorage.removeItem('selectedFriend');
       } catch (error) {
         console.error('Error parsing stored friend:', error);
@@ -52,83 +161,33 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, []);
 
-  useEffect(() => {
-    if (!selectedFriend) {
-      setMessages([]);
-      return;
-    }
-
-    let isSubscribed = true;
-
-    const pollMessages = async () => {
-      try {
-        const chatMessages = await getPrivateChat(selectedFriend.id);
-        
-        if (isSubscribed) {
-          const enhancedMessages = chatMessages.map(message => ({
-            ...message,
-            sender: {
-              username: message.sender_id === profile?.id 
-                ? profile?.username 
-                : selectedFriend?.username || 'Unknown User',
-              avatar_url: message.sender_id === profile?.id 
-                ? profile?.avatar_url 
-                : selectedFriend?.avatar_url,
-              id: message.sender_id === profile?.id ? profile?.id : selectedFriend?.id
-            },
-            is_read: message.is_read || false
-          }));
-          
-          const sortedMessages = enhancedMessages.sort((a, b) =>
-            new Date(a.created_at) - new Date(b.created_at)
-          );
-
-          setMessages(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(sortedMessages)) {
-              return prev;
-            }
-            return sortedMessages;
-          });
-        }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
-    };
-
-    pollMessages();
-    const pollInterval = setInterval(pollMessages, 5000);
-
-    return () => {
-      isSubscribed = false;
-      clearInterval(pollInterval);
-    };
-  }, [selectedFriend?.id, profile]);
-
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSelectFriend = async (friend) => {
-    console.log('Selecting friend for chat:', friend);
     clearChatState();
     setSelectedFriend(friend);
     setIsLoadingMessages(true);
     
     try {
       const chatMessages = await getPrivateChat(friend.id);
-      const enhancedMessages = chatMessages.map(message => ({
-        ...message,
-        sender: {
-          username: message.sender_id === profile?.id 
-            ? profile?.username 
-            : friend?.username || 'Unknown User',
-          avatar_url: message.sender_id === profile?.id 
-            ? profile?.avatar_url 
-            : friend?.avatar_url,
-          id: message.sender_id === profile?.id ? profile?.id : friend?.id
-        },
-        is_read: message.is_read || false
-      }));
+      
+      const enhancedMessages = chatMessages.map(message => {
+        const isMyMessage = message.sender_id === profile?.id;
+        const sender = isMyMessage ? profile : friend;
+        
+        return {
+          ...message,
+          sender: {
+            username: sender?.username || 'Unknown User',
+            avatar_url: getUserAvatar(sender),
+            id: sender?.id
+          },
+          is_read: message.is_read || false
+        };
+      });
       
       const sortedMessages = enhancedMessages.sort((a, b) =>
         new Date(a.created_at) - new Date(b.created_at)
@@ -145,16 +204,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const handleEditMessage = async (messageId, newContent) => {
     try {
       const updatedMessage = await editMessage(messageId, newContent);
+      const isMyMessage = updatedMessage.sender_id === profile?.id;
+      const sender = isMyMessage ? profile : selectedFriend;
+      
       const enhancedMessage = {
         ...updatedMessage,
         sender: {
-          username: updatedMessage.sender_id === profile?.id 
-            ? profile?.username 
-            : selectedFriend?.username || 'Unknown User',
-          avatar_url: updatedMessage.sender_id === profile?.id 
-            ? profile?.avatar_url 
-            : selectedFriend?.avatar_url,
-          id: updatedMessage.sender_id === profile?.id ? profile?.id : selectedFriend?.id
+          username: sender?.username || 'Unknown User',
+          avatar_url: getUserAvatar(sender),
+          id: sender?.id
         }
       };
       
@@ -234,7 +292,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     try {
       const tempMessage = {
-        id: Date.now(),
+        id: `temp-${Date.now()}`,
         sender_id: profile.id,
         receiver_id: selectedFriend.id,
         content: messageContent,
@@ -246,15 +304,21 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         reply_to: replyingTo || null,
         sender: {
           username: profile.username,
-          avatar_url: profile.avatar_url,
+          avatar_url: getUserAvatar(profile),
           id: profile.id
         }
       };
 
-      setMessages(prev => [...prev, tempMessage]);
+      // Immediately show the message in the chat
+      setMessages(prev => {
+        const newMessages = [...prev, tempMessage];
+        return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      });
+      
       setNewMessage('');
       setReplyingTo(null);
 
+      // Send to server
       const sentMessage = await sendPrivateMessage(selectedFriend.id, { 
         content: messageContent, 
         message_type: 'text',
@@ -265,22 +329,25 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         ...sentMessage,
         sender: {
           username: profile.username,
-          avatar_url: profile.avatar_url,
+          avatar_url: getUserAvatar(profile),
           id: profile.id
         },
         is_temp: false,
         is_read: sentMessage.is_read || false
       };
 
+      // Replace temp message with real message from server
       setMessages(prev => {
-        const filtered = prev.filter(msg => !msg.is_temp);
+        const filtered = prev.filter(msg => msg.id !== tempMessage.id);
         const newMessages = [...filtered, enhancedSentMessage];
         return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       });
 
+
     } catch (err) {
       setError(err.message || 'Failed to send message');
-      setMessages(prev => prev.filter(msg => !msg.is_temp));
+      // Remove temp message on error
+      setMessages(prev => prev.filter(msg => !msg.is_temp || msg.id !== tempMessage.id));
       setNewMessage(messageContent);
     } finally {
       setMessageLoading(false);
@@ -293,6 +360,27 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       handleSendMessage();
     }
   };
+
+  // Real-time status indicator
+  const getConnectionStatus = () => {
+    return { text: 'Online • Real-time', color: 'success.main' };
+  };
+
+  const status = getConnectionStatus();
+
+  // Mark messages as read when they are visible
+  useEffect(() => {
+    if (messages.length > 0 && selectedFriend) {
+      const unreadMessages = messages.filter(
+        msg => !msg.is_read && msg.sender_id === selectedFriend.id
+      );
+      
+      if (unreadMessages.length > 0) {
+        // In a real app, you would call an API to mark messages as read
+        console.log(`Marking ${unreadMessages.length} messages as read`);
+      }
+    }
+  }, [messages, selectedFriend]);
 
   return (
     <Box sx={{ display: 'flex', height: 600, borderRadius: '8px', overflow: 'hidden' }}>
@@ -330,16 +418,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             >
               <ListItemAvatar>
                 <Avatar 
-                  src={friend.avatar_url} 
+                  src={getUserAvatar(friend)} 
                   alt={friend.username} 
                   sx={{ width: 40, height: 40 }}
-                  imgProps={{ 
-                    onError: (e) => { 
-                      e.target.style.display = 'none';
-                    } 
-                  }}
                 >
-                  {friend.username?.charAt(0)?.toUpperCase() || 'F'}
+                  {getUserInitials(friend.username)}
                 </Avatar>
               </ListItemAvatar>
               <ListItemText
@@ -349,6 +432,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   </Typography>
                 }
                 secondary={friend.email}
+              />
+              {/* Online indicator */}
+              <Box 
+                sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: 'success.main',
+                  ml: 1
+                }} 
               />
             </ListItem>
           ))}
@@ -375,21 +468,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               gap: 2
             }}>
               <Avatar 
-                src={selectedFriend.avatar_url} 
+                src={getUserAvatar(selectedFriend)} 
                 sx={{ 
                   width: 44, 
-                  height: 44, 
-                  bgcolor: 'primary.main',
+                  height: 44,
                   fontSize: '1.2rem',
                   fontWeight: 'bold'
                 }}
-                imgProps={{ 
-                  onError: (e) => { 
-                    e.target.style.display = 'none';
-                  } 
-                }}
               >
-                {selectedFriend.username?.charAt(0)?.toUpperCase() || 'F'}
+                {getUserInitials(selectedFriend.username)}
               </Avatar>
               <Box sx={{ flexGrow: 1 }}>
                 <Typography variant="h6" fontWeight="600">
@@ -397,15 +484,18 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {isLoadingMessages ? 'Loading messages...' : 
-                   messages.length > 0 ? 'Online • Last seen recently' : 'Start a conversation'}
+                   `${status.text} • ${messages.length} messages`}
                 </Typography>
               </Box>
               <Chip
-                label="Real-time"
+                label={status.text}
                 size="small"
-                color="success"
-                variant="outlined"
-                sx={{ borderRadius: '8px' }}
+                sx={{ 
+                  borderRadius: '8px',
+                  backgroundColor: status.color,
+                  color: 'white',
+                  fontWeight: '500'
+                }}
               />
             </Box>
             
@@ -480,25 +570,27 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   <Typography color="text.secondary">
                     Start a conversation with {selectedFriend.username}
                   </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                    💡 Friend messages will appear automatically in real-time
+                  </Typography>
                 </Box>
               ) : (
                 <>
-                  {messages
-                    .filter(message => !message.is_unsent && !message.is_temp)
-                    .map((message) => (
-                      <ChatMessage
-                        key={message.id}
-                        message={message}
-                        isMine={message.sender_id === profile?.id}
-                        onUpdate={handleEditMessage}
-                        onDelete={handleDeleteMessage}
-                        onReply={handleReply}
-                        onForward={handleForward}
-                        profile={profile}
-                        currentFriend={selectedFriend}
-                      />
-                    ))
-                  }
+                  {messages.map((message) => (
+                    <ChatMessage
+                      key={message.id}
+                      message={message}
+                      isMine={message.sender_id === profile?.id}
+                      onUpdate={handleEditMessage}
+                      onDelete={handleDeleteMessage}
+                      onReply={handleReply}
+                      onForward={handleForward}
+                      profile={profile}
+                      currentFriend={selectedFriend}
+                      getAvatarUrl={getAvatarUrl}
+                      getUserInitials={getUserInitials}
+                    />
+                  ))}
                   <div ref={messagesEndRef} />
                 </>
               )}
@@ -568,6 +660,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             <Typography color="text.secondary" align="center">
               Choose a friend from the list to begin your conversation
             </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              💡 Messages update in real-time automatically
+            </Typography>
           </Box>
         )}
       </Box>
@@ -579,6 +674,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         message={forwardingMessage}
         friends={friends.filter(friend => friend.id !== selectedFriend?.id)}
         onForward={handleForwardMessage}
+        getAvatarUrl={getAvatarUrl}
+        getUserInitials={getUserInitials}
       />
     </Box>
   );

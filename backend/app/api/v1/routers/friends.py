@@ -162,7 +162,13 @@ def list_friends(
 ):
     try:
         friends = get_friends(db, current_user.id)
-        return [{"id": f.id, "username": f.username, "email": f.email} for f in friends]
+        return [{
+            "id": f.id, 
+            "username": f.username, 
+            "email": f.email,
+            "avatar_url": f.avatar_url,  # ADD THIS LINE
+            "is_verified": f.is_verified  # Optional: add if you have this field
+        } for f in friends]
     except Exception as e:
         print(f"Server error in list_friends: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -179,7 +185,9 @@ def pending_requests(
             "id": u.id, 
             "username": u.username, 
             "email": u.email,
-            "requester_id": u.id
+            "avatar_url": u.avatar_url,  # ADD THIS LINE
+            "requester_id": u.id,
+            "is_verified": u.is_verified  # Optional: add if you have this field
         } for u in requests]
     except Exception as e:
         print(f"Server error in pending_requests: {str(e)}")
@@ -203,7 +211,8 @@ def get_blocked_users_route(
         return [{
             "id": user.id,
             "username": user.username,
-            "email": user.email
+            "email": user.email,
+            "avatar_url": user.avatar_url  # ADD THIS LINE
         } for user in blocked_users]
         
     except Exception as e:

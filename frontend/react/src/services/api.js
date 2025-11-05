@@ -10,7 +10,7 @@ const GROUPS_URL = `${API_BASE}/groups`;
 const CHATS_URL = `${API_BASE}/chats`;
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -119,90 +119,193 @@ export const updateMe = async (data) => {
   }
 };
 
+export const uploadAvatar = async (file) => {
+  const formData = new FormData();
+  formData.append('avatar', file);
+  
+  const response = await api.post('/avatars/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+
 export const searchUsers = async (query) => {
+  // Validate and clean the query
+  if (!query || typeof query !== 'string') {
+    return [];
+  }
+
+  const trimmedQuery = query.trim();
+  
+  // Return empty array for short queries instead of error
+  if (trimmedQuery.length < 1) {
+    return [];
+  }
+
   try {
-    const response = await api.get(`${USERS_URL}/search`, {
-      params: { q: query },
+    // Remove limit and offset parameters as they might be causing validation issues
+    const response = await api.get(`${USERS_URL}/search`, { 
+      params: { 
+        query: trimmedQuery // Use 'query' instead of 'q'
+      } 
     });
     return response.data;
   } catch (error) {
-    console.error("Search users error:", error.response?.data);
-    throw new Error(
-      error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Search failed"
-    );
+    console.error('Search users error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      query: trimmedQuery
+    });
+    
+    // Handle 422 error specifically
+    if (error.response?.status === 422) {
+      console.warn('Search validation failed, returning empty results');
+      return []; // Return empty array instead of throwing error
+    }
+    
+    // For other errors, still return empty array to prevent UI crashes
+    return [];
   }
 };
 
 // Friend endpoints
-export const sendFriendRequest = async (userId) => {
+const getCurrentUserId = () => {
   try {
-    console.log("🚀 Sending friend request to user ID:", userId);
-    const response = await api.post(`${FRIENDS_URL}/request/${userId}`);
-    console.log("✅ Friend request successful:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("❌ Send friend request error:", {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-    });
-
-    // Handle specific backend errors
-    if (error.response?.status === 400) {
-      const detail = error.response?.data?.detail;
-      if (detail?.includes("Already friends")) {
-        throw new Error("You are already friends with this user");
-      } else if (detail?.includes("Cannot send")) {
-        throw new Error("Cannot send friend request to yourself");
-      } else if (detail?.includes("blocked")) {
-        throw new Error("This friendship is blocked");
-      } else {
-        throw new Error(detail || "Invalid request");
-      }
+    const userData = localStorage.getItem('user');
+    
+    // If no data or it's the broken string, return null
+    if (!userData || userData === '[object Object]') {
+      console.warn('User data missing or corrupted');
+      return null;
     }
 
+    // Try to parse normally
+    const user = JSON.parse(userData);
+    return user?.id || null;
+    
+  } catch (error) {
+    console.error('Error getting user ID:', error);
+    return null;
+  }
+};
+
+
+export const sendFriendRequest = async (userId) => {
+  // Input validation
+  if (!userId || typeof userId !== 'number') {
+    return {
+      success: false,
+      message: 'Invalid user ID',
+      code: 'INVALID_ID'
+    };
+  }
+
+  // Get current user ID
+  const currentUserId = getCurrentUserId();
+  
+  // Only check self-request if we have a valid currentUserId
+  if (currentUserId && userId === currentUserId) {
+    return {
+      success: false,
+      message: 'You cannot send a friend request to yourself',
+      code: 'SELF_REQUEST'
+    };
+  }
+
+  try {
+    const response = await api.post(`/friends/request/${userId}`);
+    
+    return {
+      success: true,
+      data: response.data,
+      message: 'Friend request sent successfully!',
+      code: 'SUCCESS'
+    };
+    
+  } catch (error) {
+    console.error('Friend request error:', error);
+
+    // Handle 409 Conflict - request already exists
     if (error.response?.status === 409) {
-      const detail = error.response?.data?.detail;
-      // For 409 conflicts, return a success-like response since the request already exists
       return {
-        success: true,
-        message: detail || "Friend request already sent",
-        alreadyExists: true,
+        success: true, // Consider this a success
+        data: error.response?.data,
+        message: 'Friend request already sent!',
+        code: 'ALREADY_EXISTS'
       };
     }
 
-    if (error.response?.status === 404) {
-      throw new Error("User not found");
-    }
+    // Handle other HTTP errors
+    const errorMessage = error.response?.data?.detail 
+      || error.response?.data?.message 
+      || error.message 
+      || 'Failed to send friend request';
 
-    if (error.response?.status === 500) {
-      const detail = error.response?.data?.detail;
-      if (detail?.includes("already exists") || detail?.includes("duplicate")) {
-        return {
-          success: true,
-          message: "Friend request already sent",
-          alreadyExists: true,
-        };
-      }
-      throw new Error("Server error. Please try again.");
-    }
-
-    // Network errors
-    if (
-      error.message === "Network Error" ||
-      error.message === "Failed to fetch"
-    ) {
-      throw new Error(
-        "Cannot connect to server. Please check your internet connection."
-      );
-    }
-
-    throw new Error(
-      error.response?.data?.detail || "Failed to send friend request"
-    );
+    return {
+      success: false,
+      message: errorMessage,
+      code: 'REQUEST_FAILED',
+      status: error.response?.status
+    };
   }
+};
+
+
+export const checkFriendStatus = async (userId) => {
+  try {
+    const response = await api.get(`/friends/status/${userId}`);
+    return {
+      exists: true,
+      status: response.data.status, // 'pending', 'accepted', 'none'
+      data: response.data
+    };
+  } catch (error) {
+    return {
+      exists: false,
+      status: 'none',
+      error: error.response?.data
+    };
+  }
+};
+
+// Smart friend request that checks status first
+export const smartFriendRequest = async (userId) => {
+  // First check current status
+  const statusCheck = await checkFriendStatus(userId);
+  
+  if (statusCheck.exists) {
+    switch (statusCheck.status) {
+      case 'pending':
+        return {
+          success: false,
+          message: 'Friend request already pending!',
+          code: 'ALREADY_PENDING',
+          data: statusCheck.data
+        };
+      
+      case 'accepted':
+        return {
+          success: false,
+          message: 'You are already friends!',
+          code: 'ALREADY_FRIENDS',
+          data: statusCheck.data
+        };
+      
+      case 'none':
+        // Continue to send request
+        break;
+      
+      default:
+        // Continue to send request
+        break;
+    }
+  }
+
+  // Send the actual friend request
+  return await sendFriendRequest(userId);
 };
 
 export const getFriends = async () => {

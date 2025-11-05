@@ -1,21 +1,22 @@
+import { Block as BlockIcon, MoreVert as MoreVertIcon } from '@mui/icons-material';
 import {
   Avatar,
   Box,
   Button,
   Card,
   CircularProgress,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Typography,
-  IconButton,
   Menu,
-  MenuItem
+  MenuItem,
+  Typography
 } from '@mui/material';
-import { MoreVert as MoreVertIcon, Block as BlockIcon } from '@mui/icons-material';
 import { useState } from 'react';
-import { acceptFriendRequest, unfriend, blockUser } from '../../services/api';
+import { useAvatar } from '../../hooks/useAvatar';
+import { acceptFriendRequest, blockUser, unfriend } from '../../services/api';
 
 const FriendsTab = ({ 
   friends, 
@@ -29,6 +30,9 @@ const FriendsTab = ({
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [processingAction, setProcessingAction] = useState(null);
+
+  // Use the avatar hook
+  const { getUserAvatar, getUserInitials } = useAvatar();
 
   const handleAcceptRequest = async (requesterId) => {
     setAcceptingId(requesterId);
@@ -123,17 +127,20 @@ const FriendsTab = ({
                 borderRadius: '12px'
               }}
             >
-              <Avatar 
-                src={request.avatar_url} 
-                sx={{ mr: 2, width: 48, height: 48 }}
-                imgProps={{ 
-                  onError: (e) => { 
-                    e.target.style.display = 'none';
-                  } 
-                }}
-              >
-                {request.username?.charAt(0)?.toUpperCase() || 'U'}
-              </Avatar>
+              <ListItemAvatar>
+                <Avatar 
+                  src={getUserAvatar(request)} 
+                  sx={{ width: 48, height: 48 }}
+                  imgProps={{
+                    onError: (e) => {
+                      // Hide the image and show initials if avatar fails to load
+                      e.target.style.display = 'none';
+                    }
+                  }}
+                >
+                  {getUserInitials(request.username)}
+                </Avatar>
+              </ListItemAvatar>
               <Box sx={{ flexGrow: 1 }}>
                 <Typography variant="body1" fontWeight="500">{request.username}</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -185,15 +192,16 @@ const FriendsTab = ({
             >
               <ListItemAvatar>
                 <Avatar 
-                  src={friend.avatar_url} 
+                  src={getUserAvatar(friend)} 
                   sx={{ width: 48, height: 48 }}
-                  imgProps={{ 
-                    onError: (e) => { 
+                  imgProps={{
+                    onError: (e) => {
+                      // Hide the image and show initials if avatar fails to load
                       e.target.style.display = 'none';
-                    } 
+                    }
                   }}
                 >
-                  {friend.username?.charAt(0)?.toUpperCase() || 'F'}
+                  {getUserInitials(friend.username)}
                 </Avatar>
               </ListItemAvatar>
               <ListItemText
@@ -217,6 +225,7 @@ const FriendsTab = ({
                   onClick={(e) => handleActionMenuOpen(e, friend)}
                   disabled={processingAction === friend.id}
                   sx={{ borderRadius: '8px' }}
+                  aria-label="friend actions"
                 >
                   {processingAction === friend.id ? (
                     <CircularProgress size={20} />
