@@ -46,11 +46,13 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
       try {
         let avatarUrl = profile?.avatar_url;
         
+        // Upload new avatar if selected
         if (selectedFile) {
           setUploading(true);
           try {
             const uploadResponse = await uploadAvatar(selectedFile);
             avatarUrl = uploadResponse.avatar_url;
+            console.log('Avatar uploaded to:', avatarUrl);
           } catch (uploadError) {
             setError(uploadError.message || 'Failed to upload avatar');
             setLoading(false);
@@ -60,21 +62,25 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           setUploading(false);
         }
 
+        // Prepare update data
         const updateData = {
           username: values.username,
           bio: values.bio,
           ...(avatarUrl && { avatar_url: avatarUrl })
         };
 
+        // Remove empty values
         const cleanData = Object.fromEntries(
           Object.entries(updateData).filter(([, value]) => value !== '' && value !== null)
         );
 
+        // Update profile
         const response = await updateMe(cleanData);
         setProfile(response);
         setEditing(false);
         setSuccess(selectedFile ? 'Profile and avatar updated successfully!' : 'Profile updated successfully');
         
+        // Reset file state
         setSelectedFile(null);
         setImagePreview(null);
         if (fileInputRef.current) {
@@ -82,7 +88,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         }
 
       } catch (err) {
-        setError(err.message || 'Failed to update profile');
+        setError(err.response?.data?.detail || err.message || 'Failed to update profile');
       } finally {
         setLoading(false);
       }
@@ -99,12 +105,13 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
       return;
     }
 
-    const maxSize = 2 * 1024 * 1024;
+    const maxSize = 2 * 1024 * 1024; // 2MB
     if (file.size > maxSize) {
       setError('Image size must be less than 2MB');
       return;
     }
 
+    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setImagePreview(e.target.result);
@@ -138,7 +145,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     }
   };
 
-  // Current avatar: preview > formik > profile
+  // Current avatar display: preview > current profile avatar
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
   return (
