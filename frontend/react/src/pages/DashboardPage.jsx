@@ -10,10 +10,12 @@ import {
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import BlockedUsersTab from '../components/BlockedUsersTab';
 import FeedTab from '../components/dashboard/FeedTab';
 import FriendsTab from '../components/dashboard/FriendsTab';
 import GroupsTab from '../components/dashboard/GroupsTab';
 import MessagesTab from '../components/dashboard/MessagesTab';
+import NotesTab from '../components/dashboard/NotesTab'; // Add this import
 import ProfileSection from '../components/dashboard/ProfileSection';
 import SearchUsersTab from '../components/dashboard/SearchUsersTab';
 import CreateDiaryDialog from '../components/dialogs/CreateDiaryDialog';
@@ -23,7 +25,6 @@ import GroupInviteNotification from '../components/GroupInviteNotification';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
-import BlockedUsersTab from '../components/BlockedUsersTab';
 
 // Tab panel component
 function TabPanel({ children, value, index, ...other }) {
@@ -172,6 +173,7 @@ const DashboardPage = () => {
             <Tab label="Messages" />
             <Tab label="Friends" />
             <Tab label="Groups" />
+            <Tab label="Notes" /> {/* Add Notes Tab */}
             <Tab label="Search Users" />
             <Tab label="Blocked Users" />
           </Tabs>
@@ -222,8 +224,16 @@ const DashboardPage = () => {
             />
           </TabPanel>
 
-          {/* Search Users Tab */}
+          {/* Notes Tab */}
           <TabPanel value={activeTab} index={4}>
+            <NotesTab
+              setError={setError}
+              setSuccess={setSuccess}
+            />
+          </TabPanel>
+
+          {/* Search Users Tab */}
+          <TabPanel value={activeTab} index={5}>
             <SearchUsersTab
               setError={setError}
               setSuccess={setSuccess}
@@ -235,7 +245,7 @@ const DashboardPage = () => {
           </TabPanel>
 
           {/* Blocked Users Tab */}
-          <TabPanel value={activeTab} index={5}>
+          <TabPanel value={activeTab} index={6}>
             <BlockedUsersTab
               setError={setError}
               setSuccess={setSuccess}

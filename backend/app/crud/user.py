@@ -16,7 +16,12 @@ def get_by_email(db: Session, email: str) -> User:
 
 def create(db: Session, user_in: UserCreate) -> User:
     hashed = hash_password(user_in.password)
-    user = User(username=user_in.username, email=user_in.email, password_hash=hashed)
+    user = User(
+        username=user_in.username, 
+        email=user_in.email, 
+        password_hash=hashed,
+        is_verified=False  # ✅ CRITICAL: Set this to False by default
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -39,8 +44,10 @@ def search(db: Session, q: str) -> List[User]:
     return db.query(User).filter(User.username.ilike(f"%{q_clean}%")).limit(10).all()
 
 
-def verify(db: Session, user_id: int):
+def verify(db: Session, user_id: int) -> User:
     user = get_by_id(db, user_id)
     if user:
         user.is_verified = True
         db.commit()
+        db.refresh(user)  # ✅ Refresh to get updated data
+    return user  # ✅ Return the user object
