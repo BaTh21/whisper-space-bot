@@ -1,15 +1,24 @@
 import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Badge from '@mui/material/Badge';
+import MailIcon from '@mui/icons-material/Mail';
+import { useState } from 'react';
+import InboxComponent from './dialogs/InboxComponentDialog';
 
 const Layout = ({ children }) => {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+  const [popup, setPopup] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  const handleSuccess =()=> {
+    setPopup(false);
+  }
 
   return (
     <Box
@@ -38,6 +47,11 @@ const Layout = ({ children }) => {
           >
             Whisper Space
           </Typography>
+          <Box sx={{marginRight: 2}}>
+            <Badge badgeContent={4} color="secondary">
+              <MailIcon color="white" sx={{'&:hover': {color: 'grey.300'}}} onClick={()=> setPopup(true)}/>
+            </Badge>
+          </Box>
           <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 } }}>
             {!isAuthenticated ? (
               <>
@@ -98,6 +112,11 @@ const Layout = ({ children }) => {
       >
         {children}
       </Box>
+      <InboxComponent
+      open={popup}
+      onClose={()=> setPopup(false)}
+      onSuccess={handleSuccess}
+      />
     </Box>
   );
 };

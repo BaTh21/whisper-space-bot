@@ -730,6 +730,18 @@ export const deleteGroupMessage = async (messageId) => {
   }
 };
 
+export const getUserInvites = async () => {
+  try{
+    const res = await api.get(`${GROUPS_URL}/invites/pending`);
+    return res.data;
+  }catch(error){
+    throw new Error(
+      error.response?.data?.detail ||
+        "Failed to invite user to the group"
+    );
+  }
+}
+
 export const inviteToGroup = async (groupId, userId) => {
   try {
     const res = await api.post(`${GROUPS_URL}/${groupId}/invites/${userId}`);
