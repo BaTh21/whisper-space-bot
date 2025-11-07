@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from app.api.v1.routers import auth, users, chats, diaries, websockets, friends, groups
 from app.models import base
 from app.core.database import engine
@@ -24,7 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
