@@ -1,4 +1,4 @@
-// App.jsx - Add DebugAuth temporarily
+// App.jsx - Remove the direct /notes route
 import { ThemeProvider } from '@mui/material/styles';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';

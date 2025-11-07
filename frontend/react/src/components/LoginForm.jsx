@@ -1,14 +1,14 @@
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import {
-    Alert,
-    Box,
-    Button,
-    Card,
-    Collapse,
-    IconButton,
-    InputAdornment,
-    TextField,
-    Typography,
+  Alert,
+  Box,
+  Button,
+  Card,
+  Collapse,
+  IconButton,
+  InputAdornment,
+  TextField,
+  Typography,
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useState } from 'react';
@@ -34,17 +34,20 @@ const LoginForm = () => {
       setError(null);
       setLoading(true);
       try {
-        const data = new URLSearchParams();
-        data.append('username', values.username);
-        data.append('password', values.password);
-        const response = await loginApi(data);
+        // Pass the values directly to loginApi - it will handle the form data conversion
+        const response = await loginApi({
+          email: values.username, 
+          password: values.password
+        });
+        
         if (login(response)) {
           navigate('/dashboard');
         } else {
           setError('Login failed: Invalid tokens received');
         }
       } catch (err) {
-        setError(err.msg || 'Login failed');
+        // Use err.message instead of err.msg
+        setError(err.message || 'Login failed');
       } finally {
         setLoading(false);
       }
@@ -55,7 +58,7 @@ const LoginForm = () => {
     <Card
       sx={{
         width: { xs: '100%', sm: '90%' },
-        maxWidth: 500, // Moderate size, not too large
+        maxWidth: 500,
         mx: 'auto',
         p: { xs: 2, sm: 3 },
         bgcolor: 'background.paper',

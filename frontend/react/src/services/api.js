@@ -1,16 +1,10 @@
-// services/api.js
+
 import axios from "axios";
 
-const API_BASE = "http://localhost:8000/api/v1";
-const AUTH_URL = `${API_BASE}/auth`;
-const USERS_URL = `${API_BASE}/users`;
-const FRIENDS_URL = `${API_BASE}/friends`;
-const DIARIES_URL = `${API_BASE}/diaries`;
-const GROUPS_URL = `${API_BASE}/groups`;
-const CHATS_URL = `${API_BASE}/chats`;
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: BASE_URL, // Remove /api/v1 from baseURL
   headers: {
     "Content-Type": "application/json",
   },
@@ -38,22 +32,53 @@ api.interceptors.response.use(
   }
 );
 
+// Fixed Login endpoint - Use form data format
+export const login = async (data) => {
+  try {
+    const formData = new URLSearchParams();
+    formData.append('username', data.email);
+    formData.append('password', data.password);
+
+    const response = await api.post(`/api/v1/auth/login`, formData, {
+      headers: { 
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+    
+    return {
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token,
+      token_type: response.data.token_type
+    };
+    
+  } catch (error) {
+    console.error("Login error details:", {
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    
+    let errorMessage = "Login failed";
+    
+    if (error.response?.status === 401) {
+      errorMessage = "Invalid email or password";
+    } else if (error.response?.status === 403) {
+      errorMessage = "Please verify your email first";
+    } else if (error.response?.data?.detail) {
+      errorMessage = error.response.data.detail;
+    }
+    
+    throw new Error(errorMessage);
+  }
+};
+
 // Auth endpoints
 export const register = async (data) => {
   try {
-    console.log("Sending registration data:", data);
-
-    const response = await axios.post(`${AUTH_URL}/register`, data, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
+    const response = await api.post(`/api/v1/auth/register`, data);
     return response.data;
   } catch (error) {
     console.error("Registration error details:", error.response?.data);
 
-    // Handle different error response formats
     const errorMessage =
       error.response?.data?.detail ||
       error.response?.data?.msg ||
@@ -66,7 +91,7 @@ export const register = async (data) => {
 
 export const verifyCode = async (data) => {
   try {
-    const response = await axios.post(`${AUTH_URL}/verify-code`, data);
+    const response = await api.post(`/api/v1/auth/verify-code`, data);
     return response.data;
   } catch (error) {
     console.error("Verify code error:", error.response?.data);
@@ -78,22 +103,10 @@ export const verifyCode = async (data) => {
   }
 };
 
-export const login = async (data) => {
-  try {
-    const response = await axios.post(`${AUTH_URL}/login`, data, {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Login error:", error.response?.data);
-    throw new Error(error.response?.data?.detail || "Login failed");
-  }
-};
-
 // User endpoints
 export const getMe = async () => {
   try {
-    const response = await api.get(`${USERS_URL}/me`);
+    const response = await api.get(`/api/v1/users/me`);
     return response.data;
   } catch (error) {
     console.error("Get me error:", error.response?.data);
@@ -107,7 +120,7 @@ export const getMe = async () => {
 
 export const updateMe = async (data) => {
   try {
-    const response = await api.put(`${USERS_URL}/me`, data);
+    const response = await api.put(`/api/v1/users/me`, data);
     return response.data;
   } catch (error) {
     console.error("Update me error:", error.response?.data);
@@ -123,7 +136,7 @@ export const uploadAvatar = async (file) => {
   const formData = new FormData();
   formData.append('avatar', file);
   
-  const response = await api.post('/avatars/upload', formData, {
+  const response = await api.post('/api/v1/avatars/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -131,25 +144,21 @@ export const uploadAvatar = async (file) => {
   return response.data;
 };
 
-
 export const searchUsers = async (query) => {
-  // Validate and clean the query
   if (!query || typeof query !== 'string') {
     return [];
   }
 
   const trimmedQuery = query.trim();
   
-  // Return empty array for short queries instead of error
   if (trimmedQuery.length < 1) {
     return [];
   }
 
   try {
-    // Remove limit and offset parameters as they might be causing validation issues
-    const response = await api.get(`${USERS_URL}/search`, { 
+    const response = await api.get(`/api/v1/users/search`, { 
       params: { 
-        query: trimmedQuery // Use 'query' instead of 'q'
+        query: trimmedQuery
       } 
     });
     return response.data;
@@ -160,13 +169,11 @@ export const searchUsers = async (query) => {
       query: trimmedQuery
     });
     
-    // Handle 422 error specifically
     if (error.response?.status === 422) {
       console.warn('Search validation failed, returning empty results');
-      return []; // Return empty array instead of throwing error
+      return [];
     }
     
-    // For other errors, still return empty array to prevent UI crashes
     return [];
   }
 };
@@ -176,13 +183,11 @@ const getCurrentUserId = () => {
   try {
     const userData = localStorage.getItem('user');
     
-    // If no data or it's the broken string, return null
     if (!userData || userData === '[object Object]') {
       console.warn('User data missing or corrupted');
       return null;
     }
 
-    // Try to parse normally
     const user = JSON.parse(userData);
     return user?.id || null;
     
@@ -192,9 +197,7 @@ const getCurrentUserId = () => {
   }
 };
 
-
 export const sendFriendRequest = async (userId) => {
-  // Input validation
   if (!userId || typeof userId !== 'number') {
     return {
       success: false,
@@ -203,10 +206,8 @@ export const sendFriendRequest = async (userId) => {
     };
   }
 
-  // Get current user ID
   const currentUserId = getCurrentUserId();
   
-  // Only check self-request if we have a valid currentUserId
   if (currentUserId && userId === currentUserId) {
     return {
       success: false,
@@ -216,7 +217,7 @@ export const sendFriendRequest = async (userId) => {
   }
 
   try {
-    const response = await api.post(`/friends/request/${userId}`);
+    const response = await api.post(`/api/v1/friends/request/${userId}`);
     
     return {
       success: true,
@@ -228,17 +229,15 @@ export const sendFriendRequest = async (userId) => {
   } catch (error) {
     console.error('Friend request error:', error);
 
-    // Handle 409 Conflict - request already exists
     if (error.response?.status === 409) {
       return {
-        success: true, // Consider this a success
+        success: true,
         data: error.response?.data,
         message: 'Friend request already sent!',
         code: 'ALREADY_EXISTS'
       };
     }
 
-    // Handle other HTTP errors
     const errorMessage = error.response?.data?.detail 
       || error.response?.data?.message 
       || error.message 
@@ -253,13 +252,12 @@ export const sendFriendRequest = async (userId) => {
   }
 };
 
-
 export const checkFriendStatus = async (userId) => {
   try {
-    const response = await api.get(`/friends/status/${userId}`);
+    const response = await api.get(`/api/v1/friends/status/${userId}`);
     return {
       exists: true,
-      status: response.data.status, // 'pending', 'accepted', 'none'
+      status: response.data.status,
       data: response.data
     };
   } catch (error) {
@@ -271,9 +269,7 @@ export const checkFriendStatus = async (userId) => {
   }
 };
 
-// Smart friend request that checks status first
 export const smartFriendRequest = async (userId) => {
-  // First check current status
   const statusCheck = await checkFriendStatus(userId);
   
   if (statusCheck.exists) {
@@ -295,22 +291,19 @@ export const smartFriendRequest = async (userId) => {
         };
       
       case 'none':
-        // Continue to send request
         break;
       
       default:
-        // Continue to send request
         break;
     }
   }
 
-  // Send the actual friend request
   return await sendFriendRequest(userId);
 };
 
 export const getFriends = async () => {
   try {
-    const response = await api.get(`${FRIENDS_URL}/`);
+    const response = await api.get(`/api/v1/friends/`);
     return response.data;
   } catch (error) {
     console.error("Get friends error:", error.response?.data);
@@ -324,7 +317,7 @@ export const getFriends = async () => {
 
 export const getPendingRequests = async () => {
   try {
-    const response = await api.get(`${FRIENDS_URL}/requests`);
+    const response = await api.get(`/api/v1/friends/requests`);
     return response.data;
   } catch (error) {
     console.error("Get pending requests error:", error.response?.data);
@@ -339,7 +332,7 @@ export const getPendingRequests = async () => {
 export const acceptFriendRequest = async (requesterId) => {
   try {
     console.log("✅ Accepting friend request from:", requesterId);
-    const response = await api.post(`${FRIENDS_URL}/accept/${requesterId}`);
+    const response = await api.post(`/api/v1/friends/accept/${requesterId}`);
     console.log("✅ Friend request accepted:", response.data);
     return response.data;
   } catch (error) {
@@ -368,7 +361,7 @@ export const acceptFriendRequest = async (requesterId) => {
 // Diary endpoints
 export const createDiary = async (data) => {
   try {
-    const response = await api.post(`${DIARIES_URL}/`, data);
+    const response = await api.post(`/api/v1/diaries/`, data);
     return response.data;
   } catch (error) {
     console.error("Create diary error:", error.response?.data);
@@ -382,7 +375,7 @@ export const createDiary = async (data) => {
 
 export const getFeed = async () => {
   try {
-    const response = await api.get(`${DIARIES_URL}/feed`);
+    const response = await api.get(`/api/v1/diaries/feed`);
     return response.data;
   } catch (error) {
     console.error("Get feed error:", error.response?.data);
@@ -396,10 +389,9 @@ export const getFeed = async () => {
 
 export const likeDiary = async (diaryId) => {
   try {
-    const response = await api.post(`${DIARIES_URL}/${diaryId}/like`);
+    const response = await api.post(`/api/v1/diaries/${diaryId}/like`);
     return response.data;
   } catch (error) {
-    // If endpoint doesn't exist (404), simulate success
     if (error.response?.status === 404) {
       console.log("Like endpoint not found, simulating success");
       return {
@@ -408,7 +400,6 @@ export const likeDiary = async (diaryId) => {
       };
     }
 
-    // If it's another error, throw it
     throw new Error(
       error.response?.data?.detail ||
         error.response?.data?.msg ||
@@ -419,7 +410,7 @@ export const likeDiary = async (diaryId) => {
 
 export const commentOnDiary = async (diaryId, content) => {
   try {
-    const response = await api.post(`${DIARIES_URL}/${diaryId}/comment`, {
+    const response = await api.post(`/api/v1/diaries/${diaryId}/comment`, {
       content,
     });
     return response.data;
@@ -435,11 +426,10 @@ export const commentOnDiary = async (diaryId, content) => {
 
 export const getDiaryComments = async (diaryId) => {
   try {
-    const response = await api.get(`${DIARIES_URL}/${diaryId}/comments`);
+    const response = await api.get(`/api/v1/diaries/${diaryId}/comments`);
     return response.data;
   } catch (error) {
     console.error("Get diary comments error:", error.response?.data);
-    // Return empty array if endpoint doesn't exist yet
     if (error.response?.status === 404) {
       return [];
     }
@@ -453,11 +443,10 @@ export const getDiaryComments = async (diaryId) => {
 
 export const getDiaryLikes = async (diaryId) => {
   try {
-    const response = await api.get(`${DIARIES_URL}/${diaryId}/likes`);
+    const response = await api.get(`/api/v1/diaries/${diaryId}/likes`);
     return response.data;
   } catch (error) {
     console.error("Get diary likes error:", error.response?.data);
-    // Return empty array if endpoint doesn't exist yet
     if (error.response?.status === 404) {
       return [];
     }
@@ -470,11 +459,10 @@ export const getDiaryLikes = async (diaryId) => {
 };
 
 // Group endpoints
-
 export const createGroup = async (data) => {
   try {
     console.log("Creating group with data:", data);
-    const response = await api.post(`${GROUPS_URL}/`, data);
+    const response = await api.post(`/api/v1/groups/`, data);
     console.log("Group creation response:", response.data);
     return response.data;
   } catch (error) {
@@ -489,8 +477,7 @@ export const createGroup = async (data) => {
 
 export const getUserGroups = async () => {
   try {
-    // Use the correct endpoint: /groups/my
-    const response = await api.get(`${GROUPS_URL}/my`);
+    const response = await api.get(`/api/v1/groups/my`);
     return response.data;
   } catch (error) {
     console.error(
@@ -508,7 +495,7 @@ export const getUserGroups = async () => {
 
 export const getGroupById = async (groupId) => {
   try {
-    const response = await api.get(`${GROUPS_URL}/${groupId}`);
+    const response = await api.get(`/api/v1/groups/${groupId}`);
     return response.data;
   } catch (error) {
     console.error(
@@ -526,7 +513,7 @@ export const getGroupById = async (groupId) => {
 
 export const updateGroupById = async (groupId, data) => {
   try {
-    const response = await api.patch(`${GROUPS_URL}/${groupId}`, data);
+    const response = await api.patch(`/api/v1/groups/${groupId}`, data);
     return response.data;
   } catch (error) {
     console.error(
@@ -544,7 +531,7 @@ export const updateGroupById = async (groupId, data) => {
 
 export const joinGroup = async (groupId) => {
   try {
-    const response = await api.post(`${GROUPS_URL}/${groupId}/join`);
+    const response = await api.post(`/api/v1/groups/${groupId}/join`);
     return response.data;
   } catch (error) {
     console.error("Join group error:", error.response?.data);
@@ -559,9 +546,8 @@ export const joinGroup = async (groupId) => {
 // Chat endpoints
 export const sendPrivateMessage = async (friendId, data) => {
   try {
-    const response = await api.post(`${CHATS_URL}/private/${friendId}`, data);
+    const response = await api.post(`/api/v1/chats/private/${friendId}`, data);
 
-    // Ensure the response has proper timestamp
     if (response.data && !response.data.created_at) {
       response.data.created_at = new Date().toISOString();
     }
@@ -579,9 +565,8 @@ export const sendPrivateMessage = async (friendId, data) => {
 
 export const getPrivateChat = async (friendId) => {
   try {
-    const response = await api.get(`${CHATS_URL}/private/${friendId}`);
+    const response = await api.get(`/api/v1/chats/private/${friendId}`);
 
-    // Ensure messages have proper structure with Cambodia time
     const messages = Array.isArray(response.data) ? response.data : [];
 
     return messages.map((msg) => ({
@@ -610,13 +595,13 @@ export const getPrivateChat = async (friendId) => {
 };
 
 export const getGroupMessage = async (groupId) => {
-  const res = await api.get(`${GROUPS_URL}/${groupId}/message`);
+  const res = await api.get(`/api/v1/groups/${groupId}/message`);
   return res.data;
 };
 
 export const getGroupMembers = async (groupId) => {
   try {
-    const response = await api.get(`${GROUPS_URL}/${groupId}/members/`);
+    const response = await api.get(`/api/v1/groups/${groupId}/members/`);
     return response.data;
   } catch (error) {
     console.error("Get members error:", error.response?.data);
@@ -630,7 +615,7 @@ export const getGroupMembers = async (groupId) => {
 
 export const removeGroupMember = async (groupId, memberId) => {
   try {
-    await api.delete(`${GROUPS_URL}/remove/${groupId}/members/${memberId}`);
+    await api.delete(`/api/v1/groups/remove/${groupId}/members/${memberId}`);
   } catch (error) {
     console.error("Remove members error:", error.response?.data);
     throw new Error(
@@ -643,7 +628,7 @@ export const removeGroupMember = async (groupId, memberId) => {
 
 export const leaveGroupById = async (groupId) => {
   try {
-    await api.delete(`${GROUPS_URL}/leave/${groupId}`);
+    await api.delete(`/api/v1/groups/leave/${groupId}`);
   } catch (error) {
     console.error("Leave error:", error.response?.data);
     throw new Error(
@@ -656,7 +641,7 @@ export const leaveGroupById = async (groupId) => {
 
 export const getGroupDiaries = async (groupId) => {
   try {
-    const response = await api.get(`${GROUPS_URL}/${groupId}/diaries/`);
+    const response = await api.get(`/api/v1/groups/${groupId}/diaries/`);
     console.log(response.data);
     return response.data;
   } catch (error) {
@@ -669,24 +654,21 @@ export const getGroupDiaries = async (groupId) => {
   }
 };
 
-// services/api.js - USE THIS VERSION
 export const editMessage = async (msgId, content) => {
   try {
     console.log("Editing message:", { msgId, content });
 
-    const res = await api.patch(`${CHATS_URL}/private/${msgId}`, {
+    const res = await api.patch(`/api/v1/chats/private/${msgId}`, {
       content: content,
     });
 
     return res.data;
   } catch (err) {
-    // Get the actual error message from the response
     const errorData = err.response?.data;
     console.error("Edit message FULL error response:", errorData);
 
     let errorMessage = "Failed to edit message";
 
-    // Handle the case where detail is an array
     if (errorData?.detail && Array.isArray(errorData.detail)) {
       errorMessage = errorData.detail.join(", ");
     } else if (errorData?.detail) {
@@ -705,10 +687,9 @@ export const editMessage = async (msgId, content) => {
 };
 
 // Group message operations
-// Group message operations
 export const editGroupMessage = async (messageId, content) => {
   try {
-    const response = await api.put(`${CHATS_URL}/group/${messageId}`, {
+    const response = await api.put(`/api/v1/chats/group/${messageId}`, {
       content,
     });
     return response.data;
@@ -721,7 +702,7 @@ export const editGroupMessage = async (messageId, content) => {
 
 export const deleteGroupMessage = async (messageId) => {
   try {
-    await api.delete(`${CHATS_URL}/group/${messageId}`);
+    await api.delete(`/api/v1/chats/group/${messageId}`);
     return true;
   } catch (err) {
     throw new Error(
@@ -732,7 +713,7 @@ export const deleteGroupMessage = async (messageId) => {
 
 export const getUserInvites = async () => {
   try{
-    const res = await api.get(`${GROUPS_URL}/invites/pending`);
+    const res = await api.get(`/api/v1/groups/invites/pending`);
     return res.data;
   }catch(error){
     throw new Error(
@@ -744,7 +725,7 @@ export const getUserInvites = async () => {
 
 export const inviteToGroup = async (groupId, userId) => {
   try {
-    const res = await api.post(`${GROUPS_URL}/${groupId}/invites/${userId}`);
+    const res = await api.post(`/api/v1/groups/${groupId}/invites/${userId}`);
     return res.data;
   } catch (error) {
     throw new Error(
@@ -756,7 +737,7 @@ export const inviteToGroup = async (groupId, userId) => {
 
 export const createGroupWithInvites = async (data, inviteeIds = []) => {
   try {
-    const response = await api.post(`${GROUPS_URL}/`, {
+    const response = await api.post(`/api/v1/groups/`, {
       ...data,
       invitee_ids: inviteeIds,
     });
@@ -764,12 +745,11 @@ export const createGroupWithInvites = async (data, inviteeIds = []) => {
   } catch (error) {
     console.error("Create group with invites error:", error.response?.data);
 
-    // If the endpoint doesn't support invites, try creating without invites
     if (error.response?.status === 422 || error.response?.status === 400) {
       console.log(
         "Invite feature not supported, creating group without invites"
       );
-      const response = await api.post(`${GROUPS_URL}/`, data);
+      const response = await api.post(`/api/v1/groups/`, data);
       return response.data;
     }
 
@@ -780,30 +760,28 @@ export const createGroupWithInvites = async (data, inviteeIds = []) => {
     );
   }
 };
-// Get pending invites
+
 export const getPendingInvites = async () => {
   try {
-    const res = await api.get(`${GROUPS_URL}/invites/pending`);
+    const res = await api.get(`/api/v1/groups/invites/pending`);
     return res.data;
   } catch (err) {
     throw new Error(err.response?.data?.detail || "Failed to load invites");
   }
 };
 
-// Accept invite
 export const acceptGroupInvite = async (inviteId) => {
   try {
-    const res = await api.post(`${GROUPS_URL}/invites/${inviteId}/accept`);
+    const res = await api.post(`/api/v1/groups/invites/${inviteId}/accept`);
     return res.data;
   } catch (err) {
     throw new Error(err.response?.data?.detail || "Failed to join");
   }
 };
 
-// Get invite link (we'll implement backend next)
 export const getGroupInviteLink = async (groupId) => {
   try {
-    const res = await api.get(`${GROUPS_URL}/${groupId}/invite-link`);
+    const res = await api.get(`/api/v1/groups/${groupId}/invite-link`);
     return res.data.invite_link;
   } catch (err) {
     throw new Error(err.response?.data?.detail || "Failed to get link");
@@ -812,7 +790,7 @@ export const getGroupInviteLink = async (groupId) => {
 
 export const deleteMessage = async (msgId) => {
   try {
-    await api.delete(`${CHATS_URL}/private/${msgId}`);
+    await api.delete(`/api/v1/chats/private/${msgId}`);
   } catch (err) {
     const detail = err.response?.data?.detail || "Failed to delete message";
     throw new Error(detail);
@@ -823,7 +801,7 @@ export const sendMessage = async (
   friendId,
   { content, message_type = "text", reply_to_id = null }
 ) => {
-  const res = await api.post(`/private/${friendId}`, {
+  const res = await api.post(`/api/v1/chats/private/${friendId}`, {
     content,
     message_type,
     reply_to_id,
@@ -833,7 +811,7 @@ export const sendMessage = async (
 
 export const unfriend = async (friendId) => {
   try {
-    const response = await api.post(`${FRIENDS_URL}/unfriend/${friendId}`);
+    const response = await api.post(`/api/v1/friends/unfriend/${friendId}`);
     return response.data;
   } catch (error) {
     console.error("Unfriend error:", {
@@ -858,7 +836,7 @@ export const unfriend = async (friendId) => {
 
 export const blockUser = async (userId) => {
   try {
-    const response = await api.post(`${FRIENDS_URL}/block/${userId}`);
+    const response = await api.post(`/api/v1/friends/block/${userId}`);
     return response.data;
   } catch (error) {
     console.error("Block user error:", {
@@ -879,7 +857,7 @@ export const blockUser = async (userId) => {
 
 export const unblockUser = async (userId) => {
   try {
-    const response = await api.post(`${FRIENDS_URL}/unblock/${userId}`);
+    const response = await api.post(`/api/v1/friends/unblock/${userId}`);
     return response.data;
   } catch (error) {
     console.error("Unblock user error:", {
@@ -902,7 +880,7 @@ export const unblockUser = async (userId) => {
 
 export const getBlockedUsers = async () => {
   try {
-    const response = await api.get(`${FRIENDS_URL}/blocked`);
+    const response = await api.get(`/api/v1/friends/blocked`);
     return response.data;
   } catch (error) {
     console.error("Get blocked users error:", error);
@@ -914,10 +892,7 @@ export const getBlockedUsers = async () => {
 
 export const markMessagesAsRead = async (messageIds) => {
   try {
-    // Simulate API call without actually making the request
     console.log('Simulating mark as read for messages:', messageIds);
-    
-    // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 100));
     
     return { 
@@ -933,8 +908,6 @@ export const markMessagesAsRead = async (messageIds) => {
 
 export const respondToGroupInvite = async (inviteId, action) => {
   console.log(`Simulating ${action} for group invite:`, inviteId);
-  
-  // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 500));
   
   return { 
@@ -946,5 +919,42 @@ export const respondToGroupInvite = async (inviteId, action) => {
 
 export const getPendingGroupInvites = async () => {
   console.log('Groups invites feature not implemented - returning empty array');
-  return []; // Return empty array without making API call
+  return [];
+};
+
+// Notes API - FIXED (all start with /api/v1)
+// Notes API - Remove the duplicate /api/v1
+export const getNotes = async (archived = false) => {
+  const response = await api.get(`/api/v1/notes?archived=${String(archived)}`);
+  return response.data;
+};
+
+export const getNote = async (noteId) => {
+  const response = await api.get(`/api/v1/notes/${noteId}`);
+  return response.data;
+};
+
+export const createNote = async (noteData) => {
+  const response = await api.post('/api/v1/notes', noteData);
+  return response.data;
+};
+
+export const updateNote = async (noteId, noteData) => {
+  const response = await api.put(`/api/v1/notes/${noteId}`, noteData);
+  return response.data;
+};
+
+export const deleteNote = async (noteId) => {
+  const response = await api.delete(`/api/v1/notes/${noteId}`);
+  return response.data;
+};
+
+export const togglePinNote = async (noteId) => {
+  const response = await api.post(`/api/v1/notes/${noteId}/pin`);
+  return response.data;
+};
+
+export const toggleArchiveNote = async (noteId) => {
+  const response = await api.post(`/api/v1/notes/${noteId}/archive`);
+  return response.data;
 };
