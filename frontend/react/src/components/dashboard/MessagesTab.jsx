@@ -137,6 +137,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         });
         
         setSuccess(`New message from ${selectedFriend.username}`);
+        setTimeout(() => {
+          setSuccess(''); // or setSuccess(null) depending on your state
+        }, 2000);
       }
     };
 
