@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
-import { deleteMessage, editMessage, getPrivateChat, sendPrivateMessage } from '../../services/api';
+import { deleteMessage, editMessage, getPrivateChat, markMessagesAsRead, sendPrivateMessage } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 
@@ -32,7 +32,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const messageInterval = useRef(null);
 
   // Use the avatar hook - single instance for all avatars
-  const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
+  const { getAvatarUrl, getUserInitials, getUserAvatar, handleAvatarError } = useAvatar();
 
   // Clear chat state helper
   const clearChatState = () => {
@@ -41,7 +41,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setNewMessage('');
   };
 
-  // Real-time message polling (simulate WebSocket)
+  // Real-time message polling
   useEffect(() => {
     if (!selectedFriend || !profile?.id) return;
 
@@ -60,7 +60,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               avatar_url: getUserAvatar(sender),
               id: sender?.id
             },
-            is_read: message.is_read || false
+            // Ensure consistent status properties
+            is_read: message.is_read || false,
+            read_at: message.read_at || null,
+            delivered_at: message.delivered_at || null,
+            is_temp: message.is_temp || false
           };
         });
         
@@ -74,8 +78,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       }
     };
 
-    // Poll every 2 seconds for new messages
-    messageInterval.current = setInterval(pollForNewMessages, 2000);
+    // Poll every 3 seconds for new messages
+    messageInterval.current = setInterval(pollForNewMessages, 3000);
     
     // Initial load
     pollForNewMessages();
@@ -87,13 +91,52 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     };
   }, [selectedFriend?.id, profile, getUserAvatar]);
 
+  // Mark messages as read when they are visible
+  useEffect(() => {
+    if (messages.length > 0 && selectedFriend) {
+      const unreadMessages = messages.filter(
+        msg => !msg.is_read && 
+               !msg.read_at && 
+               msg.sender_id === selectedFriend.id &&
+               !msg.is_temp
+      );
+      
+      if (unreadMessages.length > 0) {
+        const unreadIds = unreadMessages.map(msg => msg.id);
+        handleMarkAsRead(unreadIds);
+      }
+    }
+  }, [messages, selectedFriend]);
+
+  // Function to mark messages as read
+  const handleMarkAsRead = async (messageIds) => {
+    try {
+      // Update local state immediately for better UX
+      setMessages(prev => prev.map(msg => 
+        messageIds.includes(msg.id) 
+          ? { 
+              ...msg, 
+              is_read: true, 
+              read_at: msg.read_at || new Date().toISOString() 
+            }
+          : msg
+      ));
+      
+      // Call API to mark as read (this will use the simulated version)
+      await markMessagesAsRead(messageIds);
+      
+    } catch (error) {
+      console.error('Failed to mark messages as read:', error);
+    }
+  };
+
   // Simulate real-time message reception from friend
   useEffect(() => {
     if (!selectedFriend) return;
 
     const simulateFriendTyping = () => {
       // Simulate friend sending messages randomly
-      const shouldSendMessage = Math.random() > 0.95; // 5% chance every 10 seconds
+      const shouldSendMessage = Math.random() > 0.98; // 2% chance every 15 seconds
       
       if (shouldSendMessage) {
         const friendMessages = [
@@ -118,6 +161,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           content: randomMessage,
           message_type: 'text',
           is_read: false,
+          read_at: null,
+          delivered_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           is_temp: false,
           sender: {
@@ -136,14 +181,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         });
         
+        // Show success alert for 2 seconds
         setSuccess(`New message from ${selectedFriend.username}`);
         setTimeout(() => {
-          setSuccess(''); // or setSuccess(null) depending on your state
+          setSuccess('');
         }, 2000);
       }
     };
 
-    const typingInterval = setInterval(simulateFriendTyping, 10000); // Check every 10 seconds
+    const typingInterval = setInterval(simulateFriendTyping, 15000);
 
     return () => {
       clearInterval(typingInterval);
@@ -188,7 +234,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             avatar_url: getUserAvatar(sender),
             id: sender?.id
           },
-          is_read: message.is_read || false
+          is_read: message.is_read || false,
+          read_at: message.read_at || null,
+          delivered_at: message.delivered_at || null
         };
       });
       
@@ -197,7 +245,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       );
       setMessages(sortedMessages);
     } catch (err) {
-      setError(err.message || 'Failed to load messages');
+      console.error('Failed to load messages:', err);
       setMessages([]);
     } finally {
       setIsLoadingMessages(false);
@@ -216,7 +264,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           username: sender?.username || 'Unknown User',
           avatar_url: getUserAvatar(sender),
           id: sender?.id
-        }
+        },
+        is_read: updatedMessage.is_read || false,
+        read_at: updatedMessage.read_at || null,
+        delivered_at: updatedMessage.delivered_at || null
       };
       
       setMessages(prev => 
@@ -227,6 +278,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         )
       );
       setSuccess('Message updated successfully');
+      setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
       setError(err.message || 'Failed to edit message');
     }
@@ -235,11 +287,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const handleDeleteMessage = async (messageId) => {
     setMessages(prev => prev.filter(msg => String(msg.id) !== String(messageId)));
     setSuccess('Message deleted successfully');
+    setTimeout(() => setSuccess(''), 2000);
     
     try {
       await deleteMessage(messageId);
     } catch (err) {
-      setError('Failed to delete message on server',err);
+      console.error('Failed to delete message on server:', err);
     }
   };
 
@@ -271,6 +324,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
       await Promise.all(forwardPromises);
       setSuccess(`Message forwarded to ${friendIds.length} ${friendIds.length === 1 ? 'friend' : 'friends'}`);
+      setTimeout(() => setSuccess(''), 2000);
       setForwardDialogOpen(false);
     } catch (err) {
       setError(err.message || 'Failed to forward message');
@@ -293,25 +347,28 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     setMessageLoading(true);
 
-    try {
-      const tempMessage = {
-        id: `temp-${Date.now()}`,
-        sender_id: profile.id,
-        receiver_id: selectedFriend.id,
-        content: messageContent,
-        message_type: 'text',
-        is_read: false,
-        created_at: new Date().toISOString(),
-        is_temp: true,
-        reply_to_id: replyingTo?.id || null,
-        reply_to: replyingTo || null,
-        sender: {
-          username: profile.username,
-          avatar_url: getUserAvatar(profile),
-          id: profile.id
-        }
-      };
+    // Create temporary message
+    const tempMessage = {
+      id: `temp-${Date.now()}`,
+      sender_id: profile.id,
+      receiver_id: selectedFriend.id,
+      content: messageContent,
+      message_type: 'text',
+      is_read: false,
+      read_at: null,
+      delivered_at: null,
+      created_at: new Date().toISOString(),
+      is_temp: true,
+      reply_to_id: replyingTo?.id || null,
+      reply_to: replyingTo || null,
+      sender: {
+        username: profile.username,
+        avatar_url: getUserAvatar(profile),
+        id: profile.id
+      }
+    };
 
+    try {
       // Immediately show the message in the chat
       setMessages(prev => {
         const newMessages = [...prev, tempMessage];
@@ -336,7 +393,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           id: profile.id
         },
         is_temp: false,
-        is_read: sentMessage.is_read || false
+        is_read: sentMessage.is_read || false,
+        read_at: sentMessage.read_at || null,
+        delivered_at: sentMessage.delivered_at || new Date().toISOString()
       };
 
       // Replace temp message with real message from server
@@ -345,7 +404,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         const newMessages = [...filtered, enhancedSentMessage];
         return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       });
-
 
     } catch (err) {
       setError(err.message || 'Failed to send message');
@@ -371,19 +429,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   const status = getConnectionStatus();
 
-  // Mark messages as read when they are visible
-  useEffect(() => {
-    if (messages.length > 0 && selectedFriend) {
-      const unreadMessages = messages.filter(
-        msg => !msg.is_read && msg.sender_id === selectedFriend.id
-      );
-      
-      if (unreadMessages.length > 0) {
-        // In a real app, you would call an API to mark messages as read
-        console.log(`Marking ${unreadMessages.length} messages as read`);
-      }
-    }
-  }, [messages, selectedFriend]);
+  // Local avatar error handler for this component
+  const handleLocalAvatarError = (avatarUrl) => {
+    console.log('Avatar failed to load in MessagesTab:', avatarUrl);
+    // You can add local state management here if needed
+  };
 
   return (
     <Box sx={{ display: 'flex', height: 600, borderRadius: '8px', overflow: 'hidden' }}>
@@ -424,6 +474,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   src={getUserAvatar(friend)} 
                   alt={friend.username} 
                   sx={{ width: 40, height: 40 }}
+                  imgProps={{
+                    onError: () => handleAvatarError ? handleAvatarError(friend.avatar_url || friend.avatar) : handleLocalAvatarError(friend.avatar_url || friend.avatar)
+                  }}
                 >
                   {getUserInitials(friend.username)}
                 </Avatar>
@@ -477,6 +530,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   height: 44,
                   fontSize: '1.2rem',
                   fontWeight: 'bold'
+                }}
+                imgProps={{
+                  onError: () => handleAvatarError ? handleAvatarError(selectedFriend.avatar_url || selectedFriend.avatar) : handleLocalAvatarError(selectedFriend.avatar_url || selectedFriend.avatar)
                 }}
               >
                 {getUserInitials(selectedFriend.username)}
