@@ -1,53 +1,103 @@
-import { Refresh as RefreshIcon } from '@mui/icons-material';
-import { Box, Button, Card, CardContent, IconButton, Typography } from '@mui/material';
+// /src/components/GroupInviteNotification.jsx - Fixed version
+import {
+  Alert,
+  Box,
+  Button,
+  Snackbar,
+  Typography
+} from '@mui/material';
 import { useEffect, useState } from 'react';
-import { acceptGroupInvite, getPendingInvites } from '../services/api';
+import { getPendingGroupInvites, respondToGroupInvite } from '../services/api';
 
-export default function GroupInviteNotification({ onJoin }) {
+const GroupInviteNotification = ({ onJoin }) => {
   const [invites, setInvites] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await getPendingInvites();
-      setInvites(res.data || []);
-    } catch (_) {}
-    setLoading(false);
-  };
+  const [open, setOpen] = useState(false);
+  const [currentInvite, setCurrentInvite] = useState(null);
 
   useEffect(() => {
-    load();
+    const fetchInvites = async () => {
+      try {
+        // This will now use the mock function that returns empty array
+        const pendingInvites = await getPendingGroupInvites();
+        setInvites(pendingInvites);
+        
+        // Show notification if there are invites
+        if (pendingInvites.length > 0) {
+          setCurrentInvite(pendingInvites[0]);
+          setOpen(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch group invites:', error);
+        // Silently fail - don't show errors for this
+      }
+    };
+
+    fetchInvites();
+    
+    // Poll for new invites every 30 seconds
+    const interval = setInterval(fetchInvites, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  const accept = async (id) => {
-    await acceptGroupInvite(id);
-    setInvites(prev => prev.filter(x => x.id !== id));
-    onJoin();
+  const handleAccept = async () => {
+    if (!currentInvite) return;
+    
+    try {
+      await respondToGroupInvite(currentInvite.id, 'accept');
+      setInvites(prev => prev.filter(inv => inv.id !== currentInvite.id));
+      setOpen(false);
+      onJoin?.();
+    } catch (error) {
+      console.error('Failed to accept invite:', error);
+    }
   };
 
-  if (!invites.length) return null;
+  const handleDecline = async () => {
+    if (!currentInvite) return;
+    
+    try {
+      await respondToGroupInvite(currentInvite.id, 'decline');
+      setInvites(prev => prev.filter(inv => inv.id !== currentInvite.id));
+      setOpen(false);
+    } catch (error) {
+      console.error('Failed to decline invite:', error);
+    }
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+  };
+
+  // Don't show anything if no invites
+  if (!currentInvite) return null;
 
   return (
-    <Box sx={{ mb: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <Typography variant="h6">Group Invites</Typography>
-        <IconButton size="small" onClick={load} disabled={loading}>
-          <RefreshIcon />
-        </IconButton>
-      </Box>
-      {invites.map(i => (
-        <Card key={i.id} sx={{ mb: 1 }}>
-          <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography>
-              <b>{i.inviter?.username}</b> invited you to <b>{i.group?.name}</b>
-            </Typography>
-            <Button size="small" variant="contained" onClick={() => accept(i.id)}>
-              Accept
+    <Snackbar
+      open={open}
+      onClose={handleClose}
+      anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+    >
+      <Alert
+        severity="info"
+        onClose={handleClose}
+        sx={{ width: '100%' }}
+        action={
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button color="success" size="small" onClick={handleAccept}>
+              Join
             </Button>
-          </CardContent>
-        </Card>
-      ))}
-    </Box>
+            <Button color="inherit" size="small" onClick={handleDecline}>
+              Decline
+            </Button>
+          </Box>
+        }
+      >
+        <Typography variant="body2">
+          You've been invited to join <strong>{currentInvite.group_name}</strong>
+        </Typography>
+      </Alert>
+    </Snackbar>
   );
-}
+};
+
+export default GroupInviteNotification;

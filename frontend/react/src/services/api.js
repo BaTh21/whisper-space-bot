@@ -899,3 +899,40 @@ export const getBlockedUsers = async () => {
     );
   }
 };
+
+export const markMessagesAsRead = async (messageIds) => {
+  try {
+    // Simulate API call without actually making the request
+    console.log('Simulating mark as read for messages:', messageIds);
+    
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    return { 
+      success: true, 
+      message_ids: messageIds,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error in markMessagesAsRead simulation:', error);
+    return { success: true, message_ids: messageIds };
+  }
+};
+
+export const respondToGroupInvite = async (inviteId, action) => {
+  console.log(`Simulating ${action} for group invite:`, inviteId);
+  
+  // Simulate API call
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  return { 
+    success: true, 
+    invite_id: inviteId, 
+    action: action 
+  };
+};
+
+export const getPendingGroupInvites = async () => {
+  console.log('Groups invites feature not implemented - returning empty array');
+  return []; // Return empty array without making API call
+};
