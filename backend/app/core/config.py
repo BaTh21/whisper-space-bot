@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     SMTP_PASS: str
     SMTP_FROM: str
     FRONTEND_URL: str
+    
+    # Cloudinary
+    CLOUDINARY_CLOUD_NAME: str
+    CLOUDINARY_API_KEY: str
+    CLOUDINARY_API_SECRET: str
+    CLOUDINARY_UPLOAD_FOLDER: str = "whisper_space/avatars"
 
     class Config:
         env_file = ".env"
