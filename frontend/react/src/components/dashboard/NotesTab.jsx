@@ -21,8 +21,6 @@ import NoteCard from '../notes/NoteCard';
 import NoteEditor from '../notes/NoteEditor';
 import ShareDialog from '../ShareDialog';
 
-// Import the api instance
-
 function TabPanel({ children, value, index, ...other }) {
   return (
     <div
@@ -48,7 +46,6 @@ const NotesTab = ({ setError, setSuccess }) => {
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
 
-  // Mock current user - replace with your actual user management
   const currentUser = {
     id: 1,
     name: "Current User",
@@ -59,47 +56,27 @@ const NotesTab = ({ setError, setSuccess }) => {
     loadNotes();
   }, [activeTab]);
 
-const loadNotes = async () => {
-  setLoading(true);
-  try {
-    console.log('🔄 Loading notes...');
-
-    if (activeTab === 2) {
-      // Load shared notes with better error handling
-      try {
+  const loadNotes = async () => {
+    setLoading(true);
+    try {
+      if (activeTab === 2) {
         const data = await getSharedNotes();
-        console.log('✅ Shared notes loaded:', data);
         setSharedNotes(Array.isArray(data) ? data : []);
-      } catch (sharedError) {
-        console.warn('⚠️ Shared notes endpoint not available:', sharedError);
-        setSharedNotes([]); // Set empty array instead of crashing
-        setError('Shared notes feature is not available yet');
+      } else {
+        const archived = activeTab === 1;
+        const data = await getNotes(archived);
+        setNotes(Array.isArray(data) ? data : []);
       }
-    } else {
-      const archived = activeTab === 1;
-      const data = await getNotes(archived);
-      console.log('✅ Notes loaded successfully:', data);
-      setNotes(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error loading notes:', error);
+      setError(error.message || 'Failed to load notes');
+      setNotes([]);
+      setSharedNotes([]);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('❌ Error loading notes:', error);
-    
-    if (error.response?.status === 404) {
-      setError('Feature not available: The server endpoint is missing');
-    } else if (error.response?.status === 500) {
-      setError('Server error: Please check backend logs');
-    } else {
-      setError(`Failed to load notes: ${error.message}`);
-    }
-    
-    setNotes([]);
-    setSharedNotes([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
-  // ... rest of your functions remain the same
   const handleCreateNote = () => {
     setEditingNote(null);
     setIsEditorOpen(true);
@@ -112,7 +89,6 @@ const loadNotes = async () => {
 
   const handleSaveNote = async (noteData) => {
     try {
-      console.log('Saving note:', noteData);
       let result;
       if (editingNote) {
         result = await updateNote(editingNote.id, noteData);
@@ -121,7 +97,6 @@ const loadNotes = async () => {
         result = await createNote(noteData);
         setSuccess('Note created successfully');
       }
-      console.log('Save successful:', result);
       setIsEditorOpen(false);
       setEditingNote(null);
       loadNotes();
@@ -133,7 +108,6 @@ const loadNotes = async () => {
 
   const handleDeleteNote = async (noteId) => {
     try {
-      console.log('Deleting note:', noteId);
       await deleteNote(noteId);
       setSuccess('Note deleted successfully');
       loadNotes();
@@ -145,7 +119,6 @@ const loadNotes = async () => {
 
   const handleTogglePin = async (noteId) => {
     try {
-      console.log('Toggling pin for note:', noteId);
       await togglePinNote(noteId);
       setSuccess('Note pinned status updated');
       loadNotes();
@@ -157,7 +130,6 @@ const loadNotes = async () => {
 
   const handleToggleArchive = async (noteId) => {
     try {
-      console.log('Toggling archive for note:', noteId);
       await toggleArchiveNote(noteId);
       const action = activeTab === 0 ? 'archived' : 'unarchived';
       setSuccess(`Note ${action} successfully`);
@@ -175,7 +147,6 @@ const loadNotes = async () => {
 
   const handleShare = async (shareData) => {
     try {
-      console.log('Sharing note:', shareData);
       await shareNote(sharingNote.id, shareData);
       
       let successMessage = 'Sharing settings updated';
@@ -197,7 +168,6 @@ const loadNotes = async () => {
     }
   };
 
-  // Filter notes based on current tab
   const filteredNotes = notes.filter(note => {
     if (activeTab === 0) return !note.is_archived;
     if (activeTab === 1) return note.is_archived;
@@ -220,7 +190,7 @@ const loadNotes = async () => {
       >
         <Tab label="Active Notes" />
         <Tab label="Archived" />
-        <Tab label="Shared with Me" />
+        {/* <Tab label="Shared with Me" /> */}
       </Tabs>
 
       {loading && (
@@ -229,7 +199,6 @@ const loadNotes = async () => {
         </Box>
       )}
 
-      {/* Active Notes Tab */}
       {!loading && activeTab === 0 && (
         <>
           {pinnedNotes.length > 0 && (
@@ -296,7 +265,6 @@ const loadNotes = async () => {
         </>
       )}
 
-      {/* Archived Notes Tab */}
       {!loading && activeTab === 1 && (
         <>
           {filteredNotes.length > 0 ? (
@@ -331,7 +299,6 @@ const loadNotes = async () => {
         </>
       )}
 
-      {/* Shared with Me Tab */}
       {!loading && activeTab === 2 && (
         <>
           {sharedNotes.length > 0 ? (
@@ -340,11 +307,11 @@ const loadNotes = async () => {
                 <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <NoteCard
                     note={note}
-                    onEdit={handleEditNote}
-                    onDelete={() => {}}
-                    onTogglePin={() => {}}
-                    onToggleArchive={() => {}}
-                    onShare={() => {}}
+                    onEdit={note.can_edit ? handleEditNote : undefined}
+                    onDelete={undefined}
+                    onTogglePin={undefined}
+                    onToggleArchive={undefined}
+                    onShare={undefined}
                     currentUser={currentUser}
                   />
                 </Grid>
@@ -366,7 +333,6 @@ const loadNotes = async () => {
         </>
       )}
 
-      {/* Floating Action Button */}
       <Fab
         color="primary"
         aria-label="add note"
@@ -380,7 +346,6 @@ const loadNotes = async () => {
         <AddIcon />
       </Fab>
 
-      {/* Note Editor Dialog */}
       <NoteEditor
         open={isEditorOpen}
         note={editingNote}
@@ -391,7 +356,6 @@ const loadNotes = async () => {
         }}
       />
 
-      {/* Share Dialog */}
       <ShareDialog
         open={shareDialogOpen}
         note={sharingNote}

@@ -1,27 +1,29 @@
+import { Close, Group, Link, Lock, Public } from '@mui/icons-material';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  TextField,
-  Chip,
-  Box,
-  Typography,
-  IconButton,
-  Switch,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon
+    Box,
+    Button,
+    Chip,
+    CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    FormControl,
+    FormControlLabel,
+    FormLabel,
+    IconButton,
+    List,
+    ListItem,
+    ListItemIcon,
+    ListItemText,
+    Radio,
+    RadioGroup,
+    Switch,
+    TextField,
+    Typography
 } from '@mui/material';
-import { Close, Link, Email, Group, Public, Lock } from '@mui/icons-material';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { getFriends } from '../services/api';
 
 const ShareDialog = ({ open, note, onClose, onShare }) => {
   const [shareType, setShareType] = useState('private');
@@ -30,22 +32,40 @@ const ShareDialog = ({ open, note, onClose, onShare }) => {
   const [expires, setExpires] = useState(false);
   const [expireHours, setExpireHours] = useState(24);
   const [friends, setFriends] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Mock friends data - replace with actual API call
-    const mockFriends = [
-      { id: 2, name: "John Doe", email: "john@example.com" },
-      { id: 3, name: "Jane Smith", email: "jane@example.com" },
-      { id: 4, name: "Mike Johnson", email: "mike@example.com" },
-    ];
-    setFriends(mockFriends);
-    
-    // Initialize with note's current sharing settings
-    if (note) {
-      setShareType(note.share_type || 'private');
-      setFriendIds(note.shared_with || []);
-      setCanEdit(note.can_edit || false);
-    }
+    const loadFriends = async () => {
+      if (open) {
+        setLoading(true);
+        try {
+          // Fetch real friends from your API
+          const friendsData = await getFriends();
+          console.log('Loaded friends:', friendsData);
+          setFriends(friendsData);
+        } catch (error) {
+          console.error('Error loading friends:', error);
+          // Fallback to empty array if API fails
+          setFriends([]);
+        } finally {
+          setLoading(false);
+        }
+        
+        // Initialize with note's current sharing settings
+        if (note) {
+          setShareType(note.share_type || 'private');
+          setFriendIds(note.shared_with || []);
+          setCanEdit(note.can_edit || false);
+        } else {
+          // Reset for new note
+          setShareType('private');
+          setFriendIds([]);
+          setCanEdit(false);
+        }
+      }
+    };
+
+    loadFriends();
   }, [note, open]);
 
   const handleFriendToggle = (friendId) => {
@@ -138,30 +158,64 @@ const ShareDialog = ({ open, note, onClose, onShare }) => {
             <Typography variant="subtitle2" gutterBottom>
               Select Friends:
             </Typography>
-            <List sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              {friends.map(friend => (
-                <ListItem 
-                  key={friend.id}
-                  onClick={() => handleFriendToggle(friend.id)}
-                  selected={friendIds.includes(friend.id)}
-                >
-                  <ListItemIcon>
-                    <Group />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={friend.name}
-                    secondary={friend.email}
-                  />
-                </ListItem>
-              ))}
-            </List>
             
-            {friendIds.length > 0 && (
-              <Box sx={{ mt: 1 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Sharing with: {friendIds.length} friend{friendIds.length !== 1 ? 's' : ''}
-                </Typography>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                <CircularProgress />
               </Box>
+            ) : friends.length === 0 ? (
+              <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
+                No friends found. Add friends to share notes with them.
+              </Typography>
+            ) : (
+              <>
+                <List sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  {friends.map(friend => (
+                    <ListItem 
+                      key={friend.id}
+                      onClick={() => handleFriendToggle(friend.id)}
+                      selected={friendIds.includes(friend.id)}
+                      sx={{
+                        '&.Mui-selected': {
+                          backgroundColor: 'primary.light',
+                          '&:hover': {
+                            backgroundColor: 'primary.light',
+                          }
+                        }
+                      }}
+                    >
+                      <ListItemIcon>
+                        <Group />
+                      </ListItemIcon>
+                      <ListItemText 
+                        primary={friend.username || friend.name || friend.email}
+                        secondary={friend.email}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+                
+                {friendIds.length > 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Sharing with: {friendIds.length} friend{friendIds.length !== 1 ? 's' : ''}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                      {friendIds.map(friendId => {
+                        const friend = friends.find(f => f.id === friendId);
+                        return friend ? (
+                          <Chip
+                            key={friend.id}
+                            label={friend.username || friend.name || friend.email}
+                            size="small"
+                            onDelete={() => handleFriendToggle(friend.id)}
+                          />
+                        ) : null;
+                      })}
+                    </Box>
+                  </Box>
+                )}
+              </>
             )}
           </Box>
         )}
