@@ -28,15 +28,10 @@ def get_user_notes(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        print(f"🔍 ROUTER: Fetching notes for user {current_user.id}, archived={archived}")
         notes = get_notes_by_user(db, current_user.id, archived=archived)
-        print(f"✅ ROUTER: Successfully returning {len(notes)} notes")
         return notes
     except Exception as e:
-        print(f"❌ ROUTER Error in get_user_notes: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return []
+        raise HTTPException(status_code=500, detail=f"Failed to load notes: {str(e)}")
 
 @router.get("/{note_id}", response_model=NoteOut)
 def get_note(
@@ -69,30 +64,8 @@ def delete_user_note(
 ):
     success = delete_note(db, note_id, current_user.id)
     if not success:
-        raise HTTPException(status_code=404, detail="Note not found or no permission to delete")
-    return {"message": "Note deleted permanently"}
-
-@router.post("/{note_id}/pin", response_model=NoteOut)
-def pin_note(
-    note_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    note = toggle_pin_note(db, note_id, current_user.id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found or no permission to pin")
-    return note
-
-@router.post("/{note_id}/archive", response_model=NoteOut)
-def archive_user_note(
-    note_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    note = archive_note(db, note_id, current_user.id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found or no permission to archive")
-    return note
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note deleted successfully"}
 
 @router.post("/{note_id}/share", response_model=NoteOut)
 def share_note_endpoint(
@@ -103,7 +76,7 @@ def share_note_endpoint(
 ):
     note = share_note(db, note_id, current_user.id, share_data)
     if not note:
-        raise HTTPException(status_code=404, detail="Note not found or no permission to share")
+        raise HTTPException(status_code=404, detail="Note not found or no permission")
     return note
 
 @router.post("/{note_id}/stop-sharing", response_model=NoteOut)
@@ -114,7 +87,7 @@ def stop_sharing_endpoint(
 ):
     note = stop_sharing(db, note_id, current_user.id)
     if not note:
-        raise HTTPException(status_code=404, detail="Note not found or no permission to stop sharing")
+        raise HTTPException(status_code=404, detail="Note not found")
     return note
 
 @router.get("/public/{share_token}", response_model=PublicNoteOut)
@@ -134,10 +107,44 @@ def get_notes_shared_with_me(
 ):
     """Get notes that friends have shared with current user"""
     try:
-        print(f"🔍 Fetching shared notes for user {current_user.id}")
         notes = get_shared_notes(db, current_user.id)
-        print(f"✅ Found {len(notes)} shared notes")
         return notes
     except Exception as e:
-        print(f"❌ Error fetching shared notes: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to load shared notes: {str(e)}")
+
+@router.get("/{note_id}/share-link")
+def get_share_link(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    note = get_note_by_id(db, note_id, current_user.id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    if note.share_type != "public" or not note.share_token:
+        raise HTTPException(status_code=400, detail="Note is not publicly shared")
+    
+    return {"share_link": f"/notes/public/{note.share_token}"}
+
+@router.post("/{note_id}/pin")
+def pin_note(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    note = toggle_pin_note(db, note_id, current_user.id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note pinned" if note.is_pinned else "Note unpinned"}
+
+@router.post("/{note_id}/archive")
+def archive_user_note(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    note = archive_note(db, note_id, current_user.id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note archived" if note.is_archived else "Note unarchived"}
