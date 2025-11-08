@@ -1,4 +1,4 @@
-import { Add as AddIcon, Notes as NotesIcon } from '@mui/icons-material';
+import { Add as AddIcon, Group as GroupIcon, Notes as NotesIcon } from '@mui/icons-material';
 import {
   Box,
   Card,
@@ -11,9 +11,17 @@ import {
   useTheme
 } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { createNote, deleteNote, getNotes, toggleArchiveNote, togglePinNote, updateNote } from '../../services/api';
+import {
+  createNote, deleteNote, getNotes,
+  getSharedNotes,
+  shareNote,
+  toggleArchiveNote, togglePinNote, updateNote
+} from '../../services/api';
 import NoteCard from '../notes/NoteCard';
 import NoteEditor from '../notes/NoteEditor';
+import ShareDialog from '../ShareDialog';
+
+// Import the api instance
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -31,33 +39,67 @@ function TabPanel({ children, value, index, ...other }) {
 
 const NotesTab = ({ setError, setSuccess }) => {
   const [notes, setNotes] = useState([]);
+  const [sharedNotes, setSharedNotes] = useState([]);
   const [activeTab, setActiveTab] = useState(0);
   const [editingNote, setEditingNote] = useState(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [sharingNote, setSharingNote] = useState(null);
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
+
+  // Mock current user - replace with your actual user management
+  const currentUser = {
+    id: 1,
+    name: "Current User",
+    email: "user@example.com"
+  };
 
   useEffect(() => {
     loadNotes();
   }, [activeTab]);
 
-  const loadNotes = async () => {
-    setLoading(true);
-    try {
-      const archived = activeTab === 1;
-      console.log('Loading notes, archived:', archived);
-      const data = await getNotes(archived);
-      console.log('Notes loaded:', data);
-      setNotes(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error loading notes:', error);
-      setError(error.message || 'Failed to load notes');
-      setNotes([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+const loadNotes = async () => {
+  setLoading(true);
+  try {
+    console.log('🔄 Loading notes...');
 
+    if (activeTab === 2) {
+      // Load shared notes with better error handling
+      try {
+        const data = await getSharedNotes();
+        console.log('✅ Shared notes loaded:', data);
+        setSharedNotes(Array.isArray(data) ? data : []);
+      } catch (sharedError) {
+        console.warn('⚠️ Shared notes endpoint not available:', sharedError);
+        setSharedNotes([]); // Set empty array instead of crashing
+        setError('Shared notes feature is not available yet');
+      }
+    } else {
+      const archived = activeTab === 1;
+      const data = await getNotes(archived);
+      console.log('✅ Notes loaded successfully:', data);
+      setNotes(Array.isArray(data) ? data : []);
+    }
+  } catch (error) {
+    console.error('❌ Error loading notes:', error);
+    
+    if (error.response?.status === 404) {
+      setError('Feature not available: The server endpoint is missing');
+    } else if (error.response?.status === 500) {
+      setError('Server error: Please check backend logs');
+    } else {
+      setError(`Failed to load notes: ${error.message}`);
+    }
+    
+    setNotes([]);
+    setSharedNotes([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // ... rest of your functions remain the same
   const handleCreateNote = () => {
     setEditingNote(null);
     setIsEditorOpen(true);
@@ -126,10 +168,39 @@ const NotesTab = ({ setError, setSuccess }) => {
     }
   };
 
+  const handleShareNote = (note) => {
+    setSharingNote(note);
+    setShareDialogOpen(true);
+  };
+
+  const handleShare = async (shareData) => {
+    try {
+      console.log('Sharing note:', shareData);
+      await shareNote(sharingNote.id, shareData);
+      
+      let successMessage = 'Sharing settings updated';
+      if (shareData.share_type === 'public') {
+        successMessage = 'Note is now public';
+      } else if (shareData.share_type === 'shared') {
+        successMessage = `Note shared with ${shareData.friend_ids.length} friend${shareData.friend_ids.length !== 1 ? 's' : ''}`;
+      } else {
+        successMessage = 'Note is now private';
+      }
+      
+      setSuccess(successMessage);
+      setShareDialogOpen(false);
+      setSharingNote(null);
+      loadNotes();
+    } catch (error) {
+      console.error('Error sharing note:', error);
+      setError(error.message || 'Failed to update sharing settings');
+    }
+  };
+
   // Filter notes based on current tab
   const filteredNotes = notes.filter(note => {
-    if (activeTab === 0) return !note.is_archived; // Active notes
-    if (activeTab === 1) return note.is_archived;  // Archived notes
+    if (activeTab === 0) return !note.is_archived;
+    if (activeTab === 1) return note.is_archived;
     return true;
   });
 
@@ -149,6 +220,7 @@ const NotesTab = ({ setError, setSuccess }) => {
       >
         <Tab label="Active Notes" />
         <Tab label="Archived" />
+        <Tab label="Shared with Me" />
       </Tabs>
 
       {loading && (
@@ -157,6 +229,7 @@ const NotesTab = ({ setError, setSuccess }) => {
         </Box>
       )}
 
+      {/* Active Notes Tab */}
       {!loading && activeTab === 0 && (
         <>
           {pinnedNotes.length > 0 && (
@@ -166,13 +239,15 @@ const NotesTab = ({ setError, setSuccess }) => {
               </Typography>
               <Grid container spacing={2}>
                 {pinnedNotes.map(note => (
-                  <Grid item xs={12} sm={6} md={4} key={note.id}>
+                  <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
                     <NoteCard
                       note={note}
                       onEdit={handleEditNote}
                       onDelete={handleDeleteNote}
                       onTogglePin={handleTogglePin}
                       onToggleArchive={handleToggleArchive}
+                      onShare={handleShareNote}
+                      currentUser={currentUser}
                     />
                   </Grid>
                 ))}
@@ -189,13 +264,15 @@ const NotesTab = ({ setError, setSuccess }) => {
               )}
               <Grid container spacing={2}>
                 {otherNotes.map(note => (
-                  <Grid item xs={12} sm={6} md={4} key={note.id}>
+                  <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
                     <NoteCard
                       note={note}
                       onEdit={handleEditNote}
                       onDelete={handleDeleteNote}
                       onTogglePin={handleTogglePin}
                       onToggleArchive={handleToggleArchive}
+                      onShare={handleShareNote}
+                      currentUser={currentUser}
                     />
                   </Grid>
                 ))}
@@ -219,18 +296,21 @@ const NotesTab = ({ setError, setSuccess }) => {
         </>
       )}
 
+      {/* Archived Notes Tab */}
       {!loading && activeTab === 1 && (
         <>
           {filteredNotes.length > 0 ? (
             <Grid container spacing={2}>
               {filteredNotes.map(note => (
-                <Grid item xs={12} sm={6} md={4} key={note.id}>
+                <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <NoteCard
                     note={note}
                     onEdit={handleEditNote}
                     onDelete={handleDeleteNote}
                     onTogglePin={handleTogglePin}
                     onToggleArchive={handleToggleArchive}
+                    onShare={handleShareNote}
+                    currentUser={currentUser}
                   />
                 </Grid>
               ))}
@@ -251,6 +331,42 @@ const NotesTab = ({ setError, setSuccess }) => {
         </>
       )}
 
+      {/* Shared with Me Tab */}
+      {!loading && activeTab === 2 && (
+        <>
+          {sharedNotes.length > 0 ? (
+            <Grid container spacing={2}>
+              {sharedNotes.map(note => (
+                <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <NoteCard
+                    note={note}
+                    onEdit={handleEditNote}
+                    onDelete={() => {}}
+                    onTogglePin={() => {}}
+                    onToggleArchive={() => {}}
+                    onShare={() => {}}
+                    currentUser={currentUser}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
+              <CardContent>
+                <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  No shared notes
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Notes shared by friends will appear here
+                </Typography>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Floating Action Button */}
       <Fab
         color="primary"
         aria-label="add note"
@@ -264,6 +380,7 @@ const NotesTab = ({ setError, setSuccess }) => {
         <AddIcon />
       </Fab>
 
+      {/* Note Editor Dialog */}
       <NoteEditor
         open={isEditorOpen}
         note={editingNote}
@@ -272,6 +389,17 @@ const NotesTab = ({ setError, setSuccess }) => {
           setIsEditorOpen(false);
           setEditingNote(null);
         }}
+      />
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={shareDialogOpen}
+        note={sharingNote}
+        onClose={() => {
+          setShareDialogOpen(false);
+          setSharingNote(null);
+        }}
+        onShare={handleShare}
       />
     </Box>
   );

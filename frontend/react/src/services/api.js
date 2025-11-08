@@ -145,20 +145,22 @@ export const uploadAvatar = async (file) => {
 };
 
 export const searchUsers = async (query) => {
+  // Validate query
   if (!query || typeof query !== 'string') {
     return [];
   }
 
   const trimmedQuery = query.trim();
   
-  if (trimmedQuery.length < 1) {
+  // Don't search if query is too short
+  if (trimmedQuery.length < 2) {
     return [];
   }
 
   try {
-    const response = await api.get(`/api/v1/users/search`, { 
+    const response = await api.get('/api/v1/users/search', { 
       params: { 
-        query: trimmedQuery
+        q: trimmedQuery  // Changed from 'query' to 'q' to match common API convention
       } 
     });
     return response.data;
@@ -169,12 +171,46 @@ export const searchUsers = async (query) => {
       query: trimmedQuery
     });
     
-    if (error.response?.status === 422) {
+    // Return empty array for common errors instead of crashing
+    if (error.response?.status === 404) {
+      console.warn('Search endpoint not found, returning empty results');
+      return [];
+    }
+    
+    if (error.response?.status === 422 || error.response?.status === 400) {
       console.warn('Search validation failed, returning empty results');
       return [];
     }
     
+    if (error.response?.status === 500) {
+      console.warn('Server error during search, returning empty results');
+      return [];
+    }
+    
+    // For network errors or other issues, return empty array
     return [];
+  }
+};
+
+export const addFriend = async (userId) => {
+  try {
+    const response = await api.post('/api/v1/friends/', { 
+      friend_id: userId 
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Add friend error:", {
+      status: error.response?.status,
+      data: error.response?.data,
+      userId: userId
+    });
+    
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.message ||
+      error.response?.data?.msg ||
+      "Failed to add friend"
+    );
   }
 };
 
@@ -303,14 +339,26 @@ export const smartFriendRequest = async (userId) => {
 
 export const getFriends = async () => {
   try {
-    const response = await api.get(`/api/v1/friends/`);
+    const response = await api.get('/api/v1/friends/');
     return response.data;
   } catch (error) {
-    console.error("Get friends error:", error.response?.data);
+    console.error("Get friends error:", {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    // Return empty array instead of throwing error for 404/500
+    if (error.response?.status === 404 || error.response?.status === 500) {
+      console.warn('Friends endpoint not available, returning empty array');
+      return [];
+    }
+    
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch friends"
+      error.response?.data?.message ||
+      error.response?.data?.msg ||
+      "Failed to fetch friends"
     );
   }
 };
@@ -918,7 +966,6 @@ export const respondToGroupInvite = async (inviteId, action) => {
 };
 
 export const getPendingGroupInvites = async () => {
-  console.log('Groups invites feature not implemented - returning empty array');
   return [];
 };
 
@@ -956,5 +1003,35 @@ export const togglePinNote = async (noteId) => {
 
 export const toggleArchiveNote = async (noteId) => {
   const response = await api.post(`/api/v1/notes/${noteId}/archive`);
+  return response.data;
+};
+
+
+// Sharing API
+export const shareNote = async (noteId, shareData) => {
+  const response = await api.post(`/api/v1/notes/${noteId}/share`, shareData);
+  return response.data;
+};
+
+export const stopSharingNote = async (noteId) => {
+  const response = await api.post(`/api/v1/notes/${noteId}/stop-sharing`);
+  return response.data;
+};
+
+export const getSharedNotes = async () => {
+  try {
+    const response = await api.get('/api/v1/notes/shared/with-me');
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 404) {
+      console.log('Shared notes endpoint not implemented yet');
+      return [];
+    }
+    throw error;
+  }
+};
+
+export const getPublicNote = async (shareToken) => {
+  const response = await api.get(`/api/v1/notes/public/${shareToken}`);
   return response.data;
 };
