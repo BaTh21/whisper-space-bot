@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
@@ -25,31 +25,41 @@ def update_me(
     return UserOut.from_orm(updated)
 
 
-@router.get("/search")
+@router.get("/search", response_model=List[dict])
 def search_users(
-    query: str,
+    q: str = Query(..., min_length=2, description="Search query for users"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Search for users by username or email"""
     try:
-        from sqlalchemy import or_
-        
+        if len(q) < 2:
+            return []
+            
+        # Search in username and email fields
         users = db.query(User).filter(
-            or_(
-                User.username.ilike(f"%{query}%"),
-                User.email.ilike(f"%{query}%")
-            ),
-            User.id != current_user.id
-        ).limit(20).all()
+            (User.username.ilike(f"%{q}%")) | (User.email.ilike(f"%{q}%"))
+        ).limit(10).all()
         
-        return [{
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "avatar_url": user.avatar_url,  # Make sure this is included
-            "is_verified": getattr(user, 'is_verified', False)
-        } for user in users]
+        # Return user data with avatar URL
+        results = []
+        for user in users:
+            user_data = {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "avatar_url": user.avatar_url  # Make sure this is included
+            }
+            results.append(user_data)
+        
+        print(f"🔍 Search results for '{q}': {len(results)} users found")
+        for user in results:
+            print(f"   - {user['username']} (avatar: {user['avatar_url']})")
+        
+        return results
         
     except Exception as e:
-        print(f"Server error in search_users: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        print(f"❌ Error searching users: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []

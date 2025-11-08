@@ -52,12 +52,14 @@ const NoteEditor = ({ open, note, onSave, onClose }) => {
     console.log('Title:', title);
     console.log('Content:', content);
     console.log('isPinned:', isPinned);
+    console.log('Color:', color);
     
-    // Allow saving even with empty title for testing
+    // Add null checks to prevent the trim error
     const noteData = {
-      title: title.trim() || 'Untitled Note', // Fallback title
-      content: content.trim(),
+      title: title ? title.trim() : '',
+      content: content ? content.trim() : '',
       is_pinned: isPinned,
+      color: color,
     };
     
     console.log('Saving note data:', noteData);
@@ -87,17 +89,18 @@ const NoteEditor = ({ open, note, onSave, onClose }) => {
         sx: {
           backgroundColor: color,
           borderRadius: 2,
-          minHeight: 200
+          minHeight: 200,
+          background: color,
         }
       }}
     >
-      <DialogContent sx={{ p: 2, pb: 1 }}>
+      <DialogContent sx={{ p: 2, pb: 1, background: color }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
           <TextField
             fullWidth
             placeholder="Title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => setTitle(e.target.value)} 
             variant="standard"
             InputProps={{
               disableUnderline: true,
@@ -106,10 +109,11 @@ const NoteEditor = ({ open, note, onSave, onClose }) => {
                 fontWeight: 600,
                 '&::placeholder': {
                   opacity: 0.6
-                }
+                },
+                background: 'transparent',
               }
             }}
-            sx={{ mr: 1 }}
+            sx={{ mr: 1, background: 'transparent' }}
             onKeyPress={handleKeyPress}
             autoFocus
           />
@@ -131,16 +135,18 @@ const NoteEditor = ({ open, note, onSave, onClose }) => {
           maxRows={15}
           placeholder="Take a note..."
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => setContent(e.target.value)} 
           variant="standard"
           InputProps={{
             disableUnderline: true,
             sx: {
               '&::placeholder': {
                 opacity: 0.6
-              }
+              },
+              background: 'transparent',
             }
           }}
+          sx={{ background: 'transparent' }}
           onKeyPress={handleKeyPress}
         />
 
@@ -175,7 +181,7 @@ const NoteEditor = ({ open, note, onSave, onClose }) => {
         )}
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, pt: 1 }}>
+      <DialogActions sx={{ p: 2, pt: 1, background: color }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <IconButton
             size="small"
@@ -195,7 +201,6 @@ const NoteEditor = ({ open, note, onSave, onClose }) => {
         <Button 
           variant="contained" 
           onClick={handleSave}
-          // REMOVED disabled prop completely for testing
           sx={{ minWidth: 80 }}
         >
           {note ? 'Update' : 'Save'}
