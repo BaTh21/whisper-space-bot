@@ -15,7 +15,7 @@ from app.models.user import User
 # Configure Cloudinary on startup
 configure_cloudinary()
 
-router = APIRouter(prefix="/api/v1/avatars", tags=["avatars"])
+router = APIRouter(tags=["avatars"])
 
 # Avatar configuration
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
@@ -85,7 +85,6 @@ async def upload_avatar(
             detail=f"Failed to upload avatar: {str(e)}"
         )
 
-
 @router.delete("/delete")
 async def delete_avatar(
     current_user: User = Depends(get_current_user),
@@ -121,8 +120,6 @@ async def delete_avatar(
             detail=f"Failed to delete avatar: {str(e)}"
         )
 
-
-# Remove the local file serving endpoint since files are served directly from Cloudinary
 @router.get("/info/files")
 async def list_avatar_files():
     """
