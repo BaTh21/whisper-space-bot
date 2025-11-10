@@ -29,26 +29,39 @@ const SearchUsersTab = ({
   const [sendingRequests, setSendingRequests] = useState(new Set());
   const [failedImages, setFailedImages] = useState(new Set());
 
-  // Function to get full avatar URL with cache busting
+  // Function to get full avatar URL
   const getAvatarUrl = (url) => {
-    if (!url || failedImages.has(url)) {
+    if (!url) {
+      console.log('No avatar URL provided');
       return null;
     }
 
-    // If it's already a full URL, add cache busting
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return `${url}?v=${Date.now()}`;
+    if (failedImages.has(url)) {
+      console.log('Avatar URL previously failed:', url);
+      return null;
     }
 
-    // For relative paths, construct full URL
-    const baseUrl = 'http://localhost:8000';
+    // If it's already a full URL, return as is
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      console.log('Using full avatar URL:', url);
+      return url;
+    }
+
+    // For relative paths, construct full URL to your backend
+    const baseUrl = 'http://localhost:8000'; // Your FastAPI server
     const cleanUrl = url.startsWith('/') ? url : `/${url}`;
-    return `${baseUrl}${cleanUrl}?v=${Date.now()}`;
+    const fullUrl = `${baseUrl}${cleanUrl}`;
+    console.log('Constructed avatar URL:', fullUrl);
+    return fullUrl;
   };
 
-  const handleImageError = (url) => {
-    console.log('Image failed to load:', url);
+  const handleImageError = (userId, url) => {
+    console.log(`Avatar failed to load for user ${userId}:`, url);
     setFailedImages(prev => new Set([...prev, url]));
+  };
+
+  const handleImageLoad = (userId, url) => {
+    console.log(`Avatar loaded successfully for user ${userId}:`, url);
   };
 
   const handleSearch = async () => {
@@ -60,6 +73,13 @@ const SearchUsersTab = ({
     setLoading(true);
     try {
       const results = await searchUsers(searchQuery.trim());
+      console.log('🔍 Search results received:', results);
+      
+      // Debug: Check avatar URLs in results
+      results.forEach(user => {
+        console.log(`👤 User ${user.username}: avatar_url =`, user.avatar_url);
+      });
+      
       setSearchResults(results);
       setError(null);
     } catch (err) {
@@ -71,41 +91,37 @@ const SearchUsersTab = ({
   };
 
   const handleSendFriendRequest = async (user) => {
-  if (sendingRequests.has(user.id)) return;
+    if (sendingRequests.has(user.id)) return;
 
-  setSendingRequests(prev => new Set(prev).add(user.id));
-  
-  try {
-    const result = await sendFriendRequest(user.id);
+    setSendingRequests(prev => new Set(prev).add(user.id));
     
-    // Check the result structure properly
-    if (result.success) {
-      if (result.code === 'ALREADY_EXISTS') {
-        setSuccess(result.message || 'Friend request already sent');
+    try {
+      const result = await sendFriendRequest(user.id);
+      
+      if (result.success) {
+        if (result.code === 'ALREADY_EXISTS') {
+          setSuccess(result.message || 'Friend request already sent');
+        } else {
+          setSuccess(result.message || 'Friend request sent successfully');
+        }
+        
+        setSearchResults(prev => prev.filter(u => u.id !== user.id));
+        if (onDataUpdate) onDataUpdate();
       } else {
-        setSuccess(result.message || 'Friend request sent successfully');
+        setError(result.message || 'Failed to send friend request');
       }
       
-      // Remove user from search results after sending request
-      setSearchResults(prev => prev.filter(u => u.id !== user.id));
-      
-      if (onDataUpdate) onDataUpdate();
-    } else {
-      // Handle failure cases
-      setError(result.message || 'Failed to send friend request');
+    } catch (err) {
+      console.error('Send request failed:', err);
+      setError(err.message || 'An unexpected error occurred');
+    } finally {
+      setSendingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(user.id);
+        return newSet;
+      });
     }
-    
-  } catch (err) {
-    console.error('Send request failed:', err);
-    setError(err.message || 'An unexpected error occurred');
-  } finally {
-    setSendingRequests(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(user.id);
-      return newSet;
-    });
-  }
-};
+  };
 
   const shouldShowAddButton = (user) => {
     if (!currentUser) return false;
@@ -179,6 +195,13 @@ const SearchUsersTab = ({
           const showAddButton = shouldShowAddButton(user);
           const statusText = getUserStatusText(user);
           const isSending = sendingRequests.has(user.id);
+          const avatarUrl = getAvatarUrl(user.avatar_url);
+
+          console.log(`🎨 Rendering user ${user.username}:`, {
+            avatarUrl,
+            hasAvatarUrl: !!user.avatar_url,
+            showAddButton
+          });
 
           return (
             <ListItem
@@ -198,11 +221,11 @@ const SearchUsersTab = ({
             >
               <ListItemAvatar>
                 <Avatar 
-                  src={getAvatarUrl(user.avatar_url)} 
+                  src={avatarUrl}
                   sx={{ width: 48, height: 48 }}
                   imgProps={{
-                    onError: () => handleImageError(user.avatar_url),
-                    onLoad: () => console.log('Search user image loaded:', user.avatar_url)
+                    onError: () => handleImageError(user.id, user.avatar_url),
+                    onLoad: () => handleImageLoad(user.id, user.avatar_url),
                   }}
                 >
                   {user.username?.charAt(0)?.toUpperCase() || 'U'}

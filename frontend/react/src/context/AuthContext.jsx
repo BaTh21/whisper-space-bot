@@ -20,7 +20,6 @@ export const AuthProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Memoize checkAuthStatus to prevent unnecessary re-renders
   const checkAuthStatus = useCallback(async () => {
     try {
       const token = localStorage.getItem('accessToken');
@@ -30,21 +29,27 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // Only fetch user data if we don't have it already
-      if (!auth.user) {
-        const userData = await getMe();
-        setAuth(prev => ({
-          ...prev,
-          user: userData
-        }));
-      }
+      // Verify token is valid by fetching user data
+      const userData = await getMe();
+      setAuth(prev => ({
+        ...prev,
+        user: userData
+      }));
+      
     } catch (error) {
       console.error('Auth check failed:', error);
-      logout();
+      // Clear invalid tokens
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      setAuth({
+        accessToken: null,
+        refreshToken: null,
+        user: null
+      });
     } finally {
       setLoading(false);
     }
-  }, [auth.user]);
+  }, []);
 
   useEffect(() => {
     checkAuthStatus();
@@ -60,6 +65,7 @@ export const AuthProvider = ({ children }) => {
 
         let user = userData;
         
+        // Always fetch fresh user data to ensure it's valid
         if (!user) {
           user = await getMe();
         }
@@ -103,7 +109,7 @@ export const AuthProvider = ({ children }) => {
     updateUser,
     checkAuthStatus,
     loading,
-    isAuthenticated: !!auth.accessToken
+    isAuthenticated: !!auth.accessToken && !!auth.user
   };
 
   return (
