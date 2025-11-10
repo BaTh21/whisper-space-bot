@@ -4,7 +4,7 @@ from app.models.private_message import MessageType, PrivateMessage
 from app.models.group_message import GroupMessage
 from app.models.group_member import GroupMember
 from typing import List
-from datetime import datetime, timezone  # Add timezone import
+from datetime import datetime, timezone
 from fastapi import HTTPException,status
 from app.models.user_message_status import UserMessageStatus
 
@@ -23,8 +23,8 @@ def create_private_message(
     content: str,
     msg_type: str = "text",
     reply_to_id: int | None = None,
-    is_forwarded: bool = False,  # NEW: Forward parameter
-    original_sender: str | None = None  # NEW: Original sender parameter
+    is_forwarded: bool = False,
+    original_sender: str | None = None
 ) -> PrivateMessage:
 
     msg = PrivateMessage(
@@ -33,8 +33,8 @@ def create_private_message(
         content=content,
         message_type=MessageType(msg_type),
         reply_to_id=reply_to_id,
-        is_forwarded=is_forwarded,  # NEW: Set forward flag
-        original_sender=original_sender,  # NEW: Set original sender
+        is_forwarded=is_forwarded,
+        original_sender=original_sender,
         created_at=datetime.now(timezone.utc),
     )
     db.add(msg)
@@ -53,14 +53,12 @@ def create_group_message(
     sender_id: int, 
     group_id: int, 
     content: str, 
-    # msg_type: str = "text"
 ) -> GroupMessage:
     
     msg = GroupMessage(
         sender_id=sender_id, 
         group_id=group_id, 
         content=content, 
-        # message_type=MessageType(msg_type),
         created_at=datetime.utcnow()
     )
     try:
@@ -88,10 +86,9 @@ def edit_private_message(db: Session, message_id: int, user_id: int, new_content
     msg = db.query(PrivateMessage).filter(
         PrivateMessage.id == message_id,
         PrivateMessage.sender_id == user_id,
-        PrivateMessage.is_unsent == False
     ).first()
     if not msg:
-        raise HTTPException(404, "Message not found or already unsent")
+        raise HTTPException(404, "Message not found")
     msg.content = new_content
     msg.updated_at = datetime.now(timezone.utc)
     db.commit()

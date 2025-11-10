@@ -6,7 +6,9 @@ import {
   CircularProgress,
   Collapse,
   Tab,
-  Tabs
+  Tabs,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,7 +17,7 @@ import FeedTab from '../components/dashboard/FeedTab';
 import FriendsTab from '../components/dashboard/FriendsTab';
 import GroupsTab from '../components/dashboard/GroupsTab';
 import MessagesTab from '../components/dashboard/MessagesTab';
-import NotesTab from '../components/dashboard/NotesTab'; // Add this import
+import NotesTab from '../components/dashboard/NotesTab';
 import ProfileSection from '../components/dashboard/ProfileSection';
 import SearchUsersTab from '../components/dashboard/SearchUsersTab';
 import CreateDiaryDialog from '../components/dialogs/CreateDiaryDialog';
@@ -36,7 +38,7 @@ function TabPanel({ children, value, index, ...other }) {
       aria-labelledby={`dashboard-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+      {value === index && <Box sx={{ p: { xs: 2, sm: 3 } }}>{children}</Box>}
     </div>
   );
 }
@@ -49,6 +51,9 @@ const DashboardPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   // Data states
   const [friends, setFriends] = useState([]);
@@ -134,13 +139,36 @@ const DashboardPage = () => {
     );
   }
 
+  // Tab labels for mobile (shorter versions)
+  const getTabLabel = (label) => {
+    if (!isMobile) return label;
+    
+    const mobileLabels = {
+      'Feed': 'Feed',
+      'Messages': 'Chat',
+      'Friends': 'Friends',
+      'Groups': 'Groups',
+      'Notes': 'Notes',
+      'Search Users': 'Search',
+      'Blocked Users': 'Blocked'
+    };
+    
+    return mobileLabels[label] || label;
+  };
+
   return (
     <Layout>
       <Backdrop open={loading} sx={{ zIndex: 1300, color: '#40C4FF' }}>
         <CircularProgress color="inherit" />
       </Backdrop>
 
-      <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', p: 2 }}>
+      <Box sx={{ 
+        width: '100%', 
+        maxWidth: 1200, 
+        mx: 'auto', 
+        p: { xs: 1, sm: 2 },
+        minHeight: '100vh'
+      }}>
         {/* Show pending group invites */}
         <GroupInviteNotification onJoin={fetchDashboardData} />
 
@@ -156,27 +184,53 @@ const DashboardPage = () => {
         />
 
         {/* Main Content with Tabs */}
-        <Card sx={{ borderRadius: '16px', overflow: 'hidden' }}>
-          <Tabs
-            value={activeTab}
-            onChange={handleTabChange}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{
-              '& .MuiTab-root': {
-                borderRadius: '8px 8px 0 0',
-                minHeight: 60,
-              }
-            }}
-          >
-            <Tab label="Feed" />
-            <Tab label="Messages" />
-            <Tab label="Friends" />
-            <Tab label="Groups" />
-            <Tab label="Notes" /> {/* Add Notes Tab */}
-            <Tab label="Search Users" />
-            <Tab label="Blocked Users" />
-          </Tabs>
+        <Card sx={{ 
+          borderRadius: '16px', 
+          overflow: 'hidden',
+          mb: { xs: 2, sm: 3 }
+        }}>
+          {/* Responsive Tabs */}
+          <Box sx={{ 
+            borderBottom: 1, 
+            borderColor: 'divider',
+            overflow: 'hidden'
+          }}>
+            <Tabs
+              value={activeTab}
+              onChange={handleTabChange}
+              variant={isMobile ? "scrollable" : "standard"}
+              scrollButtons={isMobile ? "auto" : false}
+              allowScrollButtonsMobile
+              sx={{
+                minHeight: { xs: 48, sm: 60 },
+                '& .MuiTab-root': {
+                  borderRadius: '8px 8px 0 0',
+                  minHeight: { xs: 48, sm: 60 },
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  px: { xs: 1, sm: 2 },
+                  minWidth: 'auto',
+                  '&.Mui-selected': {
+                    bgcolor: 'primary.light',
+                    color: 'primary.contrastText',
+                  }
+                },
+                '& .MuiTabs-scrollButtons': {
+                  width: { xs: 32, sm: 40 },
+                  '&.Mui-disabled': {
+                    opacity: 0.3,
+                  }
+                }
+              }}
+            >
+              <Tab label={getTabLabel("Feed")} />
+              <Tab label={getTabLabel("Messages")} />
+              <Tab label={getTabLabel("Friends")} />
+              <Tab label={getTabLabel("Groups")} />
+              <Tab label={getTabLabel("Notes")} />
+              <Tab label={getTabLabel("Search Users")} />
+              <Tab label={getTabLabel("Blocked Users")} />
+            </Tabs>
+          </Box>
 
           {/* Feed Tab */}
           <TabPanel value={activeTab} index={0}>
@@ -302,10 +356,12 @@ const DashboardPage = () => {
           severity="error" 
           sx={{ 
             position: 'fixed', 
-            top: 80, 
-            right: 20, 
+            top: { xs: 70, sm: 80 }, 
+            right: { xs: 10, sm: 20 }, 
+            left: { xs: 10, sm: 'auto' },
             zIndex: 9999,
-            minWidth: 300 
+            width: { xs: 'calc(100% - 20px)', sm: 'auto' },
+            minWidth: { xs: 'auto', sm: 300 }
           }} 
           onClose={() => setError(null)}
         >
@@ -318,10 +374,12 @@ const DashboardPage = () => {
           severity="success" 
           sx={{ 
             position: 'fixed', 
-            top: 80, 
-            right: 20, 
+            top: { xs: 70, sm: 80 }, 
+            right: { xs: 10, sm: 20 }, 
+            left: { xs: 10, sm: 'auto' },
             zIndex: 9999,
-            minWidth: 300 
+            width: { xs: 'calc(100% - 20px)', sm: 'auto' },
+            minWidth: { xs: 'auto', sm: 300 }
           }} 
           onClose={() => setSuccess(null)}
         >

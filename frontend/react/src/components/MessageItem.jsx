@@ -1,4 +1,3 @@
-// components/MessageItem.jsx
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -27,15 +26,7 @@ const MessageItem = ({ message, isMine, onEdit, onDelete }) => {
     setEditing(false);
   };
 
-  if (message.is_unsent) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', mb: 1 }}>
-        <Typography variant="caption" color="text.secondary" fontStyle="italic">
-          This message was unsent
-        </Typography>
-      </Box>
-    );
-  }
+  // REMOVED: Unsent message display logic
 
   return (
     <Box sx={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', mb: 1 }}>

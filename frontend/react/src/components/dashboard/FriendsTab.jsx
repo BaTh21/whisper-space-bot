@@ -1,4 +1,4 @@
-import { Block as BlockIcon, MoreVert as MoreVertIcon } from '@mui/icons-material';
+import { Block as BlockIcon, Message as MessageIcon, MoreVert as MoreVertIcon } from '@mui/icons-material';
 import {
   Avatar,
   Box,
@@ -12,7 +12,9 @@ import {
   ListItemText,
   Menu,
   MenuItem,
-  Typography
+  Typography,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
@@ -30,6 +32,9 @@ const FriendsTab = ({
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [processingAction, setProcessingAction] = useState(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Use the avatar hook
   const { getUserAvatar, getUserInitials } = useAvatar();
@@ -93,66 +98,114 @@ const FriendsTab = ({
   };
 
   const handleMessageFriend = (friend) => {
-    console.log('Message button clicked for friend:', friend);
+  console.log('Message button clicked for friend:', friend);
+  
+  if (typeof setActiveTab === 'function') {
+    localStorage.setItem('selectedFriend', JSON.stringify(friend));
+    setActiveTab(1);
+    setSuccess(`Opening chat with ${friend.username}`);
     
-    if (typeof setActiveTab === 'function') {
-      localStorage.setItem('selectedFriend', JSON.stringify(friend));
-      setActiveTab(1);
-      setSuccess(`Opening chat with ${friend.username}`);
-    } else {
-      console.error('setActiveTab is not a function');
-      setError('Cannot open messages. Please try again.');
-    }
-  };
+    // Auto-hide success message after 2 seconds
+    setTimeout(() => {
+      setSuccess('');
+    }, 2000);
+  } else {
+    console.error('setActiveTab is not a function');
+    setError('Cannot open messages. Please try again.');
+    
+    // Auto-hide error message after 2 seconds
+    setTimeout(() => {
+      setError('');
+    }, 2000);
+  }
+};
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom fontWeight="600">
+    <Box sx={{ 
+      p: { xs: 2, sm: 3 },
+      maxWidth: '100%',
+      overflow: 'hidden'
+    }}>
+      <Typography variant="h5" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
         Friends
       </Typography>
 
       {pendingRequests.length > 0 && (
         <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom color="primary" fontWeight="600">
+          <Typography variant="h6" gutterBottom color="primary" fontWeight="600" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
             Pending Requests ({pendingRequests.length})
           </Typography>
           {pendingRequests.map((request) => (
             <Card 
               key={request.id} 
               sx={{ 
-                p: 2, 
+                p: { xs: 1.5, sm: 2 }, 
                 mb: 1, 
                 display: 'flex', 
-                alignItems: 'center',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'stretch', sm: 'center' },
+                gap: { xs: 2, sm: 0 },
                 borderRadius: '12px'
               }}
             >
-              <ListItemAvatar>
-                <Avatar 
-                  src={getUserAvatar(request)} 
-                  sx={{ width: 48, height: 48 }}
-                  imgProps={{
-                    onError: (e) => {
-                      // Hide the image and show initials if avatar fails to load
-                      e.target.style.display = 'none';
-                    }
-                  }}
-                >
-                  {getUserInitials(request.username)}
-                </Avatar>
-              </ListItemAvatar>
-              <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="body1" fontWeight="500">{request.username}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {request.email}
-                </Typography>
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                width: { xs: '100%', sm: 'auto' }
+              }}>
+                <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
+                  <Avatar 
+                    src={getUserAvatar(request)} 
+                    sx={{ 
+                      width: { xs: 40, sm: 48 }, 
+                      height: { xs: 40, sm: 48 } 
+                    }}
+                    imgProps={{
+                      onError: (e) => {
+                        e.target.style.display = 'none';
+                      }
+                    }}
+                  >
+                    {getUserInitials(request.username)}
+                  </Avatar>
+                </ListItemAvatar>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Typography 
+                    variant="body1" 
+                    fontWeight="500" 
+                    sx={{ 
+                      fontSize: { xs: '0.9rem', sm: '1rem' },
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {request.username}
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ 
+                      fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {request.email}
+                  </Typography>
+                </Box>
               </Box>
               <Button
                 variant="contained"
                 size="small"
                 onClick={() => handleAcceptRequest(request.id)}
                 disabled={acceptingId === request.id}
-                sx={{ borderRadius: '8px', minWidth: 100 }}
+                sx={{ 
+                  borderRadius: '8px', 
+                  minWidth: { xs: '100%', sm: 100 },
+                  mt: { xs: 1, sm: 0 }
+                }}
               >
                 {acceptingId === request.id ? (
                   <CircularProgress size={20} />
@@ -165,72 +218,132 @@ const FriendsTab = ({
         </Box>
       )}
 
-      <Typography variant="h6" gutterBottom fontWeight="600">
+      <Typography variant="h6" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
         Your Friends ({friends.length})
       </Typography>
       {friends.length === 0 ? (
-        <Typography color="text.secondary" sx={{ py: 2 }}>
+        <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
           No friends yet. Search for users to add friends!
         </Typography>
       ) : (
-        <List>
+        <List sx={{ p: 0 }}>
           {friends.map((friend) => (
             <ListItem
               key={friend.id}
               sx={{
-                p: 2,
+                p: { xs: 1.5, sm: 2 },
                 mb: 1,
                 borderRadius: '12px',
                 border: '1px solid',
                 borderColor: 'divider',
                 transition: 'all 0.2s ease',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'stretch', sm: 'center' },
+                gap: { xs: 2, sm: 0 },
                 '&:hover': {
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  transform: { xs: 'none', sm: 'translateY(-2px)' },
+                  boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
                 }
               }}
             >
-              <ListItemAvatar>
-                <Avatar 
-                  src={getUserAvatar(friend)} 
-                  sx={{ width: 48, height: 48 }}
-                  imgProps={{
-                    onError: (e) => {
-                      // Hide the image and show initials if avatar fails to load
-                      e.target.style.display = 'none';
-                    }
+              {/* Friend Info Section */}
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                width: { xs: '100%', sm: 'auto' },
+                flex: 1,
+                minWidth: 0
+              }}>
+                <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
+                  <Avatar 
+                    src={getUserAvatar(friend)} 
+                    sx={{ 
+                      width: { xs: 40, sm: 48 }, 
+                      height: { xs: 40, sm: 48 } 
+                    }}
+                    imgProps={{
+                      onError: (e) => {
+                        e.target.style.display = 'none';
+                      }
+                    }}
+                  >
+                    {getUserInitials(friend.username)}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Typography 
+                      variant="body1" 
+                      fontWeight="500"
+                      sx={{ 
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {friend.username}
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography 
+                      variant="body2" 
+                      color="text.secondary"
+                      sx={{ 
+                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {friend.email}
+                    </Typography>
+                  }
+                  sx={{ 
+                    my: 0,
+                    mr: { xs: 0, sm: 2 },
+                    flex: 1,
+                    minWidth: 0
                   }}
-                >
-                  {getUserInitials(friend.username)}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={
-                  <Typography variant="body1" fontWeight="500">
-                    {friend.username}
-                  </Typography>
-                }
-                secondary={friend.email}
-              />
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                />
+              </Box>
+
+              {/* Action Buttons */}
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 1, 
+                alignItems: 'center',
+                width: { xs: '100%', sm: 'auto' },
+                justifyContent: { xs: 'space-between', sm: 'flex-end' }
+              }}>
                 <Button
                   variant="outlined"
                   size="small"
                   onClick={() => handleMessageFriend(friend)}
-                  sx={{ borderRadius: '8px' }}
+                  sx={{ 
+                    borderRadius: '8px',
+                    minWidth: { xs: 'auto', sm: 100 },
+                    px: { xs: 1, sm: 2 },
+                    flex: { xs: 1, sm: 'none' }
+                  }}
+                  startIcon={isMobile ? <MessageIcon /> : null}
                 >
-                  Message
+                  {isMobile ? '' : 'Message'}
                 </Button>
                 <IconButton
                   onClick={(e) => handleActionMenuOpen(e, friend)}
                   disabled={processingAction === friend.id}
-                  sx={{ borderRadius: '8px' }}
+                  sx={{ 
+                    borderRadius: '8px',
+                    flex: { xs: 'none', sm: 'none' }
+                  }}
                   aria-label="friend actions"
+                  size={isMobile ? 'small' : 'medium'}
                 >
                   {processingAction === friend.id ? (
                     <CircularProgress size={20} />
                   ) : (
-                    <MoreVertIcon />
+                    <MoreVertIcon fontSize={isMobile ? 'small' : 'medium'} />
                   )}
                 </IconButton>
               </Box>
@@ -245,22 +358,25 @@ const FriendsTab = ({
         open={Boolean(actionMenuAnchor)}
         onClose={handleActionMenuClose}
         PaperProps={{
-          sx: { borderRadius: '8px' }
+          sx: { 
+            borderRadius: '8px',
+            minWidth: 140
+          }
         }}
       >
         <MenuItem 
           onClick={handleUnfriend}
           disabled={processingAction === 'unfriend'}
-          sx={{ color: 'error.main' }}
+          sx={{ color: 'error.main', fontSize: { xs: '0.9rem', sm: '1rem' } }}
         >
           {processingAction === 'unfriend' ? 'Unfriending...' : 'Unfriend'}
         </MenuItem>
         <MenuItem 
           onClick={handleBlock}
           disabled={processingAction === 'block'}
-          sx={{ color: 'error.main' }}
+          sx={{ color: 'error.main', fontSize: { xs: '0.9rem', sm: '1rem' } }}
         >
-          <BlockIcon sx={{ mr: 1, fontSize: 20 }} />
+          <BlockIcon sx={{ mr: 1, fontSize: { xs: 18, sm: 20 } }} />
           {processingAction === 'block' ? 'Blocking...' : 'Block User'}
         </MenuItem>
       </Menu>

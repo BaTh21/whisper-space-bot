@@ -1,3 +1,4 @@
+//dashboard/ProfileSection.jsx
 import { CloudUpload as CloudUploadIcon, Edit as EditIcon } from '@mui/icons-material';
 import {
   Alert,
@@ -9,7 +10,9 @@ import {
   Collapse,
   IconButton,
   TextField,
-  Typography
+  Typography,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useRef, useState } from 'react';
@@ -24,6 +27,9 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const [selectedFile, setSelectedFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Use the avatar hook
   const { getAvatarUrl, getUserInitials } = useAvatar();
@@ -149,37 +155,69 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
   return (
-    <Card sx={{ mb: 3, p: 3, borderRadius: '16px' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+    <Card sx={{ 
+      mb: 3, 
+      p: { xs: 2, sm: 3 }, 
+      borderRadius: '16px',
+      mx: { xs: 0, sm: 0 },
+      position: 'relative' // Added this for absolute positioning context
+    }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        alignItems: { xs: 'center', sm: 'flex-start' },
+        textAlign: { xs: 'center', sm: 'left' },
+        mb: 3,
+        position: 'relative' // Added this for better positioning
+      }}>
         <Avatar
           src={currentAvatarUrl}
           alt={profile?.username}
           sx={{ 
-            width: 80, 
-            height: 80, 
-            mr: 3,
+            width: { xs: 60, sm: 80 }, 
+            height: { xs: 60, sm: 80 }, 
+            mr: { xs: 0, sm: 3 },
+            mb: { xs: 2, sm: 0 },
             border: imagePreview ? '2px solid' : 'none',
             borderColor: imagePreview ? 'primary.main' : 'transparent',
           }}
         >
           {getUserInitials(profile?.username)}
         </Avatar>
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="h4" gutterBottom fontWeight="600">
+        <Box sx={{ 
+          flexGrow: 1,
+          pr: { xs: 6, sm: 0 } // Add padding on mobile to prevent text overlap with icon
+        }}>
+          <Typography variant="h4" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
             {profile?.username}
           </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+          <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6, mb: 1 }}>
             {profile?.bio || 'No bio yet.'}
           </Typography>
           <Chip
             label={profile?.is_verified ? 'Verified' : 'Not Verified'}
             color={profile?.is_verified ? 'success' : 'default'}
             size="small"
-            sx={{ mt: 1, borderRadius: '8px' }}
+            sx={{ borderRadius: '8px' }}
           />
         </Box>
-        <IconButton onClick={() => setEditing(!editing)}>
-          <EditIcon />
+        
+        {/* Fixed IconButton positioning */}
+        <IconButton 
+          onClick={() => setEditing(!editing)}
+          sx={{ 
+            position: { xs: 'absolute', sm: 'static' },
+            top: { xs: 8, sm: 'auto' },
+            right: { xs: 8, sm: 'auto' },
+            bgcolor: { xs: 'background.paper', sm: 'transparent' },
+            boxShadow: { xs: 1, sm: 0 },
+            '&:hover': {
+              bgcolor: { xs: 'action.hover', sm: 'action.hover' }
+            }
+          }}
+          size={isMobile ? 'small' : 'medium'}
+        >
+          <EditIcon fontSize={isMobile ? 'small' : 'medium'} />
         </IconButton>
       </Box>
 
@@ -205,7 +243,11 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
       </Collapse>
 
       <Collapse in={editing}>
-        <Card sx={{ p: 3, mt: 2, borderRadius: '12px' }}>
+        <Card sx={{ 
+          p: { xs: 2, sm: 3 }, 
+          mt: 2, 
+          borderRadius: '12px' 
+        }}>
           <Typography variant="h6" gutterBottom fontWeight="600">
             Edit Profile
           </Typography>
@@ -220,6 +262,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               helperText={formik.touched.username && formik.errors.username}
               fullWidth
               margin="normal"
+              size={isMobile ? 'small' : 'medium'}
             />
             
             <TextField
@@ -235,6 +278,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               fullWidth
               margin="normal"
               placeholder="Tell us a bit about yourself..."
+              size={isMobile ? 'small' : 'medium'}
             />
 
             {/* Avatar Upload Section */}
@@ -242,25 +286,38 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               <Typography variant="subtitle2" gutterBottom fontWeight="600">
                 Profile Picture
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'center', sm: 'flex-start' },
+                gap: 2, 
+                mb: 1 
+              }}>
                 <Avatar
                   src={currentAvatarUrl}
                   sx={{
-                    width: 60,
-                    height: 60,
+                    width: { xs: 50, sm: 60 },
+                    height: { xs: 50, sm: 60 },
                     border: imagePreview ? '2px solid' : 'none',
                     borderColor: imagePreview ? 'primary.main' : 'transparent',
                   }}
                 >
                   {getUserInitials(profile?.username)}
                 </Avatar>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: 1,
+                  alignItems: { xs: 'center', sm: 'flex-start' },
+                  textAlign: { xs: 'center', sm: 'left' }
+                }}>
                   <Button
                     variant="outlined"
                     startIcon={<CloudUploadIcon />}
                     onClick={handleAvatarClick}
                     disabled={uploading}
                     sx={{ borderRadius: '8px' }}
+                    size={isMobile ? 'small' : 'medium'}
                   >
                     {uploading ? 'Uploading...' : 'Choose Image'}
                   </Button>
@@ -287,12 +344,22 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               </Typography>
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 1, mt: 3 }}>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 1, 
+              mt: 3 
+            }}>
               <Button 
                 type="submit" 
                 variant="contained" 
                 disabled={loading || uploading}
-                sx={{ borderRadius: '8px', minWidth: 120 }}
+                sx={{ 
+                  borderRadius: '8px', 
+                  minWidth: 120,
+                  order: { xs: 2, sm: 1 }
+                }}
+                size={isMobile ? 'small' : 'medium'}
               >
                 {uploading ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}
               </Button>
@@ -300,7 +367,11 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
                 variant="outlined"
                 onClick={handleCancel}
                 disabled={loading || uploading}
-                sx={{ borderRadius: '8px' }}
+                sx={{ 
+                  borderRadius: '8px',
+                  order: { xs: 1, sm: 2 }
+                }}
+                size={isMobile ? 'small' : 'medium'}
               >
                 Cancel
               </Button>

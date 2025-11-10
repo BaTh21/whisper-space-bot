@@ -1,3 +1,4 @@
+//chat/ChatMessage.jsx
 import {
   Delete as DeleteIcon,
   DoneAll as DoneAllIcon,
@@ -5,6 +6,7 @@ import {
   Edit as EditIcon,
   Forward as ForwardIcon,
   MoreVert as MoreVertIcon,
+  PushPin as PushPinIcon,
   Reply as ReplyIcon
 } from '@mui/icons-material';
 import {
@@ -28,10 +30,12 @@ const ChatMessage = ({
   onDelete, 
   onReply, 
   onForward, 
+  onPin, // NEW: Pin function
   profile, 
   currentFriend,
   getAvatarUrl,
-  getUserInitials 
+  getUserInitials,
+  isPinned = false // NEW: Pinned status
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -75,6 +79,14 @@ const ChatMessage = ({
   const handleReplyClick = () => {
     if (onReply) {
       onReply(message);
+    }
+    handleClose();
+  };
+
+  // NEW: Handle pin message
+  const handlePinClick = () => {
+    if (onPin) {
+      onPin(message);
     }
     handleClose();
   };
@@ -152,8 +164,35 @@ const ChatMessage = ({
         justifyContent: isMine ? 'flex-end' : 'flex-start',
         mb: 2,
         px: 1,
+        position: 'relative'
       }}
     >
+      {/* Pin indicator for pinned messages */}
+      {isPinned && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: -8,
+            left: isMine ? 'auto' : 40,
+            right: isMine ? 40 : 'auto',
+            bgcolor: 'warning.main',
+            color: 'white',
+            px: 1,
+            py: 0.5,
+            borderRadius: '12px',
+            fontSize: '0.7rem',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            zIndex: 1
+          }}
+        >
+          <PushPinIcon fontSize="small" sx={{ fontSize: '0.8rem' }} />
+          Pinned
+        </Box>
+      )}
+      
       {/* Friend's avatar (left side for their messages) */}
       {!isMine && (
         <Avatar 
@@ -235,12 +274,13 @@ const ChatMessage = ({
                     bgcolor: isMine ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
                   }
                 }}
-                onClick={handleReplyClick}
+                onClick={() => onReply && onReply(message.reply_to)}
               >
                 <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', fontWeight: 500 }}>
-                  Replying to {message.reply_to.sender_id === profile?.id ? 'yourself' : senderInfo.username}
+                  Replying to {message.reply_to.sender_id === profile?.id ? 'yourself' : 
+                    (message.reply_to.sender_username || senderInfo.username)}
                 </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8, fontStyle: 'italic' }}>
+                <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8, fontStyle: 'italic', lineHeight: 1.3 }}>
                   {message.reply_to.content}
                 </Typography>
               </Box>
@@ -254,7 +294,9 @@ const ChatMessage = ({
                 p: 2,
                 borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                 position: 'relative',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                boxShadow: isPinned ? '0 2px 8px rgba(255,152,0,0.3)' : '0 1px 2px rgba(0,0,0,0.1)',
+                border: isPinned ? '2px solid' : 'none',
+                borderColor: isPinned ? 'warning.main' : 'transparent',
                 transition: 'all 0.2s ease',
                 '&:hover': {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -391,6 +433,12 @@ const ChatMessage = ({
             <MenuItem onClick={handleReplyClick}>
               <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
               Reply
+            </MenuItem>
+
+            {/* NEW: Pin option */}
+            <MenuItem onClick={handlePinClick}>
+              <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
+              {isPinned ? 'Unpin Message' : 'Pin Message'}
             </MenuItem>
 
             {/* Forward option */}
