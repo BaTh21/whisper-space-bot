@@ -414,7 +414,7 @@ export default function ChatBox({ selectedFriend, profile, friends }) {
         ) : (
           <>
             {messages
-              .filter(message => !message.is_unsent && !message.is_temp)
+              .filter(message => !message.is_temp) // REMOVED: unsent filtering
               .map((message) => (
                 <ChatMessage
                   key={message.id}

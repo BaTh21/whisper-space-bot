@@ -1,3 +1,4 @@
+//dashboard/NotesTab.jsx
 import { Add as AddIcon, Group as GroupIcon, Notes as NotesIcon } from '@mui/icons-material';
 import {
   Box,
@@ -8,6 +9,7 @@ import {
   Tab,
   Tabs,
   Typography,
+  useMediaQuery,
   useTheme
 } from '@mui/material';
 import { useEffect, useState } from 'react';
@@ -44,7 +46,10 @@ const NotesTab = ({ setError, setSuccess }) => {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState(null);
   const [loading, setLoading] = useState(false);
+
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
   const currentUser = {
     id: 1,
@@ -87,58 +92,102 @@ const NotesTab = ({ setError, setSuccess }) => {
     setIsEditorOpen(true);
   };
 
-  const handleSaveNote = async (noteData) => {
-    try {
-      let result;
-      if (editingNote) {
-        result = await updateNote(editingNote.id, noteData);
-        setSuccess('Note updated successfully');
-      } else {
-        result = await createNote(noteData);
-        setSuccess('Note created successfully');
-      }
-      setIsEditorOpen(false);
-      setEditingNote(null);
-      loadNotes();
-    } catch (error) {
-      console.error('Error saving note:', error);
-      setError(error.message || 'Failed to save note');
+  const showTimedAlert = (type, message, duration = 2000) => {
+  if (type === 'success') {
+    setSuccess(message);
+    setTimeout(() => setSuccess(''), duration);
+  } else {
+    setError(message);
+    setTimeout(() => setError(''), duration);
+  }
+};
+
+const handleSaveNote = async (noteData) => {
+  try {
+    let result;
+    if (editingNote) {
+      result = await updateNote(editingNote.id, noteData);
+      showTimedAlert('success', 'Note updated successfully');
+    } else {
+      result = await createNote(noteData);
+      showTimedAlert('success', 'Note created successfully');
     }
-  };
+    
+    setIsEditorOpen(false);
+    setEditingNote(null);
+    loadNotes();
+  } catch (error) {
+    console.error('Error saving note:', error);
+    showTimedAlert('error', error.message || 'Failed to save note');
+  }
+};
 
   const handleDeleteNote = async (noteId) => {
-    try {
-      await deleteNote(noteId);
-      setSuccess('Note deleted successfully');
-      loadNotes();
-    } catch (error) {
-      console.error('Error deleting note:', error);
-      setError(error.message || 'Failed to delete note');
-    }
-  };
+  try {
+    await deleteNote(noteId);
+    setSuccess('Note deleted successfully');
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setSuccess('');
+    }, 2000);
+    
+    loadNotes();
+  } catch (error) {
+    console.error('Error deleting note:', error);
+    setError(error.message || 'Failed to delete note');
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setError('');
+    }, 2000);
+  }
+};
 
   const handleTogglePin = async (noteId) => {
-    try {
-      await togglePinNote(noteId);
-      setSuccess('Note pinned status updated');
-      loadNotes();
-    } catch (error) {
-      console.error('Error toggling pin:', error);
-      setError(error.message || 'Failed to toggle pin');
-    }
-  };
+  try {
+    await togglePinNote(noteId);
+    setSuccess('Note pinned status updated');
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setSuccess('');
+    }, 2000);
+    
+    loadNotes();
+  } catch (error) {
+    console.error('Error toggling pin:', error);
+    setError(error.message || 'Failed to toggle pin');
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setError('');
+    }, 2000);
+  }
+};
 
   const handleToggleArchive = async (noteId) => {
-    try {
-      await toggleArchiveNote(noteId);
-      const action = activeTab === 0 ? 'archived' : 'unarchived';
-      setSuccess(`Note ${action} successfully`);
-      loadNotes();
-    } catch (error) {
-      console.error('Error toggling archive:', error);
-      setError(error.message || 'Failed to toggle archive');
-    }
-  };
+  try {
+    await toggleArchiveNote(noteId);
+    const action = activeTab === 0 ? 'archived' : 'unarchived';
+    setSuccess(`Note ${action} successfully`);
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setSuccess('');
+    }, 2000);
+    
+    loadNotes();
+  } catch (error) {
+    console.error('Error toggling archive:', error);
+    setError(error.message || 'Failed to toggle archive');
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setError('');
+    }, 2000);
+  }
+};
 
   const handleShareNote = (note) => {
     setSharingNote(note);
@@ -146,27 +195,38 @@ const NotesTab = ({ setError, setSuccess }) => {
   };
 
   const handleShare = async (shareData) => {
-    try {
-      await shareNote(sharingNote.id, shareData);
-      
-      let successMessage = 'Sharing settings updated';
-      if (shareData.share_type === 'public') {
-        successMessage = 'Note is now public';
-      } else if (shareData.share_type === 'shared') {
-        successMessage = `Note shared with ${shareData.friend_ids.length} friend${shareData.friend_ids.length !== 1 ? 's' : ''}`;
-      } else {
-        successMessage = 'Note is now private';
-      }
-      
-      setSuccess(successMessage);
-      setShareDialogOpen(false);
-      setSharingNote(null);
-      loadNotes();
-    } catch (error) {
-      console.error('Error sharing note:', error);
-      setError(error.message || 'Failed to update sharing settings');
+  try {
+    await shareNote(sharingNote.id, shareData);
+    
+    let successMessage = 'Sharing settings updated';
+    if (shareData.share_type === 'public') {
+      successMessage = 'Note is now public';
+    } else if (shareData.share_type === 'shared') {
+      successMessage = `Note shared with ${shareData.friend_ids.length} friend${shareData.friend_ids.length !== 1 ? 's' : ''}`;
+    } else {
+      successMessage = 'Note is now private';
     }
-  };
+    
+    setSuccess(successMessage);
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setSuccess('');
+    }, 2000);
+    
+    setShareDialogOpen(false);
+    setSharingNote(null);
+    loadNotes();
+  } catch (error) {
+    console.error('Error sharing note:', error);
+    setError(error.message || 'Failed to update sharing settings');
+    
+    // Auto-hide after 2 seconds
+    setTimeout(() => {
+      setError('');
+    }, 2000);
+  }
+};
 
   const filteredNotes = notes.filter(note => {
     if (activeTab === 0) return !note.is_archived;
@@ -178,7 +238,13 @@ const NotesTab = ({ setError, setSuccess }) => {
   const otherNotes = filteredNotes.filter(note => !note.is_pinned);
 
   return (
-    <Box sx={{ position: 'relative', minHeight: 400 }}>
+    <Box sx={{ 
+      position: 'relative', 
+      minHeight: 400,
+      p: { xs: 2, sm: 3 },
+      maxWidth: '100%',
+      overflow: 'hidden'
+    }}>
       <Typography variant="h5" gutterBottom fontWeight="600">
         My Notes
       </Typography>
@@ -187,6 +253,9 @@ const NotesTab = ({ setError, setSuccess }) => {
         value={activeTab} 
         onChange={(e, newValue) => setActiveTab(newValue)} 
         sx={{ mb: 3 }}
+        variant={isMobile ? "scrollable" : "standard"}
+        scrollButtons={isMobile ? "auto" : false}
+        allowScrollButtonsMobile
       >
         <Tab label="Active Notes" />
         <Tab label="Archived" />
@@ -208,7 +277,7 @@ const NotesTab = ({ setError, setSuccess }) => {
               </Typography>
               <Grid container spacing={2}>
                 {pinnedNotes.map(note => (
-                  <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
                     <NoteCard
                       note={note}
                       onEdit={handleEditNote}
@@ -233,7 +302,7 @@ const NotesTab = ({ setError, setSuccess }) => {
               )}
               <Grid container spacing={2}>
                 {otherNotes.map(note => (
-                  <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
                     <NoteCard
                       note={note}
                       onEdit={handleEditNote}
@@ -252,7 +321,7 @@ const NotesTab = ({ setError, setSuccess }) => {
           {filteredNotes.length === 0 && (
             <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
               <CardContent>
-                <NotesIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                <NotesIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
                 <Typography variant="h6" color="text.secondary" gutterBottom>
                   No notes yet
                 </Typography>
@@ -270,7 +339,7 @@ const NotesTab = ({ setError, setSuccess }) => {
           {filteredNotes.length > 0 ? (
             <Grid container spacing={2}>
               {filteredNotes.map(note => (
-                <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
                   <NoteCard
                     note={note}
                     onEdit={handleEditNote}
@@ -286,7 +355,7 @@ const NotesTab = ({ setError, setSuccess }) => {
           ) : (
             <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
               <CardContent>
-                <NotesIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                <NotesIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
                 <Typography variant="h6" color="text.secondary" gutterBottom>
                   No archived notes
                 </Typography>
@@ -304,7 +373,7 @@ const NotesTab = ({ setError, setSuccess }) => {
           {sharedNotes.length > 0 ? (
             <Grid container spacing={2}>
               {sharedNotes.map(note => (
-                <Grid key={note.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
                   <NoteCard
                     note={note}
                     onEdit={note.can_edit ? handleEditNote : undefined}
@@ -320,7 +389,7 @@ const NotesTab = ({ setError, setSuccess }) => {
           ) : (
             <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
               <CardContent>
-                <GroupIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                <GroupIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
                 <Typography variant="h6" color="text.secondary" gutterBottom>
                   No shared notes
                 </Typography>
@@ -338,10 +407,12 @@ const NotesTab = ({ setError, setSuccess }) => {
         aria-label="add note"
         sx={{
           position: 'fixed',
-          bottom: 24,
-          right: 24,
+          bottom: { xs: 16, sm: 24 },
+          right: { xs: 16, sm: 24 },
+          transform: { xs: 'scale(0.9)', sm: 'scale(1)' }
         }}
         onClick={handleCreateNote}
+        size={isMobile ? 'small' : 'large'}
       >
         <AddIcon />
       </Fab>

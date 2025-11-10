@@ -1,3 +1,4 @@
+//dashboard/SearchUsersTab.jsx
 import { PersonAdd as PersonAddIcon } from '@mui/icons-material';
 import {
   Avatar,
@@ -10,7 +11,9 @@ import {
   ListItemAvatar,
   ListItemText,
   TextField,
-  Typography
+  Typography,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { useState } from 'react';
 import { searchUsers, sendFriendRequest } from '../../services/api';
@@ -28,6 +31,9 @@ const SearchUsersTab = ({
   const [loading, setLoading] = useState(false);
   const [sendingRequests, setSendingRequests] = useState(new Set());
   const [failedImages, setFailedImages] = useState(new Set());
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Function to get full avatar URL
   const getAvatarUrl = (url) => {
@@ -159,12 +165,21 @@ const SearchUsersTab = ({
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: { xs: 2, sm: 3 },
+      maxWidth: '100%',
+      overflow: 'hidden'
+    }}>
       <Typography variant="h5" gutterBottom fontWeight="600">
         Search Users
       </Typography>
       
-      <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: 1, 
+        mb: 3 
+      }}>
         <TextField
           fullWidth
           label="Search by username or email..."
@@ -173,12 +188,18 @@ const SearchUsersTab = ({
           onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           disabled={loading}
           sx={{ borderRadius: '8px' }}
+          size={isMobile ? 'small' : 'medium'}
         />
         <Button 
           variant="contained" 
           onClick={handleSearch}
           disabled={loading || searchQuery.trim().length < 2}
-          sx={{ borderRadius: '8px', minWidth: 120 }}
+          sx={{ 
+            borderRadius: '8px', 
+            minWidth: { xs: '100%', sm: 120 },
+            height: { xs: '40px', sm: '56px' }
+          }}
+          size={isMobile ? 'small' : 'medium'}
         >
           {loading ? <CircularProgress size={20} /> : 'Search'}
         </Button>
@@ -190,7 +211,7 @@ const SearchUsersTab = ({
         </Typography>
       )}
 
-      <List>
+      <List sx={{ p: 0 }}>
         {searchResults.map((user) => {
           const showAddButton = shouldShowAddButton(user);
           const statusText = getUserStatusText(user);
@@ -207,38 +228,52 @@ const SearchUsersTab = ({
             <ListItem
               key={user.id}
               sx={{
-                p: 2,
+                p: { xs: 1.5, sm: 2 },
                 mb: 1,
                 borderRadius: '12px',
                 border: '1px solid',
                 borderColor: 'divider',
                 transition: 'all 0.2s ease',
+                flexDirection: { xs: 'column', sm: 'row' },
+                alignItems: { xs: 'stretch', sm: 'center' },
                 '&:hover': {
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  transform: { xs: 'none', sm: 'translateY(-2px)' },
+                  boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
                 }
               }}
             >
-              <ListItemAvatar>
-                <Avatar 
-                  src={avatarUrl}
-                  sx={{ width: 48, height: 48 }}
-                  imgProps={{
-                    onError: () => handleImageError(user.id, user.avatar_url),
-                    onLoad: () => handleImageLoad(user.id, user.avatar_url),
-                  }}
-                >
-                  {user.username?.charAt(0)?.toUpperCase() || 'U'}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={
-                  <Typography variant="body1" fontWeight="500">
-                    {user.username}
-                  </Typography>
-                }
-                secondary={user.email}
-              />
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                width: { xs: '100%', sm: 'auto' },
+                mb: { xs: 2, sm: 0 }
+              }}>
+                <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
+                  <Avatar 
+                    src={avatarUrl}
+                    sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
+                    imgProps={{
+                      onError: () => handleImageError(user.id, user.avatar_url),
+                      onLoad: () => handleImageLoad(user.id, user.avatar_url),
+                    }}
+                  >
+                    {user.username?.charAt(0)?.toUpperCase() || 'U'}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Typography variant="body1" fontWeight="500" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}>
+                      {user.username}
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
+                      {user.email}
+                    </Typography>
+                  }
+                  sx={{ my: 0 }}
+                />
+              </Box>
               
               {showAddButton ? (
                 <Button
@@ -251,16 +286,24 @@ const SearchUsersTab = ({
                   }
                   onClick={() => handleSendFriendRequest(user)}
                   disabled={isSending}
-                  sx={{ borderRadius: '8px', minWidth: 120 }}
+                  sx={{ 
+                    borderRadius: '8px', 
+                    minWidth: { xs: '100%', sm: 120 },
+                    mt: { xs: 1, sm: 0 }
+                  }}
                 >
-                  {statusText}
+                  {isMobile ? 'Add' : statusText}
                 </Button>
               ) : (
                 <Chip 
-                  label={statusText} 
+                  label={isMobile ? statusText.replace('Request Sent', 'Sent') : statusText} 
                   color={getStatusColor(statusText)}
                   variant="outlined"
                   size="small"
+                  sx={{ 
+                    mt: { xs: 1, sm: 0 },
+                    alignSelf: { xs: 'center', sm: 'auto' }
+                  }}
                 />
               )}
             </ListItem>
