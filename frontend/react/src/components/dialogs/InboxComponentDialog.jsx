@@ -29,7 +29,7 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
             setInvites(res);
             console.log("invites", res);
         } catch (error) {
-            console.error("Error fetching invites:", error);
+            // console.error("Error fetching invites:", error);
             setInvites([]);
         } finally {
             setLoading(false);

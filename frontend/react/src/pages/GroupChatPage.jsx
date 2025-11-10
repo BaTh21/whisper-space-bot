@@ -86,7 +86,7 @@ const GroupChatPage = () => {
 
   const setupWebSocket = () => {
     try {
-      const wsUrl = `${BASE_URI.replace(/^http/, 'ws')}/ws/group/${groupId}?token=${token}`;
+      const wsUrl = `${BASE_URI.replace(/^http/, 'ws')}/api/v1/ws/ws/group/${groupId}?token=${token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
