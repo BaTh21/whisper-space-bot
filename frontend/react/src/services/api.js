@@ -121,25 +121,24 @@ export const updateMe = async (data) => {
 
 export const uploadAvatar = async (file) => {
   const formData = new FormData();
-  formData.append('avatar', file);
-  
-  const response = await api.post('/avatars/upload', formData, {
+  formData.append("avatar", file);
+
+  const response = await api.post("/avatars/upload", formData, {
     headers: {
-      'Content-Type': 'multipart/form-data',
+      "Content-Type": "multipart/form-data",
     },
   });
   return response.data;
 };
 
-
 export const searchUsers = async (query) => {
   // Validate and clean the query
-  if (!query || typeof query !== 'string') {
+  if (!query || typeof query !== "string") {
     return [];
   }
 
   const trimmedQuery = query.trim();
-  
+
   // Return empty array for short queries instead of error
   if (trimmedQuery.length < 1) {
     return [];
@@ -147,25 +146,25 @@ export const searchUsers = async (query) => {
 
   try {
     // Remove limit and offset parameters as they might be causing validation issues
-    const response = await api.get(`${USERS_URL}/search`, { 
-      params: { 
-        query: trimmedQuery // Use 'query' instead of 'q'
-      } 
+    const response = await api.get(`${USERS_URL}/search`, {
+      params: {
+        query: trimmedQuery, // Use 'query' instead of 'q'
+      },
     });
     return response.data;
   } catch (error) {
-    console.error('Search users error:', {
+    console.error("Search users error:", {
       status: error.response?.status,
       data: error.response?.data,
-      query: trimmedQuery
+      query: trimmedQuery,
     });
-    
+
     // Handle 422 error specifically
     if (error.response?.status === 422) {
-      console.warn('Search validation failed, returning empty results');
+      console.warn("Search validation failed, returning empty results");
       return []; // Return empty array instead of throwing error
     }
-    
+
     // For other errors, still return empty array to prevent UI crashes
     return [];
   }
@@ -174,85 +173,82 @@ export const searchUsers = async (query) => {
 // Friend endpoints
 const getCurrentUserId = () => {
   try {
-    const userData = localStorage.getItem('user');
-    
+    const userData = localStorage.getItem("user");
+
     // If no data or it's the broken string, return null
-    if (!userData || userData === '[object Object]') {
-      console.warn('User data missing or corrupted');
+    if (!userData || userData === "[object Object]") {
+      console.warn("User data missing or corrupted");
       return null;
     }
 
     // Try to parse normally
     const user = JSON.parse(userData);
     return user?.id || null;
-    
   } catch (error) {
-    console.error('Error getting user ID:', error);
+    console.error("Error getting user ID:", error);
     return null;
   }
 };
 
-
 export const sendFriendRequest = async (userId) => {
   // Input validation
-  if (!userId || typeof userId !== 'number') {
+  if (!userId || typeof userId !== "number") {
     return {
       success: false,
-      message: 'Invalid user ID',
-      code: 'INVALID_ID'
+      message: "Invalid user ID",
+      code: "INVALID_ID",
     };
   }
 
   // Get current user ID
   const currentUserId = getCurrentUserId();
-  
+
   // Only check self-request if we have a valid currentUserId
   if (currentUserId && userId === currentUserId) {
     return {
       success: false,
-      message: 'You cannot send a friend request to yourself',
-      code: 'SELF_REQUEST'
+      message: "You cannot send a friend request to yourself",
+      code: "SELF_REQUEST",
     };
   }
 
   try {
     const response = await api.post(`/friends/request/${userId}`);
-    
+
     return {
       success: true,
       data: response.data,
-      message: 'Friend request sent successfully!',
-      code: 'SUCCESS'
+      message: "Friend request sent successfully!",
+      code: "SUCCESS",
     };
-    
   } catch (error) {
-    console.error('Friend request error:', error);
+    console.error("Friend request error:", error);
 
     // Handle 409 Conflict - request already exists
     if (error.response?.status === 409) {
       return {
         success: true, // Consider this a success
         data: error.response?.data,
-        message: 'Friend request already sent!',
-        code: 'ALREADY_EXISTS'
+        message: "Friend request already sent!",
+        code: "ALREADY_EXISTS",
       };
     }
 
     // Handle other HTTP errors
-    const errorMessage = error.response?.data?.detail 
-      || error.response?.data?.message 
-      || error.message 
-      || 'Failed to send friend request';
+    const errorMessage =
+      error.response?.data?.detail ||
+      error.response?.data?.message ||
+      error.message ||
+      "Failed to send friend request";
 
     return {
       success: false,
       message: errorMessage,
-      code: 'REQUEST_FAILED',
-      status: error.response?.status
+      code: "REQUEST_FAILED",
+      status: error.response?.status,
     };
   }
 };
-
 
 export const checkFriendStatus = async (userId) => {
   try {
@@ -260,13 +256,13 @@ export const checkFriendStatus = async (userId) => {
     return {
       exists: true,
       status: response.data.status, // 'pending', 'accepted', 'none'
-      data: response.data
+      data: response.data,
     };
   } catch (error) {
     return {
       exists: false,
-      status: 'none',
-      error: error.response?.data
+      status: "none",
+      error: error.response?.data,
     };
   }
 };
@@ -275,29 +271,29 @@ export const checkFriendStatus = async (userId) => {
 export const smartFriendRequest = async (userId) => {
   // First check current status
   const statusCheck = await checkFriendStatus(userId);
-  
+
   if (statusCheck.exists) {
     switch (statusCheck.status) {
-      case 'pending':
+      case "pending":
         return {
           success: false,
-          message: 'Friend request already pending!',
-          code: 'ALREADY_PENDING',
-          data: statusCheck.data
+          message: "Friend request already pending!",
+          code: "ALREADY_PENDING",
+          data: statusCheck.data,
         };
-      
-      case 'accepted':
+
+      case "accepted":
         return {
           success: false,
-          message: 'You are already friends!',
-          code: 'ALREADY_FRIENDS',
-          data: statusCheck.data
+          message: "You are already friends!",
+          code: "ALREADY_FRIENDS",
+          data: statusCheck.data,
         };
-      
-      case 'none':
+
+      case "none":
         // Continue to send request
         break;
-      
+
       default:
         // Continue to send request
         break;
@@ -731,14 +727,31 @@ export const deleteGroupMessage = async (messageId) => {
 };
 
 export const getUserInvites = async () => {
-  try{
+  try {
     const res = await api.get(`${GROUPS_URL}/invites/pending`);
     return res.data;
-  }catch(error){
+  } catch (error) {
     throw new Error(
-      error.response?.data?.detail ||
-        "Failed to invite user to the group"
+      error.response?.data?.detail || "Failed to invite user to the group"
     );
+  }
+};
+
+export const acceptInviteById = async (inviteId) => {
+  try {
+    await api.post(`${GROUPS_URL}/invites/${inviteId}/accept`);
+    return true;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail);
+  }
+};
+
+export const deleteInvite = async (inviteId) => {
+  try{
+    await api.delete(`${GROUPS_URL}/invites/${inviteId}`);
+    return true;
+  }catch(error){
+    throw new Error(error.response?.data?.detail);
   }
 }
 
@@ -748,8 +761,7 @@ export const inviteToGroup = async (groupId, userId) => {
     return res.data;
   } catch (error) {
     throw new Error(
-      error.response?.data?.detail ||
-        "Failed to invite user to the group"
+      error.response?.data?.detail || "Failed to invite user to the group"
     );
   }
 };
@@ -915,36 +927,36 @@ export const getBlockedUsers = async () => {
 export const markMessagesAsRead = async (messageIds) => {
   try {
     // Simulate API call without actually making the request
-    console.log('Simulating mark as read for messages:', messageIds);
-    
+    console.log("Simulating mark as read for messages:", messageIds);
+
     // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    return { 
-      success: true, 
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    return {
+      success: true,
       message_ids: messageIds,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   } catch (error) {
-    console.error('Error in markMessagesAsRead simulation:', error);
+    console.error("Error in markMessagesAsRead simulation:", error);
     return { success: true, message_ids: messageIds };
   }
 };
 
 export const respondToGroupInvite = async (inviteId, action) => {
   console.log(`Simulating ${action} for group invite:`, inviteId);
-  
+
   // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  return { 
-    success: true, 
-    invite_id: inviteId, 
-    action: action 
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  return {
+    success: true,
+    invite_id: inviteId,
+    action: action,
   };
 };
 
 export const getPendingGroupInvites = async () => {
-  console.log('Groups invites feature not implemented - returning empty array');
+  console.log("Groups invites feature not implemented - returning empty array");
   return []; // Return empty array without making API call
 };

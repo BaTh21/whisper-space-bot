@@ -196,6 +196,11 @@ const GroupSideComponent = () => {
                                     secondary={member.id === user?.id ? 'You' : member.email}
                                 />
                             </Box>
+                            {group?.creator_id === member?.id && (
+                                <Typography sx={{fontSize: 14, color: 'red'}}>
+                                Admin
+                                </Typography>
+                            )}
                             {group?.creator_id === user?.id && member.id !== user?.id && (
                                 <Button
                                     size="small"

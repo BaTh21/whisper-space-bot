@@ -3,22 +3,40 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Badge from '@mui/material/Badge';
 import MailIcon from '@mui/icons-material/Mail';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import InboxComponent from './dialogs/InboxComponentDialog';
+import { getUserInvites } from '../services/api';
 
 const Layout = ({ children }) => {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const [popup, setPopup] = useState(false);
+  const [invites, setInvites] = useState([]);
+
+  const fetchInvites = async () => {
+    try {
+      const res = await getUserInvites();
+      setInvites(res);
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      setInvites([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvites();
+  }, []);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const handleSuccess =()=> {
+  const handleSuccess = () => {
     setPopup(false);
   }
+
+  const totalInvites = invites.length;
 
   return (
     <Box
@@ -47,9 +65,9 @@ const Layout = ({ children }) => {
           >
             Whisper Space
           </Typography>
-          <Box sx={{marginRight: 2}}>
-            <Badge badgeContent={4} color="secondary">
-              <MailIcon color="white" sx={{'&:hover': {color: 'grey.300'}}} onClick={()=> setPopup(true)}/>
+          <Box sx={{ marginRight: 2 }}>
+            <Badge badgeContent={totalInvites || 0} color="secondary">
+              <MailIcon color="white" sx={{ '&:hover': { color: 'grey.300' } }} onClick={() => setPopup(true)} />
             </Badge>
           </Box>
           <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 } }}>
@@ -113,9 +131,9 @@ const Layout = ({ children }) => {
         {children}
       </Box>
       <InboxComponent
-      open={popup}
-      onClose={()=> setPopup(false)}
-      onSuccess={handleSuccess}
+        open={popup}
+        onClose={() => setPopup(false)}
+        onSuccess={handleSuccess}
       />
     </Box>
   );

@@ -8,6 +8,8 @@ from app.crud.friend import is_friend
 from typing import List
 from datetime import datetime, timedelta
 import uuid
+from zoneinfo import ZoneInfo
+import pytz
 
 from app.models.diary import Diary
 from app.models.user import User
@@ -231,30 +233,51 @@ def accept_group_invite(db: Session, invite_id: id, user_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Invite not found")
         
-    check_user = db.query(GroupInvite).filter(GroupInvite.user_id == user_id).first()
-    if not check_user:
+    if invite.invitee_id != user_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="You are not inviting to this group")
+                            detail="You are not invited to this group")
         
-    check_expired = db.query(GroupInvite.expires_at < datetime.utcnow())
-    if check_expired:
+    cambodia_tz = pytz.timezone("Asia/Phnom_Penh")
+    now = datetime.now(cambodia_tz)
+        
+    if invite.expires_at < now:
         raise HTTPException(status_code=status.HTTP_410_GONE,
                             detail="Token is expired")
-        
-    check_status = db.query(GroupInvite.status == InviteStatus.pending)
-    if not check_status:
+    
+    if invite.status != InviteStatus.pending:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Invite can use only once time")
+                            detail="Invite can be used only once")
+        
+    existing_member = db.query(GroupMember).filter(
+        GroupMember.group_id == invite.group_id,
+        GroupMember.user_id == user_id
+    ).first()
+    if existing_member:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You are already join this group"
+        )
         
     save_invite = GroupMember(
         group_id = invite.group_id,
         user_id = user_id,
-        joined_at = datetime.utcnow()
     )
+    
+    db.add(save_invite)
     
     invite.status = InviteStatus.accepted
     db.commit()
     return {"datail": "You have joined the group successfully"}
+
+def delete_group_invite(db: Session, invite_id: int):
+    invite = db.query(GroupInvite).filter(GroupInvite.id == invite_id).first()
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Invite not found")
+
+    db.delete(invite)
+    db.commit()
+    return {"detail": "Invite has been deleted"}
 
 def get_group_invite_link(db: Session, group_id: int, user_id: int):
     group = db.query(Group).filter(Group.id == group_id, Group.creator_id == user_id).first()
@@ -301,14 +324,17 @@ def invite_user(group_id: int, user_id: int, db: Session, current_user_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="User not found")
         
+    cambodia_tz = pytz.timezone("Asia/Phnom_Penh")
+    now = datetime.now(tz=cambodia_tz)
+        
     new_invite = GroupInvite(
         group_id=group_id,
         inviter_id=current_user_id,
         invitee_id=user_id,
         status=InviteStatus.pending,
         invite_token=secrets.token_urlsafe(16),
-        created_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(minutes=5)
+        created_at=now,
+        expires_at=now + timedelta(minutes=5)
     )
     db.add(new_invite)
     db.commit()

@@ -9,39 +9,55 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VerifyCodePage from './pages/VerifyCodePage';
 import theme from './theme';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import DebugAuth from './components/DebugAuth';
 
 const App = () => (
   <ThemeProvider theme={theme}>
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify-code" element={<VerifyCodePage />} />
-          
-          {/* Protected Routes */}
-          <Route 
-            path="/dashboard" 
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/group/:groupId" 
-            element={
-              <ProtectedRoute>
-                <GroupChatPage />
-              </ProtectedRoute>
-            } 
-          />
-          
-          {/* Default Route */}
-          <Route path="/" element={<LoginPage />} />
-        </Routes>
-      </BrowserRouter>
+      <DebugAuth>
+        <BrowserRouter>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify-code" element={<VerifyCodePage />} />
+
+            {/* Protected Routes */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/group/:groupId"
+              element={
+                <ProtectedRoute>
+                  <GroupChatPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Default Route */}
+            <Route path="/" element={<LoginPage />} />
+          </Routes>
+        </BrowserRouter>
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+        />
+      </DebugAuth>
     </AuthProvider>
   </ThemeProvider>
 );

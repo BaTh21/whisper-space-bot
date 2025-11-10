@@ -6,7 +6,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut, GroupUpdate, GroupInviteResponse
 from app.services.websocket_manager import manager
-from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user
+from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user, delete_group_invite
 from app.schemas.diary import DiaryOut
 from app.schemas.user import UserOut
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -107,11 +107,13 @@ def get_group_messages_(
     messages = get_group_messages(db, group_id, limit, offset)
     return messages
 
-
 @router.post("/{token}/accept")
 def accept_invite(token: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return accept_group_invite(db, token, current_user.id)
     
+@router.delete("/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_invite_by_id(invite_id: int, db: Session = Depends(get_db)):
+    return delete_group_invite(db, invite_id)
 
 @router.get("/{group_id}/invite-link")
 def get_invite_link(
@@ -148,7 +150,7 @@ def get_group_diaries_endpoint(
     diaries = get_group_diaries(db, group_id, current_user.id)
     return diaries
 
-@router.get("/invites/pending", response_model=GroupInviteResponse)
+@router.get("/invites/pending", response_model=List[GroupInviteResponse])
 def get_pending_invites_(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
