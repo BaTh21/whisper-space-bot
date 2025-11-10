@@ -22,3 +22,4 @@ class Group(Base):
     members = relationship("GroupMember", back_populates="group")
     messages = relationship("GroupMessage", back_populates="group")
     invites = relationship("GroupInvite", back_populates="group")
+    images = relationship("GroupImage", back_populates="group")

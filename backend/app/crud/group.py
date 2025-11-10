@@ -1,6 +1,6 @@
 # app/crud/group.py
 import secrets
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
 from app.models.group import Group
 from app.models.group_member import GroupMember
@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import uuid
 from zoneinfo import ZoneInfo
 import pytz
+from pathlib import Path
 
 from app.models.diary import Diary
 from app.models.user import User
@@ -17,11 +18,17 @@ from app.schemas.group import GroupCreate, GroupUpdate
 from app.models.friend import Friend
 from app.models.diary_group import DiaryGroup
 from app.models.group_invite import GroupInvite, InviteStatus
+from app.models.group_image import GroupImage
 import string
 from sqlalchemy.orm import joinedload
 
 from app.models.group_invite_link import GroupInviteLink
+from app.core.cloudinary import upload_to_cloudinary, delete_from_cloudinary, configure_cloudinary, extract_public_id_from_url
 
+configure_cloudinary()
+
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+MAX_FILE_SIZE = 3 * 1024 * 1024  # 3MB
 
 def generate_invite_token():
     return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
@@ -381,3 +388,108 @@ def leave_group(group_id: int, db: Session, current_user_id: int):
     db.delete(member)
     db.commit()
     return None
+
+async def upload_group_cover(group_id: int, db: Session, cover: UploadFile, current_user_id):
+    
+    try:
+    
+        file_extension = Path(cover.filename).suffix.lower()
+        if file_extension not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Only png and JPG are allowed")
+        
+        content = await cover.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File is too large, max size is 3MB"
+            )
+        
+        group = db.query(Group).filter(Group.id == group_id).first()
+        if not group:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail="Group not found")
+        
+        if group.creator_id != current_user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Only owner can use this feature")
+            
+        unique_filename = f"groups/{group_id}/cover/{uuid.uuid4().hex}{file_extension}"
+            
+        upload_result = upload_to_cloudinary(content, public_id=unique_filename)
+        if not upload_result or "secure_url" not in upload_result:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                detail="Failed to upload cover")
+            
+        save_data = GroupImage(
+            group_id= group_id,
+            url=upload_result["secure_url"],
+            public_id= upload_result["public_id"],
+            uploaded_by=current_user_id,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(save_data)
+        db.commit()
+        db.refresh(save_data)
+        return save_data
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error uploading cover: {str(e)}"
+        )
+        
+async def delete_cover(cover_id: int, db: Session, current_user_id: int):
+    
+    try:
+        cover = db.query(GroupImage).filter(GroupImage.id == cover_id).first()
+        if not cover:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail="Cover not found")
+            
+        if cover.uploaded_by != current_user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Only owner can use this feature")
+            
+        public_id = extract_public_id_from_url(cover.url)
+        if public_id:
+            delete_from_cloudinary(public_id)
+            
+        db.delete(cover)
+        db.commit()
+
+        return {"detail": "Cover has been deleted"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting cover: {str(e)}"
+        )
+        
+def get_group_covers(group_id: int, db: Session):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found"
+        )
+
+    covers = (
+        db.query(GroupImage)
+        .filter(GroupImage.group_id == group.id)
+        .order_by(GroupImage.created_at.desc())
+        .all()
+    )
+
+    if not covers:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No covers found"
+        )
+
+    return covers

@@ -72,3 +72,14 @@ class GroupInviteResponse(BaseModel):
     invite_token: str
     created_at: datetime
     expires_at: datetime
+    
+class GroupImageResponse(BaseModel):
+    id: int
+    group_id: int
+    public_id: str
+    url: str
+    uploaded_by: int
+    created_at: datetime
+    
+    class Config:
+        orm_mode = True

@@ -18,7 +18,7 @@ const Layout = ({ children }) => {
       const res = await getUserInvites();
       setInvites(res);
     } catch (error) {
-      console.error("Error fetching invites:", error);
+      // console.error("Error fetching invites:", error);
       setInvites([]);
     }
   };

@@ -1,19 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut, GroupUpdate, GroupInviteResponse
+from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut, GroupUpdate, GroupInviteResponse, GroupImageResponse
 from app.services.websocket_manager import manager
-from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user, delete_group_invite
+from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user, delete_group_invite, delete_cover, get_group_covers
 from app.schemas.diary import DiaryOut
 from app.schemas.user import UserOut
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.crud.chat import get_group_messages
 from app.models.group_message import GroupMessage
 from app.schemas.chat import GroupMessageOut
-from app.crud.group import get_or_create_invite_link
+from app.crud.group import get_or_create_invite_link, upload_group_cover
 
 from app.models.group_invite import GroupInvite
 
@@ -183,3 +183,26 @@ def remove_member_by_id(group_id: int,
 @router.delete("/leave/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 def leave_group_by_id(group_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return leave_group(group_id, db, current_user.id)
+
+@router.post("/{group_id}/cover", response_model=GroupImageResponse)
+async def upload_cover_by_id(group_id: int,
+                       db: Session = Depends(get_db),
+                       cover: UploadFile = File(...),
+                       current_user: User = Depends(get_current_user)):
+    
+    return await upload_group_cover(group_id, db, cover, current_user.id)
+
+@router.delete("/cover/{cover_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_cover_by_id(cover_id: int,
+                             db: Session = Depends(get_db),
+                             current_user: User = Depends(get_current_user)
+                             ):
+    return delete_cover(cover_id, db, current_user.id)
+
+@router.get("/{group_id}/cover", response_model=List[GroupImageResponse])
+def get_cover(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return get_group_covers(group_id, db)

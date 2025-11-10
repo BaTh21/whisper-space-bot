@@ -12,6 +12,7 @@ import { leaveGroupById } from '../../services/api';
 import UpdateGroupDialog from './UpdateGroupDialog';
 import ReplyAllIcon from '@mui/icons-material/ReplyAll';
 import InviteMemberComponent from './InviteMemberComponent';
+import { Avatar } from '@mui/material';
 
 function GroupMenuDialog({ open, onClose, group, onSuccess }) {
     const [selectedIndex, setSelectedIndex] = useState(null);
@@ -37,7 +38,7 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
         setUpdatePopup(true);
     };
 
-    const handleInviteMember = ()=>{
+    const handleInviteMember = () => {
         setInvitePopup(true);
     }
     return (
@@ -61,6 +62,11 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
                     }}
                 >
                     <List component="nav" aria-label="group actions">
+                        <Avatar
+                            alt='group cover'
+                        >
+                            {group.name}
+                        </Avatar>
                         <ListItemButton
                             selected={selectedIndex === 0}
                             onClick={(event) =>
