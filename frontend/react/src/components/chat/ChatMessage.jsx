@@ -30,17 +30,19 @@ const ChatMessage = ({
   onDelete, 
   onReply, 
   onForward, 
-  onPin, // NEW: Pin function
+  onPin,
   profile, 
   currentFriend,
   getAvatarUrl,
   getUserInitials,
-  isPinned = false // NEW: Pinned status
+  isPinned = false,
+  showSeenStatus = false
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
   const [avatarError, setAvatarError] = useState(false);
+  const [seenAvatarError, setSeenAvatarError] = useState(false);
 
   const handleMenu = (e) => {
     e.stopPropagation();
@@ -83,7 +85,6 @@ const ChatMessage = ({
     handleClose();
   };
 
-  // NEW: Handle pin message
   const handlePinClick = () => {
     if (onPin) {
       onPin(message);
@@ -102,9 +103,9 @@ const ChatMessage = ({
 
   // Get proper sender information with avatar
   const getSenderInfo = () => {
-    // If message already has sender data with avatar, use it
+    // If message has sender data, use it (most reliable)
     if (message.sender && message.sender.username) {
-      const avatarUrl = message.sender.avatar_url;
+      const avatarUrl = message.sender.avatar_url || message.sender.avatar;
       return {
         username: message.sender.username,
         avatar_url: getAvatarUrl ? getAvatarUrl(avatarUrl) : avatarUrl,
@@ -151,10 +152,143 @@ const ChatMessage = ({
     };
   };
 
+  // Get friend's avatar for seen status
+  const getFriendAvatar = () => {
+    if (!currentFriend) return { avatar_url: null, initial: 'F' };
+    
+    const avatarUrl = currentFriend.avatar_url || currentFriend.avatar;
+    return {
+      avatar_url: getAvatarUrl ? getAvatarUrl(avatarUrl) : avatarUrl,
+      initial: getUserInitials ? getUserInitials(currentFriend.username) : (currentFriend.username?.charAt(0) || 'F').toUpperCase()
+    };
+  };
+
   const myAvatar = getMyAvatar();
+  const friendAvatar = getFriendAvatar();
 
   const handleAvatarError = () => {
     setAvatarError(true);
+  };
+
+  const handleSeenAvatarError = () => {
+    setSeenAvatarError(true);
+  };
+
+  // SIMPLIFIED: Correct message status determination
+  const getMessageStatus = () => {
+    if (!isMine) return 'none';
+    
+    // Check temporary messages first
+    if (message.is_temp) return 'sending';
+    
+    // Debug: Log message status for troubleshooting
+    console.log('Message status debug:', {
+      id: message.id,
+      is_read: message.is_read,
+      read_at: message.read_at,
+      delivered_at: message.delivered_at,
+      status: message.status,
+      seen_status: message.seen_status
+    });
+    
+    // Priority 1: Check read status with timestamp
+    if (message.is_read === true && message.read_at) {
+      return 'seen';
+    }
+    
+    // Priority 2: Check delivered status
+    if (message.delivered_at) {
+      return 'delivered';
+    }
+    
+    // Priority 3: Check status field
+    if (message.status === 'seen') return 'seen';
+    if (message.status === 'delivered') return 'delivered';
+    if (message.status === 'sent') return 'sent';
+    
+    // Priority 4: Check seen_status field
+    if (message.seen_status === 'seen') return 'seen';
+    if (message.seen_status === 'delivered') return 'delivered';
+    
+    // Default: Assume sent
+    return 'sent';
+  };
+
+  const messageStatus = getMessageStatus();
+
+  // Render the appropriate tick icon based on message status
+  const renderStatusIcon = () => {
+    switch (messageStatus) {
+      case 'sending':
+        return <CircularProgress size={10} sx={{ color: 'rgba(255,255,255,0.5)' }} />;
+      
+      case 'seen':
+        return (
+          <DoneAllIcon 
+            fontSize="small" 
+            sx={{ 
+              fontSize: '1rem',
+              color: '#34B7F1' // BLUE for SEEN
+            }} 
+          />
+        );
+      
+      case 'delivered':
+        return (
+          <DoneAllIcon 
+            fontSize="small" 
+            sx={{ 
+              fontSize: '1rem',
+              color: 'rgba(255,255,255,0.7)' // GREY for DELIVERED
+            }} 
+          />
+        );
+      
+      case 'sent':
+        return (
+          <DoneIcon 
+            fontSize="small" 
+            sx={{ 
+              fontSize: '1rem',
+              color: 'rgba(255,255,255,0.7)' // GREY for SENT
+            }} 
+          />
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  // Render seen status with friend's avatar (like Messenger)
+  const renderSeenStatus = () => {
+    // Only show for my messages that are seen AND when explicitly told to show
+    if (!showSeenStatus || !isMine || messageStatus !== 'seen') return null;
+
+    console.log('Rendering seen status for message:', message.id, 'friend:', currentFriend);
+
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, gap: 0.5 }}>
+        <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7, color: 'text.secondary' }}>
+          Seen
+        </Typography>
+        <Avatar 
+          src={seenAvatarError ? null : friendAvatar.avatar_url}
+          sx={{ 
+            width: 16, 
+            height: 16,
+            fontSize: '0.5rem',
+            bgcolor: 'primary.main',
+            minWidth: 16
+          }}
+          imgProps={{
+            onError: handleSeenAvatarError
+          }}
+        >
+          {friendAvatar.initial}
+        </Avatar>
+      </Box>
+    );
   };
 
   return (
@@ -339,31 +473,10 @@ const ChatMessage = ({
                   {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
                 </Typography>
                 
-                {/* Fixed Read receipts for my messages */}
+                {/* Read receipts with correct tick logic */}
                 {isMine && (
                   <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
-                    {message.is_temp ? (
-                      // Message sending (loading)
-                      <CircularProgress size={10} sx={{ color: 'rgba(255,255,255,0.5)' }} />
-                    ) : message.read_at || message.is_read ? (
-                      // Message read by recipient (double tick - blue)
-                      <DoneAllIcon 
-                        fontSize="small" 
-                        sx={{ 
-                          fontSize: '1rem',
-                          color: '#34B7F1'
-                        }} 
-                      />
-                    ) : (
-                      // Message sent but not read (single tick - white/grey)
-                      <DoneIcon 
-                        fontSize="small" 
-                        sx={{ 
-                          fontSize: '1rem',
-                          color: 'rgba(255,255,255,0.7)'
-                        }} 
-                      />
-                    )}
+                    {renderStatusIcon()}
                   </Box>
                 )}
               </Box>
@@ -397,6 +510,9 @@ const ChatMessage = ({
             </Box>
           </Box>
         )}
+
+        {/* Seen status with friend's avatar (Messenger style) */}
+        {renderSeenStatus()}
 
         {/* Message actions menu */}
         {showMenu && (
@@ -435,7 +551,7 @@ const ChatMessage = ({
               Reply
             </MenuItem>
 
-            {/* NEW: Pin option */}
+            {/* Pin option */}
             <MenuItem onClick={handlePinClick}>
               <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
               {isPinned ? 'Unpin Message' : 'Pin Message'}

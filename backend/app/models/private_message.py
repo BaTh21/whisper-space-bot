@@ -18,6 +18,8 @@ class PrivateMessage(Base):
     content = Column(Text, nullable=False)
     message_type = Column(Enum(MessageType), default=MessageType.text)
     is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)  # ADD THIS
+    delivered_at = Column(DateTime(timezone=True), nullable=True)  # ADD THIS
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
