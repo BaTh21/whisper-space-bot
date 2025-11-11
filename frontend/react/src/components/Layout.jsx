@@ -1,11 +1,11 @@
-import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
+import MailIcon from '@mui/icons-material/Mail';
+import { AppBar, Box, Button, Toolbar, Typography } from '@mui/material';
+import Badge from '@mui/material/Badge';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Badge from '@mui/material/Badge';
-import MailIcon from '@mui/icons-material/Mail';
-import { useEffect, useState } from 'react';
+import { getPendingGroupInvites } from '../services/api'; // Updated import
 import InboxComponent from './dialogs/InboxComponentDialog';
-import { getUserInvites } from '../services/api';
 
 const Layout = ({ children }) => {
   const { isAuthenticated, logout } = useAuth();
@@ -15,7 +15,7 @@ const Layout = ({ children }) => {
 
   const fetchInvites = async () => {
     try {
-      const res = await getUserInvites();
+      const res = await getPendingGroupInvites(); // Updated function call
       setInvites(res);
     } catch (error) {
       // console.error("Error fetching invites:", error);
@@ -24,8 +24,10 @@ const Layout = ({ children }) => {
   };
 
   useEffect(() => {
-    fetchInvites();
-  }, []);
+    if (isAuthenticated) {
+      fetchInvites();
+    }
+  }, [isAuthenticated]); // Added dependency
 
   const handleLogout = () => {
     logout();
@@ -34,6 +36,7 @@ const Layout = ({ children }) => {
 
   const handleSuccess = () => {
     setPopup(false);
+    fetchInvites(); // Refresh invites after success
   }
 
   const totalInvites = invites.length;
@@ -65,11 +68,20 @@ const Layout = ({ children }) => {
           >
             Whisper Space
           </Typography>
-          <Box sx={{ marginRight: 2 }}>
-            <Badge badgeContent={totalInvites || 0} color="secondary">
-              <MailIcon color="white" sx={{ '&:hover': { color: 'grey.300' } }} onClick={() => setPopup(true)} />
-            </Badge>
-          </Box>
+          
+          {/* Only show inbox badge when authenticated */}
+          {isAuthenticated && (
+            <Box sx={{ marginRight: 2, cursor: 'pointer' }}>
+              <Badge badgeContent={totalInvites || 0} color="secondary">
+                <MailIcon 
+                  color="white" 
+                  sx={{ '&:hover': { color: 'grey.300' } }} 
+                  onClick={() => setPopup(true)} 
+                />
+              </Badge>
+            </Box>
+          )}
+          
           <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 } }}>
             {!isAuthenticated ? (
               <>
@@ -130,11 +142,15 @@ const Layout = ({ children }) => {
       >
         {children}
       </Box>
-      <InboxComponent
-        open={popup}
-        onClose={() => setPopup(false)}
-        onSuccess={handleSuccess}
-      />
+      
+      {/* Only show inbox component when authenticated */}
+      {isAuthenticated && (
+        <InboxComponent
+          open={popup}
+          onClose={() => setPopup(false)}
+          onSuccess={handleSuccess}
+        />
+      )}
     </Box>
   );
 };

@@ -155,10 +155,10 @@ def get_pending_invites_(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return get_group_invites(db, current_user.id)
+    return get_pending_invites(db, current_user.id)
 
 @router.post("/invites/{invite_id}/accept")
-def accept_invite(
+def accept_invite_by_id(
     invite_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

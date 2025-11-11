@@ -16,21 +16,21 @@ const GroupInviteNotification = ({ onJoin }) => {
 
   useEffect(() => {
     const fetchInvites = async () => {
-      try {
-        // This will now use the mock function that returns empty array
-        const pendingInvites = await getPendingGroupInvites();
-        setInvites(pendingInvites);
-        
-        // Show notification if there are invites
-        if (pendingInvites.length > 0) {
-          setCurrentInvite(pendingInvites[0]);
-          setOpen(true);
-        }
-      } catch (error) {
-        console.error('Failed to fetch group invites:', error);
-        // Silently fail - don't show errors for this
-      }
-    };
+  try {
+    const pendingInvites = await getPendingGroupInvites();
+    setInvites(pendingInvites);
+    
+    // Show notification if there are invites
+    if (pendingInvites.length > 0) {
+      setCurrentInvite(pendingInvites[0]);
+      setOpen(true);
+    }
+  } catch (error) {
+    console.error('Failed to fetch group invites:', error);
+    // Optional: Set empty array as fallback
+    setInvites([]);
+  }
+};
 
     fetchInvites();
     
