@@ -3,7 +3,7 @@ import axios from "axios";
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const api = axios.create({
-  baseURL: BASE_URL, // Remove /api/v1 from baseURL
+  baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -18,15 +18,46 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor to handle errors
+// FIXED Response interceptor - using api instance for refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
+  async (error) => {
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        // Attempt to refresh the token using the same api instance
+        const refreshToken = localStorage.getItem("refreshToken");
+        if (refreshToken) {
+          const response = await api.post('/api/v1/auth/refresh', {
+            refresh_token: refreshToken
+          });
+          
+          const { access_token, refresh_token } = response.data;
+          
+          // Store new tokens
+          localStorage.setItem("accessToken", access_token);
+          if (refresh_token) {
+            localStorage.setItem("refreshToken", refresh_token);
+          }
+          
+          // Retry the original request with new token
+          originalRequest.headers.Authorization = `Bearer ${access_token}`;
+          return api(originalRequest);
+        }
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        // Continue to redirect if refresh fails
+      }
+      
+      // If refresh failed or no refresh token, then redirect to login
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
       window.location.href = "/login";
     }
+    
     return Promise.reject(error);
   }
 );
@@ -143,23 +174,21 @@ export const uploadAvatar = async (file) => {
 };
 
 export const searchUsers = async (query) => {
-  // Validate query
-  if (!query || typeof query !== "string") {
+  if (!query || typeof query !== 'string') {
     return [];
   }
 
   const trimmedQuery = query.trim();
-
-  // Don't search if query is too short
+  
   if (trimmedQuery.length < 2) {
     return [];
   }
 
   try {
-    const response = await api.get("/api/v1/users/search", {
-      params: {
-        q: trimmedQuery, // Changed from 'query' to 'q' to match common API convention
-      },
+    const response = await api.get('/api/v1/users/search', { 
+      params: { 
+        q: trimmedQuery
+      } 
     });
     return response.data;
   } catch (error) {
@@ -168,8 +197,7 @@ export const searchUsers = async (query) => {
       data: error.response?.data,
       query: trimmedQuery,
     });
-
-    // Return empty array for common errors instead of crashing
+    
     if (error.response?.status === 404) {
       console.warn("Search endpoint not found, returning empty results");
       return [];
@@ -184,68 +212,18 @@ export const searchUsers = async (query) => {
       console.warn("Server error during search, returning empty results");
       return [];
     }
-
-    // For network errors or other issues, return empty array
+    
     return [];
   }
 };
 
-export const addFriend = async (userId) => {
-  try {
-    const response = await api.post("/api/v1/friends/", {
-      friend_id: userId,
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Add friend error:", {
-      status: error.response?.status,
-      data: error.response?.data,
-      userId: userId,
-    });
-
-    throw new Error(
-      error.response?.data?.detail ||
-        error.response?.data?.message ||
-        error.response?.data?.msg ||
-        "Failed to add friend"
-    );
-  }
-};
-
 // Friend endpoints
-const getCurrentUserId = () => {
-  try {
-    const userData = localStorage.getItem("user");
-
-    if (!userData || userData === "[object Object]") {
-      console.warn("User data missing or corrupted");
-      return null;
-    }
-
-    const user = JSON.parse(userData);
-    return user?.id || null;
-  } catch (error) {
-    console.error("Error getting user ID:", error);
-    return null;
-  }
-};
-
 export const sendFriendRequest = async (userId) => {
   if (!userId || typeof userId !== "number") {
     return {
       success: false,
       message: "Invalid user ID",
       code: "INVALID_ID",
-    };
-  }
-
-  const currentUserId = getCurrentUserId();
-
-  if (currentUserId && userId === currentUserId) {
-    return {
-      success: false,
-      message: "You cannot send a friend request to yourself",
-      code: "SELF_REQUEST",
     };
   }
 
@@ -344,8 +322,7 @@ export const getFriends = async () => {
       data: error.response?.data,
       message: error.message,
     });
-
-    // Return empty array instead of throwing error for 404/500
+    
     if (error.response?.status === 404 || error.response?.status === 500) {
       console.warn("Friends endpoint not available, returning empty array");
       return [];
@@ -620,6 +597,82 @@ export const joinGroup = async (groupId) => {
   }
 };
 
+// Group Invites - SINGLE FUNCTION (removed duplicates)
+export const getPendingGroupInvites = async () => {
+  try {
+    const res = await api.get(`/api/v1/groups/invites/pending`);
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail || "Failed to fetch group invites"
+    );
+  }
+};
+
+export const acceptGroupInvite = async (inviteId) => {
+  try {
+    const res = await api.post(`/api/v1/groups/invites/${inviteId}/accept`);
+    return res.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || "Failed to join");
+  }
+};
+
+export const deleteInvite = async (inviteId) => {
+  try{
+    await api.delete(`/api/v1/groups/invites/${inviteId}`);
+    return true;
+  }catch(error){
+    throw new Error(error.response?.data?.detail);
+  }
+}
+
+export const inviteToGroup = async (groupId, userId) => {
+  try {
+    const res = await api.post(`/api/v1/groups/${groupId}/invites/${userId}`);
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail || "Failed to invite user to the group"
+    );
+  }
+};
+
+export const createGroupWithInvites = async (data, inviteeIds = []) => {
+  try {
+    const response = await api.post(`/api/v1/groups/`, {
+      ...data,
+      invitee_ids: inviteeIds,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Create group with invites error:", error.response?.data);
+
+    if (error.response?.status === 422 || error.response?.status === 400) {
+      console.log(
+        "Invite feature not supported, creating group without invites"
+      );
+      const response = await api.post(`/api/v1/groups/`, data);
+      return response.data;
+    }
+
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to create group"
+    );
+  }
+};
+
+export const getGroupInviteLink = async (groupId) => {
+  try {
+    const res = await api.get(`/api/v1/groups/${groupId}/invite-link`);
+    return res.data.invite_link;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || "Failed to get link");
+  }
+};
+
 // Chat endpoints
 export const sendPrivateMessage = async (friendId, data) => {
   try {
@@ -822,99 +875,6 @@ export const deleteGroupMessage = async (messageId) => {
   }
 };
 
-export const getUserInvites = async () => {
-  try {
-    const res = await api.get(`${GROUPS_URL}/invites/pending`);
-    return res.data;
-  } catch (error) {
-    throw new Error(
-      error.response?.data?.detail || "Failed to invite user to the group"
-    );
-  }
-};
-
-export const acceptInviteById = async (inviteId) => {
-  try {
-    await api.post(`${GROUPS_URL}/invites/${inviteId}/accept`);
-    return true;
-  } catch (error) {
-    throw new Error(error.response?.data?.detail);
-  }
-};
-
-export const deleteInvite = async (inviteId) => {
-  try {
-    await api.delete(`${GROUPS_URL}/invites/${inviteId}`);
-    return true;
-  } catch (error) {
-    throw new Error(error.response?.data?.detail);
-  }
-};
-
-export const inviteToGroup = async (groupId, userId) => {
-  try {
-    const res = await api.post(`/api/v1/groups/${groupId}/invites/${userId}`);
-    return res.data;
-  } catch (error) {
-    throw new Error(
-      error.response?.data?.detail || "Failed to invite user to the group"
-    );
-  }
-};
-
-export const createGroupWithInvites = async (data, inviteeIds = []) => {
-  try {
-    const response = await api.post(`/api/v1/groups/`, {
-      ...data,
-      invitee_ids: inviteeIds,
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Create group with invites error:", error.response?.data);
-
-    if (error.response?.status === 422 || error.response?.status === 400) {
-      console.log(
-        "Invite feature not supported, creating group without invites"
-      );
-      const response = await api.post(`/api/v1/groups/`, data);
-      return response.data;
-    }
-
-    throw new Error(
-      error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to create group"
-    );
-  }
-};
-
-export const getPendingInvites = async () => {
-  try {
-    const res = await api.get(`/api/v1/groups/invites/pending`);
-    return res.data;
-  } catch (err) {
-    throw new Error(err.response?.data?.detail || "Failed to load invites");
-  }
-};
-
-export const acceptGroupInvite = async (inviteId) => {
-  try {
-    const res = await api.post(`/api/v1/groups/invites/${inviteId}/accept`);
-    return res.data;
-  } catch (err) {
-    throw new Error(err.response?.data?.detail || "Failed to join");
-  }
-};
-
-export const getGroupInviteLink = async (groupId) => {
-  try {
-    const res = await api.get(`/api/v1/groups/${groupId}/invite-link`);
-    return res.data.invite_link;
-  } catch (err) {
-    throw new Error(err.response?.data?.detail || "Failed to get link");
-  }
-};
-
 export const deleteMessage = async (msgId) => {
   try {
     await api.delete(`/api/v1/chats/private/${msgId}`);
@@ -1044,12 +1004,7 @@ export const respondToGroupInvite = async (inviteId, action) => {
   };
 };
 
-export const getPendingGroupInvites = async () => {
-  return [];
-};
-
-// Notes API - FIXED (all start with /api/v1)
-// Notes API - Remove the duplicate /api/v1
+// Notes API
 export const getNotes = async (archived = false) => {
   const response = await api.get(`/api/v1/notes?archived=${String(archived)}`);
   return response.data;
@@ -1113,3 +1068,5 @@ export const getPublicNote = async (shareToken) => {
   const response = await api.get(`/api/v1/notes/public/${shareToken}`);
   return response.data;
 };
+
+export default api;

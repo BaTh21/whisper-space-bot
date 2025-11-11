@@ -36,6 +36,7 @@ def create_private_message(
         is_forwarded=is_forwarded,
         original_sender=original_sender,
         created_at=datetime.now(timezone.utc),
+        delivered_at=datetime.now(timezone.utc),  # ADD THIS - mark as delivered when saved
     )
     db.add(msg)
     db.commit()
@@ -47,6 +48,24 @@ def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int =
         ((PrivateMessage.sender_id == user_id) & (PrivateMessage.receiver_id == friend_id)) |
         ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == user_id))
     ).order_by(PrivateMessage.created_at.desc()).offset(offset).limit(limit).all()
+
+# ADD THIS FUNCTION - Mark messages as read
+def mark_messages_as_read(db: Session, message_ids: List[int], user_id: int):
+    """
+    Mark messages as read by the receiver
+    """
+    messages = db.query(PrivateMessage).filter(
+        PrivateMessage.id.in_(message_ids),
+        PrivateMessage.receiver_id == user_id,
+        PrivateMessage.is_read == False  # Only mark unread messages
+    ).all()
+    
+    for message in messages:
+        message.is_read = True
+        message.read_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    return len(messages)
 
 def create_group_message(
     db: Session, 

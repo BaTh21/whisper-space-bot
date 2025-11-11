@@ -6,7 +6,7 @@ from app.core.security import get_current_user
 from app.crud.friend import is_friend
 from app.models.user import User
 from app.schemas.chat import MessageCreate, MessageOut
-from app.crud.chat import create_private_message, delete_message_forever, edit_private_message
+from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, mark_messages_as_read  # ADD mark_messages_as_read
 from app.services.websocket_manager import manager
 from datetime import timezone
 from sqlalchemy.orm import joinedload
@@ -16,6 +16,34 @@ from app.api.v1.routers.websockets import _chat_id
 from app.models.private_message import PrivateMessage
 
 router = APIRouter()
+
+# ADD THIS ENDPOINT - Mark messages as read
+@router.post("/messages/read")
+async def mark_messages_as_read_endpoint(
+    message_ids: List[int],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Mark multiple messages as read
+    """
+    try:
+        count = mark_messages_as_read(db, message_ids, current_user.id)
+        
+        # Notify sender via WebSocket that messages were read
+        for message_id in message_ids:
+            message = db.query(PrivateMessage).filter(PrivateMessage.id == message_id).first()
+            if message:
+                chat_id = _chat_id(message.sender_id, message.receiver_id)
+                await manager.broadcast(chat_id, {
+                    "type": "read_receipt",
+                    "message_id": message_id,
+                    "read_at": message.read_at.isoformat() if message.read_at else None
+                })
+        
+        return {"status": "success", "marked_count": count}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to mark messages as read: {str(e)}")
 
 @router.get("/private/{friend_id}", response_model=List[MessageOut])
 async def get_private_chat(
@@ -41,6 +69,8 @@ async def get_private_chat(
             content=msg.content,
             message_type=msg.message_type.value,
             is_read=msg.is_read,
+            read_at=msg.read_at.isoformat() if msg.read_at else None,  # ADD THIS
+            delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,  # ADD THIS
             reply_to_id=msg.reply_to_id,
             is_forwarded=msg.is_forwarded,
             original_sender=msg.original_sender,
@@ -59,6 +89,8 @@ async def get_private_chat(
                 content=msg.reply_to.content,
                 message_type=msg.reply_to.message_type.value,
                 is_read=msg.reply_to.is_read,
+                read_at=msg.reply_to.read_at.isoformat() if msg.reply_to.read_at else None,  # ADD THIS
+                delivered_at=msg.reply_to.delivered_at.isoformat() if msg.reply_to.delivered_at else None,  # ADD THIS
                 is_forwarded=msg.reply_to.is_forwarded,
                 original_sender=msg.reply_to.original_sender,
                 created_at=msg.reply_to.created_at.isoformat() if msg.reply_to.created_at else None,
@@ -108,6 +140,8 @@ async def send_private_message(
         "content": full_msg.content,
         "message_type": full_msg.message_type.value,
         "is_read": full_msg.is_read,
+        "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,  # ADD THIS
+        "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,  # ADD THIS
         "reply_to_id": full_msg.reply_to_id,
         "is_forwarded": full_msg.is_forwarded,
         "original_sender": full_msg.original_sender,
@@ -126,6 +160,9 @@ async def send_private_message(
             "is_forwarded": full_msg.reply_to.is_forwarded,
             "original_sender": full_msg.reply_to.original_sender,
             "created_at": full_msg.reply_to.created_at.isoformat() if full_msg.reply_to.created_at else None,
+            "is_read": full_msg.reply_to.is_read,
+            "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,  # ADD THIS
+            "delivered_at": full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,  # ADD THIS
             "sender_username": full_msg.reply_to.sender.username if full_msg.reply_to.sender else "Unknown User"
         }
     
@@ -139,6 +176,8 @@ async def send_private_message(
         content=full_msg.content,
         message_type=full_msg.message_type.value,
         is_read=full_msg.is_read,
+        read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,  # ADD THIS
+        delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,  # ADD THIS
         reply_to_id=full_msg.reply_to_id,
         is_forwarded=full_msg.is_forwarded,
         original_sender=full_msg.original_sender,
@@ -151,6 +190,8 @@ async def send_private_message(
             content=full_msg.reply_to.content,
             message_type=full_msg.reply_to.message_type.value,
             is_read=full_msg.reply_to.is_read,
+            read_at=full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,  # ADD THIS
+            delivered_at=full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,  # ADD THIS
             is_forwarded=full_msg.reply_to.is_forwarded,
             original_sender=full_msg.reply_to.original_sender,
             created_at=full_msg.reply_to.created_at.isoformat() if full_msg.reply_to.created_at else None,

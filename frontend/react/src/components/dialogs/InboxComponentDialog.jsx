@@ -1,18 +1,18 @@
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
-import Modal from '@mui/material/Modal';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
-import Divider from '@mui/material/Divider';
-import CircularProgress from '@mui/material/CircularProgress';
-import { getUserInvites, acceptInviteById, deleteInvite } from '../../services/api';
+import Modal from '@mui/material/Modal';
+import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { formatCambodiaTime } from '../../utils/dateUtils';
 import { toast } from 'react-toastify';
-import DeleteIcon from '@mui/icons-material/Delete';
+import { acceptGroupInvite, deleteInvite, getPendingGroupInvites } from '../../services/api';
+import { formatCambodiaTime } from '../../utils/dateUtils';
 import DeleteDialog from './DeleteDialog';
 
 export default function InboxComponent({ open, onClose, onSuccess }) {
@@ -25,7 +25,7 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
     const fetchInvites = async () => {
         try {
             setLoading(true);
-            const res = await getUserInvites();
+            const res = await getPendingGroupInvites(); // Changed from getUserInvites
             setInvites(res);
             console.log("invites", res);
         } catch (error) {
@@ -39,7 +39,7 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
     const handleAcceptInvite = async (inviteId) => {
         try {
             setProcessingInviteId(inviteId);
-            await acceptInviteById(inviteId);
+            await acceptGroupInvite(inviteId); // Changed from acceptInviteById
             toast.success("You have joined the group successfully!");
             fetchInvites();
         } catch (error) {

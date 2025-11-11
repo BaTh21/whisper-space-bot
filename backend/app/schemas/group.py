@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from time import timezone
 from pydantic import BaseModel, ConfigDict
@@ -99,13 +98,21 @@ class GroupResponse(BaseModel):
     
 class GroupInviteResponse(BaseModel):
     id: int
-    group: GroupResponse
-    inviter: UserResponse
-    invitee: UserResponse
+    group_id: int
+    inviter_id: int
+    invitee_id: int
     status: str
     invite_token: str
     created_at: datetime
     expires_at: datetime
+    
+    # Include related objects
+    group: Optional[GroupResponse] = None
+    inviter: Optional[UserResponse] = None
+    invitee: Optional[UserResponse] = None
+    
+    class Config:
+        from_attributes = True
     
 class GroupImageResponse(BaseModel):
     id: int

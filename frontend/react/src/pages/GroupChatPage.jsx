@@ -375,7 +375,7 @@ const GroupChatPage = () => {
 
                         <Box>
                           {isEditing ? (
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', backgroundColor: 'primary.main',p: 1, borderRadius: 3 }}>
                               <TextField
                                 fullWidth
                                 size="small"

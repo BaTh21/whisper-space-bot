@@ -96,26 +96,51 @@ def update_group(group_id: int, db: Session, group_data: GroupUpdate, current_us
     db.commit()
     db.refresh(group)
     return group
-    
 
 def get_pending_invites(db: Session, user_id: int):
+    """
+    Get pending group invites for a user
+    """
     from sqlalchemy.orm import joinedload
     
-    return (
+    invites = (
         db.query(GroupInvite)
-        .filter(GroupInvite.invitee_id == user_id, GroupInvite.status == "pending")
-        .options(joinedload(GroupInvite.group), joinedload(GroupInvite.inviter))
+        .filter(
+            GroupInvite.invitee_id == user_id, 
+            GroupInvite.status == "pending"  # Use string "pending"
+        )
+        .options(
+            joinedload(GroupInvite.group), 
+            joinedload(GroupInvite.inviter),
+            joinedload(GroupInvite.invitee)
+        )
         .all()
     )
+    return invites
 
 def accept_group_invite(db: Session, invite_id: int, user_id: int) -> Group:
+    """
+    Accept group invite by invite ID
+    """
     invite = db.query(GroupInvite).filter(
         GroupInvite.id == invite_id,
         GroupInvite.invitee_id == user_id,
         GroupInvite.status == "pending"
     ).first()
+    
     if not invite:
         raise HTTPException(404, "Invite not found or already processed")
+
+    # Check if already a member
+    existing_member = db.query(GroupMember).filter(
+        GroupMember.group_id == invite.group_id,
+        GroupMember.user_id == user_id
+    ).first()
+    if existing_member:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You are already a member of this group"
+        )
 
     # Add user to group
     member = GroupMember(user_id=user_id, group_id=invite.group_id)
@@ -213,7 +238,7 @@ def create_group_with_invites(
                 group_id=db_group.id,
                 inviter_id=creator_id,
                 invitee_id=uid,
-                status=InviteStatus.pending,
+                status="pending",
                 invite_token=secrets.token_urlsafe(16)
             )
             db.add(db_invite)
@@ -225,56 +250,13 @@ def create_group_with_invites(
 def get_group_invites(db: Session, user_id: int):
     invites = db.query(GroupInvite).filter(
         GroupInvite.invitee_id == user_id,
-        GroupInvite.status == InviteStatus.pending
+        GroupInvite.status == "pending"
     ).all()
     if not invites:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="You have no invite yet")
         
     return invites
-
-def accept_group_invite(db: Session, invite_id: id, user_id: int):
-    
-    invite = db.query(GroupInvite).filter(GroupInvite.id == invite_id).first()
-    if not invite:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail="Invite not found")
-        
-    if invite.invitee_id != user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="You are not invited to this group")
-        
-    cambodia_tz = pytz.timezone("Asia/Phnom_Penh")
-    now = datetime.now(cambodia_tz)
-        
-    if invite.expires_at < now:
-        raise HTTPException(status_code=status.HTTP_410_GONE,
-                            detail="Token is expired")
-    
-    if invite.status != InviteStatus.pending:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Invite can be used only once")
-        
-    existing_member = db.query(GroupMember).filter(
-        GroupMember.group_id == invite.group_id,
-        GroupMember.user_id == user_id
-    ).first()
-    if existing_member:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You are already join this group"
-        )
-        
-    save_invite = GroupMember(
-        group_id = invite.group_id,
-        user_id = user_id,
-    )
-    
-    db.add(save_invite)
-    
-    invite.status = InviteStatus.accepted
-    db.commit()
-    return {"datail": "You have joined the group successfully"}
 
 def delete_group_invite(db: Session, invite_id: int):
     invite = db.query(GroupInvite).filter(GroupInvite.id == invite_id).first()
@@ -338,7 +320,7 @@ def invite_user(group_id: int, user_id: int, db: Session, current_user_id: int):
         group_id=group_id,
         inviter_id=current_user_id,
         invitee_id=user_id,
-        status=InviteStatus.pending,
+        status="pending",
         invite_token=secrets.token_urlsafe(16),
         created_at=now,
         expires_at=now + timedelta(minutes=5)
@@ -348,6 +330,7 @@ def invite_user(group_id: int, user_id: int, db: Session, current_user_id: int):
     db.refresh(new_invite)
     
     return new_invite
+
 def remove_member(
     group_id: int,
     member_id: int,

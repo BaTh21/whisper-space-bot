@@ -22,6 +22,8 @@ class MessageOut(TimestampMixin):
     is_read: bool = False
     reply_to_id: Optional[int] = None
     reply_to: Optional["MessageOut"] = None
+    read_at: Optional[str] = None  
+    delivered_at: Optional[str] = None
     is_forwarded: Optional[bool] = False
     original_sender: Optional[str] = None
     # ADD THESE TWO FIELDS
