@@ -1,4 +1,3 @@
-//dashboard/MessagesTab.jsx
 import { Chat as ChatIcon, Close as CloseIcon, Menu as MenuIcon, PushPin as PushPinIcon, Reply as ReplyIcon, Send as SendIcon } from '@mui/icons-material';
 import {
   Avatar,
@@ -36,6 +35,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [pinnedMessage, setPinnedMessage] = useState(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const messageInterval = useRef(null);
+  const messagesContainerRef = useRef(null); // Keep ref for manual scrolling if needed
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -199,69 +199,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       console.error('Failed to mark messages as read:', error);
     }
   };
-
-  // Simulate real-time message reception from friend
-  useEffect(() => {
-    if (!selectedFriend) return;
-
-    const simulateFriendTyping = () => {
-      const shouldSendMessage = Math.random() > 0.98;
-      
-      if (shouldSendMessage) {
-        const friendMessages = [
-          "Hey! How are you?",
-          "What's up?",
-          "Nice to chat with you!",
-          "I got your message",
-          "Thanks for reaching out!",
-          "How's your day going?",
-          "That's interesting!",
-          "I agree with you",
-          "Let me think about that",
-          "Sounds good to me!"
-        ];
-        
-        const randomMessage = friendMessages[Math.floor(Math.random() * friendMessages.length)];
-        
-        const simulatedMessage = {
-          id: `friend-${Date.now()}-${Math.random()}`,
-          sender_id: selectedFriend.id,
-          receiver_id: profile.id,
-          content: randomMessage,
-          message_type: 'text',
-          is_read: false,
-          read_at: null,
-          delivered_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          is_temp: false,
-          sender: {
-            username: selectedFriend.username,
-            avatar_url: getUserAvatar(selectedFriend),
-            id: selectedFriend.id
-          }
-        };
-        
-        setMessages(prev => {
-          const messageExists = prev.some(msg => msg.id === simulatedMessage.id);
-          if (messageExists) return prev;
-          
-          const newMessages = [...prev, simulatedMessage];
-          return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        });
-        
-        setSuccess(`New message from ${selectedFriend.username}`);
-        setTimeout(() => {
-          setSuccess('');
-        }, 2000);
-      }
-    };
-
-    const typingInterval = setInterval(simulateFriendTyping, 15000);
-
-    return () => {
-      clearInterval(typingInterval);
-    };
-  }, [selectedFriend, profile, getUserAvatar, setSuccess]);
 
   // Check for selected friend from FriendsTab when component mounts
   useEffect(() => {
@@ -626,7 +563,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       height: { xs: 'calc(100vh - 200px)', sm: 600 },
       borderRadius: '8px', 
       overflow: 'hidden',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      border: 1,
+      borderColor: 'divider',
+      bgcolor: 'background.paper'
     }}>
       {/* Mobile Header */}
       {isMobile && selectedFriend && (
@@ -637,7 +577,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           bgcolor: 'white',
           display: { xs: 'flex', md: 'none' },
           alignItems: 'center',
-          gap: 1
+          gap: 1,
+          flexShrink: 0
         }}>
           <IconButton onClick={() => setMobileDrawerOpen(true)}>
             <MenuIcon />
@@ -663,21 +604,21 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', flex: 1, flexDirection: { xs: 'column', md: 'row' } }}>
+      <Box sx={{ display: 'flex', flex: 1, flexDirection: { xs: 'column', md: 'row' }, minHeight: 0 }}>
         {/* Friends List Sidebar - Desktop */}
         {!isMobile && (
           <Box sx={{ 
             width: { md: 300, lg: 350 }, 
             borderRight: 1, 
             borderColor: 'divider', 
-            pr: 2,
             bgcolor: 'background.paper',
-            display: { xs: 'none', md: 'block' }
+            display: { xs: 'none', md: 'block' },
+            overflow: 'auto'
           }}>
             <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600 }}>
               Friends {isLoadingMessages && <CircularProgress size={16} sx={{ ml: 1 }} />}
             </Typography>
-            <List sx={{ maxHeight: 520, overflow: 'auto' }}>
+            <List sx={{ overflow: 'auto' }}>
               {friends.map((friend) => (
                 <ListItem
                   key={friend.id}
@@ -687,6 +628,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   sx={{
                     borderRadius: '12px',
                     mb: 1,
+                    mx: 1,
                     transition: 'all 0.2s ease',
                     '&:hover': {
                       bgcolor: 'action.hover',
@@ -738,9 +680,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
         {/* Chat Area */}
         <Box sx={{ 
-          flexGrow: 1, 
+          flex: 1, 
           display: 'flex', 
           flexDirection: 'column',
+          minHeight: 0,
           bgcolor: '#f8f9fa'
         }}>
           {selectedFriend ? (
@@ -754,7 +697,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   bgcolor: 'white',
                   display: { xs: 'none', md: 'flex' },
                   alignItems: 'center',
-                  gap: 2
+                  gap: 2,
+                  flexShrink: 0
                 }}>
                   <Avatar 
                     src={getUserAvatar(selectedFriend)} 
@@ -803,7 +747,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     border: '2px solid',
                     borderColor: replyingTo ? 'primary.main' : 'warning.main',
                     borderRadius: '12px',
-                    position: 'relative'
+                    position: 'relative',
+                    flexShrink: 0
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -876,14 +821,18 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               )}
               
               {/* Messages Container */}
-              <Box sx={{ 
-                flexGrow: 1, 
-                overflow: 'auto', 
-                p: { xs: 1, sm: 2 },
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)'
-              }}>
+              <Box 
+                ref={messagesContainerRef}
+                sx={{ 
+                  flex: 1,
+                  overflow: 'auto', 
+                  p: { xs: 1, sm: 2 },
+                  display: 'flex',
+                  flexDirection: 'column',
+                  background: 'linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)',
+                  minHeight: 0
+                }}
+              >
                 {isLoadingMessages ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                     <CircularProgress />
@@ -891,7 +840,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 ) : messages.length === 0 ? (
                   <Box sx={{ 
                     textAlign: 'center', 
-                    mt: 4,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -926,17 +874,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         getAvatarUrl={getAvatarUrl}
                         getUserInitials={getUserInitials}
                         isPinned={pinnedMessage && pinnedMessage.id === message.id}
-                        isBeingReplied={replyingTo && replyingTo.id === message.id}
-                        threadLevel={message.threadLevel || 0}
-                        isThreadStart={message.isThreadStart || false}
-                        hasReplies={message.replies && message.replies.length > 0}
                       />
                     ))}
                   </>
                 )}
               </Box>
               
-              {/* Message Input */}
+              {/* Message Input - FIXED: Ensure it's always visible */}
               <Box sx={{ 
                 p: { xs: 1, sm: 2 }, 
                 borderTop: 1, 
@@ -944,7 +888,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 bgcolor: 'white',
                 display: 'flex', 
                 gap: 1, 
-                alignItems: 'flex-end' 
+                alignItems: 'flex-end',
+                flexShrink: 0,
+                position: 'relative',
+                zIndex: 10
               }}>
                 <TextField
                   fullWidth
@@ -962,7 +909,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   disabled={messageLoading}
                   sx={{ 
                     borderRadius: '24px',
-                    bgcolor: '#f8f9fa'
+                    bgcolor: '#f8f9fa',
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '24px',
+                    }
                   }}
                   autoFocus={!!replyingTo}
                 />
@@ -972,6 +922,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   disabled={!newMessage.trim() || messageLoading}
                   sx={{ 
                     minWidth: { xs: '40px', sm: '48px' }, 
+                    width: { xs: '40px', sm: '48px' },
                     height: { xs: '40px', sm: '48px' }, 
                     borderRadius: '50%',
                     bgcolor: '#0088cc',
