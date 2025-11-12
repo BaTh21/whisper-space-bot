@@ -146,3 +146,26 @@ def delete_message_forever(db: Session, message_id: int, user_id: int):
     db.commit()
 
     return {"message_id": message_id, "receiver_id": receiver_id}
+
+def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
+    """Mark a private message as read by the receiver"""
+    from app.models.private_message import PrivateMessage
+    from datetime import datetime
+    
+    try:
+        message = db.query(PrivateMessage).filter(
+            PrivateMessage.id == message_id,
+            PrivateMessage.receiver_id == user_id  # Only receiver can mark as read
+        ).first()
+        
+        if message and not message.is_read:
+            message.is_read = True
+            message.read_at = datetime.utcnow()
+            db.commit()
+            print(f"[DB] Message {message_id} marked as read by user {user_id}")
+            return True
+        return False
+    except Exception as e:
+        print(f"[DB] Error marking message as read: {e}")
+        db.rollback()
+        return False

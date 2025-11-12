@@ -160,48 +160,58 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   // === Handle Incoming ===
   const handleWebSocketMessage = (data) => {
-    const { type } = data;
+  console.log('[WS] Received:', data); // Debug log
+  
+  const { type } = data;
 
-    if (type === 'message') {
-      const incomingMsg = {
-        ...data,
-        is_temp: false,
-        sender: {
-          id: data.sender_id,
-          username: data.sender_username,
-          avatar_url: getAvatarUrl(data.sender_username ? null : data.sender_id),
-        },
-        reply_to: data.reply_to
-          ? {
-              ...data.reply_to,
-              sender_username:
-                data.reply_to.sender_id === profile?.id
-                  ? profile.username
-                  : selectedFriend.username,
-            }
-          : null,
-      };
+  if (type === 'message') {
+    const incomingMsg = {
+      ...data,
+      is_temp: false,
+      sender: {
+        id: data.sender_id,
+        username: data.sender_username,
+        avatar_url: getAvatarUrl(data.sender_username ? null : data.sender_id),
+      },
+      reply_to: data.reply_to
+        ? {
+            ...data.reply_to,
+            sender_username: data.reply_to.sender_username,
+          }
+        : null,
+    };
 
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === incomingMsg.id)) return prev;
-        return [...prev, incomingMsg].sort(
-          (a, b) => new Date(a.created_at) - new Date(b.created_at)
-        );
-      });
-
-      if (data.sender_id === selectedFriend.id && !data.is_read) {
-        handleMarkAsRead([data.id]);
-      }
-    } else if (type === 'read_receipt') {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === data.message_id
-            ? { ...msg, is_read: true, read_at: data.read_at }
-            : msg
-        )
+    setMessages((prev) => {
+      // Remove any temporary messages with same content
+      const filteredPrev = prev.filter(m => 
+        !m.is_temp || m.content !== incomingMsg.content
       );
+      
+      if (filteredPrev.some(m => m.id === incomingMsg.id)) return filteredPrev;
+      
+      const updated = [...filteredPrev, incomingMsg].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+      
+      console.log('[WS] Messages after update:', updated); // Debug log
+      return updated;
+    });
+
+    // Auto-mark as read if message is from friend
+    if (data.sender_id === selectedFriend.id && !data.is_read) {
+      handleMarkAsRead([data.id]);
     }
-  };
+    
+  } else if (type === 'read_receipt') {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === data.message_id
+          ? { ...msg, is_read: true, read_at: data.read_at }
+          : msg
+      )
+    );
+  }
+};
 
   // === Load Initial Messages (ONLY ONCE) ===
   const loadInitialMessages = async () => {
@@ -242,31 +252,62 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   };
 
   // === Mark as Read ===
-  const handleMarkAsRead = async (ids) => {
-    if (!ids.length) return;
-    setMessages((prev) =>
-      prev.map((m) => (ids.includes(m.id) ? { ...m, is_read: true, read_at: new Date().toISOString() } : m))
-    );
-    try {
-      await markMessagesAsRead(ids);
-      ids.forEach(id => sendWsMessage({ type: 'read', message_id: id }));
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const handleMarkAsRead = async (messageIds) => {
+  if (!messageIds.length || !selectedFriend) return;
+  
+  console.log('[READ] Marking messages as read:', messageIds);
+  
+  // Update UI immediately
+  setMessages((prev) =>
+    prev.map((m) => 
+      messageIds.includes(m.id) 
+        ? { ...m, is_read: true, read_at: new Date().toISOString() }
+        : m
+    )
+  );
+  
+  try {
+    // Update in database via HTTP API
+    await markMessagesAsRead(messageIds);
+    
+    // Send WebSocket read receipt
+    messageIds.forEach(id => {
+      sendWsMessage({ 
+        type: 'read', 
+        message_id: id 
+      });
+    });
+    
+    console.log('[READ] Successfully marked messages as read');
+  } catch (err) {
+    console.error('[READ] Failed to mark messages as read:', err);
+  }
+};
+
 
   // === Auto Mark Read ===
   useEffect(() => {
-    if (!selectedFriend || !messages.length) return;
-    const now = Date.now();
-    if (lastSeenCheckRef.current && now - lastSeenCheckRef.current < 2000) return;
-    lastSeenCheckRef.current = now;
-
-    const unread = messages
-      .filter(m => !m.is_read && m.sender_id === selectedFriend.id && !m.is_temp)
-      .map(m => m.id);
-    if (unread.length) handleMarkAsRead(unread);
-  }, [messages, selectedFriend]);
+  if (!selectedFriend || !messages.length || !isWsConnected) return;
+  
+  // Debounce the read check
+  const now = Date.now();
+  if (lastSeenCheckRef.current && now - lastSeenCheckRef.current < 1000) return;
+  lastSeenCheckRef.current = now;
+  
+  // Find unread messages from friend
+  const unreadFromFriend = messages
+    .filter(m => 
+      !m.is_read && 
+      m.sender_id === selectedFriend.id && 
+      !m.is_temp
+    )
+    .map(m => m.id);
+  
+  if (unreadFromFriend.length > 0) {
+    console.log('[READ] Auto-marking messages as read:', unreadFromFriend);
+    handleMarkAsRead(unreadFromFriend);
+  }
+}, [messages, selectedFriend, isWsConnected]);
 
   // === Friend Select ===
   const handleSelectFriend = (friend) => {
@@ -284,42 +325,57 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   // === Send Message ===
   const handleSendMessage = async () => {
-    const content = newMessage.trim();
-    if (!content || !selectedFriend) return;
+  const content = newMessage.trim();
+  if (!content || !selectedFriend) return;
 
-    const tempId = `temp-${Date.now()}`;
-    const tempMsg = {
-      id: tempId,
-      sender_id: profile.id,
-      receiver_id: selectedFriend.id,
-      content,
-      message_type: 'text',
-      is_read: false,
-      created_at: new Date().toISOString(),
-      is_temp: true,
-      reply_to_id: replyingTo?.id || null,
-      sender: { username: profile.username, avatar_url: getUserAvatar(profile), id: profile.id },
-    };
+  const tempId = `temp-${Date.now()}`;
+  const tempMsg = {
+    id: tempId,
+    sender_id: profile.id,
+    receiver_id: selectedFriend.id,
+    content,
+    message_type: 'text',
+    is_read: false,
+    created_at: new Date().toISOString(),
+    is_temp: true,
+    reply_to_id: replyingTo?.id || null,
+    sender: { 
+      username: profile.username, 
+      avatar_url: getUserAvatar(profile), 
+      id: profile.id 
+    },
+  };
 
-    setMessages(prev => [...prev, tempMsg]);
-    setNewMessage('');
-    setReplyingTo(null);
-    setMessageLoading(true);
+  setMessages(prev => [...prev, tempMsg]);
+  setNewMessage('');
+  setReplyingTo(null);
+  setMessageLoading(true);
 
-    const payload = { type: "message", content, message_type: "text", reply_to_id: replyingTo?.id || null };
+  const payload = { 
+    type: "message", 
+    content, 
+    message_type: "text", 
+    reply_to_id: replyingTo?.id || null 
+  };
 
-    if (sendWsMessage(payload)) {
-      setMessageLoading(false);
-      return;
-    }
+  console.log('[WS] Sending:', payload); // Debug log
 
+  if (sendWsMessage(payload)) {
+    // WebSocket sent successfully, keep temp message until confirmed
+    setMessageLoading(false);
+  } else {
+    // WebSocket failed, fallback to HTTP
     try {
       const sent = await sendPrivateMessage(selectedFriend.id, payload);
       setMessages(prev =>
         prev.filter(m => m.id !== tempId).concat({
           ...sent,
           is_temp: false,
-          sender: { username: profile.username, avatar_url: getUserAvatar(profile), id: profile.id },
+          sender: { 
+            username: profile.username, 
+            avatar_url: getUserAvatar(profile), 
+            id: profile.id 
+          },
         })
       );
     } catch (err) {
@@ -329,7 +385,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     } finally {
       setMessageLoading(false);
     }
-  };
+  }
+};
 
   // === Threading ===
   const organizeMessagesIntoThreads = (list) => {
