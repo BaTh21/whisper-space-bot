@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getGroupMembers, getGroupMessage, getGroupById, updateMessageById, deleteMessageById, uploadFileMessage } from '../services/api';
+import { getGroupMembers, getGroupMessage, getGroupById, updateMessageById, deleteMessageById, uploadFileMessage, editGroupFileMessage } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
 import GroupSideComponent from '../components/group/GroupSideComponent';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
@@ -25,7 +25,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
-import { toast } from 'react-toastify';
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 
 const GroupChatPage = () => {
   const { groupId } = useParams();
@@ -48,6 +48,8 @@ const GroupChatPage = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [activeMessageId, setActiveMessageId] = useState(null);
   const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const openMenu = (event, messageId) => {
     setAnchorEl(event.currentTarget);
@@ -225,12 +227,103 @@ const GroupChatPage = () => {
 
   const handleUploadFileMessage = async (groupId, file) => {
     if (!file) return;
+
+    const tempId = `temp-${Date.now()}`;
+    const tempMessage = {
+      id: tempId,
+      file_url: URL.createObjectURL(file),
+      sender: user,
+      created_at: new Date().toISOString(),
+      is_temp: true,
+      uploading: true,
+      progress: 0,
+    };
+
+    // Add temporary message to chat
+    setMessages((prev) => [...prev, tempMessage]);
+    setUploading(true);
+    setUploadProgress(0);
+
     try {
-      const newMessage = await uploadFileMessage(groupId, file);
-      setMessages(prev => [...prev, newMessage]);
-      setFile(null);
+      const uploadedMessage = await uploadFileMessage(groupId, file, (progressEvent) => {
+        if (progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+          setUploadProgress(percent);
+          // Update temp message progress
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempId ? { ...msg, progress: percent } : msg
+            )
+          );
+        }
+      });
+
+      // Replace temp message with the real one
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === tempId ? uploadedMessage : msg))
+      );
     } catch (error) {
-      console.log("Upload error", error);
+      console.error("Upload error", error);
+      // Mark temp message as failed
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === tempId ? { ...msg, uploading: false, failed: true } : msg
+        )
+      );
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      setFile(null);
+    }
+  };
+
+  const updateFileMessage = async (messageId, newFile) => {
+    if (!newFile) return;
+
+    const tempId = `updating-${Date.now()}`;
+    const tempPreviewUrl = URL.createObjectURL(newFile);
+
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId
+          ? {
+            ...msg,
+            temp_id: tempId,
+            file_url: tempPreviewUrl,
+            uploading: true,
+            progress: 0,
+            failed: false,
+          }
+          : msg
+      )
+    );
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const updatedMessage = await editGroupFileMessage(messageId, newFile);
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+              ...updatedMessage,
+              uploading: false,
+              progress: 100,
+            }
+            : msg
+        )
+      );
+    } catch (error) {
+      console.error("Update file error:", error);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, uploading: false, failed: true } : msg
+        )
+      );
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -375,7 +468,7 @@ const GroupChatPage = () => {
 
                         <Box>
                           {isEditing ? (
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', backgroundColor: 'primary.main',p: 1, borderRadius: 3 }}>
+                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', backgroundColor: 'primary.main', p: 1, borderRadius: 3 }}>
                               <TextField
                                 fullWidth
                                 size="small"
@@ -416,18 +509,58 @@ const GroupChatPage = () => {
                             <>
                               {message.file_url && (
                                 <Box
-                                  component="img"
-                                  src={message.file_url}
-                                  alt="Message image"
                                   sx={{
+                                    position: 'relative',
+                                    display: 'inline-block',
                                     width: '100%',
-                                    maxHeight: 300,
-                                    objectFit: 'cover',
+                                    maxWidth: 300,
                                     borderRadius: 2,
-                                    mb: message.content ? 1 : 0,
+                                    overflow: 'hidden',
                                   }}
-                                />
+                                >
+                                  <Box
+                                    component="img"
+                                    src={message.file_url}
+                                    alt="upload"
+                                    sx={{
+                                      width: '100%',
+                                      opacity: message.uploading ? 0.6 : 1,
+                                      filter: message.failed ? 'grayscale(100%)' : 'none',
+                                    }}
+                                  />
+                                  {message.uploading && (
+                                    <Box
+                                      sx={{
+                                        position: 'absolute',
+                                        bottom: 0,
+                                        left: 0,
+                                        width: `${message.progress || 0}%`,
+                                        height: 4,
+                                        bgcolor: 'primary.main',
+                                        transition: 'width 0.2s ease',
+                                      }}
+                                    />
+                                  )}
+                                  {message.failed && (
+                                    <Typography
+                                      variant="caption"
+                                      color="error"
+                                      sx={{
+                                        position: 'absolute',
+                                        bottom: 8,
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        bgcolor: 'rgba(255,255,255,0.7)',
+                                        px: 1,
+                                        borderRadius: 1,
+                                      }}
+                                    >
+                                      Upload failed
+                                    </Typography>
+                                  )}
+                                </Box>
                               )}
+
                               {message.content && (
                                 <Typography
                                   variant="body2"
@@ -474,15 +607,38 @@ const GroupChatPage = () => {
                             open={Boolean(anchorEl) && activeMessageId === message.id}
                             onClose={closeMenu}
                           >
-                            <MenuItem
-                              onClick={() => {
-                                setEditedContent(message.content);
-                                setEditingMessageId(message.id);
-                                closeMenu();
-                              }}
-                            >
-                              <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
-                            </MenuItem>
+                            {message.file_url && (
+                              <MenuItem
+                                onClick={() => {
+                                  const input = document.createElement('input');
+                                  input.type = 'file';
+                                  input.accept = 'image/*';
+                                  input.onchange = async (e) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                      await updateFileMessage(message.id, file);
+                                    }
+                                  };
+                                  input.click();
+                                  closeMenu();
+                                }}
+                              >
+                                <PhotoCameraIcon fontSize="small" sx={{ mr: 1 }} /> Replace Image
+                              </MenuItem>
+                            )}
+
+                            {message.content && (
+                              <MenuItem
+                                onClick={() => {
+                                  setEditedContent(message.content);
+                                  setEditingMessageId(message.id);
+                                  closeMenu();
+                                }}
+                              >
+                                <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit Message
+                              </MenuItem>
+                            )}
+
                             <MenuItem
                               onClick={() => {
                                 onDelete(message.id);
@@ -492,6 +648,7 @@ const GroupChatPage = () => {
                               <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
                             </MenuItem>
                           </Menu>
+
 
                         </>
                       )}
@@ -504,8 +661,13 @@ const GroupChatPage = () => {
           </Box>
 
           <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white' }}>
+            {file && (
+              <Typography variant="caption" sx={{ mt: 1 }}>
+                Selected file: {file.name}
+              </Typography>
+            )}
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              {/* File input */}
+
               <input
                 type="file"
                 accept="image/*"
@@ -553,11 +715,7 @@ const GroupChatPage = () => {
 
             </Box>
 
-            {file && (
-              <Typography variant="caption" sx={{ mt: 1 }}>
-                Selected file: {file.name}
-              </Typography>
-            )}
+
           </Box>
 
         </Box>

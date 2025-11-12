@@ -4,7 +4,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.schemas.group import GroupMessageUpdate, GroupMessageOut, GroupMessageResponse
 from app.models.user import User
-from app.crud.message import update_message, delete_message, upload_file_message
+from app.crud.message import update_message, delete_message, upload_file_message, update_file_message
 
 router = APIRouter();
 
@@ -31,3 +31,12 @@ async def upload_file_message_by_id(group_id: int,
     
     print(f"User id: {current_user.id}")
     return await upload_file_message(db, group_id, file, current_user.id)
+
+@router.put("/{message_id}/file", response_model=GroupMessageResponse)
+async def update_file_message_by_id(
+    message_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await update_file_message(db, message_id, file, current_user.id)

@@ -32,6 +32,7 @@ import { formatCambodiaDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
 import { useParams } from 'react-router-dom';
 import DeleteDialog from '../dialogs/DeleteDialog';
+import UserProfileDialog from '../dialogs/UserProfileDialog';
 
 const GroupSideComponent = () => {
     const { groupId } = useParams();
@@ -48,25 +49,28 @@ const GroupSideComponent = () => {
     const [group, setGroup] = useState(null);
     const [open, setOpen] = useState(false);
     const [selectedMember, setSelectedMember] = useState(null);
+    const [openUserProfile, setOpenUserProfile] = useState(null);
+    const [selectedGroup, setSelectedGroup] = useState(null);
+
+    const fetchGroupData = async () => {
+        setLoading(true);
+        try {
+            const [membersData, diariesData, groupData] = await Promise.all([
+                getGroupMembers(groupId),
+                getGroupDiaries(groupId),
+                getGroupById(groupId)
+            ]);
+            setMembers(membersData);
+            setDiaries(diariesData);
+            setGroup(groupData);
+        } catch (err) {
+            console.log(err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchGroupData = async () => {
-            setLoading(true);
-            try {
-                const [membersData, diariesData, groupData] = await Promise.all([
-                    getGroupMembers(groupId),
-                    getGroupDiaries(groupId),
-                    getGroupById(groupId)
-                ]);
-                setMembers(membersData);
-                setDiaries(diariesData);
-                setGroup(groupData);
-            } catch (err) {
-                console.log(err);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchGroupData();
     }, [groupId]);
 
@@ -158,6 +162,9 @@ const GroupSideComponent = () => {
         }
     };
 
+    const handleSuccess = () => {
+        fetchGroupData();
+    }
 
     if (loading) {
         return (
@@ -169,22 +176,14 @@ const GroupSideComponent = () => {
 
     return (
         <Box
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 3,
-                height: '80vh',
-                width: '30%',
-                marginLeft: 3,
-                p: 1,
-            }}
+            sx={{ width: '30%' }}
         >
             <Tabs
                 value={tab}
                 onChange={(e, v) => setTab(v)}
                 sx={{
                     '& .MuiTabs-indicator': {
-                        height: 4,
+                        height: 3,
                         borderRadius: 2,
                         bgcolor: 'primary.main',
                     },
@@ -194,201 +193,205 @@ const GroupSideComponent = () => {
                 <Tab label={`Group Feed (${diaries.length})`} />
             </Tabs>
 
-            {/* MEMBERS LIST */}
-            {tab === 0 && (
-                <List
-                    sx={{
-                        maxHeight: 'calc(80vh - 120px)',
-                        overflowY: 'auto',
-                        borderRadius: 2,
-                        bgcolor: 'grey.50',
-                        p: 1,
-                        '&::-webkit-scrollbar': { width: 6 },
-                        '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.400', borderRadius: 3 },
-                    }}
-                >
-                    {members.map((member) => (
-                        <ListItem
-                            key={member.id}
-                            sx={{
-                                borderRadius: 2,
-                                mb: 1,
-                                bgcolor: 'white',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                boxShadow: 1,
-                                transition: '0.3s',
-                                '&:hover': { boxShadow: 4 },
-                            }}
-                        >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <ListItemAvatar>
-                                    <Avatar
-                                        src={member.avatar_url}
-                                        sx={{ width: 36, height: 36, fontSize: 16 }}
-                                    >
-                                        {member.username?.[0]?.toUpperCase() || 'U'}
-                                    </Avatar>
-                                </ListItemAvatar>
-                                <ListItemText
-                                    primary={
-                                        <Typography variant="subtitle2" fontWeight={500}>
-                                            {member.username}
-                                        </Typography>
-                                    }
-                                    secondary={
-                                        member.id === user?.id ? 'You' : member.email
-                                    }
-                                />
-                            </Box>
+            <Box
+                sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 3,
+                    height: '80vh',
+                    px: 1,
+                    py: 3,
+                    width: '100%'
+                }}
+            >
+                {/* MEMBERS LIST */}
+                {tab === 0 && (
+                    <List
+                        sx={{
+                            maxHeight: 'calc(80vh - 120px)',
+                            overflowY: 'auto',
+                            p: 1,
+                            '&::-webkit-scrollbar': { width: 6 },
+                            '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.400', borderRadius: 3 },
+                        }}
+                    >
+                        {members.map((member) => (
+                            <ListItem
+                                key={member.id}
+                                sx={{
+                                    borderRadius: 2,
+                                    mb: 1,
+                                    bgcolor: 'grey.50',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    transition: '0.3s',
+                                    '&:hover': { boxShadow: 3 },
+                                }}
+                                onClick={() => {
+                                    setSelectedMember(member);
+                                    setOpenUserProfile(true);
+                                    setSelectedGroup(group);
+                                }}
+                            >
+                                <Box
+                                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
 
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                {group?.creator_id === member?.id && (
-                                    <Typography sx={{ fontSize: 12, color: 'primary.main', fontWeight: 600 }}>
-                                        Admin
-                                    </Typography>
-                                )}
-                                {group?.creator_id === user?.id && member.id !== user?.id && (
-                                    <Button
-                                        size="small"
-                                        variant="outlined"
-                                        color="error"
-                                        onClick={() => {
-                                            setSelectedMember(member);
-                                            setOpen(true);
+                                >
+                                    <ListItemAvatar>
+                                        <Avatar
+                                            src={member.avatar_url}
+                                            sx={{ width: 45, height: 45, fontSize: 16 }}
+                                        >
+                                            {member.username?.[0]?.toUpperCase() || 'U'}
+                                        </Avatar>
+                                    </ListItemAvatar>
+                                    <ListItemText
+                                        primary={
+                                            <Typography variant="subtitle2" fontWeight={500}>
+                                                {member.username}
+                                            </Typography>
+                                        }
+                                        secondary={
+                                            member.id === user?.id ? 'You' : member.email
+                                        }
+                                    />
+                                </Box>
+
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    {group?.creator_id === member?.id && (
+                                        <Typography sx={{ fontSize: 12, color: 'primary.main', fontWeight: 600 }}>
+                                            Admin
+                                        </Typography>
+                                    )}
+                                </Box>
+                            </ListItem>
+                        ))}
+                    </List>
+                )}
+
+                {/* GROUP FEED */}
+                {tab === 1 && (
+                    <Box
+                        sx={{
+                            overflowY: 'auto',
+                            maxHeight: 'calc(80vh - 120px)',
+                            px: 1,
+                            '&::-webkit-scrollbar': { display: 'none' },
+                            scrollbarWidth: 'none',
+                        }}
+                    >
+                        {diaries.length === 0 ? (
+                            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+                                No diaries posted in this group yet.
+                            </Typography>
+                        ) : (
+                            diaries.map((d) => {
+                                const isExpanded = expendedGroupDiary === d.id;
+                                const diaryComments = diaryGroupComments[d.id] || [];
+                                const isLiked = d.likes?.some((like) => like.user.id === user?.id);
+                                const totalLikes = d?.likes?.length;
+
+                                return (
+                                    <Box
+                                        key={d.id}
+                                        sx={{
+                                            p: 2,
+                                            mb: 2,
+                                            borderRadius: 3,
+                                            boxShadow: 1,
+                                            bgcolor: 'background.paper',
+                                            transition: '0.3s',
+                                            '&:hover': { boxShadow: 4 },
                                         }}
                                     >
-                                        Remove
-                                    </Button>
-                                )}
-                            </Box>
-                        </ListItem>
-                    ))}
-                </List>
-            )}
-
-            {/* GROUP FEED */}
-            {tab === 1 && (
-                <Box
-                    sx={{
-                        overflowY: 'auto',
-                        maxHeight: 'calc(80vh - 120px)',
-                        px: 1,
-                        '&::-webkit-scrollbar': { display: 'none' },
-                        scrollbarWidth: 'none',
-                    }}
-                >
-                    {diaries.length === 0 ? (
-                        <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-                            No diaries posted in this group yet.
-                        </Typography>
-                    ) : (
-                        diaries.map((d) => {
-                            const isExpanded = expendedGroupDiary === d.id;
-                            const diaryComments = diaryGroupComments[d.id] || [];
-                            const isLiked = d.likes?.some((like) => like.user.id === user?.id);
-                            const totalLikes = d?.likes?.length;
-
-                            return (
-                                <Box
-                                    key={d.id}
-                                    sx={{
-                                        p: 2,
-                                        mb: 2,
-                                        borderRadius: 3,
-                                        boxShadow: 1,
-                                        bgcolor: 'background.paper',
-                                        transition: '0.3s',
-                                        '&:hover': { boxShadow: 4 },
-                                    }}
-                                >
-                                    <Typography variant="h6" fontWeight={600} gutterBottom>
-                                        {d.title}
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {d.author?.username || "Unknown"}
+                                        <Typography variant="h6" fontWeight={600} gutterBottom>
+                                            {d.title}
                                         </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {formatCambodiaDate(d.created_at)}
-                                        </Typography>
-                                    </Box>
-                                    <Typography sx={{ mb: 2 }}>{d.content}</Typography>
-
-                                    <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 1 }}>
-                                        <Button
-                                            startIcon={<FavoriteIcon sx={{ color: isLiked ? "red" : "grey.600" }} />}
-                                            size="small"
-                                            onClick={() => handleLikeGroupDiary(d.id)}
-                                            sx={{ color: isLiked ? "red" : "grey.700", textTransform: 'none' }}
-                                        >
-                                            {totalLikes} {isLiked ? "Liked" : "Like"}
-                                        </Button>
-
-                                        <Button
-                                            startIcon={<CommentIcon />}
-                                            size="small"
-                                            sx={{ color: "grey.700", textTransform: 'none' }}
-                                            onClick={() => handleToggleComments(d.id)}
-                                        >
-                                            Comment
-                                        </Button>
-                                    </Box>
-
-                                    <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                        <Box sx={{ mt: 2 }}>
-                                            <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
-                                                <TextField
-                                                    size="small"
-                                                    fullWidth
-                                                    placeholder="Write a comment..."
-                                                    value={newComment[d.id] || ""}
-                                                    onChange={(e) =>
-                                                        setNewComment((prev) => ({ ...prev, [d.id]: e.target.value }))
-                                                    }
-                                                />
-                                                <Button
-                                                    variant="contained"
-                                                    onClick={() => handleAddComment(d.id)}
-                                                    disabled={postingComment[d.id]}
-                                                >
-                                                    {postingComment[d.id] ? 'Posting...' : 'Post'}
-                                                </Button>
-                                            </Box>
-
-                                            {diaryComments.length === 0 ? (
-                                                <Typography variant="body2" color="text.secondary">
-                                                    No comments yet.
-                                                </Typography>
-                                            ) : (
-                                                diaryComments.map((c) => (
-                                                    <Box key={c.id} sx={{ mb: 1, pl: 1 }}>
-                                                        <Typography variant="subtitle2">{c.author?.username || "Anonymous"}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            {formatCambodiaDate(c.created_at)}
-                                                        </Typography>
-                                                        <Box
-                                                            sx={{
-                                                                ml: 0.5,
-                                                                mt: 0.5,
-                                                                p: 1.5,
-                                                                borderRadius: 2,
-                                                                bgcolor: 'grey.100',
-                                                            }}
-                                                        >
-                                                            <Typography variant="body2">{c.content}</Typography>
-                                                        </Box>
-                                                    </Box>
-                                                ))
-                                            )}
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {d.author?.username || "Unknown"}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {formatCambodiaDate(d.created_at)}
+                                            </Typography>
                                         </Box>
-                                    </Collapse>
-                                </Box>
-                            );
-                        })
-                    )}
-                </Box>
-            )}
+                                        <Typography sx={{ mb: 2 }}>{d.content}</Typography>
+
+                                        <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 1 }}>
+                                            <Button
+                                                startIcon={<FavoriteIcon sx={{ color: isLiked ? "red" : "grey.600" }} />}
+                                                size="small"
+                                                onClick={() => handleLikeGroupDiary(d.id)}
+                                                sx={{ color: isLiked ? "red" : "grey.700", textTransform: 'none' }}
+                                            >
+                                                {totalLikes} {isLiked ? "Liked" : "Like"}
+                                            </Button>
+
+                                            <Button
+                                                startIcon={<CommentIcon />}
+                                                size="small"
+                                                sx={{ color: "grey.700", textTransform: 'none' }}
+                                                onClick={() => handleToggleComments(d.id)}
+                                            >
+                                                Comment
+                                            </Button>
+                                        </Box>
+
+                                        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                            <Box sx={{ mt: 2 }}>
+                                                <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+                                                    <TextField
+                                                        size="small"
+                                                        fullWidth
+                                                        placeholder="Write a comment..."
+                                                        value={newComment[d.id] || ""}
+                                                        onChange={(e) =>
+                                                            setNewComment((prev) => ({ ...prev, [d.id]: e.target.value }))
+                                                        }
+                                                    />
+                                                    <Button
+                                                        variant="contained"
+                                                        onClick={() => handleAddComment(d.id)}
+                                                        disabled={postingComment[d.id]}
+                                                    >
+                                                        {postingComment[d.id] ? 'Posting...' : 'Post'}
+                                                    </Button>
+                                                </Box>
+
+                                                {diaryComments.length === 0 ? (
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        No comments yet.
+                                                    </Typography>
+                                                ) : (
+                                                    diaryComments.map((c) => (
+                                                        <Box key={c.id} sx={{ mb: 1, pl: 1 }}>
+                                                            <Typography variant="subtitle2">{c.author?.username || "Anonymous"}</Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                {formatCambodiaDate(c.created_at)}
+                                                            </Typography>
+                                                            <Box
+                                                                sx={{
+                                                                    ml: 0.5,
+                                                                    mt: 0.5,
+                                                                    p: 1.5,
+                                                                    borderRadius: 2,
+                                                                    bgcolor: 'grey.100',
+                                                                }}
+                                                            >
+                                                                <Typography variant="body2">{c.content}</Typography>
+                                                            </Box>
+                                                        </Box>
+                                                    ))
+                                                )}
+                                            </Box>
+                                        </Collapse>
+                                    </Box>
+                                );
+                            })
+                        )}
+                    </Box>
+                )}
+            </Box>
 
             <DeleteDialog
                 open={open}
@@ -400,6 +403,14 @@ const GroupSideComponent = () => {
                         : ""
                 }
                 onConfirm={handleConfirmRemove}
+            />
+
+            <UserProfileDialog
+                open={openUserProfile}
+                onClose={() => setOpenUserProfile(false)}
+                userData={selectedMember}
+                group={selectedGroup}
+                onSuccess={handleSuccess}
             />
         </Box>
 

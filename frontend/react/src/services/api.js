@@ -864,6 +864,16 @@ export const editGroupMessage = async (messageId, content) => {
   }
 };
 
+export const editGroupFileMessage = async (messageId, file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.put(`/api/v1/messages/${messageId}/file`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+};
+
+
 export const deleteGroupMessage = async (messageId) => {
   try {
     await api.delete(`/api/v1/chats/group/${messageId}`);
