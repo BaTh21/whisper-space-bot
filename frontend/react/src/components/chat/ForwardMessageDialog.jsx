@@ -1,3 +1,4 @@
+// src/components/chat/ForwardMessageDialog.jsx
 import { Forward as ForwardIcon } from '@mui/icons-material';
 import {
     Avatar,
@@ -17,7 +18,15 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 
-const ForwardMessageDialog = ({ open, onClose, message, friends, onForward }) => {
+const ForwardMessageDialog = ({ 
+  open, 
+  onClose, 
+  message, 
+  friends, 
+  onForward,
+  getAvatarUrl,
+  getUserInitials 
+}) => {
   const [selectedFriends, setSelectedFriends] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -131,7 +140,7 @@ const ForwardMessageDialog = ({ open, onClose, message, friends, onForward }) =>
               >
                 <ListItemAvatar>
                   <Avatar 
-                    src={friend.avatar_url}
+                    src={getAvatarUrl ? getAvatarUrl(friend.avatar_url) : friend.avatar_url}
                     sx={{ width: 40, height: 40 }}
                     imgProps={{ 
                       onError: (e) => { 
@@ -139,7 +148,7 @@ const ForwardMessageDialog = ({ open, onClose, message, friends, onForward }) =>
                       } 
                     }}
                   >
-                    {friend.username?.charAt(0)?.toUpperCase() || 'F'}
+                    {getUserInitials ? getUserInitials(friend.username) : (friend.username?.charAt(0)?.toUpperCase() || 'F')}
                   </Avatar>
                 </ListItemAvatar>
                 <ListItemText

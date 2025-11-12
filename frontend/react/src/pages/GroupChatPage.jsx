@@ -2,6 +2,10 @@ import {
   ArrowBack as ArrowBackIcon,
   Send as SendIcon
 } from '@mui/icons-material';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {
   AppBar,
   Avatar,
@@ -9,23 +13,19 @@ import {
   Button,
   CircularProgress,
   IconButton,
+  Menu, MenuItem,
   TextField,
   Toolbar,
-  Typography, Menu, MenuItem
+  Typography
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
+import GroupSideComponent from '../components/group/GroupSideComponent';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getGroupMembers, getGroupMessage, getGroupById, updateMessageById, deleteMessageById, uploadFileMessage } from '../services/api';
+import { deleteMessageById, getGroupById, getGroupMembers, getGroupMessage, updateMessageById, uploadFileMessage } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
-import GroupSideComponent from '../components/group/GroupSideComponent';
-import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import AttachFileIcon from '@mui/icons-material/AttachFile';
-import { toast } from 'react-toastify';
 
 const GroupChatPage = () => {
   const { groupId } = useParams();
@@ -40,7 +40,7 @@ const GroupChatPage = () => {
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const pollingIntervalRef = useRef(null);
-  const BASE_URI = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const BASE_URI = import.meta.env.VITE_API_URL;
   const token = localStorage.getItem('accessToken');
   const [open, setOpen] = useState(false);
   const [editedContent, setEditedContent] = useState('');
@@ -136,7 +136,7 @@ const GroupChatPage = () => {
 
   const setupWebSocket = () => {
     try {
-      const wsUrl = `${BASE_URI.replace(/^http/, 'ws')}/api/v1/ws/ws/group/${groupId}?token=${token}`;
+      const wsUrl = `${BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
