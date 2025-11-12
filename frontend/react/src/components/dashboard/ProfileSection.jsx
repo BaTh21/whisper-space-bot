@@ -29,7 +29,30 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const fileInputRef = useRef(null);
 
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
+  // Media query breakpoints
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));      // 0-599px
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600-899px
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));       // 900px+
+  
+  // Helper functions for responsive logic
+  const getAvatarSize = () => {
+    if (isMobile) return 80;
+    if (isTablet) return 100;
+    return 120; // desktop
+  };
+
+  const getAvatarFontSize = () => {
+    if (isMobile) return '2rem';
+    if (isTablet) return '2.5rem';
+    return '3rem'; // desktop
+  };
+
+  const getTitleFontSize = () => {
+    if (isMobile) return '1.5rem';
+    if (isTablet) return '1.75rem';
+    return '2.125rem'; // desktop
+  };
 
   // Use the avatar hook
   const { getAvatarUrl, getUserInitials } = useAvatar();
@@ -158,62 +181,93 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     <Card sx={{ 
       mb: 3, 
       p: { xs: 2, sm: 3 }, 
-      borderRadius: '16px',
-      mx: { xs: 0, sm: 0 },
-      position: 'relative' // Added this for absolute positioning context
+      borderRadius: { xs: '12px', sm: '16px' },
+      border: 1,
+      borderColor: 'divider',
+      bgcolor: 'background.paper',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
     }}>
+      {/* Profile Header */}
       <Box sx={{ 
         display: 'flex', 
         flexDirection: { xs: 'column', sm: 'row' },
         alignItems: { xs: 'center', sm: 'flex-start' },
         textAlign: { xs: 'center', sm: 'left' },
         mb: 3,
-        position: 'relative' // Added this for better positioning
+        position: 'relative',
+        gap: { xs: 2, sm: 3 }
       }}>
-        <Avatar
-          src={currentAvatarUrl}
-          alt={profile?.username}
-          sx={{ 
-            width: { xs: 60, sm: 80 }, 
-            height: { xs: 60, sm: 80 }, 
-            mr: { xs: 0, sm: 3 },
-            mb: { xs: 2, sm: 0 },
-            border: imagePreview ? '2px solid' : 'none',
-            borderColor: imagePreview ? 'primary.main' : 'transparent',
-          }}
-        >
-          {getUserInitials(profile?.username)}
-        </Avatar>
+        {/* Avatar */}
+        <Box sx={{ position: 'relative' }}>
+          <Avatar
+            src={currentAvatarUrl}
+            alt={profile?.username}
+            sx={{ 
+              width: getAvatarSize(), 
+              height: getAvatarSize(), 
+              border: imagePreview ? '3px solid' : 'none',
+              borderColor: imagePreview ? 'primary.main' : 'transparent',
+              fontSize: getAvatarFontSize(),
+              bgcolor: 'primary.light',
+            }}
+          >
+            {getUserInitials(profile?.username)}
+          </Avatar>
+        </Box>
+
+        {/* Profile Info */}
         <Box sx={{ 
           flexGrow: 1,
-          pr: { xs: 6, sm: 0 } // Add padding on mobile to prevent text overlap with icon
+          minWidth: 0 // Prevent text overflow
         }}>
-          <Typography variant="h4" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+          <Typography 
+            variant="h4" 
+            gutterBottom 
+            fontWeight="600" 
+            sx={{ 
+              fontSize: getTitleFontSize(),
+              lineHeight: 1.2
+            }}
+          >
             {profile?.username}
           </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.6, mb: 1 }}>
+          <Typography 
+            variant="body1" 
+            color="text.secondary" 
+            sx={{ 
+              lineHeight: 1.6, 
+              mb: 2,
+              fontSize: { xs: '0.9rem', sm: '1rem' }
+            }}
+          >
             {profile?.bio || 'No bio yet.'}
           </Typography>
           <Chip
             label={profile?.is_verified ? 'Verified' : 'Not Verified'}
             color={profile?.is_verified ? 'success' : 'default'}
             size="small"
-            sx={{ borderRadius: '8px' }}
+            sx={{ 
+              borderRadius: '8px',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' }
+            }}
           />
         </Box>
         
-        {/* Fixed IconButton positioning */}
+        {/* Edit Button */}
         <IconButton 
           onClick={() => setEditing(!editing)}
           sx={{ 
             position: { xs: 'absolute', sm: 'static' },
             top: { xs: 8, sm: 'auto' },
             right: { xs: 8, sm: 'auto' },
-            bgcolor: { xs: 'background.paper', sm: 'transparent' },
-            boxShadow: { xs: 1, sm: 0 },
+            bgcolor: 'primary.main',
+            color: 'white',
             '&:hover': {
-              bgcolor: { xs: 'action.hover', sm: 'action.hover' }
-            }
+              bgcolor: 'primary.dark',
+            },
+            width: { xs: 40, sm: 48 },
+            height: { xs: 40, sm: 48 },
+            flexShrink: 0
           }}
           size={isMobile ? 'small' : 'medium'}
         >
@@ -230,28 +284,56 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         style={{ display: 'none' }}
       />
 
+      {/* Alerts */}
       <Collapse in={!!error}>
-        <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 2, 
+            borderRadius: '12px',
+            fontSize: { xs: '0.875rem', sm: '1rem' }
+          }} 
+          onClose={() => setError(null)}
+        >
           {error}
         </Alert>
       </Collapse>
       
       <Collapse in={!!success}>
-        <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setSuccess(null)}>
+        <Alert 
+          severity="success" 
+          sx={{ 
+            mb: 2, 
+            borderRadius: '12px',
+            fontSize: { xs: '0.875rem', sm: '1rem' }
+          }} 
+          onClose={() => setSuccess(null)}
+        >
           {success}
         </Alert>
       </Collapse>
 
+      {/* Edit Form */}
       <Collapse in={editing}>
         <Card sx={{ 
           p: { xs: 2, sm: 3 }, 
           mt: 2, 
-          borderRadius: '12px' 
+          borderRadius: '12px',
+          border: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.default'
         }}>
-          <Typography variant="h6" gutterBottom fontWeight="600">
+          <Typography 
+            variant="h6" 
+            gutterBottom 
+            fontWeight="600"
+            sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+          >
             Edit Profile
           </Typography>
+          
           <Box component="form" onSubmit={formik.handleSubmit}>
+            {/* Username Field */}
             <TextField
               label="Username"
               name="username"
@@ -263,8 +345,14 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               fullWidth
               margin="normal"
               size={isMobile ? 'small' : 'medium'}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '8px',
+                }
+              }}
             />
             
+            {/* Bio Field */}
             <TextField
               label="Bio"
               name="bio"
@@ -274,58 +362,88 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               onChange={formik.handleChange}
               onBlur={formik.handleBlur}
               error={formik.touched.bio && !!formik.errors.bio}
-              helperText={formik.touched.bio && formik.errors.bio}
+              helperText={`${formik.values.bio?.length || 0}/500 characters`}
               fullWidth
               margin="normal"
               placeholder="Tell us a bit about yourself..."
               size={isMobile ? 'small' : 'medium'}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '8px',
+                }
+              }}
             />
 
             {/* Avatar Upload Section */}
-            <Box sx={{ mb: 2, mt: 2 }}>
-              <Typography variant="subtitle2" gutterBottom fontWeight="600">
+            <Box sx={{ mb: 2, mt: 3 }}>
+              <Typography 
+                variant="subtitle2" 
+                gutterBottom 
+                fontWeight="600"
+                sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}
+              >
                 Profile Picture
               </Typography>
               <Box sx={{ 
                 display: 'flex', 
                 flexDirection: { xs: 'column', sm: 'row' },
                 alignItems: { xs: 'center', sm: 'flex-start' },
-                gap: 2, 
-                mb: 1 
+                gap: 3, 
+                mb: 2 
               }}>
-                <Avatar
-                  src={currentAvatarUrl}
-                  sx={{
-                    width: { xs: 50, sm: 60 },
-                    height: { xs: 50, sm: 60 },
-                    border: imagePreview ? '2px solid' : 'none',
-                    borderColor: imagePreview ? 'primary.main' : 'transparent',
-                  }}
-                >
-                  {getUserInitials(profile?.username)}
-                </Avatar>
+                {/* Avatar Preview */}
                 <Box sx={{ 
                   display: 'flex', 
                   flexDirection: 'column', 
-                  gap: 1,
+                  alignItems: 'center',
+                  gap: 1
+                }}>
+                  <Avatar
+                    src={currentAvatarUrl}
+                    sx={{
+                      width: { xs: 80, sm: 100 },
+                      height: { xs: 80, sm: 100 },
+                      border: imagePreview ? '3px solid' : 'none',
+                      borderColor: imagePreview ? 'primary.main' : 'transparent',
+                      fontSize: { xs: '1.5rem', sm: '2rem' },
+                    }}
+                  >
+                    {getUserInitials(profile?.username)}
+                  </Avatar>
+                  {selectedFile && (
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ textAlign: 'center' }}
+                    >
+                      {selectedFile.name}
+                    </Typography>
+                  )}
+                </Box>
+
+                {/* Upload Controls */}
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: 2,
                   alignItems: { xs: 'center', sm: 'flex-start' },
-                  textAlign: { xs: 'center', sm: 'left' }
+                  textAlign: { xs: 'center', sm: 'left' },
+                  flexGrow: 1
                 }}>
                   <Button
                     variant="outlined"
                     startIcon={<CloudUploadIcon />}
                     onClick={handleAvatarClick}
                     disabled={uploading}
-                    sx={{ borderRadius: '8px' }}
+                    sx={{ 
+                      borderRadius: '8px',
+                      minWidth: { xs: '100%', sm: 160 }
+                    }}
                     size={isMobile ? 'small' : 'medium'}
                   >
                     {uploading ? 'Uploading...' : 'Choose Image'}
                   </Button>
-                  {selectedFile && (
-                    <Typography variant="caption" color="text.secondary">
-                      Selected: {selectedFile.name}
-                    </Typography>
-                  )}
+                  
                   {(selectedFile || imagePreview) && (
                     <Button
                       variant="text"
@@ -334,21 +452,26 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
                       onClick={removeSelectedImage}
                       sx={{ borderRadius: '8px' }}
                     >
-                      Remove
+                      Remove Image
                     </Button>
                   )}
                 </Box>
               </Box>
-              <Typography variant="caption" color="text.secondary">
+              <Typography 
+                variant="caption" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
                 Supported formats: PNG, JPG. Max size: 2MB
               </Typography>
             </Box>
 
+            {/* Action Buttons */}
             <Box sx={{ 
               display: 'flex', 
               flexDirection: { xs: 'column', sm: 'row' },
-              gap: 1, 
-              mt: 3 
+              gap: 2, 
+              mt: 4 
             }}>
               <Button 
                 type="submit" 
@@ -356,7 +479,8 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
                 disabled={loading || uploading}
                 sx={{ 
                   borderRadius: '8px', 
-                  minWidth: 120,
+                  minWidth: { xs: '100%', sm: 140 },
+                  py: { xs: 1, sm: 1.5 },
                   order: { xs: 2, sm: 1 }
                 }}
                 size={isMobile ? 'small' : 'medium'}
@@ -369,6 +493,8 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
                 disabled={loading || uploading}
                 sx={{ 
                   borderRadius: '8px',
+                  minWidth: { xs: '100%', sm: 120 },
+                  py: { xs: 1, sm: 1.5 },
                   order: { xs: 1, sm: 2 }
                 }}
                 size={isMobile ? 'small' : 'medium'}

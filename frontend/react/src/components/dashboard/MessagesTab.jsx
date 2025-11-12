@@ -1,4 +1,12 @@
-import { Chat as ChatIcon, Close as CloseIcon, Menu as MenuIcon, PushPin as PushPinIcon, Reply as ReplyIcon, Send as SendIcon } from '@mui/icons-material';
+// src/components/message/MessagesTab.jsx
+import {
+  Chat as ChatIcon,
+  Close as CloseIcon,
+  Menu as MenuIcon,
+  PushPin as PushPinIcon,
+  Reply as ReplyIcon,
+  Send as SendIcon,
+} from '@mui/icons-material';
 import {
   Avatar,
   Box,
@@ -15,13 +23,21 @@ import {
   TextField,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
-import { deleteMessage, editMessage, getPrivateChat, markMessagesAsRead, sendPrivateMessage } from '../../services/api';
+import {
+  deleteMessage,
+  editMessage,
+  getPrivateChat,
+  markMessagesAsRead,
+  sendPrivateMessage,
+} from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
+
+const BASE_URI = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
 
 const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -34,17 +50,231 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [pinnedMessage, setPinnedMessage] = useState(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const messageInterval = useRef(null);
+  const [isWsConnected, setIsWsConnected] = useState(false);
+
   const messagesContainerRef = useRef(null);
   const lastSeenCheckRef = useRef(null);
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
 
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // 0-599px
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600-899px
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md')); // 900px+
 
-  // Use the avatar hook
-  const { getAvatarUrl, getUserInitials, getUserAvatar, handleAvatarError } = useAvatar();
+  const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
 
-  // Clear chat state helper
+  // === WebSocket Setup ===
+  useEffect(() => {
+    if (!selectedFriend) {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setIsWsConnected(false);
+      return;
+    }
+
+    const rawToken = localStorage.getItem('accessToken') || '';
+    const token = rawToken.startsWith('Bearer ') ? rawToken.slice(7) : rawToken;
+    const wsUrl = `${BASE_URI}/api/v1/ws/private/${selectedFriend.id}?token=${token}`;
+
+    const connectWebSocket = () => {
+      try {
+        console.log('[WS] Connecting to:', wsUrl);
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('[WS] Connected');
+          setIsWsConnected(true);
+          setError(null);
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+          }
+          if (messages.length === 0) {
+            loadInitialMessages();
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            handleWebSocketMessage(data);
+          } catch (err) {
+            console.error('[WS] Parse error:', err);
+          }
+        };
+
+        ws.onclose = (event) => {
+          console.log('[WS] Disconnected:', event.reason || 'Unknown');
+          setIsWsConnected(false);
+          wsRef.current = null;
+
+          if (!reconnectTimeoutRef.current && selectedFriend) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              reconnectTimeoutRef.current = null;
+              connectWebSocket();
+            }, 3000);
+          }
+        };
+
+        ws.onerror = () => {
+          console.error('[WS] Error');
+          setError('Chat connection failed');
+        };
+      } catch (err) {
+        console.error('[WS] Setup failed:', err);
+        setError('WebSocket failed');
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [selectedFriend?.id]);
+
+  // === Send via WebSocket ===
+  const sendWsMessage = (msg) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      try {
+        wsRef.current.send(JSON.stringify(msg));
+        return true;
+      } catch (err) {
+        console.error('[WS] Send failed:', err);
+        return false;
+      }
+    }
+    return false;
+  };
+
+  // === Handle Incoming ===
+  const handleWebSocketMessage = (data) => {
+    const { type } = data;
+
+    if (type === 'message') {
+      const incomingMsg = {
+        ...data,
+        is_temp: false,
+        sender: {
+          id: data.sender_id,
+          username: data.sender_username,
+          avatar_url: getAvatarUrl(data.sender_username ? null : data.sender_id),
+        },
+        reply_to: data.reply_to
+          ? {
+              ...data.reply_to,
+              sender_username:
+                data.reply_to.sender_id === profile?.id
+                  ? profile.username
+                  : selectedFriend.username,
+            }
+          : null,
+      };
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === incomingMsg.id)) return prev;
+        return [...prev, incomingMsg].sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        );
+      });
+
+      if (data.sender_id === selectedFriend.id && !data.is_read) {
+        handleMarkAsRead([data.id]);
+      }
+    } else if (type === 'read_receipt') {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === data.message_id
+            ? { ...msg, is_read: true, read_at: data.read_at }
+            : msg
+        )
+      );
+    }
+  };
+
+  // === Load Initial Messages (ONLY ONCE) ===
+  const loadInitialMessages = async () => {
+    if (!selectedFriend || messages.length > 0) return;
+    setIsLoadingMessages(true);
+    try {
+      const chatMessages = await getPrivateChat(selectedFriend.id);
+      const enhanced = chatMessages.map((msg) => ({
+        ...msg,
+        is_temp: false,
+        sender: {
+          id: msg.sender_id,
+          username: msg.sender_username || (msg.sender_id === profile?.id ? profile.username : selectedFriend.username),
+          avatar_url: getUserAvatar(msg.sender_id === profile?.id ? profile : selectedFriend),
+        },
+        reply_to: msg.reply_to
+          ? {
+              ...msg.reply_to,
+              sender_username:
+                msg.reply_to.sender_id === profile?.id
+                  ? profile.username
+                  : selectedFriend.username,
+            }
+          : null,
+      }));
+
+      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+
+      const unread = enhanced
+        .filter((m) => !m.is_read && m.sender_id === selectedFriend.id)
+        .map((m) => m.id);
+      if (unread.length > 0) handleMarkAsRead(unread);
+    } catch (err) {
+      setError('Failed to load messages',err);
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  };
+
+  // === Mark as Read ===
+  const handleMarkAsRead = async (ids) => {
+    if (!ids.length) return;
+    setMessages((prev) =>
+      prev.map((m) => (ids.includes(m.id) ? { ...m, is_read: true, read_at: new Date().toISOString() } : m))
+    );
+    try {
+      await markMessagesAsRead(ids);
+      ids.forEach(id => sendWsMessage({ type: 'read', message_id: id }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // === Auto Mark Read ===
+  useEffect(() => {
+    if (!selectedFriend || !messages.length) return;
+    const now = Date.now();
+    if (lastSeenCheckRef.current && now - lastSeenCheckRef.current < 2000) return;
+    lastSeenCheckRef.current = now;
+
+    const unread = messages
+      .filter(m => !m.is_read && m.sender_id === selectedFriend.id && !m.is_temp)
+      .map(m => m.id);
+    if (unread.length) handleMarkAsRead(unread);
+  }, [messages, selectedFriend]);
+
+  // === Friend Select ===
+  const handleSelectFriend = (friend) => {
+    if (isMobile) setMobileDrawerOpen(false);
+    setSelectedFriend(friend);
+    clearChatState();
+  };
+
   const clearChatState = () => {
     setMessages([]);
     setReplyingTo(null);
@@ -52,594 +282,139 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setNewMessage('');
   };
 
-  // Organize messages into threads
-  const organizeMessagesIntoThreads = (messagesList) => {
-    const threads = new Map();
-    const rootMessages = [];
-    
-    messagesList.forEach(message => {
-      if (message.reply_to_id) {
-        if (!threads.has(message.reply_to_id)) {
-          threads.set(message.reply_to_id, []);
-        }
-        threads.get(message.reply_to_id).push(message);
-      } else {
-        rootMessages.push(message);
-      }
-    });
-    
-    const buildThread = (message) => {
-      const thread = {
-        ...message,
-        replies: threads.get(message.id) ? 
-          threads.get(message.id).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)) : 
-          []
-      };
-      
-      thread.replies = thread.replies.map(reply => buildThread(reply));
-      
-      return thread;
+  // === Send Message ===
+  const handleSendMessage = async () => {
+    const content = newMessage.trim();
+    if (!content || !selectedFriend) return;
+
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg = {
+      id: tempId,
+      sender_id: profile.id,
+      receiver_id: selectedFriend.id,
+      content,
+      message_type: 'text',
+      is_read: false,
+      created_at: new Date().toISOString(),
+      is_temp: true,
+      reply_to_id: replyingTo?.id || null,
+      sender: { username: profile.username, avatar_url: getUserAvatar(profile), id: profile.id },
     };
-    
-    return rootMessages.map(message => buildThread(message))
-      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-  };
 
-  // Flatten threads for rendering
-  const flattenThreads = (threads, level = 0) => {
-    let flatList = [];
-    
-    threads.forEach(thread => {
-      flatList.push({
-        ...thread,
-        threadLevel: level,
-        isThreadStart: level === 0 && thread.replies.length > 0
-      });
-      
-      if (thread.replies && thread.replies.length > 0) {
-        flatList = flatList.concat(flattenThreads(thread.replies, level + 1));
-      }
-    });
-    
-    return flatList;
-  };
+    setMessages(prev => [...prev, tempMsg]);
+    setNewMessage('');
+    setReplyingTo(null);
+    setMessageLoading(true);
 
-  // Get messages organized in threads
-  const getThreadedMessages = () => {
-    const threads = organizeMessagesIntoThreads(messages);
-    return flattenThreads(threads);
-  };
+    const payload = { type: "message", content, message_type: "text", reply_to_id: replyingTo?.id || null };
 
-  // Enhanced message status detection
-  const getEnhancedMessageStatus = (message, isMyMessage) => {
-    if (!isMyMessage) return 'none';
-    
-    if (message.is_temp) return 'sending';
-    
-    // Check if message is seen (read_at exists and is not null)
-    if (message.is_read && message.read_at) {
-      return 'seen';
+    if (sendWsMessage(payload)) {
+      setMessageLoading(false);
+      return;
     }
-    
-    // Check if message is delivered
-    if (message.delivered_at) {
-      return 'delivered';
-    }
-    
-    // Default to sent
-    return 'sent';
-  };
 
-  // Process message with enhanced status
-  const processMessageWithStatus = (message, isMyMessage) => {
-    return {
-      ...message,
-      status: getEnhancedMessageStatus(message, isMyMessage)
-    };
-  };
-
-  // Real-time message polling
-  useEffect(() => {
-    if (!selectedFriend || !profile?.id) return;
-
-    const pollForNewMessages = async () => {
-      try {
-        const chatMessages = await getPrivateChat(selectedFriend.id);
-        
-        const enhancedMessages = chatMessages.map(message => {
-          const isMyMessage = message.sender_id === profile?.id;
-          const sender = isMyMessage ? profile : selectedFriend;
-          
-          const replyToData = message.reply_to ? {
-            id: message.reply_to.id,
-            content: message.reply_to.content,
-            sender_id: message.reply_to.sender_id,
-            sender_username: message.reply_to.sender_id === profile?.id ? profile.username : selectedFriend.username,
-            is_read: message.reply_to.is_read,
-            read_at: message.reply_to.read_at
-          } : null;
-          
-          // Process message with enhanced status
-          const processedMessage = processMessageWithStatus(message, isMyMessage);
-          
-          return {
-            ...processedMessage,
-            sender: {
-              username: sender?.username || 'Unknown User',
-              avatar_url: getUserAvatar(sender),
-              id: sender?.id
-            },
-            reply_to: replyToData,
-            is_read: message.is_read || false,
-            read_at: message.read_at || null,
-            delivered_at: message.delivered_at || null,
-            is_temp: message.is_temp || false,
-          };
-        });
-        
-        const sortedMessages = enhancedMessages.sort((a, b) =>
-          new Date(a.created_at) - new Date(b.created_at)
-        );
-
-        setMessages(sortedMessages);
-      } catch (error) {
-        console.error('Failed to poll messages:', error);
-      }
-    };
-
-    messageInterval.current = setInterval(pollForNewMessages, 3000);
-    pollForNewMessages();
-
-    return () => {
-      if (messageInterval.current) {
-        clearInterval(messageInterval.current);
-      }
-    };
-  }, [selectedFriend?.id, profile, getUserAvatar]);
-
-  // Mark messages as read when chat is active and messages are visible
-  useEffect(() => {
-    if (messages.length > 0 && selectedFriend && document.visibilityState === 'visible') {
-      const now = Date.now();
-      
-      // Only check every 2 seconds to avoid spamming
-      if (lastSeenCheckRef.current && now - lastSeenCheckRef.current < 2000) {
-        return;
-      }
-      
-      lastSeenCheckRef.current = now;
-
-      const unreadMessages = messages.filter(
-        msg => !msg.is_read && 
-               !msg.read_at && 
-               msg.sender_id === selectedFriend.id &&
-               !msg.is_temp
-      );
-      
-      if (unreadMessages.length > 0) {
-        const unreadIds = unreadMessages.map(msg => msg.id);
-        handleMarkAsRead(unreadIds);
-      }
-    }
-  }, [messages, selectedFriend]);
-
-  // Also mark as read when tab becomes visible
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && selectedFriend && messages.length > 0) {
-        const unreadMessages = messages.filter(
-          msg => !msg.is_read && 
-                 !msg.read_at && 
-                 msg.sender_id === selectedFriend.id &&
-                 !msg.is_temp
-        );
-        
-        if (unreadMessages.length > 0) {
-          const unreadIds = unreadMessages.map(msg => msg.id);
-          handleMarkAsRead(unreadIds);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [messages, selectedFriend]);
-
-  // Function to mark messages as read
-  const handleMarkAsRead = async (messageIds) => {
     try {
-      // Optimistically update UI
-      setMessages(prev => prev.map(msg => 
-        messageIds.includes(msg.id) 
-          ? { 
-              ...msg, 
-              is_read: true, 
-              read_at: msg.read_at || new Date().toISOString(),
-              status: 'seen'
-            }
-          : msg
-      ));
-      
-      // Call API to mark as read
-      await markMessagesAsRead(messageIds);
-      
-    } catch (error) {
-      console.error('Failed to mark messages as read:', error);
-      // Revert optimistic update on error
-      setMessages(prev => prev.map(msg => 
-        messageIds.includes(msg.id) 
-          ? { 
-              ...msg, 
-              is_read: false, 
-              read_at: null,
-              status: 'delivered'
-            }
-          : msg
-      ));
-    }
-  };
-
-  // Check for selected friend from FriendsTab when component mounts
-  useEffect(() => {
-    const storedFriend = localStorage.getItem('selectedFriend');
-    if (storedFriend) {
-      try {
-        const friend = JSON.parse(storedFriend);
-        handleSelectFriend(friend);
-        localStorage.removeItem('selectedFriend');
-      } catch (error) {
-        console.error('Error parsing stored friend:', error);
-      }
-    }
-  }, []);
-
-  const handleSelectFriend = async (friend) => {
-    if (isMobile) {
-      setMobileDrawerOpen(false);
-    }
-    
-    clearChatState();
-    setSelectedFriend(friend);
-    setIsLoadingMessages(true);
-    
-    try {
-      const chatMessages = await getPrivateChat(friend.id);
-      
-      const enhancedMessages = chatMessages.map(message => {
-        const isMyMessage = message.sender_id === profile?.id;
-        const sender = isMyMessage ? profile : friend;
-        
-        const replyToData = message.reply_to ? {
-          id: message.reply_to.id,
-          content: message.reply_to.content,
-          sender_id: message.reply_to.sender_id,
-          sender_username: message.reply_to.sender_id === profile?.id ? profile.username : friend.username,
-          is_read: message.reply_to.is_read,
-          read_at: message.reply_to.read_at
-        } : null;
-        
-        // Process message with enhanced status
-        const processedMessage = processMessageWithStatus(message, isMyMessage);
-        
-        return {
-          ...processedMessage,
-          sender: {
-            username: sender?.username || 'Unknown User',
-            avatar_url: getUserAvatar(sender),
-            id: sender?.id
-          },
-          reply_to: replyToData,
-          is_read: message.is_read || false,
-          read_at: message.read_at || null,
-          delivered_at: message.delivered_at || null,
-        };
-      });
-      
-      const sortedMessages = enhancedMessages.sort((a, b) =>
-        new Date(a.created_at) - new Date(b.created_at)
+      const sent = await sendPrivateMessage(selectedFriend.id, payload);
+      setMessages(prev =>
+        prev.filter(m => m.id !== tempId).concat({
+          ...sent,
+          is_temp: false,
+          sender: { username: profile.username, avatar_url: getUserAvatar(profile), id: profile.id },
+        })
       );
-      setMessages(sortedMessages);
-
-      // Mark all messages as read when opening chat
-      const unreadMessages = sortedMessages.filter(
-        msg => !msg.is_read && msg.sender_id === friend.id
-      );
-      if (unreadMessages.length > 0) {
-        const unreadIds = unreadMessages.map(msg => msg.id);
-        handleMarkAsRead(unreadIds);
-      }
     } catch (err) {
-      console.error('Failed to load messages:', err);
-      setMessages([]);
+      setError(err.message);
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setNewMessage(content);
     } finally {
-      setIsLoadingMessages(false);
+      setMessageLoading(false);
     }
   };
 
+  // === Threading ===
+  const organizeMessagesIntoThreads = (list) => {
+    const threads = new Map();
+    const roots = [];
+    list.forEach(m => m.reply_to_id ? (threads.has(m.reply_to_id) || threads.set(m.reply_to_id, [])).get(m.reply_to_id).push(m) : roots.push(m));
+    const build = (m) => ({
+      ...m,
+      replies: (threads.get(m.id) || []).sort((a,b) => new Date(a.created_at) - new Date(b.created_at)).map(build)
+    });
+    return roots.map(build).sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+  };
+
+  const flattenThreads = (threads, level = 0) => {
+    let flat = [];
+    threads.forEach(t => {
+      flat.push({ ...t, threadLevel: level, isThreadStart: level === 0 && t.replies.length > 0 });
+      if (t.replies.length) flat = flat.concat(flattenThreads(t.replies, level + 1));
+    });
+    return flat;
+  };
+
+  const threadedMessages = flattenThreads(organizeMessagesIntoThreads(messages));
+
+  // === AUTO SCROLL ===
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages, selectedFriend, replyingTo, pinnedMessage]);
+
+  // === Status ===
+  const getConnectionStatus = () => {
+    const unread = messages.filter(m => !m.is_read && m.sender_id === selectedFriend?.id).length;
+    return {
+      text: isWsConnected ? `Online • ${unread} unread` : 'Connecting...',
+      color: isWsConnected ? 'success.main' : 'warning.main'
+    };
+  };
+  const status = selectedFriend ? getConnectionStatus() : { text: 'Online', color: 'success.main' };
+
+  // === Edit / Delete / Reply / Pin / Forward ===
   const handleEditMessage = async (messageId, newContent) => {
     try {
-      const updatedMessage = await editMessage(messageId, newContent);
-      const isMyMessage = updatedMessage.sender_id === profile?.id;
-      const sender = isMyMessage ? profile : selectedFriend;
-      
-      const replyToData = updatedMessage.reply_to ? {
-        id: updatedMessage.reply_to.id,
-        content: updatedMessage.reply_to.content,
-        sender_id: updatedMessage.reply_to.sender_id,
-        sender_username: updatedMessage.reply_to.sender_id === profile?.id ? profile.username : selectedFriend.username,
-        is_read: updatedMessage.reply_to.is_read,
-        read_at: updatedMessage.reply_to.read_at
-      } : null;
-      
-      // Process message with enhanced status
-      const processedMessage = processMessageWithStatus(updatedMessage, isMyMessage);
-      
-      const enhancedMessage = {
-        ...processedMessage,
-        sender: {
-          username: sender?.username || 'Unknown User',
-          avatar_url: getUserAvatar(sender),
-          id: sender?.id
-        },
-        reply_to: replyToData,
-        is_read: updatedMessage.is_read || false,
-        read_at: updatedMessage.read_at || null,
-        delivered_at: updatedMessage.delivered_at || null,
-      };
-      
-      setMessages(prev => 
-        prev.map(msg => 
-          msg.id === messageId 
-            ? { ...enhancedMessage, is_temp: false }
-            : msg
-        )
-      );
-      setSuccess('Message updated successfully');
+      const updated = await editMessage(messageId, newContent);
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: updated.content } : m));
+      setSuccess('Message updated');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
-      setError(err.message || 'Failed to edit message');
+      setError('Failed to edit',err);
     }
   };
 
   const handleDeleteMessage = async (messageId) => {
-    if (pinnedMessage && pinnedMessage.id === messageId) {
-      setPinnedMessage(null);
-    }
-    if (replyingTo && replyingTo.id === messageId) {
-      setReplyingTo(null);
-    }
-    
-    setMessages(prev => prev.filter(msg => String(msg.id) !== String(messageId)));
-    setSuccess('Message deleted successfully');
-    setTimeout(() => setSuccess(''), 2000);
-    
-    try {
-      await deleteMessage(messageId);
-    } catch (err) {
-      console.error('Failed to delete message on server:', err);
-    }
+    if (pinnedMessage?.id === messageId) setPinnedMessage(null);
+    if (replyingTo?.id === messageId) setReplyingTo(null);
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+    try { await deleteMessage(messageId); } catch (err) { console.error(err); }
   };
 
-  // FIXED: Handle reply - ONLY set replyingTo, NOT pinnedMessage
-  const handleReply = (message) => {
-    console.log('Replying to message:', message);
-    setReplyingTo(message);
-    // Do NOT set pinnedMessage here - reply is different from pin
-    setTimeout(() => {
-      const input = document.querySelector('textarea');
-      if (input) input.focus();
-    }, 100);
-  };
+  const handleReply = (msg) => setReplyingTo(msg);
+  const handlePinMessage = (msg) => setPinnedMessage(pinnedMessage?.id === msg.id ? null : msg);
+  const handleForward = (msg) => { setForwardingMessage(msg); setForwardDialogOpen(true); };
 
-  // FIXED: Handle manual pinning of messages - ONLY for true pinning to header
-  const handlePinMessage = (message) => {
-    console.log('Pinning message to header:', message);
-    
-    // If already pinned and same message, unpin it
-    if (pinnedMessage && pinnedMessage.id === message.id) {
-      setPinnedMessage(null);
-      setSuccess('Message unpinned');
-    } else {
-      // Pin the new message to header
-      setPinnedMessage(message);
-      setSuccess('Message pinned');
-    }
-    
-    setTimeout(() => setSuccess(''), 2000);
-  };
-
-  // FIXED: Handle unpinning messages from header only
-  const handleUnpinMessage = () => {
-    console.log('Unpinning message from header');
-    setPinnedMessage(null);
-    setSuccess('Message unpinned');
-    setTimeout(() => setSuccess(''), 2000);
-  };
-
-  // ADDED: Missing handleForward function
-  const handleForward = (message) => {
-    setForwardingMessage(message);
-    setForwardDialogOpen(true);
-  };
-
-  // ADDED: Missing handleForwardMessage function
-  const handleForwardMessage = async (message, friendIds) => {
-    try {
-      setMessageLoading(true);
-      const forwardPromises = friendIds.map(friendId =>
-        sendPrivateMessage(friendId, {
-          content: message.content,
-          message_type: 'text',
-          is_forwarded: true,
-          original_sender: message.sender?.username || profile?.username || 'Unknown',
-          reply_to_id: message.reply_to_id || null,
-        })
-      );
-
-      await Promise.all(forwardPromises);
-      setSuccess(`Message forwarded to ${friendIds.length} ${friendIds.length === 1 ? 'friend' : 'friends'}`);
-      setTimeout(() => setSuccess(''), 2000);
-      setForwardDialogOpen(false);
-    } catch (err) {
-      setError(err.message || 'Failed to forward message');
-    } finally {
-      setMessageLoading(false);
-    }
-  };
-
-  // FIXED: Clear reply when sending message
-  const handleSendMessage = async () => {
-    const messageContent = newMessage.trim();
-    if (!messageContent || !selectedFriend) return;
-
-    setMessageLoading(true);
-
-    const replyToData = replyingTo ? {
-      id: replyingTo.id,
-      content: replyingTo.content,
-      sender_id: replyingTo.sender_id,
-      sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
-      is_read: replyingTo.is_read,
-      read_at: replyingTo.read_at
-    } : null;
-
-    const tempMessage = {
-      id: `temp-${Date.now()}`,
-      sender_id: profile.id,
-      receiver_id: selectedFriend.id,
-      content: messageContent,
-      message_type: 'text',
-      is_read: false,
-      read_at: null,
-      delivered_at: null,
-      created_at: new Date().toISOString(),
-      is_temp: true,
-      reply_to_id: replyingTo?.id || null,
-      reply_to: replyToData,
-      sender: {
-        username: profile.username,
-        avatar_url: getUserAvatar(profile),
-        id: profile.id
-      },
-      status: 'sending'
-    };
-
-    try {
-      setMessages(prev => {
-        const newMessages = [...prev, tempMessage];
-        return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      });
-      
-      setNewMessage('');
-      
-      // FIXED: Always clear reply after sending
-      setReplyingTo(null);
-
-      const sentMessage = await sendPrivateMessage(selectedFriend.id, { 
-        content: messageContent, 
-        message_type: 'text',
-        reply_to_id: replyingTo?.id || null,
-      });
-
-      const processedSentMessage = processMessageWithStatus(sentMessage, true);
-      
-      const enhancedSentMessage = {
-        ...processedSentMessage,
-        sender: {
-          username: profile.username,
-          avatar_url: getUserAvatar(profile),
-          id: profile.id
-        },
-        is_temp: false,
-        is_read: sentMessage.is_read || false,
-        read_at: sentMessage.read_at || null,
-        delivered_at: sentMessage.delivered_at || new Date().toISOString(),
-        reply_to: replyToData,
-      };
-
-      setMessages(prev => {
-        const filtered = prev.filter(msg => msg.id !== tempMessage.id);
-        const newMessages = [...filtered, enhancedSentMessage];
-        return newMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      });
-
-    } catch (err) {
-      setError(err.message || 'Failed to send message');
-      setMessages(prev => prev.filter(msg => !msg.is_temp || msg.id !== tempMessage.id));
-      setNewMessage(messageContent);
-    } finally {
-      setMessageLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  // Get connection status with unread count
-  const getConnectionStatus = () => {
-    const unreadCount = messages.filter(
-      msg => !msg.is_read && msg.sender_id === selectedFriend?.id
-    ).length;
-    
-    return { 
-      text: `Online • ${unreadCount} unread`, 
-      color: 'success.main',
-      unreadCount 
-    };
-  };
-
-  const status = selectedFriend ? getConnectionStatus() : { text: 'Online', color: 'success.main' };
-
-  const handleLocalAvatarError = (avatarUrl) => {
-    console.log('Avatar failed to load in MessagesTab:', avatarUrl);
-  };
-
-  // Get threaded messages for rendering
-  const threadedMessages = getThreadedMessages();
-
-  // Get the last message status for seen indicator
-  const getLastMessageStatus = () => {
-    if (threadedMessages.length === 0) return 'none';
-    
-    const lastMessage = threadedMessages[threadedMessages.length - 1];
-    return lastMessage.status || 'none';
-  };
-
-  const lastMessageStatus = getLastMessageStatus();
-
-  // Mobile drawer for friends list
+  // === Drawer ===
   const FriendsListDrawer = () => (
     <Drawer
       variant="temporary"
       open={mobileDrawerOpen}
       onClose={() => setMobileDrawerOpen(false)}
-      ModalProps={{
-        keepMounted: true,
-      }}
+      ModalProps={{ keepMounted: true }}
       sx={{
-        display: { xs: 'block', md: 'none' },
-        '& .MuiDrawer-paper': { 
-          boxSizing: 'border-box', 
-          width: 300,
-          borderRight: 1, 
-          borderColor: 'divider', 
-          pr: 2,
-          bgcolor: 'background.paper'
+        display: { xs: 'block', sm: 'none' }, // Only on mobile, not tablet
+        '& .MuiDrawer-paper': {
+          width: 280,
+          boxSizing: 'border-box',
         },
       }}
     >
       <Box sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           Friends {isLoadingMessages && <CircularProgress size={16} sx={{ ml: 1 }} />}
         </Typography>
-        <List sx={{ maxHeight: 'calc(100vh - 120px)', overflow: 'auto' }}>
+        <List>
           {friends.map((friend) => (
             <ListItem
               key={friend.id}
@@ -649,46 +424,32 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               sx={{
                 borderRadius: '12px',
                 mb: 1,
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  bgcolor: 'action.hover',
-                  transform: 'translateX(4px)',
-                },
-                '&.Mui-selected': {
-                  bgcolor: 'primary.light',
+                px: 1.5,
+                py: 1.5,
+                '&:hover': { bgcolor: 'action.hover' },
+                '&.Mui-selected': { 
+                  bgcolor: 'primary.light', 
                   color: 'primary.contrastText',
-                }
+                  '& .MuiListItemText-secondary': {
+                    color: 'primary.contrastText'
+                  }
+                },
               }}
             >
-              <ListItemAvatar>
-                <Avatar 
-                  src={getUserAvatar(friend)} 
-                  alt={friend.username} 
-                  sx={{ width: 40, height: 40 }}
-                  imgProps={{
-                    onError: () => handleAvatarError ? handleAvatarError(friend.avatar_url || friend.avatar) : handleLocalAvatarError(friend.avatar_url || friend.avatar)
-                  }}
-                >
+              <ListItemAvatar sx={{ minWidth: 44 }}>
+                <Avatar src={getUserAvatar(friend)} sx={{ width: 44, height: 44 }}>
                   {getUserInitials(friend.username)}
                 </Avatar>
               </ListItemAvatar>
               <ListItemText
-                primary={
-                  <Typography variant="body1" fontWeight="500">
-                    {friend.username}
+                primary={<Typography fontWeight="500" sx={{ fontSize: '0.95rem' }}>{friend.username}</Typography>}
+                secondary={
+                  <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                    {friend.email}
                   </Typography>
                 }
-                secondary={friend.email}
               />
-              <Box 
-                sx={{ 
-                  width: 8, 
-                  height: 8, 
-                  borderRadius: '50%', 
-                  bgcolor: 'success.main',
-                  ml: 1
-                }} 
-              />
+              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'success.main', ml: 1 }} />
             </ListItem>
           ))}
         </List>
@@ -697,363 +458,367 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   );
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      height: { xs: 'calc(100vh - 200px)', sm: 600 },
-      borderRadius: '8px', 
-      overflow: 'hidden',
-      flexDirection: 'column',
-      border: 1,
-      borderColor: 'divider',
-      bgcolor: 'background.paper'
-    }}>
-      {/* Mobile Header */}
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: { 
+          xs: 'column', // Mobile: 0-599px
+          sm: 'row',    // Tablet: 600-899px - ROW LAYOUT FOR TABLET
+          md: 'row'     // Desktop: 900px+
+        },
+        height: { 
+          xs: 'calc(100vh - 120px)', // Mobile
+          sm: '75vh',                // Tablet
+          md: 600                    // Desktop
+        },
+        borderRadius: { 
+          xs: '12px', 
+          sm: '16px',                // Tablet: more rounded
+          md: '8px' 
+        },
+        margin: {
+          xs: 1,                     // Mobile: small margin
+          sm: 2,                     // Tablet: more margin
+          md: 0                      // Desktop: no margin
+        },
+        overflow: 'hidden',
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        // Tablet-specific container styling
+        width: {
+          xs: 'calc(100% - 16px)',   // Mobile: full width minus margin
+          sm: 'calc(100% - 32px)',   // Tablet: full width minus margin
+          md: '100%'                 // Desktop: full width
+        },
+        maxWidth: {
+          sm: '900px',               // Tablet: don't get too wide
+          md: 'none'                 // Desktop: no restriction
+        },
+        mx: {
+          sm: 'auto',                // Tablet: center horizontally
+          md: 0                      // Desktop: normal flow
+        }
+      }}
+    >
+      {/* Mobile Header - Only show on mobile */}
       {isMobile && selectedFriend && (
-        <Box sx={{ 
-          p: 1, 
-          borderBottom: 1, 
-          borderColor: 'divider', 
-          bgcolor: 'white',
-          display: { xs: 'flex', md: 'none' },
-          alignItems: 'center',
-          gap: 1,
-          flexShrink: 0
-        }}>
-          <IconButton onClick={() => setMobileDrawerOpen(true)}>
-            <MenuIcon />
-          </IconButton>
-          <Avatar 
-            src={getUserAvatar(selectedFriend)} 
-            sx={{ 
-              width: 36, 
-              height: 36,
-              fontSize: '1rem',
-            }}
-          >
-            {getUserInitials(selectedFriend.username)}
-          </Avatar>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="body1" fontWeight="600">
-              {selectedFriend.username || 'Friend'}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {status.text}
-            </Typography>
+        <Box
+          sx={{
+            p: 1.5,
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <IconButton size="small" onClick={() => setMobileDrawerOpen(true)}>
+              <MenuIcon />
+            </IconButton>
+            <Avatar src={getUserAvatar(selectedFriend)} sx={{ width: 36, height: 36 }} />
+            <Box>
+              <Typography variant="body1" fontWeight="600" sx={{ fontSize: '0.95rem' }}>
+                {selectedFriend.username}
+              </Typography>
+              <Typography variant="caption" color={status.color} sx={{ fontSize: '0.75rem' }}>
+                {status.text}
+              </Typography>
+            </Box>
           </Box>
+          <IconButton size="small" onClick={() => setSelectedFriend(null)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', flex: 1, flexDirection: { xs: 'column', md: 'row' }, minHeight: 0 }}>
-        {/* Friends List Sidebar - Desktop */}
-        {!isMobile && (
+      <Box sx={{ 
+        display: 'flex', 
+        flex: 1, 
+        flexDirection: { 
+          xs: 'column', // Mobile
+          sm: 'row',    // Tablet - ROW LAYOUT
+          md: 'row'     // Desktop
+        } 
+      }}>
+        {/* Sidebar - Show on tablet and desktop, hide on mobile */}
+        {(isTablet || isDesktop) && (
           <Box sx={{ 
-            width: { md: 300, lg: 350 }, 
+            width: { 
+              sm: 280,  // Tablet: slightly narrower
+              md: 300   // Desktop: standard width
+            }, 
             borderRight: 1, 
             borderColor: 'divider', 
-            bgcolor: 'background.paper',
-            display: { xs: 'none', md: 'block' },
-            overflow: 'auto'
+            overflow: 'auto',
+            flexShrink: 0
           }}>
-            <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600 }}>
+            <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600, fontSize: { sm: '1.1rem', md: '1.25rem' } }}>
               Friends {isLoadingMessages && <CircularProgress size={16} sx={{ ml: 1 }} />}
             </Typography>
-            <List sx={{ overflow: 'auto' }}>
+            <List>
               {friends.map((friend) => (
                 <ListItem
                   key={friend.id}
                   selected={selectedFriend?.id === friend.id}
                   onClick={() => handleSelectFriend(friend)}
-                  disabled={isLoadingMessages}
                   sx={{
                     borderRadius: '12px',
                     mb: 1,
                     mx: 1,
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                      bgcolor: 'action.hover',
-                      transform: 'translateX(4px)',
-                    },
-                    '&.Mui-selected': {
-                      bgcolor: 'primary.light',
+                    px: { sm: 1.5, md: 2 },
+                    py: { sm: 1.5, md: 1 },
+                    '&:hover': { bgcolor: 'action.hover' },
+                    '&.Mui-selected': { 
+                      bgcolor: 'primary.light', 
                       color: 'primary.contrastText',
-                    }
+                      '& .MuiListItemText-secondary': {
+                        color: 'primary.contrastText'
+                      }
+                    },
                   }}
                 >
                   <ListItemAvatar>
-                    <Avatar 
-                      src={getUserAvatar(friend)} 
-                      alt={friend.username} 
-                      sx={{ width: 40, height: 40 }}
-                      imgProps={{
-                        onError: () => handleAvatarError ? handleAvatarError(friend.avatar_url || friend.avatar) : handleLocalAvatarError(friend.avatar_url || friend.avatar)
-                      }}
-                    >
+                    <Avatar src={getUserAvatar(friend)} sx={{ width: 40, height: 40 }}>
                       {getUserInitials(friend.username)}
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText
                     primary={
-                      <Typography variant="body1" fontWeight="500">
+                      <Typography fontWeight="500" sx={{ fontSize: { sm: '0.9rem', md: '1rem' } }}>
                         {friend.username}
                       </Typography>
                     }
-                    secondary={friend.email}
+                    secondary={
+                      <Typography variant="body2" sx={{ fontSize: { sm: '0.8rem', md: '0.875rem' } }}>
+                        {friend.email}
+                      </Typography>
+                    }
                   />
-                  <Box 
-                    sx={{ 
-                      width: 8, 
-                      height: 8, 
-                      borderRadius: '50%', 
-                      bgcolor: 'success.main',
-                      ml: 1
-                    }} 
-                  />
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', ml: 1 }} />
                 </ListItem>
               ))}
             </List>
           </Box>
         )}
 
-        {/* Friends List Drawer - Mobile */}
         <FriendsListDrawer />
 
         {/* Chat Area */}
         <Box sx={{ 
           flex: 1, 
           display: 'flex', 
-          flexDirection: 'column',
+          flexDirection: 'column', 
+          bgcolor: '#f8f9fa',
           minHeight: 0,
-          bgcolor: '#f8f9fa'
+          // Ensure proper minimum width on tablet
+          minWidth: {
+            sm: 300,  // Tablet: minimum chat width
+            md: 400   // Desktop: minimum chat width
+          }
         }}>
           {selectedFriend ? (
             <>
-              {/* Chat Header - Desktop */}
-              {!isMobile && (
+              {/* Desktop/Tablet Header - Show on tablet and desktop */}
+              {(isTablet || isDesktop) && (
                 <Box sx={{ 
-                  p: 2, 
+                  p: { sm: 1.5, md: 2 }, 
                   borderBottom: 1, 
                   borderColor: 'divider', 
-                  bgcolor: 'white',
-                  display: { xs: 'none', md: 'flex' },
-                  alignItems: 'center',
+                  bgcolor: 'white', 
+                  display: 'flex', 
+                  alignItems: 'center', 
                   gap: 2,
                   flexShrink: 0
                 }}>
-                  <Avatar 
-                    src={getUserAvatar(selectedFriend)} 
-                    sx={{ 
-                      width: 44, 
-                      height: 44,
-                      fontSize: '1.2rem',
-                      fontWeight: 'bold'
-                    }}
-                    imgProps={{
-                      onError: () => handleAvatarError ? handleAvatarError(selectedFriend.avatar_url || selectedFriend.avatar) : handleLocalAvatarError(selectedFriend.avatar_url || selectedFriend.avatar)
-                    }}
-                  >
-                    {getUserInitials(selectedFriend.username)}
-                  </Avatar>
+                  <Avatar src={getUserAvatar(selectedFriend)} sx={{ 
+                    width: { sm: 40, md: 44 }, 
+                    height: { sm: 40, md: 44 } 
+                  }} />
                   <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6" fontWeight="600">
-                      {selectedFriend.username || 'Friend'}
+                    <Typography variant="h6" fontWeight="600" sx={{ fontSize: { sm: '1.1rem', md: '1.25rem' } }}>
+                      {selectedFriend.username}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {isLoadingMessages ? 'Loading messages...' : status.text}
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: { sm: '0.75rem', md: '0.875rem' } }}>
+                      {isLoadingMessages ? 'Connecting...' : status.text}
                     </Typography>
                   </Box>
-                  <Chip
-                    label={status.text}
-                    size="small"
+                  <Chip 
+                    label={status.text} 
+                    size="small" 
                     sx={{ 
-                      borderRadius: '8px',
-                      backgroundColor: status.color,
+                      bgcolor: status.color, 
                       color: 'white',
-                      fontWeight: '500'
-                    }}
+                      fontSize: { sm: '0.7rem', md: '0.75rem' }
+                    }} 
                   />
                 </Box>
               )}
-              
-              {/* TRUE PINNED MESSAGE - Only shows for header pinning */}
+
+              {/* Pinned Message */}
               {pinnedMessage && (
-                <Card 
-                  sx={{ 
-                    m: { xs: 1, sm: 2 }, 
-                    mb: 1,
-                    p: { xs: 1.5, sm: 2 }, 
-                    bgcolor: 'warning.light',
-                    border: '2px solid',
-                    borderColor: 'warning.main',
-                    borderRadius: '12px',
-                    position: 'relative',
-                    flexShrink: 0
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <Box sx={{ flex: 1 }}>
+                <Card sx={{ 
+                  m: { xs: 1, sm: 1.5, md: 2 }, 
+                  mb: { xs: 0.5, sm: 1, md: 1 }, 
+                  p: { xs: 1.5, sm: 1.5, md: 2 }, 
+                  bgcolor: 'warning.light', 
+                  border: '2px solid', 
+                  borderColor: 'warning.main', 
+                  borderRadius: '12px' 
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <PushPinIcon 
-                          fontSize="small" 
-                          sx={{ 
-                            mr: 1, 
-                            color: 'warning.dark',
-                            transform: 'rotate(45deg)'
-                          }} 
-                        />
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            color: 'warning.dark',
-                            fontWeight: 600,
-                            textTransform: 'uppercase'
-                          }}
-                        >
-                          Pinned Message
+                        <PushPinIcon sx={{ 
+                          mr: 1, 
+                          color: 'warning.dark', 
+                          transform: 'rotate(45deg)', 
+                          fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } 
+                        }} />
+                        <Typography variant="caption" sx={{ 
+                          color: 'warning.dark', 
+                          fontWeight: 600, 
+                          fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.75rem' } 
+                        }}>
+                          Pinned
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <Avatar 
                           src={getUserAvatar(pinnedMessage.sender_id === profile?.id ? profile : selectedFriend)} 
-                          sx={{ width: 24, height: 24, mr: 1 }}
-                        >
-                          {getUserInitials(pinnedMessage.sender_id === profile?.id ? profile.username : selectedFriend.username)}
-                        </Avatar>
-                        <Typography variant="body2" fontWeight="500">
+                          sx={{ 
+                            width: { xs: 20, sm: 22, md: 24 }, 
+                            height: { xs: 20, sm: 22, md: 24 }, 
+                            mr: 1 
+                          }} 
+                        />
+                        <Typography variant="body2" fontWeight="500" sx={{ 
+                          fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } 
+                        }}>
                           {pinnedMessage.sender_id === profile?.id ? 'You' : selectedFriend.username}
                         </Typography>
-                        <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary', opacity: 0.8 }}>
-                          {new Date(pinnedMessage.created_at).toLocaleTimeString()}
-                        </Typography>
                       </Box>
-                      <Typography variant="body2" sx={{ lineHeight: 1.4 }}>
+                      <Typography variant="body2" sx={{ 
+                        fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } 
+                      }}>
                         {pinnedMessage.content}
                       </Typography>
                     </Box>
                     <IconButton 
                       size="small" 
-                      onClick={handleUnpinMessage}
+                      onClick={() => setPinnedMessage(null)}
                       sx={{ 
-                        color: 'warning.dark',
+                        p: { xs: 0.5, sm: 0.75, md: 1 },
                         ml: 1
                       }}
                     >
-                      <CloseIcon fontSize="small" />
+                      <CloseIcon fontSize={isMobile ? "small" : "medium"} />
                     </IconButton>
                   </Box>
                 </Card>
               )}
-              
-              {/* Messages Container */}
-              <Box 
+
+              {/* Messages */}
+              <Box
                 ref={messagesContainerRef}
-                sx={{ 
+                sx={{
                   flex: 1,
-                  overflow: 'auto', 
-                  p: { xs: 1, sm: 2 },
+                  overflowY: 'auto',
+                  px: { xs: 1.5, sm: 2, md: 2 },
+                  py: { xs: 1, sm: 1.5, md: 2 },
+                  bgcolor: '#f8f9fa',
                   display: 'flex',
                   flexDirection: 'column',
-                  background: 'linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)',
-                  minHeight: 0
+                  gap: { xs: 0.5, sm: 0.75, md: 1 },
                 }}
               >
                 {isLoadingMessages ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                    <CircularProgress />
+                  <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <CircularProgress size={isMobile ? 24 : isTablet ? 28 : 32} />
                   </Box>
                 ) : messages.length === 0 ? (
-                  <Box sx={{ 
-                    textAlign: 'center', 
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '100%'
-                  }}>
-                    <ChatIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'grey.300', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                  <Box sx={{ textAlign: 'center', mt: 4, p: 2 }}>
+                    <ChatIcon sx={{ 
+                      fontSize: { xs: 48, sm: 56, md: 64 }, 
+                      color: 'grey.300', 
+                      mb: 2 
+                    }} />
+                    <Typography variant="h6" color="text.secondary" sx={{ 
+                      fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } 
+                    }}>
                       No messages yet
                     </Typography>
-                    <Typography color="text.secondary" align="center">
-                      Start a conversation with {selectedFriend.username}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                      💡 Friend messages will appear automatically in real-time
+                    <Typography color="text.secondary" sx={{ 
+                      fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' } 
+                    }}>
+                      Say hello to {selectedFriend.username}!
                     </Typography>
                   </Box>
                 ) : (
-                  <>
-                    {threadedMessages.map((message, index) => {
-                      const isLastMessage = index === threadedMessages.length - 1;
-                      const isMyLastMessage = isLastMessage && message.sender_id === profile?.id;
-                      
-                      return (
-                        <ChatMessage
-                          key={message.id}
-                          message={message}
-                          isMine={message.sender_id === profile?.id}
-                          onUpdate={handleEditMessage}
-                          onDelete={handleDeleteMessage}
-                          onReply={handleReply}
-                          onForward={handleForward}
-                          onPin={handlePinMessage}
-                          profile={profile}
-                          currentFriend={selectedFriend}
-                          getAvatarUrl={getAvatarUrl}
-                          getUserInitials={getUserInitials}
-                          isPinned={pinnedMessage && pinnedMessage.id === message.id}
-                          // Show seen status only for the last message from me when it's seen
-                          showSeenStatus={isMyLastMessage && lastMessageStatus === 'seen'}
-                        />
-                      );
-                    })}
-                  </>
+                  threadedMessages.map((message, i) => {
+                    const isLast = i === threadedMessages.length - 1;
+                    const isMyLast = isLast && message.sender_id === profile?.id;
+                    return (
+                      <ChatMessage
+                        key={message.id}
+                        message={message}
+                        isMine={message.sender_id === profile?.id}
+                        onUpdate={handleEditMessage}
+                        onDelete={handleDeleteMessage}
+                        onReply={handleReply}
+                        onForward={handleForward}
+                        onPin={handlePinMessage}
+                        profile={profile}
+                        currentFriend={selectedFriend}
+                        getAvatarUrl={getAvatarUrl}
+                        getUserInitials={getUserInitials}
+                        isPinned={pinnedMessage?.id === message.id}
+                        showSeenStatus={isMyLast && message.is_read}
+                      />
+                    );
+                  })
                 )}
               </Box>
-              
-              {/* REPLY PREVIEW - Shows above input when replying */}
+
+              {/* Reply Preview */}
               {replyingTo && (
                 <Box sx={{ 
-                  p: { xs: 1, sm: 1.5 }, 
+                  p: { xs: 1, sm: 1.25, md: 1.5 }, 
                   borderTop: 1, 
                   borderColor: 'divider', 
                   bgcolor: 'primary.light',
-                  borderBottom: '1px solid',
-                  borderBottomColor: 'primary.main',
                   flexShrink: 0
                 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <Box sx={{ flex: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <ReplyIcon 
-                          fontSize="small" 
-                          sx={{ 
-                            mr: 1, 
-                            color: 'primary.dark'
-                          }} 
-                        />
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            color: 'primary.dark',
-                            fontWeight: 600,
-                            textTransform: 'uppercase'
-                          }}
-                        >
-                          Replying To
-                        </Typography>
-                      </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                        <Avatar 
-                          src={getUserAvatar(replyingTo.sender_id === profile?.id ? profile : selectedFriend)} 
-                          sx={{ width: 20, height: 20, mr: 1 }}
-                        >
-                          {getUserInitials(replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username)}
-                        </Avatar>
-                        <Typography variant="body2" fontWeight="500" sx={{ color: 'primary.contrastText', fontSize: '0.8rem' }}>
-                          {replyingTo.sender_id === profile?.id ? 'You' : selectedFriend.username}
+                        <ReplyIcon sx={{ 
+                          mr: 1, 
+                          color: 'primary.dark' 
+                        }} 
+                        fontSize={isMobile ? "small" : "medium"} 
+                        />
+                        <Typography variant="caption" sx={{ 
+                          color: 'primary.dark', 
+                          fontWeight: 600, 
+                          fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.75rem' } 
+                        }}>
+                          Replying
                         </Typography>
                       </Box>
-                      <Typography variant="body2" sx={{ lineHeight: 1.3, color: 'primary.contrastText', fontSize: '0.8rem' }}>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: 'primary.contrastText', 
+                          fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.8rem' },
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
                         {replyingTo.content}
                       </Typography>
                     </Box>
@@ -1061,112 +826,131 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                       size="small" 
                       onClick={() => setReplyingTo(null)}
                       sx={{ 
-                        color: 'primary.contrastText',
+                        p: { xs: 0.5, sm: 0.75, md: 1 },
                         ml: 1
                       }}
                     >
-                      <CloseIcon fontSize="small" />
+                      <CloseIcon fontSize={isMobile ? "small" : "medium"} />
                     </IconButton>
                   </Box>
                 </Box>
               )}
-              
-              {/* Message Input */}
-              <Box sx={{ 
-                p: { xs: 1, sm: 2 }, 
-                borderTop: replyingTo ? 0 : 1, 
-                borderColor: 'divider', 
-                bgcolor: 'white',
-                display: 'flex', 
-                gap: 1, 
-                alignItems: 'flex-end',
-                flexShrink: 0,
-                position: 'relative',
-                zIndex: 10
-              }}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder={
-                    replyingTo 
-                      ? `Replying to ${replyingTo.sender_id === profile?.id ? 'yourself' : selectedFriend.username}...` 
-                      : "Type a message... (Press Enter to send)"
-                  }
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  multiline
-                  maxRows={3}
-                  disabled={messageLoading}
-                  sx={{ 
-                    borderRadius: '24px',
-                    bgcolor: '#f8f9fa',
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '24px',
-                    }
-                  }}
-                  autoFocus={!!replyingTo}
-                />
-                <Button
-                  variant="contained"
-                  onClick={handleSendMessage}
-                  disabled={!newMessage.trim() || messageLoading}
-                  sx={{ 
-                    minWidth: { xs: '40px', sm: '48px' }, 
-                    width: { xs: '40px', sm: '48px' },
-                    height: { xs: '40px', sm: '48px' }, 
-                    borderRadius: '50%',
-                    bgcolor: '#0088cc',
-                    '&:hover': {
-                      bgcolor: '#0077b3'
-                    }
-                  }}
-                >
-                  {messageLoading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <SendIcon />}
-                </Button>
-              </Box>
             </>
           ) : (
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              flexDirection: 'column',
-              bgcolor: '#f8f9fa',
-              p: 2
+            <Box sx={{ 
+              flex: 1, 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              p: { xs: 3, sm: 4, md: 2 },
+              textAlign: 'center'
             }}>
-              <ChatIcon sx={{ fontSize: { xs: 64, sm: 96 }, color: 'grey.300', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary" gutterBottom align="center">
-                {isMobile ? 'Tap menu to select a friend' : 'Select a friend to start chatting'}
-              </Typography>
-              <Typography color="text.secondary" align="center">
-                {isMobile ? 'Open the menu to choose a friend' : 'Choose a friend from the list to begin your conversation'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }} align="center">
-                💡 Messages update in real-time automatically
+              <ChatIcon sx={{ 
+                fontSize: { xs: 64, sm: 72, md: 80 }, 
+                color: 'grey.300', 
+                mb: 2 
+              }} />
+              <Typography variant="h6" color="text.secondary" sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.2rem', md: '1.25rem' },
+                mb: 1 
+              }}>
+                {isMobile ? 'Select a friend' : 'Choose a friend to start chatting'}
               </Typography>
               {isMobile && (
-                <Button
-                  variant="contained"
-                  onClick={() => setMobileDrawerOpen(true)}
-                  sx={{ mt: 2 }}
+                <Button 
+                  variant="contained" 
+                  onClick={() => setMobileDrawerOpen(true)} 
+                  sx={{ 
+                    mt: 2,
+                    borderRadius: '20px',
+                    px: 3,
+                    py: 1,
+                    fontSize: '0.9rem'
+                  }}
                 >
                   Open Friends List
                 </Button>
               )}
             </Box>
           )}
+
+          {/* Message Input */}
+          <Box
+            sx={{
+              position: { xs: 'sticky', sm: 'relative' },
+              bottom: 0,
+              p: { xs: 1.5, sm: 2, md: 2 },
+              borderTop: 1,
+              borderColor: 'divider',
+              bgcolor: 'white',
+              display: 'flex',
+              gap: { xs: 1, sm: 1.5, md: 1.5 },
+              alignItems: 'flex-end',
+              flexShrink: 0
+            }}
+          >
+            <TextField
+              fullWidth
+              size="small"
+              placeholder={
+                !selectedFriend
+                  ? 'Select a friend...'
+                  : replyingTo
+                  ? `Replying to ${replyingTo.sender_id === profile?.id ? 'you' : selectedFriend.username}...`
+                  : 'Type a message...'
+              }
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && selectedFriend) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              multiline
+              maxRows={3}
+              disabled={!selectedFriend || messageLoading}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '24px',
+                  fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
+                },
+                bgcolor: '#f8f9fa',
+              }}
+            />
+            <IconButton
+              color="primary"
+              onClick={handleSendMessage}
+              disabled={!selectedFriend || !newMessage.trim() || messageLoading}
+              sx={{
+                borderRadius: '50%',
+                width: { xs: 44, sm: 46, md: 48 },
+                height: { xs: 44, sm: 46, md: 48 },
+                bgcolor: 'primary.main',
+                color: 'white',
+                '&.Mui-disabled': {
+                  bgcolor: 'grey.300',
+                },
+                flexShrink: 0
+              }}
+            >
+              {messageLoading ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : (
+                <SendIcon fontSize={isMobile ? "small" : "medium"} />
+              )}
+            </IconButton>
+          </Box>
         </Box>
       </Box>
 
-      {/* Forward Message Dialog */}
       <ForwardMessageDialog
         open={forwardDialogOpen}
         onClose={() => setForwardDialogOpen(false)}
         message={forwardingMessage}
-        friends={friends.filter(friend => friend.id !== selectedFriend?.id)}
-        onForward={handleForwardMessage} 
+        friends={friends.filter((f) => f.id !== selectedFriend?.id)}
+        onForward={() => {}}
         getAvatarUrl={getAvatarUrl}
         getUserInitials={getUserInitials}
       />

@@ -9,8 +9,8 @@ from app.schemas.chat import MessageOut, GroupMessageOut
 from app.services.websocket_manager import manager
 from app.models.group_message import MessageType
 from app.schemas.chat import MessageCreate, AuthorResponse
-
-router = APIRouter(prefix="/ws", tags=["websockets"])
+import json
+router = APIRouter()
 
 
 def _chat_id(user_a: int, user_b: int) -> str:
@@ -20,29 +20,66 @@ def _chat_id(user_a: int, user_b: int) -> str:
 
 @router.websocket("/private/{friend_id}")
 async def ws_private_chat(
-        websocket: WebSocket,
-        friend_id: int,
-        db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
-    ):
-        if not is_friend(db, current_user.id, friend_id):
-            await websocket.close(code=4003, reason="Not friends")
-            return
+    websocket: WebSocket,
+    friend_id: int,
+    db: Session = Depends(get_db)
+):
+    # === WebSocket Auth: Manual token from query params ===
+    current_user: User | None = await get_current_user_ws(websocket, db)
+    if not current_user:
+        return  # Already closed with code 4401/4403/4404
 
-        chat_id = _chat_id(current_user.id, friend_id)
-        await manager.connect(chat_id, websocket)
+    # === Friendship Check ===
+    if not is_friend(db, current_user.id, friend_id):
+        await websocket.close(code=4003, reason="Not friends")
+        return
 
-        try:
-            while True:
-                data = await websocket.receive_json()
-                if data.get("type") == "message" and data.get("content"):
-                    msg = create_private_message(db, current_user.id, friend_id, data["content"])
-                    await manager.broadcast(chat_id, MessageOut.from_orm(msg).dict())
-        except WebSocketDisconnect:
-            manager.disconnect(chat_id, websocket)
-        except Exception as e:
-            print(f"[WS Error] {e}")
-            manager.disconnect(chat_id, websocket)
+    chat_id = _chat_id(current_user.id, friend_id)
+    await manager.connect(chat_id, websocket)
+
+    print(f"[WS] Private Chat Connected: User {current_user.id} ↔ Friend {friend_id}")
+
+    try:
+        while True:
+            raw_data = await websocket.receive_text()
+            try:
+                data = json.loads(raw_data)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "error": "Invalid JSON"
+                }))
+                continue
+
+            msg_type = data.get("type")
+            content = data.get("content")
+
+            # === Handle Incoming Message ===
+            if msg_type == "message" and content and content.strip():
+                # Create message in DB
+                msg = create_private_message(
+                    db=db,
+                    sender_id=current_user.id,
+                    receiver_id=friend_id,
+                    content=content.strip()
+                )
+
+                # Prepare response
+                message_out = MessageOut.from_orm(msg)
+
+                # Broadcast to both users
+                await manager.broadcast(chat_id, message_out.dict())
+
+            elif msg_type == "read":
+                # Optional: Mark as read
+                pass
+
+    except WebSocketDisconnect:
+        print(f"[WS] Private Chat Disconnected: User {current_user.id}")
+        manager.disconnect(chat_id, websocket)
+    except Exception as e:
+        print(f"[WS] Private Chat Error: {e}")
+        manager.disconnect(chat_id, websocket)
+        await websocket.close(code=1011, reason="Server error")
         
 @router.websocket("/group/{group_id}")
 async def ws_group_chat(
