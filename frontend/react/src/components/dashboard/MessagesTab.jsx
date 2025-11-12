@@ -58,7 +58,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const reconnectTimeoutRef = useRef(null);
 
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // 0-599px
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600-899px
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md')); // 900px+
 
   const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
 
@@ -401,12 +403,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       onClose={() => setMobileDrawerOpen(false)}
       ModalProps={{ keepMounted: true }}
       sx={{
-        display: { xs: 'block', md: 'none' },
-        '& .MuiDrawer-paper': { width: 300, boxSizing: 'border-box', pr: 2 },
+        display: { xs: 'block', sm: 'none' }, // Only on mobile, not tablet
+        '& .MuiDrawer-paper': {
+          width: 280,
+          boxSizing: 'border-box',
+        },
       }}
     >
       <Box sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           Friends {isLoadingMessages && <CircularProgress size={16} sx={{ ml: 1 }} />}
         </Typography>
         <List>
@@ -419,20 +424,32 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               sx={{
                 borderRadius: '12px',
                 mb: 1,
+                px: 1.5,
+                py: 1.5,
                 '&:hover': { bgcolor: 'action.hover' },
-                '&.Mui-selected': { bgcolor: 'primary.light', color: 'primary.contrastText' },
+                '&.Mui-selected': { 
+                  bgcolor: 'primary.light', 
+                  color: 'primary.contrastText',
+                  '& .MuiListItemText-secondary': {
+                    color: 'primary.contrastText'
+                  }
+                },
               }}
             >
-              <ListItemAvatar>
-                <Avatar src={getUserAvatar(friend)} sx={{ width: 40, height: 40 }}>
+              <ListItemAvatar sx={{ minWidth: 44 }}>
+                <Avatar src={getUserAvatar(friend)} sx={{ width: 44, height: 44 }}>
                   {getUserInitials(friend.username)}
                 </Avatar>
               </ListItemAvatar>
               <ListItemText
-                primary={<Typography fontWeight="500">{friend.username}</Typography>}
-                secondary={friend.email}
+                primary={<Typography fontWeight="500" sx={{ fontSize: '0.95rem' }}>{friend.username}</Typography>}
+                secondary={
+                  <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                    {friend.email}
+                  </Typography>
+                }
               />
-              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', ml: 1 }} />
+              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'success.main', ml: 1 }} />
             </ListItem>
           ))}
         </List>
@@ -444,31 +461,102 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     <Box
       sx={{
         display: 'flex',
-        height: { xs: 'calc(100vh - 200px)', sm: 600 },
-        borderRadius: '8px',
+        flexDirection: { 
+          xs: 'column', // Mobile: 0-599px
+          sm: 'row',    // Tablet: 600-899px - ROW LAYOUT FOR TABLET
+          md: 'row'     // Desktop: 900px+
+        },
+        height: { 
+          xs: 'calc(100vh - 120px)', // Mobile
+          sm: '75vh',                // Tablet
+          md: 600                    // Desktop
+        },
+        borderRadius: { 
+          xs: '12px', 
+          sm: '16px',                // Tablet: more rounded
+          md: '8px' 
+        },
+        margin: {
+          xs: 1,                     // Mobile: small margin
+          sm: 2,                     // Tablet: more margin
+          md: 0                      // Desktop: no margin
+        },
         overflow: 'hidden',
         border: 1,
         borderColor: 'divider',
         bgcolor: 'background.paper',
+        // Tablet-specific container styling
+        width: {
+          xs: 'calc(100% - 16px)',   // Mobile: full width minus margin
+          sm: 'calc(100% - 32px)',   // Tablet: full width minus margin
+          md: '100%'                 // Desktop: full width
+        },
+        maxWidth: {
+          sm: '900px',               // Tablet: don't get too wide
+          md: 'none'                 // Desktop: no restriction
+        },
+        mx: {
+          sm: 'auto',                // Tablet: center horizontally
+          md: 0                      // Desktop: normal flow
+        }
       }}
     >
-      {/* Mobile Header */}
+      {/* Mobile Header - Only show on mobile */}
       {isMobile && selectedFriend && (
-        <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton onClick={() => setMobileDrawerOpen(true)}><MenuIcon /></IconButton>
-          <Avatar src={getUserAvatar(selectedFriend)} sx={{ width: 36, height: 36 }} />
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="body1" fontWeight="600">{selectedFriend.username}</Typography>
-            <Typography variant="caption" color="text.secondary">{status.text}</Typography>
+        <Box
+          sx={{
+            p: 1.5,
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <IconButton size="small" onClick={() => setMobileDrawerOpen(true)}>
+              <MenuIcon />
+            </IconButton>
+            <Avatar src={getUserAvatar(selectedFriend)} sx={{ width: 36, height: 36 }} />
+            <Box>
+              <Typography variant="body1" fontWeight="600" sx={{ fontSize: '0.95rem' }}>
+                {selectedFriend.username}
+              </Typography>
+              <Typography variant="caption" color={status.color} sx={{ fontSize: '0.75rem' }}>
+                {status.text}
+              </Typography>
+            </Box>
           </Box>
+          <IconButton size="small" onClick={() => setSelectedFriend(null)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', flex: 1, flexDirection: { xs: 'column', md: 'row' } }}>
-        {/* Desktop Sidebar */}
-        {!isMobile && (
-          <Box sx={{ width: 300, borderRight: 1, borderColor: 'divider', overflow: 'auto' }}>
-            <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flex: 1, 
+        flexDirection: { 
+          xs: 'column', // Mobile
+          sm: 'row',    // Tablet - ROW LAYOUT
+          md: 'row'     // Desktop
+        } 
+      }}>
+        {/* Sidebar - Show on tablet and desktop, hide on mobile */}
+        {(isTablet || isDesktop) && (
+          <Box sx={{ 
+            width: { 
+              sm: 280,  // Tablet: slightly narrower
+              md: 300   // Desktop: standard width
+            }, 
+            borderRight: 1, 
+            borderColor: 'divider', 
+            overflow: 'auto',
+            flexShrink: 0
+          }}>
+            <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600, fontSize: { sm: '1.1rem', md: '1.25rem' } }}>
               Friends {isLoadingMessages && <CircularProgress size={16} sx={{ ml: 1 }} />}
             </Typography>
             <List>
@@ -481,8 +569,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     borderRadius: '12px',
                     mb: 1,
                     mx: 1,
+                    px: { sm: 1.5, md: 2 },
+                    py: { sm: 1.5, md: 1 },
                     '&:hover': { bgcolor: 'action.hover' },
-                    '&.Mui-selected': { bgcolor: 'primary.light', color: 'primary.contrastText' },
+                    '&.Mui-selected': { 
+                      bgcolor: 'primary.light', 
+                      color: 'primary.contrastText',
+                      '& .MuiListItemText-secondary': {
+                        color: 'primary.contrastText'
+                      }
+                    },
                   }}
                 >
                   <ListItemAvatar>
@@ -491,8 +587,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText
-                    primary={<Typography fontWeight="500">{friend.username}</Typography>}
-                    secondary={friend.email}
+                    primary={
+                      <Typography fontWeight="500" sx={{ fontSize: { sm: '0.9rem', md: '1rem' } }}>
+                        {friend.username}
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography variant="body2" sx={{ fontSize: { sm: '0.8rem', md: '0.875rem' } }}>
+                        {friend.email}
+                      </Typography>
+                    }
                   />
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', ml: 1 }} />
                 </ListItem>
@@ -504,41 +608,115 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         <FriendsListDrawer />
 
         {/* Chat Area */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa' }}>
+        <Box sx={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          bgcolor: '#f8f9fa',
+          minHeight: 0,
+          // Ensure proper minimum width on tablet
+          minWidth: {
+            sm: 300,  // Tablet: minimum chat width
+            md: 400   // Desktop: minimum chat width
+          }
+        }}>
           {selectedFriend ? (
             <>
-              {/* Desktop Header */}
-              {!isMobile && (
-                <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Avatar src={getUserAvatar(selectedFriend)} sx={{ width: 44, height: 44 }} />
+              {/* Desktop/Tablet Header - Show on tablet and desktop */}
+              {(isTablet || isDesktop) && (
+                <Box sx={{ 
+                  p: { sm: 1.5, md: 2 }, 
+                  borderBottom: 1, 
+                  borderColor: 'divider', 
+                  bgcolor: 'white', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 2,
+                  flexShrink: 0
+                }}>
+                  <Avatar src={getUserAvatar(selectedFriend)} sx={{ 
+                    width: { sm: 40, md: 44 }, 
+                    height: { sm: 40, md: 44 } 
+                  }} />
                   <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="h6" fontWeight="600" sx={{ fontSize: { sm: '1.1rem', md: '1.25rem' } }}>
+                      {selectedFriend.username}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: { sm: '0.75rem', md: '0.875rem' } }}>
                       {isLoadingMessages ? 'Connecting...' : status.text}
                     </Typography>
                   </Box>
-                  <Chip label={status.text} size="small" sx={{ bgcolor: status.color, color: 'white' }} />
+                  <Chip 
+                    label={status.text} 
+                    size="small" 
+                    sx={{ 
+                      bgcolor: status.color, 
+                      color: 'white',
+                      fontSize: { sm: '0.7rem', md: '0.75rem' }
+                    }} 
+                  />
                 </Box>
               )}
 
               {/* Pinned Message */}
               {pinnedMessage && (
-                <Card sx={{ m: 2, mb: 1, p: 2, bgcolor: 'warning.light', border: '2px solid', borderColor: 'warning.main', borderRadius: '12px' }}>
+                <Card sx={{ 
+                  m: { xs: 1, sm: 1.5, md: 2 }, 
+                  mb: { xs: 0.5, sm: 1, md: 1 }, 
+                  p: { xs: 1.5, sm: 1.5, md: 2 }, 
+                  bgcolor: 'warning.light', 
+                  border: '2px solid', 
+                  borderColor: 'warning.main', 
+                  borderRadius: '12px' 
+                }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Box sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <PushPinIcon sx={{ mr: 1, color: 'warning.dark', transform: 'rotate(45deg)' }} />
-                        <Typography variant="caption" sx={{ color: 'warning.dark', fontWeight: 600 }}>Pinned</Typography>
+                        <PushPinIcon sx={{ 
+                          mr: 1, 
+                          color: 'warning.dark', 
+                          transform: 'rotate(45deg)', 
+                          fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } 
+                        }} />
+                        <Typography variant="caption" sx={{ 
+                          color: 'warning.dark', 
+                          fontWeight: 600, 
+                          fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.75rem' } 
+                        }}>
+                          Pinned
+                        </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Avatar src={getUserAvatar(pinnedMessage.sender_id === profile?.id ? profile : selectedFriend)} sx={{ width: 24, height: 24, mr: 1 }} />
-                        <Typography variant="body2" fontWeight="500">
+                        <Avatar 
+                          src={getUserAvatar(pinnedMessage.sender_id === profile?.id ? profile : selectedFriend)} 
+                          sx={{ 
+                            width: { xs: 20, sm: 22, md: 24 }, 
+                            height: { xs: 20, sm: 22, md: 24 }, 
+                            mr: 1 
+                          }} 
+                        />
+                        <Typography variant="body2" fontWeight="500" sx={{ 
+                          fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } 
+                        }}>
                           {pinnedMessage.sender_id === profile?.id ? 'You' : selectedFriend.username}
                         </Typography>
                       </Box>
-                      <Typography variant="body2">{pinnedMessage.content}</Typography>
+                      <Typography variant="body2" sx={{ 
+                        fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } 
+                      }}>
+                        {pinnedMessage.content}
+                      </Typography>
                     </Box>
-                    <IconButton size="small" onClick={() => setPinnedMessage(null)}><CloseIcon /></IconButton>
+                    <IconButton 
+                      size="small" 
+                      onClick={() => setPinnedMessage(null)}
+                      sx={{ 
+                        p: { xs: 0.5, sm: 0.75, md: 1 },
+                        ml: 1
+                      }}
+                    >
+                      <CloseIcon fontSize={isMobile ? "small" : "medium"} />
+                    </IconButton>
                   </Box>
                 </Card>
               )}
@@ -549,23 +727,35 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 sx={{
                   flex: 1,
                   overflowY: 'auto',
-                  p: 2,
+                  px: { xs: 1.5, sm: 2, md: 2 },
+                  py: { xs: 1, sm: 1.5, md: 2 },
                   bgcolor: '#f8f9fa',
-                  minHeight: 0,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 1
+                  gap: { xs: 0.5, sm: 0.75, md: 1 },
                 }}
               >
                 {isLoadingMessages ? (
                   <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                    <CircularProgress />
+                    <CircularProgress size={isMobile ? 24 : isTablet ? 28 : 32} />
                   </Box>
                 ) : messages.length === 0 ? (
-                  <Box sx={{ textAlign: 'center', mt: 4 }}>
-                    <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary">No messages yet</Typography>
-                    <Typography color="text.secondary">Say hello to {selectedFriend.username}!</Typography>
+                  <Box sx={{ textAlign: 'center', mt: 4, p: 2 }}>
+                    <ChatIcon sx={{ 
+                      fontSize: { xs: 48, sm: 56, md: 64 }, 
+                      color: 'grey.300', 
+                      mb: 2 
+                    }} />
+                    <Typography variant="h6" color="text.secondary" sx={{ 
+                      fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } 
+                    }}>
+                      No messages yet
+                    </Typography>
+                    <Typography color="text.secondary" sx={{ 
+                      fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' } 
+                    }}>
+                      Say hello to {selectedFriend.username}!
+                    </Typography>
                   </Box>
                 ) : (
                   threadedMessages.map((message, i) => {
@@ -595,45 +785,107 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
               {/* Reply Preview */}
               {replyingTo && (
-                <Box sx={{ p: 1.5, borderTop: 1, borderColor: 'divider', bgcolor: 'primary.light' }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Box sx={{ flex: 1 }}>
+                <Box sx={{ 
+                  p: { xs: 1, sm: 1.25, md: 1.5 }, 
+                  borderTop: 1, 
+                  borderColor: 'divider', 
+                  bgcolor: 'primary.light',
+                  flexShrink: 0
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                        <ReplyIcon sx={{ mr: 1, color: 'primary.dark' }} fontSize="small" />
-                        <Typography variant="caption" sx={{ color: 'primary.dark', fontWeight: 600 }}>Replying</Typography>
+                        <ReplyIcon sx={{ 
+                          mr: 1, 
+                          color: 'primary.dark' 
+                        }} 
+                        fontSize={isMobile ? "small" : "medium"} 
+                        />
+                        <Typography variant="caption" sx={{ 
+                          color: 'primary.dark', 
+                          fontWeight: 600, 
+                          fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.75rem' } 
+                        }}>
+                          Replying
+                        </Typography>
                       </Box>
-                      <Typography variant="body2" sx={{ color: 'primary.contrastText', fontSize: '0.8rem' }}>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: 'primary.contrastText', 
+                          fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.8rem' },
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
                         {replyingTo.content}
                       </Typography>
                     </Box>
-                    <IconButton size="small" onClick={() => setReplyingTo(null)}><CloseIcon /></IconButton>
+                    <IconButton 
+                      size="small" 
+                      onClick={() => setReplyingTo(null)}
+                      sx={{ 
+                        p: { xs: 0.5, sm: 0.75, md: 1 },
+                        ml: 1
+                      }}
+                    >
+                      <CloseIcon fontSize={isMobile ? "small" : "medium"} />
+                    </IconButton>
                   </Box>
                 </Box>
               )}
             </>
           ) : (
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 2 }}>
-              <ChatIcon sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
+            <Box sx={{ 
+              flex: 1, 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              p: { xs: 3, sm: 4, md: 2 },
+              textAlign: 'center'
+            }}>
+              <ChatIcon sx={{ 
+                fontSize: { xs: 64, sm: 72, md: 80 }, 
+                color: 'grey.300', 
+                mb: 2 
+              }} />
+              <Typography variant="h6" color="text.secondary" sx={{ 
+                fontSize: { xs: '1.1rem', sm: '1.2rem', md: '1.25rem' },
+                mb: 1 
+              }}>
                 {isMobile ? 'Select a friend' : 'Choose a friend to start chatting'}
               </Typography>
               {isMobile && (
-                <Button variant="contained" onClick={() => setMobileDrawerOpen(true)} sx={{ mt: 2 }}>
-                  Open Friends
+                <Button 
+                  variant="contained" 
+                  onClick={() => setMobileDrawerOpen(true)} 
+                  sx={{ 
+                    mt: 2,
+                    borderRadius: '20px',
+                    px: 3,
+                    py: 1,
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  Open Friends List
                 </Button>
               )}
             </Box>
           )}
 
-          {/* PERMANENT INPUT BOX - Always visible but conditionally disabled */}
+          {/* Message Input */}
           <Box
             sx={{
-              p: 2,
+              position: { xs: 'sticky', sm: 'relative' },
+              bottom: 0,
+              p: { xs: 1.5, sm: 2, md: 2 },
               borderTop: 1,
               borderColor: 'divider',
               bgcolor: 'white',
               display: 'flex',
-              gap: 1,
+              gap: { xs: 1, sm: 1.5, md: 1.5 },
               alignItems: 'flex-end',
               flexShrink: 0
             }}
@@ -642,11 +894,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               fullWidth
               size="small"
               placeholder={
-                !selectedFriend 
-                  ? 'Select a friend to start chatting...' 
-                  : replyingTo 
-                    ? `Replying to ${replyingTo.sender_id === profile?.id ? 'you' : selectedFriend.username}...` 
-                    : 'Type a message...'
+                !selectedFriend
+                  ? 'Select a friend...'
+                  : replyingTo
+                  ? `Replying to ${replyingTo.sender_id === profile?.id ? 'you' : selectedFriend.username}...`
+                  : 'Type a message...'
               }
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
@@ -659,32 +911,36 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               multiline
               maxRows={3}
               disabled={!selectedFriend || messageLoading}
-              sx={{ 
-                '& .MuiOutlinedInput-root': { borderRadius: '24px' }, 
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '24px',
+                  fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
+                },
                 bgcolor: '#f8f9fa',
-                '& .Mui-disabled': {
-                  bgcolor: '#f5f5f5',
-                  cursor: 'not-allowed'
-                }
               }}
-              autoFocus={!!replyingTo}
             />
-            <Button
-              variant="contained"
+            <IconButton
+              color="primary"
               onClick={handleSendMessage}
               disabled={!selectedFriend || !newMessage.trim() || messageLoading}
-              sx={{ 
-                borderRadius: '50%', 
-                minWidth: 48, 
-                height: 48,
+              sx={{
+                borderRadius: '50%',
+                width: { xs: 44, sm: 46, md: 48 },
+                height: { xs: 44, sm: 46, md: 48 },
+                bgcolor: 'primary.main',
+                color: 'white',
                 '&.Mui-disabled': {
                   bgcolor: 'grey.300',
-                  cursor: 'not-allowed'
-                }
+                },
+                flexShrink: 0
               }}
             >
-              {messageLoading ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
-            </Button>
+              {messageLoading ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : (
+                <SendIcon fontSize={isMobile ? "small" : "medium"} />
+              )}
+            </IconButton>
           </Box>
         </Box>
       </Box>
