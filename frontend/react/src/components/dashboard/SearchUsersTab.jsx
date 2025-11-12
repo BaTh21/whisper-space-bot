@@ -166,18 +166,18 @@ const SearchUsersTab = ({
 
   return (
     <Box sx={{ 
-      p: { xs: 2, sm: 3 },
+      p: { xs: 1.5, sm: 3 },
       maxWidth: '100%',
       overflow: 'hidden'
     }}>
-      <Typography variant="h5" gutterBottom fontWeight="600">
+      <Typography variant="h5" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
         Search Users
       </Typography>
       
       <Box sx={{ 
         display: 'flex', 
         flexDirection: { xs: 'column', sm: 'row' },
-        gap: 1, 
+        gap: 1.5, 
         mb: 3 
       }}>
         <TextField
@@ -187,7 +187,12 @@ const SearchUsersTab = ({
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           disabled={loading}
-          sx={{ borderRadius: '8px' }}
+          sx={{ 
+            borderRadius: '8px',
+            '& .MuiOutlinedInput-root': {
+              fontSize: { xs: '0.875rem', sm: '1rem' }
+            }
+          }}
           size={isMobile ? 'small' : 'medium'}
         />
         <Button 
@@ -197,7 +202,8 @@ const SearchUsersTab = ({
           sx={{ 
             borderRadius: '8px', 
             minWidth: { xs: '100%', sm: 120 },
-            height: { xs: '40px', sm: '56px' }
+            height: { xs: '42px', sm: '56px' },
+            fontSize: { xs: '0.875rem', sm: '0.9375rem' }
           }}
           size={isMobile ? 'small' : 'medium'}
         >
@@ -206,7 +212,7 @@ const SearchUsersTab = ({
       </Box>
 
       {searchResults.length === 0 && searchQuery.trim().length >= 2 && !loading && (
-        <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
+        <Typography color="text.secondary" align="center" sx={{ py: 2, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
           No users found matching "{searchQuery}"
         </Typography>
       )}
@@ -236,6 +242,7 @@ const SearchUsersTab = ({
                 transition: 'all 0.2s ease',
                 flexDirection: { xs: 'column', sm: 'row' },
                 alignItems: { xs: 'stretch', sm: 'center' },
+                gap: { xs: 1.5, sm: 0 },
                 '&:hover': {
                   transform: { xs: 'none', sm: 'translateY(-2px)' },
                   boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
@@ -246,12 +253,16 @@ const SearchUsersTab = ({
                 display: 'flex', 
                 alignItems: 'center',
                 width: { xs: '100%', sm: 'auto' },
-                mb: { xs: 2, sm: 0 }
+                flex: 1
               }}>
-                <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
+                <ListItemAvatar sx={{ minWidth: { xs: 44, sm: 48 } }}>
                   <Avatar 
                     src={avatarUrl}
-                    sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
+                    sx={{ 
+                      width: { xs: 44, sm: 48 }, 
+                      height: { xs: 44, sm: 48 },
+                      fontSize: { xs: '1rem', sm: '1.25rem' }
+                    }}
                     imgProps={{
                       onError: () => handleImageError(user.id, user.avatar_url),
                       onLoad: () => handleImageLoad(user.id, user.avatar_url),
@@ -262,50 +273,68 @@ const SearchUsersTab = ({
                 </ListItemAvatar>
                 <ListItemText
                   primary={
-                    <Typography variant="body1" fontWeight="500" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}>
+                    <Typography variant="body1" fontWeight="500" sx={{ 
+                      fontSize: { xs: '0.9rem', sm: '1rem' },
+                      lineHeight: 1.2
+                    }}>
                       {user.username}
                     </Typography>
                   }
                   secondary={
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ 
+                      fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                      lineHeight: 1.2,
+                      mt: 0.5
+                    }}>
                       {user.email}
                     </Typography>
                   }
-                  sx={{ my: 0 }}
+                  sx={{ my: 0, ml: { xs: 1.5, sm: 2 } }}
                 />
               </Box>
               
-              {showAddButton ? (
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={
-                    isSending ? 
-                      <CircularProgress size={16} /> : 
-                      <PersonAddIcon />
-                  }
-                  onClick={() => handleSendFriendRequest(user)}
-                  disabled={isSending}
-                  sx={{ 
-                    borderRadius: '8px', 
-                    minWidth: { xs: '100%', sm: 120 },
-                    mt: { xs: 1, sm: 0 }
-                  }}
-                >
-                  {isMobile ? 'Add' : statusText}
-                </Button>
-              ) : (
-                <Chip 
-                  label={isMobile ? statusText.replace('Request Sent', 'Sent') : statusText} 
-                  color={getStatusColor(statusText)}
-                  variant="outlined"
-                  size="small"
-                  sx={{ 
-                    mt: { xs: 1, sm: 0 },
-                    alignSelf: { xs: 'center', sm: 'auto' }
-                  }}
-                />
-              )}
+              <Box sx={{ 
+                width: { xs: '100%', sm: 'auto' },
+                display: 'flex',
+                justifyContent: { xs: 'center', sm: 'flex-end' }
+              }}>
+                {showAddButton ? (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={
+                      isSending ? 
+                        <CircularProgress size={16} /> : 
+                        <PersonAddIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />
+                    }
+                    onClick={() => handleSendFriendRequest(user)}
+                    disabled={isSending}
+                    sx={{ 
+                      borderRadius: '8px', 
+                      minWidth: { xs: '100%', sm: 120 },
+                      fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                      py: { xs: 1, sm: 0.75 }
+                    }}
+                  >
+                    {isSending ? 'Sending...' : (isMobile ? 'Add Friend' : 'Add Friend')}
+                  </Button>
+                ) : (
+                  <Chip 
+                    label={isMobile ? 
+                      (statusText === 'Request Sent' ? 'Sent' : 
+                       statusText === 'Sending...' ? 'Sending' : statusText) 
+                      : statusText} 
+                    color={getStatusColor(statusText)}
+                    variant="outlined"
+                    size="small"
+                    sx={{ 
+                      width: { xs: '100%', sm: 'auto' },
+                      fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                      height: { xs: '32px', sm: 'auto' }
+                    }}
+                  />
+                )}
+              </Box>
             </ListItem>
           );
         })}
