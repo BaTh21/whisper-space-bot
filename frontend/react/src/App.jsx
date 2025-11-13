@@ -1,6 +1,9 @@
 // App.jsx - Remove the direct /notes route
 import { ThemeProvider } from '@mui/material/styles';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { Route, HashRouter as Router, Routes } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import DebugAuth from './components/DebugAuth';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import DashboardPage from './pages/DashboardPage';
@@ -9,15 +12,11 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VerifyCodePage from './pages/VerifyCodePage';
 import theme from './theme';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import DebugAuth from './components/DebugAuth';
-
 const App = () => (
   <ThemeProvider theme={theme}>
     <AuthProvider>
       <DebugAuth>
-        <BrowserRouter>
+        <Router>  {/* Changed from BrowserRouter to HashRouter */}
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
@@ -45,7 +44,7 @@ const App = () => (
             {/* Default Route */}
             <Route path="/" element={<LoginPage />} />
           </Routes>
-        </BrowserRouter>
+        </Router>
         <ToastContainer
           position="top-right"
           autoClose={3000}
