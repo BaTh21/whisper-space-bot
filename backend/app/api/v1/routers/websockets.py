@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect,Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db, SessionLocal
 from app.core.security import get_current_user, get_current_user_ws
@@ -11,6 +11,8 @@ from app.services.websocket_manager import manager
 from app.models.group_message import MessageType
 from app.schemas.chat import MessageCreate, AuthorResponse
 import json
+
+from app.api.v1.routers.websocket_server import handle_websocket_private
 router = APIRouter()
 
 
@@ -182,4 +184,13 @@ async def ws_group_chat(
         manager.disconnect(chat_id, websocket)
         print(f"[WS Error] {e}")
 
-
+@router.websocket("/private/{friend_id}")
+async def websocket_private_chat(
+    websocket: WebSocket,
+    friend_id: int,
+    token: str = Query(..., description="JWT token")
+):
+    """
+    WebSocket endpoint for private chat with a friend
+    """
+    await handle_websocket_private(websocket, friend_id, token)
