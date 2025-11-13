@@ -25,8 +25,9 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
+import { useWebSocket } from '../../hooks/useWebSocket';
 import {
   deleteMessage,
   editMessage,
@@ -37,7 +38,17 @@ import {
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 
-const BASE_URI = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+// WebSocket URL configuration
+const getWebSocketBaseUrl = () => {
+  const wsUrl = import.meta.env.VITE_WS_URL;
+  if (!wsUrl) {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    return apiUrl.replace(/^http/, 'ws');
+  }
+  return wsUrl;
+};
+
+const BASE_URI = getWebSocketBaseUrl();
 
 const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -50,172 +61,169 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [pinnedMessage, setPinnedMessage] = useState(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [isWsConnected, setIsWsConnected] = useState(false);
+  const [friendTyping, setFriendTyping] = useState(false);
 
   const messagesContainerRef = useRef(null);
   const lastSeenCheckRef = useRef(null);
-  const wsRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const [isTyping, setIsTyping] = useState(false);
 
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // 0-599px
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600-899px
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md')); // 900px+
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
 
   const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
 
-  // === WebSocket Setup ===
-  useEffect(() => {
-    if (!selectedFriend) {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      setIsWsConnected(false);
-      return;
-    }
-
+  // WebSocket URL construction - UPDATED PATH
+  const getWsUrl = useCallback(() => {
+    if (!selectedFriend) return null;
+    
     const rawToken = localStorage.getItem('accessToken') || '';
     const token = rawToken.startsWith('Bearer ') ? rawToken.slice(7) : rawToken;
-    const wsUrl = `${BASE_URI}/api/v1/ws/private/${selectedFriend.id}?token=${token}`;
-
-    const connectWebSocket = () => {
-      try {
-        console.log('[WS] Connecting to:', wsUrl);
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          console.log('[WS] Connected');
-          setIsWsConnected(true);
-          setError(null);
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-            reconnectTimeoutRef.current = null;
-          }
-          if (messages.length === 0) {
-            loadInitialMessages();
-          }
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            handleWebSocketMessage(data);
-          } catch (err) {
-            console.error('[WS] Parse error:', err);
-          }
-        };
-
-        ws.onclose = (event) => {
-          console.log('[WS] Disconnected:', event.reason || 'Unknown');
-          setIsWsConnected(false);
-          wsRef.current = null;
-
-          if (!reconnectTimeoutRef.current && selectedFriend) {
-            reconnectTimeoutRef.current = setTimeout(() => {
-              reconnectTimeoutRef.current = null;
-              connectWebSocket();
-            }, 3000);
-          }
-        };
-
-        ws.onerror = () => {
-          console.error('[WS] Error');
-          setError('Chat connection failed');
-        };
-      } catch (err) {
-        console.error('[WS] Setup failed:', err);
-        setError('WebSocket failed');
-      }
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [selectedFriend?.id]);
-
-  // === Send via WebSocket ===
-  const sendWsMessage = (msg) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify(msg));
-        return true;
-      } catch (err) {
-        console.error('[WS] Send failed:', err);
-        return false;
-      }
-    }
-    return false;
-  };
-
-  // === Handle Incoming ===
-  const handleWebSocketMessage = (data) => {
-  console.log('[WS] Received:', data); // Debug log
-  
-  const { type } = data;
-
-  if (type === 'message') {
-    const incomingMsg = {
-      ...data,
-      is_temp: false,
-      sender: {
-        id: data.sender_id,
-        username: data.sender_username,
-        avatar_url: getAvatarUrl(data.sender_username ? null : data.sender_id),
-      },
-      reply_to: data.reply_to
-        ? {
-            ...data.reply_to,
-            sender_username: data.reply_to.sender_username,
-          }
-        : null,
-    };
-
-    setMessages((prev) => {
-      // Remove any temporary messages with same content
-      const filteredPrev = prev.filter(m => 
-        !m.is_temp || m.content !== incomingMsg.content
-      );
-      
-      if (filteredPrev.some(m => m.id === incomingMsg.id)) return filteredPrev;
-      
-      const updated = [...filteredPrev, incomingMsg].sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
-      );
-      
-      console.log('[WS] Messages after update:', updated); // Debug log
-      return updated;
-    });
-
-    // Auto-mark as read if message is from friend
-    if (data.sender_id === selectedFriend.id && !data.is_read) {
-      handleMarkAsRead([data.id]);
-    }
     
-  } else if (type === 'read_receipt') {
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === data.message_id
-          ? { ...msg, is_read: true, read_at: data.read_at }
-          : msg
-      )
-    );
-  }
-};
+    // Updated to match server route: /api/v1/ws/private/{friend_id}
+    return `${BASE_URI}/api/v1/ws/private/${selectedFriend.id}?token=${token}`;
+  }, [selectedFriend]);
 
-  // === Load Initial Messages (ONLY ONCE) ===
+  // WebSocket event handlers
+  const handleWebSocketMessage = useCallback((data) => {
+    console.log('[WS] Received:', data);
+
+    const { type } = data;
+
+    if (type === 'message') {
+      const incomingMsg = {
+        ...data,
+        is_temp: false,
+        sender: {
+          id: data.sender_id,
+          username: data.sender_username,
+          avatar_url: getAvatarUrl(data.sender_username ? null : data.sender_id),
+        },
+        reply_to: data.reply_to
+          ? {
+              ...data.reply_to,
+              sender_username: data.reply_to.sender_username,
+            }
+          : null,
+      };
+
+      setMessages((prev) => {
+        // Remove any temporary messages with same content
+        const filteredPrev = prev.filter(m => 
+          !m.is_temp || m.content !== incomingMsg.content
+        );
+        
+        // Check if message already exists
+        if (filteredPrev.some(m => m.id === incomingMsg.id)) return filteredPrev;
+        
+        const updated = [...filteredPrev, incomingMsg].sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        );
+        
+        return updated;
+      });
+
+      // Auto-mark as read if message is from friend
+      if (data.sender_id === selectedFriend?.id && !data.is_read) {
+        handleMarkAsRead([data.id]);
+      }
+      
+    } else if (type === 'read_receipt') {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === data.message_id
+            ? { ...msg, is_read: true, read_at: data.read_at }
+            : msg
+        )
+      );
+    } else if (type === 'typing') {
+      setFriendTyping(data.is_typing);
+    }
+  }, [selectedFriend, getAvatarUrl]);
+
+  const handleWebSocketOpen = useCallback(() => {
+    console.log('[WS] Connected successfully');
+    setError(null);
+    
+    // Load initial messages if not already loaded
+    if (messages.length === 0 && selectedFriend) {
+      loadInitialMessages();
+    }
+  }, [selectedFriend, messages.length, setError]);
+
+  const handleWebSocketClose = useCallback((event) => {
+    console.log('[WS] Disconnected:', event.code, event.reason);
+    setFriendTyping(false);
+  }, []);
+
+  const handleWebSocketError = useCallback((error) => {
+    console.error('[WS] Error:', error);
+    setError('Chat connection failed');
+  }, [setError]);
+
+  const handleReconnect = useCallback((attempt) => {
+    console.log(`[WS] Reconnection attempt ${attempt}`);
+  }, []);
+
+  // WebSocket hook with UPDATED URL
+  const { 
+    sendMessage: sendWsMessage, 
+    closeConnection,
+    isConnected,
+    reconnectAttempts
+  } = useWebSocket(getWsUrl(), {
+    onMessage: handleWebSocketMessage,
+    onOpen: handleWebSocketOpen,
+    onClose: handleWebSocketClose,
+    onError: handleWebSocketError,
+    onReconnect: handleReconnect,
+    shouldReconnect: true,
+    reconnectInterval: 3000,
+    maxReconnectAttempts: 5,
+    heartbeatInterval: 30000,
+    debug: true
+  });
+
+  // Typing indicators
+  const handleTypingStart = useCallback(() => {
+    if (!isTyping && selectedFriend && isConnected) {
+      setIsTyping(true);
+      sendWsMessage({ 
+        type: 'typing', 
+        is_typing: true 
+      });
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      handleTypingStop();
+    }, 3000);
+  }, [isTyping, selectedFriend, isConnected, sendWsMessage]);
+
+  const handleTypingStop = useCallback(() => {
+    if (isTyping && selectedFriend && isConnected) {
+      setIsTyping(false);
+      sendWsMessage({ 
+        type: 'typing', 
+        is_typing: false 
+      });
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  }, [isTyping, selectedFriend, isConnected, sendWsMessage]);
+
+  // Load Initial Messages
   const loadInitialMessages = async () => {
     if (!selectedFriend || messages.length > 0) return;
+    
     setIsLoadingMessages(true);
     try {
       const chatMessages = await getPrivateChat(selectedFriend.id);
@@ -240,78 +248,79 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
       setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
 
+      // Mark unread messages as read
       const unread = enhanced
         .filter((m) => !m.is_read && m.sender_id === selectedFriend.id)
         .map((m) => m.id);
       if (unread.length > 0) handleMarkAsRead(unread);
     } catch (err) {
-      setError('Failed to load messages',err);
+      setError('Failed to load messages');
+      console.error(err);
     } finally {
       setIsLoadingMessages(false);
     }
   };
 
-  // === Mark as Read ===
+  // Mark as Read
   const handleMarkAsRead = async (messageIds) => {
-  if (!messageIds.length || !selectedFriend) return;
-  
-  console.log('[READ] Marking messages as read:', messageIds);
-  
-  // Update UI immediately
-  setMessages((prev) =>
-    prev.map((m) => 
-      messageIds.includes(m.id) 
-        ? { ...m, is_read: true, read_at: new Date().toISOString() }
-        : m
-    )
-  );
-  
-  try {
-    // Update in database via HTTP API
-    await markMessagesAsRead(messageIds);
+    if (!messageIds.length || !selectedFriend) return;
     
-    // Send WebSocket read receipt
-    messageIds.forEach(id => {
-      sendWsMessage({ 
-        type: 'read', 
-        message_id: id 
+    console.log('[READ] Marking messages as read:', messageIds);
+    
+    // Update UI immediately
+    setMessages((prev) =>
+      prev.map((m) => 
+        messageIds.includes(m.id) 
+          ? { ...m, is_read: true, read_at: new Date().toISOString() }
+          : m
+      )
+    );
+    
+    try {
+      await markMessagesAsRead(messageIds);
+      
+      // Send WebSocket read receipt for each message
+      messageIds.forEach(id => {
+        sendWsMessage({ 
+          type: 'read', 
+          message_id: id 
+        });
       });
-    });
-    
-    console.log('[READ] Successfully marked messages as read');
-  } catch (err) {
-    console.error('[READ] Failed to mark messages as read:', err);
-  }
-};
+    } catch (err) {
+      console.error('[READ] Failed to mark messages as read:', err);
+    }
+  };
 
-
-  // === Auto Mark Read ===
+  // Auto Mark Read
   useEffect(() => {
-  if (!selectedFriend || !messages.length || !isWsConnected) return;
-  
-  // Debounce the read check
-  const now = Date.now();
-  if (lastSeenCheckRef.current && now - lastSeenCheckRef.current < 1000) return;
-  lastSeenCheckRef.current = now;
-  
-  // Find unread messages from friend
-  const unreadFromFriend = messages
-    .filter(m => 
-      !m.is_read && 
-      m.sender_id === selectedFriend.id && 
-      !m.is_temp
-    )
-    .map(m => m.id);
-  
-  if (unreadFromFriend.length > 0) {
-    console.log('[READ] Auto-marking messages as read:', unreadFromFriend);
-    handleMarkAsRead(unreadFromFriend);
-  }
-}, [messages, selectedFriend, isWsConnected]);
+    if (!selectedFriend || !messages.length || !isConnected) return;
+    
+    const now = Date.now();
+    if (lastSeenCheckRef.current && now - lastSeenCheckRef.current < 1000) return;
+    lastSeenCheckRef.current = now;
+    
+    const unreadFromFriend = messages
+      .filter(m => 
+        !m.is_read && 
+        m.sender_id === selectedFriend.id && 
+        !m.is_temp
+      )
+      .map(m => m.id);
+    
+    if (unreadFromFriend.length > 0) {
+      handleMarkAsRead(unreadFromFriend);
+    }
+  }, [messages, selectedFriend, isConnected, handleMarkAsRead]);
 
-  // === Friend Select ===
+  // Friend Select
   const handleSelectFriend = (friend) => {
     if (isMobile) setMobileDrawerOpen(false);
+    
+    // Close existing connection
+    if (selectedFriend) {
+      closeConnection(1000, 'Switching friends');
+    }
+    
     setSelectedFriend(friend);
     clearChatState();
   };
@@ -321,74 +330,111 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setReplyingTo(null);
     setPinnedMessage(null);
     setNewMessage('');
+    setFriendTyping(false);
+    setIsTyping(false);
   };
 
-  // === Send Message ===
+  // Send Message
   const handleSendMessage = async () => {
-  const content = newMessage.trim();
-  if (!content || !selectedFriend) return;
+    const content = newMessage.trim();
+    if (!content || !selectedFriend) return;
 
-  const tempId = `temp-${Date.now()}`;
-  const tempMsg = {
-    id: tempId,
-    sender_id: profile.id,
-    receiver_id: selectedFriend.id,
-    content,
-    message_type: 'text',
-    is_read: false,
-    created_at: new Date().toISOString(),
-    is_temp: true,
-    reply_to_id: replyingTo?.id || null,
-    sender: { 
-      username: profile.username, 
-      avatar_url: getUserAvatar(profile), 
-      id: profile.id 
-    },
-  };
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg = {
+      id: tempId,
+      sender_id: profile.id,
+      receiver_id: selectedFriend.id,
+      content,
+      message_type: 'text',
+      is_read: false,
+      created_at: new Date().toISOString(),
+      is_temp: true,
+      reply_to_id: replyingTo?.id || null,
+      sender: { 
+        username: profile.username, 
+        avatar_url: getUserAvatar(profile), 
+        id: profile.id 
+      },
+    };
 
-  setMessages(prev => [...prev, tempMsg]);
-  setNewMessage('');
-  setReplyingTo(null);
-  setMessageLoading(true);
+    setMessages(prev => [...prev, tempMsg]);
+    setNewMessage('');
+    setReplyingTo(null);
+    setMessageLoading(true);
+    handleTypingStop();
 
-  const payload = { 
-    type: "message", 
-    content, 
-    message_type: "text", 
-    reply_to_id: replyingTo?.id || null 
-  };
+    const payload = { 
+      type: "message", 
+      content, 
+      message_type: "text", 
+      reply_to_id: replyingTo?.id || null 
+    };
 
-  console.log('[WS] Sending:', payload); // Debug log
-
-  if (sendWsMessage(payload)) {
-    // WebSocket sent successfully, keep temp message until confirmed
-    setMessageLoading(false);
-  } else {
-    // WebSocket failed, fallback to HTTP
-    try {
-      const sent = await sendPrivateMessage(selectedFriend.id, payload);
-      setMessages(prev =>
-        prev.filter(m => m.id !== tempId).concat({
-          ...sent,
-          is_temp: false,
-          sender: { 
-            username: profile.username, 
-            avatar_url: getUserAvatar(profile), 
-            id: profile.id 
-          },
-        })
-      );
-    } catch (err) {
-      setError(err.message);
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-      setNewMessage(content);
-    } finally {
+    if (sendWsMessage(payload)) {
       setMessageLoading(false);
+    } else {
+      // WebSocket failed, fallback to HTTP
+      try {
+        const sent = await sendPrivateMessage(selectedFriend.id, payload);
+        setMessages(prev =>
+          prev.filter(m => m.id !== tempId).concat({
+            ...sent,
+            is_temp: false,
+            sender: { 
+              username: profile.username, 
+              avatar_url: getUserAvatar(profile), 
+              id: profile.id 
+            },
+          })
+        );
+      } catch (err) {
+        setError(err.message);
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        setNewMessage(content);
+      } finally {
+        setMessageLoading(false);
+      }
     }
-  }
-};
+  };
 
-  // === Threading ===
+  // Input Change Handler with Typing
+  const handleInputChange = (e) => {
+    setNewMessage(e.target.value);
+    
+    if (e.target.value.trim() && selectedFriend && isConnected) {
+      handleTypingStart();
+    } else {
+      handleTypingStop();
+    }
+  };
+
+  // Connection status
+  const getConnectionStatus = () => {
+    const unread = messages.filter(m => !m.is_read && m.sender_id === selectedFriend?.id).length;
+    
+    if (friendTyping) {
+      return {
+        text: 'Typing...',
+        color: 'info.main'
+      };
+    }
+    
+    if (!isConnected) {
+      return {
+        text: reconnectAttempts > 0 ? `Reconnecting... (${reconnectAttempts})` : 'Connecting...',
+        color: 'warning.main'
+      };
+    }
+    
+    return {
+      text: `Online • ${unread} unread`,
+      color: 'success.main'
+    };
+  };
+
+  const status = selectedFriend ? getConnectionStatus() : { text: 'Online', color: 'success.main' };
+
+  // Threading functions (keep your existing implementation)
   const organizeMessagesIntoThreads = (list) => {
     const threads = new Map();
     const roots = [];
@@ -411,7 +457,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   const threadedMessages = flattenThreads(organizeMessagesIntoThreads(messages));
 
-  // === AUTO SCROLL ===
+  // Auto Scroll
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (container) {
@@ -419,17 +465,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, [messages, selectedFriend, replyingTo, pinnedMessage]);
 
-  // === Status ===
-  const getConnectionStatus = () => {
-    const unread = messages.filter(m => !m.is_read && m.sender_id === selectedFriend?.id).length;
-    return {
-      text: isWsConnected ? `Online • ${unread} unread` : 'Connecting...',
-      color: isWsConnected ? 'success.main' : 'warning.main'
-    };
-  };
-  const status = selectedFriend ? getConnectionStatus() : { text: 'Online', color: 'success.main' };
-
-  // === Edit / Delete / Reply / Pin / Forward ===
+  // Edit / Delete / Reply / Pin / Forward handlers (keep your existing implementation)
   const handleEditMessage = async (messageId, newContent) => {
     try {
       const updated = await editMessage(messageId, newContent);
@@ -452,7 +488,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const handlePinMessage = (msg) => setPinnedMessage(pinnedMessage?.id === msg.id ? null : msg);
   const handleForward = (msg) => { setForwardingMessage(msg); setForwardDialogOpen(true); };
 
-  // === Drawer ===
+  // Drawer and JSX (keep your existing implementation)
   const FriendsListDrawer = () => (
     <Drawer
       variant="temporary"
@@ -460,7 +496,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       onClose={() => setMobileDrawerOpen(false)}
       ModalProps={{ keepMounted: true }}
       sx={{
-        display: { xs: 'block', sm: 'none' }, // Only on mobile, not tablet
+        display: { xs: 'block', sm: 'none' },
         '& .MuiDrawer-paper': {
           width: 280,
           boxSizing: 'border-box',
@@ -519,46 +555,45 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       sx={{
         display: 'flex',
         flexDirection: { 
-          xs: 'column', // Mobile: 0-599px
-          sm: 'row',    // Tablet: 600-899px - ROW LAYOUT FOR TABLET
-          md: 'row'     // Desktop: 900px+
+          xs: 'column',
+          sm: 'row',
+          md: 'row'
         },
         height: { 
-          xs: 'calc(100vh - 120px)', // Mobile
-          sm: '75vh',                // Tablet
-          md: 600                    // Desktop
+          xs: 'calc(100vh - 120px)',
+          sm: '75vh',
+          md: 600
         },
         borderRadius: { 
           xs: '12px', 
-          sm: '16px',                // Tablet: more rounded
+          sm: '16px',
           md: '8px' 
         },
         margin: {
-          xs: 1,                     // Mobile: small margin
-          sm: 2,                     // Tablet: more margin
-          md: 0                      // Desktop: no margin
+          xs: 1,
+          sm: 2,
+          md: 0
         },
         overflow: 'hidden',
         border: 1,
         borderColor: 'divider',
         bgcolor: 'background.paper',
-        // Tablet-specific container styling
         width: {
-          xs: 'calc(100% - 16px)',   // Mobile: full width minus margin
-          sm: 'calc(100% - 32px)',   // Tablet: full width minus margin
-          md: '100%'                 // Desktop: full width
+          xs: 'calc(100% - 16px)',
+          sm: 'calc(100% - 32px)',
+          md: '100%'
         },
         maxWidth: {
-          sm: '900px',               // Tablet: don't get too wide
-          md: 'none'                 // Desktop: no restriction
+          sm: '900px',
+          md: 'none'
         },
         mx: {
-          sm: 'auto',                // Tablet: center horizontally
-          md: 0                      // Desktop: normal flow
+          sm: 'auto',
+          md: 0
         }
       }}
     >
-      {/* Mobile Header - Only show on mobile */}
+      {/* Mobile Header */}
       {isMobile && selectedFriend && (
         <Box
           sx={{
@@ -596,17 +631,17 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         display: 'flex', 
         flex: 1, 
         flexDirection: { 
-          xs: 'column', // Mobile
-          sm: 'row',    // Tablet - ROW LAYOUT
-          md: 'row'     // Desktop
+          xs: 'column',
+          sm: 'row',
+          md: 'row'
         } 
       }}>
-        {/* Sidebar - Show on tablet and desktop, hide on mobile */}
+        {/* Sidebar - Show on tablet and desktop */}
         {(isTablet || isDesktop) && (
           <Box sx={{ 
             width: { 
-              sm: 280,  // Tablet: slightly narrower
-              md: 300   // Desktop: standard width
+              sm: 280,
+              md: 300
             }, 
             borderRight: 1, 
             borderColor: 'divider', 
@@ -671,15 +706,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           flexDirection: 'column', 
           bgcolor: '#f8f9fa',
           minHeight: 0,
-          // Ensure proper minimum width on tablet
           minWidth: {
-            sm: 300,  // Tablet: minimum chat width
-            md: 400   // Desktop: minimum chat width
+            sm: 300,
+            md: 400
           }
         }}>
           {selectedFriend ? (
             <>
-              {/* Desktop/Tablet Header - Show on tablet and desktop */}
+              {/* Desktop/Tablet Header */}
               {(isTablet || isDesktop) && (
                 <Box sx={{ 
                   p: { sm: 1.5, md: 2 }, 
@@ -958,7 +992,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   : 'Type a message...'
               }
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyPress={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && selectedFriend) {
                   e.preventDefault();
