@@ -23,41 +23,41 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      
+
       try {
         // Attempt to refresh the token using the same api instance
         const refreshToken = localStorage.getItem("refreshToken");
         if (refreshToken) {
-          const response = await api.post('/api/v1/auth/refresh', {
-            refresh_token: refreshToken
+          const response = await api.post("/api/v1/auth/refresh", {
+            refresh_token: refreshToken,
           });
-          
+
           const { access_token, refresh_token } = response.data;
-          
+
           // Store new tokens
           localStorage.setItem("accessToken", access_token);
           if (refresh_token) {
             localStorage.setItem("refreshToken", refresh_token);
           }
-          
+
           // Retry the original request with new token
           originalRequest.headers.Authorization = `Bearer ${access_token}`;
           return api(originalRequest);
         }
       } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
+        console.error("Token refresh failed:", refreshError);
         // Continue to redirect if refresh fails
       }
-      
+
       // If refresh failed or no refresh token, then redirect to login
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
       window.location.href = "/login";
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -174,21 +174,21 @@ export const uploadAvatar = async (file) => {
 };
 
 export const searchUsers = async (query) => {
-  if (!query || typeof query !== 'string') {
+  if (!query || typeof query !== "string") {
     return [];
   }
 
   const trimmedQuery = query.trim();
-  
+
   if (trimmedQuery.length < 2) {
     return [];
   }
 
   try {
-    const response = await api.get('/api/v1/users/search', { 
-      params: { 
-        q: trimmedQuery
-      } 
+    const response = await api.get("/api/v1/users/search", {
+      params: {
+        q: trimmedQuery,
+      },
     });
     return response.data;
   } catch (error) {
@@ -197,7 +197,7 @@ export const searchUsers = async (query) => {
       data: error.response?.data,
       query: trimmedQuery,
     });
-    
+
     if (error.response?.status === 404) {
       console.warn("Search endpoint not found, returning empty results");
       return [];
@@ -212,7 +212,7 @@ export const searchUsers = async (query) => {
       console.warn("Server error during search, returning empty results");
       return [];
     }
-    
+
     return [];
   }
 };
@@ -322,7 +322,7 @@ export const getFriends = async () => {
       data: error.response?.data,
       message: error.message,
     });
-    
+
     if (error.response?.status === 404 || error.response?.status === 500) {
       console.warn("Friends endpoint not available, returning empty array");
       return [];
@@ -395,6 +395,43 @@ export const createDiary = async (data) => {
   }
 };
 
+export const createDiaryForGroup = async (groupId, data) => {
+  try{
+    const res = await api.post(`/api/v1/diaries/groups/${groupId}`, data, {
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+    return res.data;
+  }catch(error){
+    throw new Error(
+      error?.response?.data?.detail || "Failed to created diary"
+    )
+  }
+}
+
+export const updateDiaryById = async (diaryId, data) => {
+  try {
+    const res = await api.patch(`/api/v1/diaries/${diaryId}`, data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return res.data;
+  } catch (error) {
+    throw new Error(error?.response?.data?.detail || "Failed to update diary");
+  }
+};
+
+export const deleteDiaryById = async (diaryId) => {
+  try {
+    await api.delete(`/api/v1/diaries/${diaryId}`);
+    return true;
+  } catch (error) {
+    throw new Error(error?.response?.data?.detail || "Failed to delete diary");
+  }
+};
+
 export const getFeed = async () => {
   try {
     const response = await api.get(`/api/v1/diaries/feed`);
@@ -462,6 +499,32 @@ export const getDiaryComments = async (diaryId) => {
     );
   }
 };
+
+export const updateCommentById = async (commentId, data) => {
+  try{
+    const res = await api.put(`/api/v1/diaries/comments/${commentId}`, data, {
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+    return res.data;
+  }catch(error){
+    throw new Error(
+      error?.data?.response?.detail || "Failed to update to comment"
+    )
+  }
+}
+
+export const deleteCommentById = async (commentId) => {
+  try{
+    await api.delete(`/api/v1/diaries/comments/${commentId}`);
+    return true;
+  }catch(error){
+    throw new Error(
+      error?.data?.response?.detail || "Failed to delete comment"
+    )
+  }
+}
 
 export const getDiaryLikes = async (diaryId) => {
   try {
@@ -551,6 +614,15 @@ export const updateGroupById = async (groupId, data) => {
   }
 };
 
+export const deleteGroupById = async (groupId) => {
+  try {
+    await api.delete(`/api/v1/groups/${groupId}`);
+    return true;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || "Failed to delete group");
+  }
+};
+
 export const uploadCover = async (groupId, file) => {
   const formData = new FormData();
   formData.append("cover", file);
@@ -619,13 +691,13 @@ export const acceptGroupInvite = async (inviteId) => {
 };
 
 export const deleteInvite = async (inviteId) => {
-  try{
+  try {
     await api.delete(`/api/v1/groups/invites/${inviteId}`);
     return true;
-  }catch(error){
+  } catch (error) {
     throw new Error(error.response?.data?.detail);
   }
-}
+};
 
 export const inviteToGroup = async (groupId, userId) => {
   try {
@@ -755,17 +827,22 @@ export const uploadFileMessage = async (groupId, file) => {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await api.post(`/api/v1/messages/groups/${groupId}`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+  const response = await api.post(
+    `/api/v1/messages/groups/${groupId}`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
   return response.data;
 };
 
-export const getGroupMembers = async (groupId) => {
+export const getGroupMembers = async (groupId, search="") => {
   try {
-    const response = await api.get(`/api/v1/groups/${groupId}/members/`);
+    const params = search ? {search} : {};
+    const response = await api.get(`/api/v1/groups/${groupId}/members/`, {params});
     return response.data;
   } catch (error) {
     console.error("Get members error:", error.response?.data);
@@ -803,9 +880,10 @@ export const leaveGroupById = async (groupId) => {
   }
 };
 
-export const getGroupDiaries = async (groupId) => {
+export const getGroupDiaries = async (groupId , search="") => {
   try {
-    const response = await api.get(`/api/v1/groups/${groupId}/diaries/`);
+    const params = search ? {search} : {};
+    const response = await api.get(`/api/v1/groups/${groupId}/diaries/`, { params });
     console.log(response.data);
     return response.data;
   } catch (error) {
@@ -872,7 +950,6 @@ export const editGroupFileMessage = async (messageId, file) => {
   });
   return res.data;
 };
-
 
 export const deleteGroupMessage = async (messageId) => {
   try {

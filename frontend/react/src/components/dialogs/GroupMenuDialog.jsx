@@ -19,10 +19,14 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import { leaveGroupById, uploadCover, getGroupCover, deleteCoverById } from '../../services/api';
+import { leaveGroupById, uploadCover, getGroupCover, deleteCoverById, deleteGroupById } from '../../services/api';
 import UpdateGroupDialog from './UpdateGroupDialog';
 import InviteMemberComponent from './InviteMemberComponent';
 import { toast } from 'react-toastify';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteDialog from './DeleteDialog';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 function GroupMenuDialog({ open, onClose, group, onSuccess }) {
   const [selectedIndex, setSelectedIndex] = useState(null);
@@ -31,6 +35,11 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
   const [covers, setCovers] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [deletePopup, setDeletePopup] = useState(false);
+  const router = useNavigate();
+  const { auth } = useAuth();
+  const user = auth?.user;
+  const [leavePopup, setLeavePopup] = useState(false);
 
   // Fetch group covers
   useEffect(() => {
@@ -42,8 +51,14 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
   const fetchCovers = async () => {
     try {
       const data = await getGroupCover(group.id);
-      setCovers(Array.isArray(data) ? data.reverse() : []);
-      setCurrentIndex(0);
+
+      if (Array.isArray(data)) {
+        const sortedCovers = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setCovers(sortedCovers);
+        setCurrentIndex(0);
+      } else {
+        setCovers([]);
+      }
     } catch (error) {
       console.error('Failed to fetch covers:', error);
     }
@@ -59,6 +74,7 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
     try {
       await leaveGroupById(group.id);
       onSuccess();
+      router("/dashboard");
     } catch (error) {
       console.error('Failed to leave group', error);
     }
@@ -80,7 +96,7 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
       onSuccess?.();
     } catch (error) {
       console.error('Upload failed:', error);
-      toast.error('Failed to upload cover');
+      toast.error(`Failed: ${error}` || "Maxed size is 3MB");
     } finally {
       setLoading(false);
     }
@@ -101,6 +117,16 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
       setLoading(false);
     }
   };
+
+  const handleDeleteGroup = async () => {
+    try {
+      await deleteGroupById(group.id);
+      toast.success("Group has been deleted");
+      router("/dashboard");
+    } catch (error) {
+      toast.error('Failed to delete group');
+    }
+  }
 
   const nextSlide = () => {
     if (covers.length > 0) setCurrentIndex((prev) => (prev + 1) % covers.length);
@@ -175,22 +201,26 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
                       <CircularProgress size={30} sx={{ color: 'white' }} />
                     ) : (
                       <>
-                        <Tooltip title="Upload cover" arrow>
-                          <IconButton
-                            sx={{ color: 'white' }}
-                            onClick={() => document.getElementById('coverUploadInput').click()}
-                          >
-                            <CloudUploadIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete cover" arrow>
-                          <IconButton
-                            sx={{ color: 'white' }}
-                            onClick={() => handleDeleteCover(currentCover?.id)}
-                          >
-                            <DeleteOutlineIcon />
-                          </IconButton>
-                        </Tooltip>
+                        {group.creator_id == user.id && (
+                          <>
+                            <Tooltip title="Upload cover" arrow>
+                              <IconButton
+                                sx={{ color: 'white' }}
+                                onClick={() => document.getElementById('coverUploadInput').click()}
+                              >
+                                <CloudUploadIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete cover" arrow>
+                              <IconButton
+                                sx={{ color: 'white' }}
+                                onClick={() => handleDeleteCover(currentCover?.id)}
+                              >
+                                <DeleteOutlineIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
                       </>
                     )}
                   </Box>
@@ -261,14 +291,16 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
                   }}
                 >
                   <Typography variant="body2">No covers yet</Typography>
-                  <Tooltip title="Upload cover" arrow>
-                    <IconButton
-                      onClick={() => document.getElementById('coverUploadInput').click()}
-                      sx={{ color: 'primary.main' }}
-                    >
-                      <CloudUploadIcon />
-                    </IconButton>
-                  </Tooltip>
+                  {group.creator_id == user.id && (
+                    <Tooltip title="Upload cover" arrow>
+                      <IconButton
+                        onClick={() => document.getElementById('coverUploadInput').click()}
+                        sx={{ color: 'primary.main' }}
+                      >
+                        <CloudUploadIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Box>
               )}
 
@@ -293,14 +325,16 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
             <Divider sx={{ my: 1.5 }} />
 
             {/* Menu options */}
-            <ListItemButton
-              onClick={(e) => handleListItemClick(e, 0, () => setUpdatePopup(true))}
-            >
-              <ListItemIcon>
-                <EditIcon color="primary" />
-              </ListItemIcon>
-              <ListItemText primary="Edit Group" />
-            </ListItemButton>
+            {group.creator_id == user.id && (
+              <ListItemButton
+                onClick={(e) => handleListItemClick(e, 0, () => setUpdatePopup(true))}
+              >
+                <ListItemIcon>
+                  <EditIcon color="primary" />
+                </ListItemIcon>
+                <ListItemText primary="Edit Group" />
+              </ListItemButton>
+            )}
 
             <ListItemButton
               onClick={(e) => handleListItemClick(e, 1, () => setInvitePopup(true))}
@@ -311,12 +345,26 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
               <ListItemText primary="Invite Member" />
             </ListItemButton>
 
+            {group.creator_id == user.id && (
+              <ListItemButton
+                onClick={(e) => handleListItemClick(e, 2, () => setDeletePopup(true))}
+                sx={{
+                  '&:hover': { bgcolor: 'error.light' },
+                }}
+              >
+                <ListItemIcon>
+                  <DeleteIcon color="error" />
+                </ListItemIcon>
+                <ListItemText primary="Delete Group" sx={{ color: 'error.main' }} />
+              </ListItemButton>
+            )}
+
             <Divider sx={{ my: 1.5 }} />
 
             <ListItemButton
               onClick={(e) => {
-                handleListItemClick(e, 2);
-                handleLeaveGroup();
+                handleListItemClick(e, 3);
+                setLeavePopup(true);
               }}
               sx={{
                 '&:hover': { bgcolor: 'error.light' },
@@ -334,7 +382,6 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
         </Box>
       </Modal>
 
-      {/* Subdialogs */}
       <UpdateGroupDialog
         open={updatePopup}
         onClose={() => setUpdatePopup(false)}
@@ -346,6 +393,23 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
         onClose={() => setInvitePopup(false)}
         onSuccess={onSuccess}
         group={group}
+      />
+      <DeleteDialog
+        open={deletePopup}
+        onClose={() => setDeletePopup(false)}
+        onSuccess={onSuccess}
+        title="Delete group"
+        description="Are you sure want to delete this group?"
+        onConfirm={handleDeleteGroup}
+      />
+      <DeleteDialog
+        open={leavePopup}
+        onClose={() => setLeavePopup(false)}
+        onSuccess={onSuccess}
+        title="Leave group"
+        tag='Leave'
+        description="Are you sure want to leave this group?"
+        onConfirm={handleLeaveGroup}
       />
     </>
   );

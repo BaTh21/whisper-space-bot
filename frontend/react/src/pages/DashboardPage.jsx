@@ -23,7 +23,6 @@ import SearchUsersTab from '../components/dashboard/SearchUsersTab';
 import CreateDiaryDialog from '../components/dialogs/CreateDiaryDialog';
 import CreateGroupDialog from '../components/dialogs/CreateGroupDialog';
 import ViewGroupDialog from '../components/dialogs/ViewGroupDialog';
-import GroupInviteNotification from '../components/GroupInviteNotification';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
@@ -169,8 +168,6 @@ const DashboardPage = () => {
         p: { xs: 1, sm: 2 },
         minHeight: '100vh'
       }}>
-        {/* Show pending group invites */}
-        <GroupInviteNotification onJoin={fetchDashboardData} />
 
         {/* Header */}
         <ProfileSection 

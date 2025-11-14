@@ -6,12 +6,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getPendingGroupInvites } from '../services/api'; // Updated import
 import InboxComponent from './dialogs/InboxComponentDialog';
+import DeleteDialog from './dialogs/DeleteDialog';
 
 const Layout = ({ children }) => {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const [popup, setPopup] = useState(false);
   const [invites, setInvites] = useState([]);
+  const [open, setOpen] = useState(false);
 
   const fetchInvites = async () => {
     try {
@@ -99,7 +101,7 @@ const Layout = ({ children }) => {
                 </Button>
               </>
             ) : (
-              <Box sx={{display: 'flex', alignItems: 'center'}}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <Box sx={{ marginRight: 2 }}>
                   <Badge badgeContent={totalInvites || 0} color="secondary">
                     <MailIcon color="white" sx={{ '&:hover': { color: 'grey.300' } }} onClick={() => setPopup(true)} />
@@ -107,7 +109,7 @@ const Layout = ({ children }) => {
                 </Box>
                 <Button
                   color="inherit"
-                  onClick={handleLogout}
+                  onClick={()=> setOpen(true)}
                   sx={{
                     borderRadius: 20,
                     px: { xs: 1, sm: 2 },
@@ -136,7 +138,7 @@ const Layout = ({ children }) => {
       >
         {children}
       </Box>
-      
+
       {/* Only show inbox component when authenticated */}
       {isAuthenticated && (
         <InboxComponent
@@ -145,6 +147,15 @@ const Layout = ({ children }) => {
           onSuccess={handleSuccess}
         />
       )}
+      <DeleteDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onSuccess={handleSuccess}
+        title="Logout"
+        tag='Logout'
+        description="Are you sure want to logout?"
+        onConfirm={handleLogout}
+      />
     </Box>
   );
 };

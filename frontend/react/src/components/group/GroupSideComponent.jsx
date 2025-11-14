@@ -10,15 +10,25 @@ import {
     ListItemAvatar,
     ListItemText,
     Avatar,
-    Card,
     TextField,
     Collapse,
-    CircularProgress
+    CircularProgress,
+    Stack,
+    Paper,
+    Divider,
+    Menu,
+    MenuItem,
+    IconButton,
+    InputAdornment
 } from '@mui/material';
 import {
     Favorite as FavoriteIcon,
     Comment as CommentIcon
 } from '@mui/icons-material';
+import ReplyIcon from '@mui/icons-material/Reply';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
     getGroupMembers,
     getGroupDiaries,
@@ -26,13 +36,22 @@ import {
     commentOnDiary,
     getDiaryComments,
     getGroupById,
-    removeGroupMember
+    removeGroupMember,
+    deleteDiaryById,
+    deleteCommentById
 } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
 import { useParams } from 'react-router-dom';
 import DeleteDialog from '../dialogs/DeleteDialog';
 import UserProfileDialog from '../dialogs/UserProfileDialog';
+import DiaryDialog from '../dialogs/DiaryDialog';
+import { toast } from 'react-toastify';
+import SearchIcon from '@mui/icons-material/Search';
+import AddIcon from '@mui/icons-material/Add';
+import CreateDiaryForGroupDialog from '../dialogs/CreateDiaryForGroupDialog';
+import ClearIcon from "@mui/icons-material/Clear";
+import CommentUpdateDialog from '../dialogs/CommentUpdateDialog';
 
 const GroupSideComponent = () => {
     const { groupId } = useParams();
@@ -51,18 +70,46 @@ const GroupSideComponent = () => {
     const [selectedMember, setSelectedMember] = useState(null);
     const [openUserProfile, setOpenUserProfile] = useState(null);
     const [selectedGroup, setSelectedGroup] = useState(null);
+    const [anchorEl, setAnchorEl] = useState(null);
+    const [openDiary, setOpenDiary] = useState(false);
+    const [selectedDiary, setSelectedDiary] = useState(null);
+    const [deletePopup, setDeletePopup] = useState(false);
+    const [openCreateDiary, setOpenCreateDiary] = useState(false);
+    const [search, setSearch] = useState("");
+    const [searchMember, setSearchMember] = useState("");
+    const [selectedComment, setSelectedComment] = useState(null);
+    const [commentAnchorEl, setCommentAnchorEl] = useState(null);
+    const [deleteReplyPopup, setDeleteReplyPopup] = useState(false);
+    const [updateCommentPopup, setUpdateCommentPopup] = useState(false);
 
-    const fetchGroupData = async () => {
+    const handleMenuClose = () => {
+        setAnchorEl(null);
+    };
+
+    const handleDeleteDiary = () => {
+        handleMenuClose();
+        setDeletePopup(true);
+    };
+
+    const handleShare = () => {
+        handleMenuClose();
+        console.log("Share diary:", d.id);
+        // your share logic here
+    };
+
+    const fetchGroupData = async (searchValue = "", memberSearchValue = "") => {
         setLoading(true);
         try {
-            const [membersData, diariesData, groupData] = await Promise.all([
-                getGroupMembers(groupId),
-                getGroupDiaries(groupId),
-                getGroupById(groupId)
+            const [membersData, diariesData, groupData, commentData] = await Promise.all([
+                getGroupMembers(groupId, memberSearchValue),
+                getGroupDiaries(groupId, searchValue),
+                getGroupById(groupId),
+                getDiaryComments(groupId)
             ]);
             setMembers(membersData);
             setDiaries(diariesData);
             setGroup(groupData);
+            setDiaryGroupComments(commentData);
         } catch (err) {
             console.log(err);
         } finally {
@@ -73,6 +120,40 @@ const GroupSideComponent = () => {
     useEffect(() => {
         fetchGroupData();
     }, [groupId]);
+
+    const handleDelete = async (diaryId) => {
+        try {
+            await deleteDiaryById(diaryId);
+            toast.success("Diary has been deleted")
+            fetchGroupData();
+        } catch (error) {
+            setSelectedDiary(null);
+            setDeletePopup(false);
+            toast.error("Failed to delete diary");
+        }
+    }
+
+    const handleKeyPressForMember = (e) => {
+        if (e.key === "Enter") {
+            fetchGroupData();
+        }
+    };
+
+    const handleClearMember = () => {
+        setSearchMember("");
+        fetchGroupData("", "");
+    };
+
+    const handleKeyPress = (e) => {
+        if (e.key === "Enter") {
+            fetchGroupData();
+        }
+    };
+
+    const handleClear = () => {
+        setSearch("");
+        fetchGroupData("", "");
+    };
 
     const handleToggleComments = async (diaryId) => {
         if (expendedGroupDiary === diaryId) {
@@ -103,12 +184,24 @@ const GroupSideComponent = () => {
                 [diaryId]: [...(prev[diaryId] || []), newCmt],
             }));
             setNewComment((prev) => ({ ...prev, [diaryId]: "" }));
+            handleSuccess();
         } catch (err) {
             console.error("Failed to add comment:", err);
         } finally {
+            handleSuccess();
             setPostingComment((prev) => ({ ...prev, [diaryId]: false }));
         }
     };
+
+    const handleDeleteCommentId = async () => {
+        try {
+            await deleteCommentById(selectedComment.id);
+            toast.success("Comment has been deleted");
+        } catch (error) {
+            toast.error(`Error: ${error.message}`)
+            console.log("error", error);
+        }
+    }
 
     const handleLikeGroupDiary = async (diaryId) => {
         setDiaries((prevDiaries) =>
@@ -176,22 +269,37 @@ const GroupSideComponent = () => {
 
     return (
         <Box
-            sx={{ width: '30%' }}
+            sx={{ width: '30%', marginTop: 0.5 }}
         >
             <Tabs
                 value={tab}
                 onChange={(e, v) => setTab(v)}
+                variant="fullWidth"
                 sx={{
+                    width: '100%',
+                    position: 'relative',
+                    '&::after': {
+                        content: '""',
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        width: '100%',
+                        height: 3,
+                        bgcolor: 'divider',
+                        borderRadius: 2,
+                    },
                     '& .MuiTabs-indicator': {
                         height: 3,
                         borderRadius: 2,
                         bgcolor: 'primary.main',
+                        zIndex: 1,
                     },
                 }}
             >
                 <Tab label={`Members (${members.length})`} />
                 <Tab label={`Group Feed (${diaries.length})`} />
             </Tabs>
+
 
             <Box
                 sx={{
@@ -206,191 +314,462 @@ const GroupSideComponent = () => {
             >
                 {/* MEMBERS LIST */}
                 {tab === 0 && (
-                    <List
-                        sx={{
-                            maxHeight: 'calc(80vh - 120px)',
-                            overflowY: 'auto',
-                            p: 1,
-                            '&::-webkit-scrollbar': { width: 6 },
-                            '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.400', borderRadius: 3 },
-                        }}
-                    >
-                        {members.map((member) => (
-                            <ListItem
-                                key={member.id}
-                                sx={{
-                                    borderRadius: 2,
-                                    mb: 1,
-                                    bgcolor: 'grey.50',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    transition: '0.3s',
-                                    '&:hover': { boxShadow: 3 },
+                    <>
+                        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', paddingX: 2 }}>
+                            <TextField
+                                sx={{ width: "100%" }}
+                                id="outlined-member-search"
+                                label="Search member"
+                                variant="outlined"
+                                size="small"
+                                value={searchMember}
+                                onChange={(e) => setSearchMember(e.target.value)}
+                                onKeyPress={handleKeyPressForMember}
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            {searchMember && (
+                                                <IconButton onClick={handleClearMember}>
+                                                    <ClearIcon />
+                                                </IconButton>
+                                            )}
+                                            <IconButton
+                                                onClick={() => fetchGroupData(search, searchMember)}
+                                            >
+                                                <SearchIcon />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
                                 }}
-                                onClick={() => {
-                                    setSelectedMember(member);
-                                    setOpenUserProfile(true);
-                                    setSelectedGroup(group);
-                                }}
-                            >
-                                <Box
-                                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                            />
 
-                                >
-                                    <ListItemAvatar>
-                                        <Avatar
-                                            src={member.avatar_url}
-                                            sx={{ width: 45, height: 45, fontSize: 16 }}
+
+                        </Box>
+
+                        <List
+                            sx={{
+                                maxHeight: 'calc(80vh - 120px)',
+                                overflowY: 'auto',
+                                p: 1,
+                                '&::-webkit-scrollbar': { width: 6 },
+                                '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.400', borderRadius: 3 },
+                            }}
+                        >
+                            {members.length === 0 ?
+                                (
+                                    <Typography
+                                        color="text.secondary"
+                                        align="center"
+                                        sx={{ py: 6, fontStyle: "italic" }}
+                                    >
+                                        No member avaiable.
+                                    </Typography>
+                                ) : (
+
+                                    members.map((member) => (
+                                        <ListItem
+                                            key={member.id}
+                                            sx={{
+                                                borderRadius: 2,
+                                                mb: 1,
+                                                bgcolor: 'grey.50',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                transition: '0.3s',
+                                                '&:hover': { boxShadow: 3 },
+                                            }}
+                                            onClick={() => {
+                                                setSelectedMember(member);
+                                                setOpenUserProfile(true);
+                                                setSelectedGroup(group);
+                                            }}
                                         >
-                                            {member.username?.[0]?.toUpperCase() || 'U'}
-                                        </Avatar>
-                                    </ListItemAvatar>
-                                    <ListItemText
-                                        primary={
-                                            <Typography variant="subtitle2" fontWeight={500}>
-                                                {member.username}
-                                            </Typography>
-                                        }
-                                        secondary={
-                                            member.id === user?.id ? 'You' : member.email
-                                        }
-                                    />
-                                </Box>
+                                            <Box
+                                                sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
 
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    {group?.creator_id === member?.id && (
-                                        <Typography sx={{ fontSize: 12, color: 'primary.main', fontWeight: 600 }}>
-                                            Admin
-                                        </Typography>
-                                    )}
-                                </Box>
-                            </ListItem>
-                        ))}
-                    </List>
+                                            >
+                                                <ListItemAvatar>
+                                                    <Avatar
+                                                        src={member.avatar_url}
+                                                        sx={{ width: 45, height: 45, fontSize: 16 }}
+                                                    >
+                                                        {member.username?.[0]?.toUpperCase() || 'U'}
+                                                    </Avatar>
+                                                </ListItemAvatar>
+                                                <ListItemText
+                                                    primary={
+                                                        <Typography variant="subtitle2" fontWeight={500}>
+                                                            {member.username}
+                                                        </Typography>
+                                                    }
+                                                    secondary={
+                                                        member.id === user?.id ? 'You' : member.email
+                                                    }
+                                                />
+                                            </Box>
+
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                {group?.creator_id === member?.id && (
+                                                    <Typography sx={{ fontSize: 12, color: 'primary.main', fontWeight: 600 }}>
+                                                        Admin
+                                                    </Typography>
+                                                )}
+                                            </Box>
+                                        </ListItem>
+                                    ))
+                                )}
+                        </List>
+                    </>
                 )}
 
-                {/* GROUP FEED */}
                 {tab === 1 && (
-                    <Box
-                        sx={{
-                            overflowY: 'auto',
-                            maxHeight: 'calc(80vh - 120px)',
-                            px: 1,
-                            '&::-webkit-scrollbar': { display: 'none' },
-                            scrollbarWidth: 'none',
-                        }}
-                    >
-                        {diaries.length === 0 ? (
-                            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-                                No diaries posted in this group yet.
-                            </Typography>
-                        ) : (
-                            diaries.map((d) => {
-                                const isExpanded = expendedGroupDiary === d.id;
-                                const diaryComments = diaryGroupComments[d.id] || [];
-                                const isLiked = d.likes?.some((like) => like.user.id === user?.id);
-                                const totalLikes = d?.likes?.length;
-
-                                return (
-                                    <Box
-                                        key={d.id}
-                                        sx={{
-                                            p: 2,
-                                            mb: 2,
-                                            borderRadius: 3,
-                                            boxShadow: 1,
-                                            bgcolor: 'background.paper',
-                                            transition: '0.3s',
-                                            '&:hover': { boxShadow: 4 },
-                                        }}
-                                    >
-                                        <Typography variant="h6" fontWeight={600} gutterBottom>
-                                            {d.title}
-                                        </Typography>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {d.author?.username || "Unknown"}
-                                            </Typography>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {formatCambodiaDate(d.created_at)}
-                                            </Typography>
-                                        </Box>
-                                        <Typography sx={{ mb: 2 }}>{d.content}</Typography>
-
-                                        <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 1 }}>
-                                            <Button
-                                                startIcon={<FavoriteIcon sx={{ color: isLiked ? "red" : "grey.600" }} />}
-                                                size="small"
-                                                onClick={() => handleLikeGroupDiary(d.id)}
-                                                sx={{ color: isLiked ? "red" : "grey.700", textTransform: 'none' }}
+                    <>
+                        <Box
+                            sx={{
+                                width: '100%',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                px: 2,
+                                gap: 1,
+                            }}
+                        >
+                            <TextField
+                                sx={{ flexGrow: 1 }}
+                                id="outlined-search"
+                                label="Search diary"
+                                variant="outlined"
+                                size="small"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            {search && (
+                                                <IconButton onClick={handleClear} edge="end">
+                                                    <ClearIcon />
+                                                </IconButton>
+                                            )}
+                                            <IconButton
+                                                onClick={() => fetchGroupData(search, searchMember)}
+                                                edge="end"
                                             >
-                                                {totalLikes} {isLiked ? "Liked" : "Like"}
-                                            </Button>
+                                                <SearchIcon />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
 
-                                            <Button
-                                                startIcon={<CommentIcon />}
-                                                size="small"
-                                                sx={{ color: "grey.700", textTransform: 'none' }}
-                                                onClick={() => handleToggleComments(d.id)}
-                                            >
-                                                Comment
-                                            </Button>
-                                        </Box>
+                            <IconButton
+                                aria-label="add"
+                                sx={{
+                                    bgcolor: 'primary.main',
+                                    '&:hover': { bgcolor: 'primary.dark' },
+                                    borderRadius: 2,
+                                }}
+                                onClick={() => {
+                                    setSelectedGroup(group);
+                                    setOpenCreateDiary(true);
+                                }}
+                            >
+                                <AddIcon sx={{ color: 'white' }} />
+                            </IconButton>
+                        </Box>
+                        <Box
+                            sx={{
+                                overflowY: "auto",
+                                maxHeight: "calc(100vh - 120px)",
+                                px: 2,
+                                py: 1,
+                                "&::-webkit-scrollbar": { display: "none" },
+                                scrollbarWidth: "none",
+                            }}
+                        >
+                            {diaries.length === 0 ? (
+                                <Typography
+                                    color="text.secondary"
+                                    align="center"
+                                    sx={{ py: 6, fontStyle: "italic" }}
+                                >
+                                    No diaries posted in this group yet.
+                                </Typography>
+                            ) : (
+                                diaries.map((d) => {
+                                    const isExpanded = expendedGroupDiary === d.id;
+                                    const diaryComments = diaryGroupComments[d.id] || [];
+                                    const isLiked = d.likes?.some((like) => like.user.id === user?.id);
+                                    const totalLikes = d?.likes?.length;
 
-                                        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                            <Box sx={{ mt: 2 }}>
-                                                <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+                                    const isMenuOpen = selectedDiary?.id === d.id && Boolean(anchorEl);
+
+                                    return (
+                                        <Paper
+                                            key={d.id}
+                                            elevation={isExpanded ? 6 : 2}
+                                            sx={{
+                                                p: 2.5,
+                                                mb: 2,
+                                                boxShadow: 0,
+                                                borderRadius: 3,
+                                                bgcolor: 'grey.50',
+                                                transition: "all 0.3s ease",
+                                                "&:hover": { boxShadow: 2, transform: "translateY(-2px)" },
+                                            }}
+                                        >
+                                            {/* Header */}
+                                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                                                <Typography variant="h6" fontWeight={600}>
+                                                    {d.title}
+                                                </Typography>
+
+                                                <Stack direction="row" alignItems="center" spacing={1}>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {formatCambodiaDate(d.created_at)}
+                                                    </Typography>
+
+                                                    {/* Menu */}
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            setAnchorEl(e.currentTarget);
+                                                            setSelectedDiary(d);
+                                                        }}
+                                                        sx={{ color: "text.secondary" }}
+                                                    >
+                                                        <MoreVertIcon />
+                                                    </IconButton>
+
+                                                    <Menu
+                                                        anchorEl={anchorEl}
+                                                        open={isMenuOpen}
+                                                        onClose={() => {
+                                                            setAnchorEl(null);
+                                                            setSelectedDiary(null);
+                                                        }}
+                                                        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                                                        transformOrigin={{ vertical: "top", horizontal: "right" }}
+                                                    >
+                                                        {d.author?.id === user?.id ? (
+                                                            [
+                                                                <MenuItem key="edit" onClick={() => { handleMenuClose(); setOpenDiary(true); setSelectedDiary(d); }}>
+                                                                    <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+                                                                </MenuItem>,
+                                                                <MenuItem key="delete" onClick={() => { handleMenuClose(); handleDeleteDiary(); setSelectedDiary(d); }}>
+                                                                    <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+                                                                </MenuItem>,
+                                                                <MenuItem key="share" onClick={() => { handleMenuClose(); handleShare(d); }}>
+                                                                    <ReplyIcon fontSize="small" sx={{ mr: 1 }} /> Share
+                                                                </MenuItem>,
+                                                            ]
+                                                        ) : (
+                                                            <MenuItem key="share" onClick={() => { handleMenuClose(); handleShare(d); }}>
+                                                                <ReplyIcon fontSize="small" sx={{ mr: 1 }} /> Share
+                                                            </MenuItem>
+                                                        )}
+                                                    </Menu>
+                                                </Stack>
+                                            </Stack>
+
+                                            {/* Author */}
+                                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                                                <Avatar
+                                                    sx={{ width: 32, height: 32, bgcolor: "primary.light" }}
+                                                    src={d.author?.avatar_url}
+                                                    alt={d.author?.username || "U"}
+                                                >
+                                                    {d.author?.username?.[0]?.toUpperCase() || "U"}
+                                                </Avatar>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {d.author?.username || "Unknown"}
+                                                </Typography>
+                                            </Stack>
+
+                                            {/* Content */}
+                                            <Typography variant="body1" sx={{ mb: 2, whiteSpace: "pre-wrap", fontSize: 16 }}>
+                                                {d.content}
+                                            </Typography>
+
+                                            {/* Actions */}
+                                            <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+                                                <Button
+                                                    startIcon={<FavoriteIcon sx={{ color: isLiked ? "error.main" : "grey.600" }} />}
+                                                    size="small"
+                                                    onClick={() => handleLikeGroupDiary(d.id)}
+                                                    sx={{ textTransform: "none", fontWeight: 500, color: isLiked ? "error.main" : "grey.600" }}
+                                                >
+                                                    {totalLikes} {isLiked ? "Liked" : "Like"}
+                                                </Button>
+
+                                                <Button
+                                                    startIcon={<CommentIcon />}
+                                                    size="small"
+                                                    sx={{ textTransform: "none", color: "grey.700", fontWeight: 500 }}
+                                                    onClick={() => handleToggleComments(d.id)}
+                                                >
+                                                    {d.comments?.length || 0} Comment
+                                                </Button>
+                                            </Stack>
+
+                                            {/* Comments */}
+                                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                                <Divider sx={{ my: 2 }} />
+
+                                                {/* Add new comment */}
+                                                <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
                                                     <TextField
                                                         size="small"
                                                         fullWidth
+                                                        multiline
+                                                        rows={3}
                                                         placeholder="Write a comment..."
                                                         value={newComment[d.id] || ""}
                                                         onChange={(e) =>
                                                             setNewComment((prev) => ({ ...prev, [d.id]: e.target.value }))
                                                         }
+                                                        InputProps={{
+                                                            endAdornment: (
+                                                                <InputAdornment position="end">
+                                                                    <Button
+                                                                        variant="contained"
+                                                                        onClick={() => handleAddComment(d.id)}
+                                                                        disabled={postingComment[d.id]}
+                                                                        sx={{
+                                                                            position: "absolute",
+                                                                            bottom: 8,
+                                                                            right: 8,
+                                                                            height: 30,
+                                                                            minWidth: 60,
+                                                                            padding: "0 12px",
+                                                                        }}
+                                                                    >
+                                                                        {postingComment[d.id] ? "Sending..." : "Send"}
+                                                                    </Button>
+                                                                </InputAdornment>
+                                                            ),
+                                                        }}
                                                     />
-                                                    <Button
-                                                        variant="contained"
-                                                        onClick={() => handleAddComment(d.id)}
-                                                        disabled={postingComment[d.id]}
-                                                    >
-                                                        {postingComment[d.id] ? 'Posting...' : 'Post'}
-                                                    </Button>
-                                                </Box>
+                                                </Stack>
 
+                                                {/* Comments list */}
                                                 {diaryComments.length === 0 ? (
-                                                    <Typography variant="body2" color="text.secondary">
+                                                    <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
                                                         No comments yet.
                                                     </Typography>
                                                 ) : (
-                                                    diaryComments.map((c) => (
-                                                        <Box key={c.id} sx={{ mb: 1, pl: 1 }}>
-                                                            <Typography variant="subtitle2">{c.author?.username || "Anonymous"}</Typography>
-                                                            <Typography variant="caption" color="text.secondary">
-                                                                {formatCambodiaDate(c.created_at)}
-                                                            </Typography>
-                                                            <Box
-                                                                sx={{
-                                                                    ml: 0.5,
-                                                                    mt: 0.5,
-                                                                    p: 1.5,
-                                                                    borderRadius: 2,
-                                                                    bgcolor: 'grey.100',
-                                                                }}
-                                                            >
-                                                                <Typography variant="body2">{c.content}</Typography>
-                                                            </Box>
-                                                        </Box>
-                                                    ))
+                                                    diaryComments.map((c) => {
+                                                        const isCommentLiked = c.likes?.some((like) => like.user.id === user?.id);
+                                                        const totalCommentLikes = c.likes?.length || 0;
+
+                                                        return (
+                                                            <Paper key={c.id} sx={{ mb: 1.5, p: 1.5, boxShadow: 0, backgroundColor: 'transparent' }}>
+                                                                <Stack direction="row" spacing={1} alignItems="flex-start">
+                                                                    <Avatar
+                                                                        sx={{ width: 28, height: 28 }}
+                                                                        src={c.user?.avatar_url}
+                                                                        alt={c.user?.username || "A"}
+                                                                    >
+                                                                        {c.user?.username?.[0]?.toUpperCase() || "A"}
+                                                                    </Avatar>
+                                                                    <Box sx={{ flex: 1 }}>
+                                                                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                                                            <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
+                                                                                {c.user?.username || "Anonymous"}
+                                                                            </Typography>
+
+                                                                            {/* Comment Menu */}
+                                                                            {c.user?.id === user?.id && (
+                                                                                <>
+                                                                                    <IconButton
+                                                                                        size="small"
+                                                                                        onClick={(e) => {
+                                                                                            setCommentAnchorEl(e.currentTarget);
+                                                                                            setSelectedComment(c);
+                                                                                        }}
+                                                                                        sx={{ color: "text.secondary" }}
+                                                                                    >
+                                                                                        <MoreVertIcon fontSize="small" />
+                                                                                    </IconButton>
+
+                                                                                    <Menu
+                                                                                        anchorEl={commentAnchorEl}
+                                                                                        open={Boolean(commentAnchorEl)}
+                                                                                        onClose={() => {
+                                                                                            setCommentAnchorEl(null);
+                                                                                            setSelectedComment(null);
+                                                                                        }}
+                                                                                        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                                                                                        transformOrigin={{ vertical: "top", horizontal: "right" }}
+                                                                                    >
+                                                                                        <MenuItem
+                                                                                            onClick={() => {
+                                                                                                setUpdateCommentPopup(true);
+                                                                                                setCommentAnchorEl(null);
+                                                                                            }}
+                                                                                        >
+                                                                                            <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+                                                                                        </MenuItem>
+
+                                                                                        <MenuItem
+                                                                                            onClick={() => {
+                                                                                                setDeleteReplyPopup(true);
+                                                                                                setCommentAnchorEl(null);
+                                                                                            }}
+                                                                                        >
+                                                                                            <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+                                                                                        </MenuItem>
+                                                                                    </Menu>
+
+                                                                                </>
+                                                                            )}
+                                                                        </Stack>
+
+                                                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                                                                            {formatCambodiaDate(c.created_at)}
+                                                                        </Typography>
+                                                                        <Typography variant="body2" sx={{ mb: 1, whiteSpace: "pre-wrap" }}>
+                                                                            {c.content}
+                                                                        </Typography>
+
+                                                                        {/* Comment actions */}
+                                                                        <Stack direction="row" spacing={1}>
+                                                                            <Button
+                                                                                size="small"
+                                                                                startIcon={<FavoriteIcon sx={{ fontSize: 18, color: isCommentLiked ? "error.main" : "grey.600" }} />}
+                                                                                sx={{ textTransform: "none", fontSize: 13, color: isCommentLiked ? "error.main" : "grey.600" }}
+                                                                                onClick={() => handleLikeComment(d.id, c.id)}
+                                                                            >
+                                                                                {totalCommentLikes} {isCommentLiked ? "Liked" : "Like"}
+                                                                            </Button>
+
+                                                                            <Button
+                                                                                size="small"
+                                                                                startIcon={<ReplyIcon sx={{ fontSize: 18 }} />}
+                                                                                sx={{ textTransform: "none", fontSize: 13, color: "grey.700" }}
+                                                                                onClick={() => handleReplyComment(d.id, c.id)}
+                                                                            >
+                                                                                Reply
+                                                                            </Button>
+                                                                        </Stack>
+                                                                    </Box>
+                                                                </Stack>
+                                                            </Paper>
+                                                        );
+                                                    })
                                                 )}
-                                            </Box>
-                                        </Collapse>
-                                    </Box>
-                                );
-                            })
-                        )}
-                    </Box>
+
+                                            </Collapse>
+                                        </Paper>
+                                    );
+                                })
+                            )}
+
+                        </Box>
+                    </>
                 )}
+
+
             </Box>
 
             <DeleteDialog
@@ -411,6 +790,45 @@ const GroupSideComponent = () => {
                 userData={selectedMember}
                 group={selectedGroup}
                 onSuccess={handleSuccess}
+            />
+
+            <DiaryDialog
+                open={openDiary}
+                onClose={() => setOpenDiary(false)}
+                diary={selectedDiary}
+                onSuccess={handleSuccess}
+            />
+
+            <DeleteDialog
+                open={deletePopup}
+                onClose={() => setDeletePopup(false)}
+                title="Delete diary"
+                description="Are you sure want to delete this diary"
+                onConfirm={() => handleDelete(selectedDiary.id)}
+                onSuccess={handleSuccess}
+            />
+
+            <CreateDiaryForGroupDialog
+                open={openCreateDiary}
+                onClose={() => setOpenCreateDiary(false)}
+                group={selectedGroup}
+                onSuccess={handleSuccess}
+            />
+
+            <DeleteDialog
+                open={deleteReplyPopup}
+                onClose={() => setDeleteReplyPopup(false)}
+                onSuccess={handleSuccess}
+                title="Delete comment"
+                description="Are you sure want to delete comment?"
+                onConfirm={handleDeleteCommentId}
+            />
+
+            <CommentUpdateDialog
+                open={updateCommentPopup}
+                onClose={() => setUpdateCommentPopup(false)}
+                onSuccess={handleSuccess}
+                comment={selectedComment}
             />
         </Box>
 

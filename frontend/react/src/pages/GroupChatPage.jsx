@@ -27,6 +27,11 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import ImageDialog from '../components/dialogs/ImageDialog';
+import SaveAltIcon from '@mui/icons-material/SaveAlt';
+import ReplyIcon from '@mui/icons-material/Reply';
+import ShortcutIcon from '@mui/icons-material/Shortcut';
+import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
 
 const GroupChatPage = () => {
   const { groupId } = useParams();
@@ -49,8 +54,9 @@ const GroupChatPage = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [activeMessageId, setActiveMessageId] = useState(null);
   const [file, setFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [openImage, setOpenImage] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const activeMessage = messages.find((m) => m.id === activeMessageId);
 
   const openMenu = (event, messageId) => {
     setAnchorEl(event.currentTarget);
@@ -242,14 +248,11 @@ const GroupChatPage = () => {
 
     // Add temporary message to chat
     setMessages((prev) => [...prev, tempMessage]);
-    setUploading(true);
-    setUploadProgress(0);
 
     try {
       const uploadedMessage = await uploadFileMessage(groupId, file, (progressEvent) => {
         if (progressEvent.total) {
           const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-          setUploadProgress(percent);
           // Update temp message progress
           setMessages((prev) =>
             prev.map((msg) =>
@@ -272,8 +275,6 @@ const GroupChatPage = () => {
         )
       );
     } finally {
-      setUploading(false);
-      setUploadProgress(0);
       setFile(null);
     }
   };
@@ -298,8 +299,6 @@ const GroupChatPage = () => {
           : msg
       )
     );
-    setUploading(true);
-    setUploadProgress(0);
 
     try {
       const updatedMessage = await editGroupFileMessage(messageId, newFile);
@@ -322,9 +321,6 @@ const GroupChatPage = () => {
           msg.id === messageId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -397,7 +393,7 @@ const GroupChatPage = () => {
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            ml: 3,
+            // ml: 3,
             overflow: 'hidden',
             borderLeft: '1px solid #dcdcdcff'
           }}
@@ -522,6 +518,7 @@ const GroupChatPage = () => {
                                   <Box
                                     component="img"
                                     src={message.file_url}
+                                    onClick={(e) => openMenu(e, message.id)}
                                     alt="upload"
                                     sx={{
                                       width: '100%',
@@ -529,36 +526,6 @@ const GroupChatPage = () => {
                                       filter: message.failed ? 'grayscale(100%)' : 'none',
                                     }}
                                   />
-                                  {message.uploading && (
-                                    <Box
-                                      sx={{
-                                        position: 'absolute',
-                                        bottom: 0,
-                                        left: 0,
-                                        width: `${message.progress || 0}%`,
-                                        height: 4,
-                                        bgcolor: 'primary.main',
-                                        transition: 'width 0.2s ease',
-                                      }}
-                                    />
-                                  )}
-                                  {message.failed && (
-                                    <Typography
-                                      variant="caption"
-                                      color="error"
-                                      sx={{
-                                        position: 'absolute',
-                                        bottom: 8,
-                                        left: '50%',
-                                        transform: 'translateX(-50%)',
-                                        bgcolor: 'rgba(255,255,255,0.7)',
-                                        px: 1,
-                                        borderRadius: 1,
-                                      }}
-                                    >
-                                      Upload failed
-                                    </Typography>
-                                  )}
                                 </Box>
                               )}
 
@@ -574,6 +541,7 @@ const GroupChatPage = () => {
                                     wordBreak: 'break-word',
                                     transition: 'all 0.2s',
                                   }}
+                                  onClick={(e) => openMenu(e, message.id)}
                                 >
                                   {message.content}
                                 </Typography>
@@ -594,62 +562,158 @@ const GroupChatPage = () => {
                         </Typography>
                       </Box>
 
-                      {isOwn && (
+                      {isOwn ? (
                         <>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => openMenu(e, message.id)}
-                          >
-                            <MoreVertIcon fontSize="small" />
-                          </IconButton>
 
                           <Menu
                             anchorEl={anchorEl}
-                            open={Boolean(anchorEl) && activeMessageId === message.id}
+                            open={Boolean(anchorEl) && activeMessage?.sender?.id === user?.id}
                             onClose={closeMenu}
                           >
-                            {message.file_url && (
+                            {/* TEXT options */}
+                            {activeMessage && activeMessage.sender?.id === user?.id && !activeMessage.file_url && [
                               <MenuItem
+                                key="edit"
                                 onClick={() => {
-                                  const input = document.createElement('input');
-                                  input.type = 'file';
-                                  input.accept = 'image/*';
-                                  input.onchange = async (e) => {
-                                    const file = e.target.files[0];
-                                    if (file) {
-                                      await updateFileMessage(message.id, file);
-                                    }
+                                  setEditingMessageId(activeMessage.id);
+                                  setEditedContent(activeMessage.content);
+                                  closeMenu();
+                                }}
+                              >
+                                <EditIcon /> Edit
+                              </MenuItem>,
+
+                              <MenuItem
+                                key="delete"
+                                onClick={() => {
+                                  onDelete(activeMessage.id);
+                                  closeMenu();
+                                }}
+                              >
+                                <DeleteIcon /> Delete
+                              </MenuItem>,
+                            ]}
+
+                            {/* IMAGE options */}
+                            {activeMessage && activeMessage.sender?.id === user?.id && activeMessage.file_url && [
+                              <MenuItem
+                                key="view-img"
+                                onClick={() => {
+                                  setSelectedImage(activeMessage.file_url);
+                                  setOpenImage(true);
+                                  closeMenu();
+                                }}
+                              >
+                                <RemoveRedEyeIcon /> View Image
+                              </MenuItem>,
+
+                              <MenuItem
+                                key="save-img"
+                                onClick={async () => {
+                                  const response = await fetch(activeMessage.file_url);
+                                  const blob = await response.blob();
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url;
+                                  a.download = activeMessage.file_url.split("/").pop();
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                  closeMenu();
+                                }}
+                              >
+                                <SaveAltIcon /> Save Image
+                              </MenuItem>,
+
+                              <MenuItem
+                                key="replace-img"
+                                onClick={() => {
+                                  const input = document.createElement("input");
+                                  input.type = "file";
+                                  input.accept = "image/*";
+                                  input.onchange = (e) => {
+                                    if (e.target.files[0]) updateFileMessage(activeMessage.id, e.target.files[0]);
                                   };
                                   input.click();
                                   closeMenu();
                                 }}
                               >
-                                <PhotoCameraIcon fontSize="small" sx={{ mr: 1 }} /> Replace Image
-                              </MenuItem>
-                            )}
+                                <PhotoCameraIcon /> Replace Image
+                              </MenuItem>,
 
-                            {message.content && (
                               <MenuItem
+                                key="delete-img"
                                 onClick={() => {
-                                  setEditedContent(message.content);
-                                  setEditingMessageId(message.id);
+                                  onDelete(activeMessage.id);
                                   closeMenu();
                                 }}
                               >
-                                <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit Message
-                              </MenuItem>
-                            )}
+                                <DeleteIcon /> Delete Image
+                              </MenuItem>,
+                            ]}
+                          </Menu>
+                        </>
+
+                      ) : (
+                        /* === MENU FOR OTHER USERS' MESSAGES === */
+                        <>
+
+                          <Menu
+                            anchorEl={anchorEl}
+                            open={Boolean(anchorEl) && activeMessage?.sender?.id !== user?.id}
+                            onClose={closeMenu}
+                            sx={{ backgroundColor: 'transparent' }}
+                          >
+                            {activeMessage && activeMessage.sender?.id !== user?.id && activeMessage.file_url && [
+                              <MenuItem
+                                key="view-img"
+                                onClick={() => {
+                                  setSelectedImage(activeMessage.file_url);
+                                  setOpenImage(true);
+                                  closeMenu();
+                                }}
+                              >
+                                <RemoveRedEyeIcon /> View Image
+                              </MenuItem>,
+
+                              <MenuItem
+                                key="save-img"
+                                onClick={async () => {
+                                  const response = await fetch(activeMessage.file_url);
+                                  const blob = await response.blob();
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url;
+                                  a.download = activeMessage.file_url.split("/").pop();
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                  closeMenu();
+                                }}
+                              >
+                                <SaveAltIcon /> Save Image
+                              </MenuItem>,
+                            ]}
 
                             <MenuItem
+                              key="reply"
                               onClick={() => {
-                                onDelete(message.id);
+                                setReplyTo(activeMessage);
                                 closeMenu();
                               }}
                             >
-                              <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+                              <ReplyIcon /> Reply
                             </MenuItem>
-                          </Menu>
 
+                            <MenuItem
+                              key="forward"
+                              onClick={() => {
+                                setForwardMessage(activeMessage);
+                                closeMenu();
+                              }}
+                            >
+                              <ShortcutIcon /> Forward
+                            </MenuItem>
+
+                          </Menu>
 
                         </>
                       )}
@@ -715,17 +779,21 @@ const GroupChatPage = () => {
               </Button>
 
             </Box>
-
-
           </Box>
-
         </Box>
+
       </Box>
       <GroupMenuDialog
         open={open}
         onClose={() => setOpen(false)}
         group={group}
         onSuccess={handleSuccess}
+      />
+
+      <ImageDialog
+        open={openImage}
+        onClose={() => setOpenImage(false)}
+        imgUrl={selectedImage}
       />
     </>
 
