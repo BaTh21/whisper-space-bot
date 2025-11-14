@@ -26,13 +26,28 @@ class GroupMessage(Base):
     message_type = Column(Enum(MessageType), default=MessageType.text)
     file_url = Column(String(255), nullable=True)
     public_id = Column(String(255), nullable=True)
-    
     parent_message_id = Column(Integer, ForeignKey("group_messages.id", ondelete="SET NULL"), nullable=True)
     forwarded_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Relationships
     group = relationship("Group", back_populates="messages")
     sender = relationship("User", foreign_keys=[sender_id])
-    parent_message = relationship("GroupMessage", remote_side=[id], back_populates="replies", uselist=False)
-    replies = relationship("GroupMessage", back_populates="parent_message", cascade="all, delete-orphan")
     forwarded_by = relationship("User", foreign_keys=[forwarded_by_id])
     seen_by = relationship("GroupMessageSeen", back_populates="message", cascade="all, delete-orphan")
+    
+    # Self-referential
+    parent_message = relationship(
+        "GroupMessage",
+        remote_side=[id],
+        back_populates="child_messages",
+        uselist=False
+    )
+    child_messages = relationship(
+        "GroupMessage",
+        back_populates="parent_message",
+        cascade="all, delete-orphan"
+    )
+
+    # Replies from GroupMessageReply
+    replies = relationship("GroupMessageReply", back_populates="message")
+

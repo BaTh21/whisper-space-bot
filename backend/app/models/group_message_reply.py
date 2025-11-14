@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, ForeignKey, Text, DateTime, Enum, String
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.models.base import Base
+from app.models.group_message import MessageType
 
 class GroupMessageReply(Base):
     __tablename__ = "group_message_replies"
