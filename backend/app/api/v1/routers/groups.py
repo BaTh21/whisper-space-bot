@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from sqlalchemy.orm import Session
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut, GroupUpdate, GroupInviteResponse, GroupImageResponse, GroupDetailsOut
 from app.services.websocket_manager import manager
-from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user, delete_group_invite, delete_cover, get_group_covers
+from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user, delete_group_invite, delete_cover, get_group_covers, delete_group
 from app.schemas.diary import DiaryOut
 from app.schemas.user import UserOut
 from app.crud.chat import get_group_messages
@@ -47,6 +47,13 @@ def update_by_id(group_id: int,
                  current_user: User = Depends(get_current_user)
                  ):
     return update_group(group_id, db, group_data, current_user.id)    
+
+@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_group_by_id(group_id: int,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)
+                       ):
+    return delete_group(db, group_id, current_user.id)
 
 @router.post("/{group_id}/join")
 def join_group(
@@ -132,22 +139,20 @@ def get_invite_link(
 @router.get("/{group_id}/members/", response_model=List[UserOut])
 def get_group_members_endpoint(
     group_id: int,
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    members = get_group_members(db, group_id, current_user.id)
-    if not members:
-        raise HTTPException(404, "Group not found or you're not a member")
-    return members
+    return get_group_members(db, group_id, current_user.id, search)
 
 @router.get("/{group_id}/diaries/", response_model=List[DiaryOut])
 def get_group_diaries_endpoint(
     group_id: int,
+    search: Optional[str] = Query(None, description="Search by title or content"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diaries = get_group_diaries(db, group_id, current_user.id)
-    return diaries
+    return get_group_diaries(db, group_id, current_user.id, search)
 
 @router.get("/invites/pending", response_model=List[GroupInviteResponse])
 def get_pending_invites_(

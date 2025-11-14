@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 from app.models.group import Group
 from app.models.group_member import GroupMember
 from app.crud.friend import is_friend
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timedelta
 import uuid
 from zoneinfo import ZoneInfo
 import pytz
 from pathlib import Path
+from sqlalchemy import or_, func
 
 from app.models.diary import Diary
 from app.models.user import User
@@ -97,6 +98,20 @@ def update_group(group_id: int, db: Session, group_data: GroupUpdate, current_us
     db.refresh(group)
     return group
 
+def delete_group(db: Session, group_id: int, current_user_id: int):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Group not found")
+
+    if group.creator_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only owner can delete this group")
+
+    db.delete(group)
+    db.commit()
+    return {"detail": "Group has been deleted"}
+
 def get_pending_invites(db: Session, user_id: int):
     """
     Get pending group invites for a user
@@ -152,7 +167,7 @@ def accept_group_invite(db: Session, invite_id: int, user_id: int) -> Group:
     db.refresh(invite.group)
     return invite.group
     
-def get_group_members(db: Session, group_id: int, user_id: int) -> List[User]:
+def get_group_members(db: Session, group_id: int, user_id: int, search: Optional[str] = None) -> List[User]:
     # Verify user is in group
     member_check = db.query(GroupMember).filter(
         GroupMember.group_id == group_id,
@@ -161,30 +176,50 @@ def get_group_members(db: Session, group_id: int, user_id: int) -> List[User]:
     if not member_check:
         return []
 
-    return (
+    query = (
         db.query(User)
         .join(GroupMember, User.id == GroupMember.user_id)
         .filter(GroupMember.group_id == group_id)
-        .all()
     )
+    
+    if search:
+        search_pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                func.lower(User.username).like(func.lower(search_pattern)),
+                func.lower(User.email).like(func.lower(search_pattern)),
+            )
+        )
 
-def get_group_diaries(db: Session, group_id: int, user_id: int) -> List[Diary]:
+    return query.all()
+
+def get_group_diaries(db: Session, group_id: int, user_id: int, search: Optional[str] = None) -> List[Diary]:
     # Optional: verify membership
     member_check = db.query(GroupMember).filter(
         GroupMember.group_id == group_id,
         GroupMember.user_id == user_id
     ).first()
     if not member_check:
-        raise HTTPException(status_code=400, detail="You are not member of this group")
+        # raise HTTPException(status_code=400, detail="You are not member of this group")
+        return []
 
-    return (
+    query = (
         db.query(Diary)
         .join(DiaryGroup, Diary.id == DiaryGroup.diary_id)
         .filter(DiaryGroup.group_id == group_id)
-        .options(joinedload(Diary.groups)) 
-        .order_by(Diary.created_at.desc())
-        .all()
+        .options(joinedload(Diary.groups))
     )
+    
+    if search:
+        search_pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                func.lower(Diary.title).like(func.lower(search_pattern)),
+                func.lower(Diary.content).like(func.lower(search_pattern))
+            )
+        )
+        
+    return query.order_by(Diary.created_at.desc()).all()
 
 def create_group(db: Session, name: str, creator_id: int, description: str = None) -> Group:
     group = Group(name=name, creator_id=creator_id, description=description)
@@ -468,11 +503,5 @@ def get_group_covers(group_id: int, db: Session):
         .order_by(GroupImage.created_at.desc())
         .all()
     )
-
-    if not covers:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No covers found"
-        )
 
     return covers

@@ -12,5 +12,5 @@ class DiaryComment(Base):
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    diary = relationship("Diary", backref="comments")
+    diary = relationship("Diary", back_populates="comments")
     user = relationship("User", backref="diary_comments")

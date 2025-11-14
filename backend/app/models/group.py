@@ -19,7 +19,7 @@ class Group(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     creator = relationship("User")
-    members = relationship("GroupMember", back_populates="group")
-    messages = relationship("GroupMessage", back_populates="group")
-    invites = relationship("GroupInvite", back_populates="group")
-    images = relationship("GroupImage", back_populates="group")
+    members = relationship("GroupMember", back_populates="group", cascade="all, delete-orphan", passive_deletes=True)
+    messages = relationship("GroupMessage", back_populates="group", cascade="all, delete-orphan",)
+    invites = relationship("GroupInvite", back_populates="group", cascade="all, delete-orphan",)
+    images = relationship("GroupImage", back_populates="group", cascade="all, delete-orphan",)

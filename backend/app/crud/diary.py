@@ -4,11 +4,14 @@ from app.models.diary import Diary, ShareType
 from app.models.diary_comment import DiaryComment
 from app.models.diary_like import DiaryLike
 from app.models.diary_group import DiaryGroup
-from app.schemas.diary import DiaryCreate
+from app.schemas.diary import DiaryCreate, DiaryUpdate, CreateDiaryForGroup, CommentUpdate
 from typing import List, Optional
 from app.models.friend import Friend, FriendshipStatus
 from app.models.group_member import GroupMember
 from sqlalchemy import or_, and_, select
+from fastapi import HTTPException, status
+from datetime import datetime
+from app.models.group import Group
 
 from app.models.friend import Friend
 from app.models.group_member import GroupMember
@@ -64,6 +67,38 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     db.refresh(diary)
     return diary
 
+def create_diary_for_group(db: Session, group_id: int, diary_data: CreateDiaryForGroup, current_user_id: int):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Group not found")
+
+    check_member = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == current_user_id
+    ).first()
+    if not check_member:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only member can create diary")
+    
+    new_diary = Diary(
+        title=diary_data.title,
+        content=diary_data.content,
+        share_type=ShareType.group,
+        created_at=datetime.utcnow(),
+        user_id=current_user_id
+    )
+    
+    db.add(new_diary)
+    db.flush()
+
+    diary_groups = DiaryGroup(diary_id=new_diary.id, group_id=group_id)
+    db.add(diary_groups)
+
+    db.commit()
+    db.refresh(new_diary)
+    return new_diary
+    
 
 def get_by_id(db: Session, diary_id: int) -> Optional[Diary]:
     return db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
@@ -141,6 +176,39 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
         ).first() is not None
     return False
 
+def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_user_id: int):
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    if not diary:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Diary not found")
+    
+    if diary.user_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only creator can edit this diary")
+    
+    update_data = diary_data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(diary, key, value)
+    
+    diary.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(diary)
+    return diary
+
+def delete_diary(db: Session, diary_id: int, current_user_id: int):
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    if not diary:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Diary not found")
+        
+    if diary.user_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only creator can delete this diary")
+
+    db.delete(diary)
+    db.commit()
+    return {"detail": "Diary has been deleted"}
 
 def create_comment(db: Session, diary_id: int, user_id: int, content: str) -> DiaryComment:
     comment = DiaryComment(diary_id=diary_id, user_id=user_id, content=content)
@@ -173,3 +241,40 @@ def get_diary_likes_count(db: Session, diary_id: int) -> int:
     return db.query(DiaryLike).filter(
         DiaryLike.diary_id == diary_id
     ).count()
+    
+def delete_comment(db: Session, comment_id: int, current_user_id: int):
+    comment = db.query(DiaryComment).filter(DiaryComment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Comment not found")
+        
+    if comment.user_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only owner can delete this comment")
+        
+    db.delete(comment)
+    db.commit()
+    return {"detail": "Comment has been deleted"}
+
+def update_comment(db: Session,
+                   comment_id: int,
+                   comment_data: CommentUpdate,
+                   current_user_id: int
+                   ):
+    
+    comment = db.query(DiaryComment).filter(DiaryComment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Comment not found")
+
+    if comment.user_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only owner can update this comment")
+
+    update_data = comment_data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(comment, key, value)
+        
+    db.commit()
+    db.refresh(comment)
+    return comment
