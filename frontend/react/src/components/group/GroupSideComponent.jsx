@@ -19,11 +19,13 @@ import {
     Menu,
     MenuItem,
     IconButton,
-    InputAdornment
+    InputAdornment,
+    ListItemIcon
 } from '@mui/material';
 import {
     Favorite as FavoriteIcon,
-    Comment as CommentIcon
+    Comment as CommentIcon,
+    Share
 } from '@mui/icons-material';
 import ReplyIcon from '@mui/icons-material/Reply';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -38,7 +40,8 @@ import {
     getGroupById,
     removeGroupMember,
     deleteDiaryById,
-    deleteCommentById
+    deleteCommentById,
+    deleteShareById
 } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
@@ -52,6 +55,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CreateDiaryForGroupDialog from '../dialogs/CreateDiaryForGroupDialog';
 import ClearIcon from "@mui/icons-material/Clear";
 import CommentUpdateDialog from '../dialogs/CommentUpdateDialog';
+import ShareDiaryDialog from '../dialogs/ShareDiaryDailog';
 
 const GroupSideComponent = () => {
     const { groupId } = useParams();
@@ -81,6 +85,10 @@ const GroupSideComponent = () => {
     const [commentAnchorEl, setCommentAnchorEl] = useState(null);
     const [deleteReplyPopup, setDeleteReplyPopup] = useState(false);
     const [updateCommentPopup, setUpdateCommentPopup] = useState(false);
+    const [openShareDiary, setOpenShareDiary] = useState(false);
+    const [openDeletePopup, setOpenDeletePopup] = useState(false);
+    const [anchorElForShare, setAnchorElForShare] = useState(null);
+    const [selectedShareId, setSelectedSharedId] = useState(null);
 
     const handleMenuClose = () => {
         setAnchorEl(null);
@@ -89,12 +97,6 @@ const GroupSideComponent = () => {
     const handleDeleteDiary = () => {
         handleMenuClose();
         setDeletePopup(true);
-    };
-
-    const handleShare = () => {
-        handleMenuClose();
-        console.log("Share diary:", d.id);
-        // your share logic here
     };
 
     const fetchGroupData = async (searchValue = "", memberSearchValue = "") => {
@@ -254,6 +256,16 @@ const GroupSideComponent = () => {
             }
         }
     };
+
+    const handleDeleteShare = async () => {
+        try {
+            await deleteShareById(selectedShareId);
+            toast.success("Share has been removed");
+            fetchGroupData();
+        } catch (error) {
+            toast.error(`Error ${error.message}`);
+        }
+    }
 
     const handleSuccess = () => {
         fetchGroupData();
@@ -507,259 +519,334 @@ const GroupSideComponent = () => {
                                     return (
                                         <Paper
                                             key={d.id}
-                                            elevation={isExpanded ? 6 : 2}
                                             sx={{
-                                                p: 2.5,
                                                 mb: 2,
                                                 boxShadow: 0,
                                                 borderRadius: 3,
                                                 bgcolor: 'grey.50',
                                                 transition: "all 0.3s ease",
-                                                "&:hover": { boxShadow: 2, transform: "translateY(-2px)" },
+                                                "&:hover": {
+                                                    boxShadow: 2,
+                                                    transform: "translateY(-2px)",
+                                                    bgcolor: 'primary.main',
+                                                    color: 'white'
+                                                },
                                             }}
                                         >
-                                            {/* Header */}
-                                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                                                <Typography variant="h6" fontWeight={600}>
-                                                    {d.title}
-                                                </Typography>
+                                            {d.is_shared && d.shared_by && (
+                                                <Box
+                                                    sx={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        p: 1,
+                                                    }}
+                                                >
+                                                    {/* Shared info */}
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                        <Typography variant="caption">Shared by</Typography>
 
-                                                <Stack direction="row" alignItems="center" spacing={1}>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        {formatCambodiaDate(d.created_at)}
+                                                        <Avatar
+                                                            src={d.shared_by.avatar_url}
+                                                            alt={d.shared_by.username}
+                                                            sx={{ width: 26, height: 26 }}
+                                                        />
+
+                                                        <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                            {d.shared_by.username}
+                                                        </Typography>
+
+                                                        <Typography variant="caption">
+                                                            • {formatCambodiaDate(d.shared_at)}
+                                                        </Typography>
+                                                    </Box>
+
+                                                    {/* Show menu only if owner */}
+                                                    {d.shared_by.id === user.id && (
+                                                        <>
+                                                            <IconButton onClick={(e) => setAnchorElForShare(e.currentTarget)}>
+                                                                <MoreVertIcon />
+                                                            </IconButton>
+
+                                                            <Menu
+                                                                anchorEl={anchorElForShare}
+                                                                open={Boolean(anchorElForShare)}
+                                                                onClose={() => setAnchorElForShare(null)}
+                                                            >
+                                                                <MenuItem
+                                                                    onClick={() => {
+                                                                        setAnchorElForShare(null);
+                                                                        setSelectedSharedId(d.shared_id);
+                                                                        setOpenDeletePopup(true);
+                                                                    }}
+                                                                >
+                                                                    <ListItemIcon>
+                                                                        <DeleteIcon color="black" fontSize="small" sx={{ mr: 1 }} />
+                                                                    </ListItemIcon>
+                                                                    <ListItemText primary="Delete" />
+                                                                </MenuItem>
+                                                            </Menu>
+                                                        </>
+                                                    )}
+                                                </Box>
+                                            )}
+
+                                            <Paper
+                                                key={d.id}
+                                                elevation={isExpanded ? 6 : 2}
+                                                sx={{
+                                                    p: 2.5,
+                                                    mb: 2,
+                                                    boxShadow: 0,
+                                                    borderRadius: 3,
+                                                    bgcolor: 'grey.50',
+                                                    transition: "all 0.3s ease",
+                                                }}
+                                            >
+
+                                                {/* Header */}
+                                                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                                                    <Typography variant="h6" fontWeight={600}>
+                                                        {d.title}
                                                     </Typography>
 
-                                                    {/* Menu */}
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            setAnchorEl(e.currentTarget);
-                                                            setSelectedDiary(d);
-                                                        }}
-                                                        sx={{ color: "text.secondary" }}
-                                                    >
-                                                        <MoreVertIcon />
-                                                    </IconButton>
+                                                    <Stack direction="row" alignItems="center" spacing={1}>
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            {formatCambodiaDate(d.created_at)}
+                                                        </Typography>
 
-                                                    <Menu
-                                                        anchorEl={anchorEl}
-                                                        open={isMenuOpen}
-                                                        onClose={() => {
-                                                            setAnchorEl(null);
-                                                            setSelectedDiary(null);
-                                                        }}
-                                                        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                                                        transformOrigin={{ vertical: "top", horizontal: "right" }}
-                                                    >
-                                                        {d.author?.id === user?.id ? (
-                                                            [
-                                                                <MenuItem key="edit" onClick={() => { handleMenuClose(); setOpenDiary(true); setSelectedDiary(d); }}>
-                                                                    <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
-                                                                </MenuItem>,
-                                                                <MenuItem key="delete" onClick={() => { handleMenuClose(); handleDeleteDiary(); setSelectedDiary(d); }}>
-                                                                    <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
-                                                                </MenuItem>,
-                                                                <MenuItem key="share" onClick={() => { handleMenuClose(); handleShare(d); }}>
+                                                        {/* Menu */}
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                setAnchorEl(e.currentTarget);
+                                                                setSelectedDiary(d);
+                                                            }}
+                                                            sx={{ color: "text.secondary" }}
+                                                        >
+                                                            <MoreVertIcon />
+                                                        </IconButton>
+
+                                                        <Menu
+                                                            anchorEl={anchorEl}
+                                                            open={isMenuOpen}
+                                                            onClose={() => {
+                                                                setAnchorEl(null);
+                                                                setSelectedDiary(null);
+                                                            }}
+                                                            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                                                            transformOrigin={{ vertical: "top", horizontal: "right" }}
+                                                        >
+                                                            {d.author?.id === user?.id ? (
+                                                                [
+                                                                    <MenuItem key="edit" onClick={() => { handleMenuClose(); setOpenDiary(true); setSelectedDiary(d); }}>
+                                                                        <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+                                                                    </MenuItem>,
+                                                                    <MenuItem key="delete" onClick={() => { handleMenuClose(); handleDeleteDiary(); setSelectedDiary(d); }}>
+                                                                        <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+                                                                    </MenuItem>,
+                                                                    <MenuItem key="share" onClick={() => { handleMenuClose(); setOpenShareDiary(true); setSelectedDiary(d); }}>
+                                                                        <ReplyIcon fontSize="small" sx={{ mr: 1 }} /> Share
+                                                                    </MenuItem>,
+                                                                ]
+                                                            ) : (
+                                                                <MenuItem key="share" onClick={() => { handleMenuClose(); setOpenShareDiary(true); setSelectedDiary(d); }}>
                                                                     <ReplyIcon fontSize="small" sx={{ mr: 1 }} /> Share
-                                                                </MenuItem>,
-                                                            ]
-                                                        ) : (
-                                                            <MenuItem key="share" onClick={() => { handleMenuClose(); handleShare(d); }}>
-                                                                <ReplyIcon fontSize="small" sx={{ mr: 1 }} /> Share
-                                                            </MenuItem>
-                                                        )}
-                                                    </Menu>
-                                                </Stack>
-                                            </Stack>
-
-                                            {/* Author */}
-                                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                                                <Avatar
-                                                    sx={{ width: 32, height: 32, bgcolor: "primary.light" }}
-                                                    src={d.author?.avatar_url}
-                                                    alt={d.author?.username || "U"}
-                                                >
-                                                    {d.author?.username?.[0]?.toUpperCase() || "U"}
-                                                </Avatar>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    {d.author?.username || "Unknown"}
-                                                </Typography>
-                                            </Stack>
-
-                                            {/* Content */}
-                                            <Typography variant="body1" sx={{ mb: 2, whiteSpace: "pre-wrap", fontSize: 16 }}>
-                                                {d.content}
-                                            </Typography>
-
-                                            {/* Actions */}
-                                            <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                                                <Button
-                                                    startIcon={<FavoriteIcon sx={{ color: isLiked ? "error.main" : "grey.600" }} />}
-                                                    size="small"
-                                                    onClick={() => handleLikeGroupDiary(d.id)}
-                                                    sx={{ textTransform: "none", fontWeight: 500, color: isLiked ? "error.main" : "grey.600" }}
-                                                >
-                                                    {totalLikes} {isLiked ? "Liked" : "Like"}
-                                                </Button>
-
-                                                <Button
-                                                    startIcon={<CommentIcon />}
-                                                    size="small"
-                                                    sx={{ textTransform: "none", color: "grey.700", fontWeight: 500 }}
-                                                    onClick={() => handleToggleComments(d.id)}
-                                                >
-                                                    {d.comments?.length || 0} Comment
-                                                </Button>
-                                            </Stack>
-
-                                            {/* Comments */}
-                                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                                <Divider sx={{ my: 2 }} />
-
-                                                {/* Add new comment */}
-                                                <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-                                                    <TextField
-                                                        size="small"
-                                                        fullWidth
-                                                        multiline
-                                                        rows={3}
-                                                        placeholder="Write a comment..."
-                                                        value={newComment[d.id] || ""}
-                                                        onChange={(e) =>
-                                                            setNewComment((prev) => ({ ...prev, [d.id]: e.target.value }))
-                                                        }
-                                                        InputProps={{
-                                                            endAdornment: (
-                                                                <InputAdornment position="end">
-                                                                    <Button
-                                                                        variant="contained"
-                                                                        onClick={() => handleAddComment(d.id)}
-                                                                        disabled={postingComment[d.id]}
-                                                                        sx={{
-                                                                            position: "absolute",
-                                                                            bottom: 8,
-                                                                            right: 8,
-                                                                            height: 30,
-                                                                            minWidth: 60,
-                                                                            padding: "0 12px",
-                                                                        }}
-                                                                    >
-                                                                        {postingComment[d.id] ? "Sending..." : "Send"}
-                                                                    </Button>
-                                                                </InputAdornment>
-                                                            ),
-                                                        }}
-                                                    />
+                                                                </MenuItem>
+                                                            )}
+                                                        </Menu>
+                                                    </Stack>
                                                 </Stack>
 
-                                                {/* Comments list */}
-                                                {diaryComments.length === 0 ? (
-                                                    <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
-                                                        No comments yet.
+                                                {/* Author */}
+                                                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+                                                    <Avatar
+                                                        sx={{ width: 32, height: 32, bgcolor: "primary.light" }}
+                                                        src={d.author?.avatar_url}
+                                                        alt={d.author?.username || "U"}
+                                                    >
+                                                        {d.author?.username?.[0]?.toUpperCase() || "U"}
+                                                    </Avatar>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        {d.author?.username || "Unknown"}
                                                     </Typography>
-                                                ) : (
-                                                    diaryComments.map((c) => {
-                                                        const isCommentLiked = c.likes?.some((like) => like.user.id === user?.id);
-                                                        const totalCommentLikes = c.likes?.length || 0;
+                                                </Stack>
 
-                                                        return (
-                                                            <Paper key={c.id} sx={{ mb: 1.5, p: 1.5, boxShadow: 0, backgroundColor: 'transparent' }}>
-                                                                <Stack direction="row" spacing={1} alignItems="flex-start">
-                                                                    <Avatar
-                                                                        sx={{ width: 28, height: 28 }}
-                                                                        src={c.user?.avatar_url}
-                                                                        alt={c.user?.username || "A"}
-                                                                    >
-                                                                        {c.user?.username?.[0]?.toUpperCase() || "A"}
-                                                                    </Avatar>
-                                                                    <Box sx={{ flex: 1 }}>
-                                                                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                                                            <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
-                                                                                {c.user?.username || "Anonymous"}
+                                                {/* Content */}
+                                                <Typography variant="body1" sx={{ mb: 2, whiteSpace: "pre-wrap", fontSize: 16 }}>
+                                                    {d.content}
+                                                </Typography>
+
+                                                {/* Actions */}
+                                                <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+                                                    <Button
+                                                        startIcon={<FavoriteIcon sx={{ color: isLiked ? "error.main" : "grey.600" }} />}
+                                                        size="small"
+                                                        onClick={() => handleLikeGroupDiary(d.id)}
+                                                        sx={{ textTransform: "none", fontWeight: 500, color: isLiked ? "error.main" : "grey.600" }}
+                                                    >
+                                                        {totalLikes} {isLiked ? "Liked" : "Like"}
+                                                    </Button>
+
+                                                    <Button
+                                                        startIcon={<CommentIcon />}
+                                                        size="small"
+                                                        sx={{ textTransform: "none", color: "grey.700", fontWeight: 500 }}
+                                                        onClick={() => handleToggleComments(d.id)}
+                                                    >
+                                                        {d.comments?.length || 0} Comment
+                                                    </Button>
+                                                </Stack>
+
+                                                {/* Comments */}
+                                                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                                    <Divider sx={{ my: 2 }} />
+
+                                                    {/* Add new comment */}
+                                                    <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+                                                        <TextField
+                                                            size="small"
+                                                            fullWidth
+                                                            multiline
+                                                            rows={3}
+                                                            placeholder="Write a comment..."
+                                                            value={newComment[d.id] || ""}
+                                                            onChange={(e) =>
+                                                                setNewComment((prev) => ({ ...prev, [d.id]: e.target.value }))
+                                                            }
+                                                            InputProps={{
+                                                                endAdornment: (
+                                                                    <InputAdornment position="end">
+                                                                        <Button
+                                                                            variant="contained"
+                                                                            onClick={() => handleAddComment(d.id)}
+                                                                            disabled={postingComment[d.id]}
+                                                                            sx={{
+                                                                                position: "absolute",
+                                                                                bottom: 8,
+                                                                                right: 8,
+                                                                                height: 30,
+                                                                                minWidth: 60,
+                                                                                padding: "0 12px",
+                                                                            }}
+                                                                        >
+                                                                            {postingComment[d.id] ? "Sending..." : "Send"}
+                                                                        </Button>
+                                                                    </InputAdornment>
+                                                                ),
+                                                            }}
+                                                        />
+                                                    </Stack>
+
+                                                    {/* Comments list */}
+                                                    {diaryComments.length === 0 ? (
+                                                        <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
+                                                            No comments yet.
+                                                        </Typography>
+                                                    ) : (
+                                                        diaryComments.map((c) => {
+                                                            const isCommentLiked = c.likes?.some((like) => like.user.id === user?.id);
+                                                            const totalCommentLikes = c.likes?.length || 0;
+
+                                                            return (
+                                                                <Paper key={c.id} sx={{ mb: 1.5, p: 1.5, boxShadow: 0, backgroundColor: 'transparent' }}>
+                                                                    <Stack direction="row" spacing={1} alignItems="flex-start">
+                                                                        <Avatar
+                                                                            sx={{ width: 28, height: 28 }}
+                                                                            src={c.user?.avatar_url}
+                                                                            alt={c.user?.username || "A"}
+                                                                        >
+                                                                            {c.user?.username?.[0]?.toUpperCase() || "A"}
+                                                                        </Avatar>
+                                                                        <Box sx={{ flex: 1 }}>
+                                                                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                                                                <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
+                                                                                    {c.user?.username || "Anonymous"}
+                                                                                </Typography>
+
+                                                                                {/* Comment Menu */}
+                                                                                {c.user?.id === user?.id && (
+                                                                                    <>
+                                                                                        <IconButton
+                                                                                            size="small"
+                                                                                            onClick={(e) => {
+                                                                                                setCommentAnchorEl(e.currentTarget);
+                                                                                                setSelectedComment(c);
+                                                                                            }}
+                                                                                            sx={{ color: "text.secondary" }}
+                                                                                        >
+                                                                                            <MoreVertIcon fontSize="small" />
+                                                                                        </IconButton>
+
+                                                                                        <Menu
+                                                                                            anchorEl={commentAnchorEl}
+                                                                                            open={Boolean(commentAnchorEl)}
+                                                                                            onClose={() => {
+                                                                                                setCommentAnchorEl(null);
+                                                                                                setSelectedComment(null);
+                                                                                            }}
+                                                                                            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                                                                                            transformOrigin={{ vertical: "top", horizontal: "right" }}
+                                                                                        >
+                                                                                            <MenuItem
+                                                                                                onClick={() => {
+                                                                                                    setUpdateCommentPopup(true);
+                                                                                                    setCommentAnchorEl(null);
+                                                                                                }}
+                                                                                            >
+                                                                                                <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+                                                                                            </MenuItem>
+
+                                                                                            <MenuItem
+                                                                                                onClick={() => {
+                                                                                                    setDeleteReplyPopup(true);
+                                                                                                    setCommentAnchorEl(null);
+                                                                                                }}
+                                                                                            >
+                                                                                                <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+                                                                                            </MenuItem>
+                                                                                        </Menu>
+
+                                                                                    </>
+                                                                                )}
+                                                                            </Stack>
+
+                                                                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                                                                                {formatCambodiaDate(c.created_at)}
+                                                                            </Typography>
+                                                                            <Typography variant="body2" sx={{ mb: 1, whiteSpace: "pre-wrap" }}>
+                                                                                {c.content}
                                                                             </Typography>
 
-                                                                            {/* Comment Menu */}
-                                                                            {c.user?.id === user?.id && (
-                                                                                <>
-                                                                                    <IconButton
-                                                                                        size="small"
-                                                                                        onClick={(e) => {
-                                                                                            setCommentAnchorEl(e.currentTarget);
-                                                                                            setSelectedComment(c);
-                                                                                        }}
-                                                                                        sx={{ color: "text.secondary" }}
-                                                                                    >
-                                                                                        <MoreVertIcon fontSize="small" />
-                                                                                    </IconButton>
+                                                                            {/* Comment actions */}
+                                                                            <Stack direction="row" spacing={1}>
+                                                                                <Button
+                                                                                    size="small"
+                                                                                    startIcon={<FavoriteIcon sx={{ fontSize: 18, color: isCommentLiked ? "error.main" : "grey.600" }} />}
+                                                                                    sx={{ textTransform: "none", fontSize: 13, color: isCommentLiked ? "error.main" : "grey.600" }}
+                                                                                    onClick={() => handleLikeComment(d.id, c.id)}
+                                                                                >
+                                                                                    {totalCommentLikes} {isCommentLiked ? "Liked" : "Like"}
+                                                                                </Button>
 
-                                                                                    <Menu
-                                                                                        anchorEl={commentAnchorEl}
-                                                                                        open={Boolean(commentAnchorEl)}
-                                                                                        onClose={() => {
-                                                                                            setCommentAnchorEl(null);
-                                                                                            setSelectedComment(null);
-                                                                                        }}
-                                                                                        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                                                                                        transformOrigin={{ vertical: "top", horizontal: "right" }}
-                                                                                    >
-                                                                                        <MenuItem
-                                                                                            onClick={() => {
-                                                                                                setUpdateCommentPopup(true);
-                                                                                                setCommentAnchorEl(null);
-                                                                                            }}
-                                                                                        >
-                                                                                            <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
-                                                                                        </MenuItem>
+                                                                                <Button
+                                                                                    size="small"
+                                                                                    startIcon={<ReplyIcon sx={{ fontSize: 18 }} />}
+                                                                                    sx={{ textTransform: "none", fontSize: 13, color: "grey.700" }}
+                                                                                    onClick={() => handleReplyComment(d.id, c.id)}
+                                                                                >
+                                                                                    Reply
+                                                                                </Button>
+                                                                            </Stack>
+                                                                        </Box>
+                                                                    </Stack>
+                                                                </Paper>
+                                                            );
+                                                        })
+                                                    )}
 
-                                                                                        <MenuItem
-                                                                                            onClick={() => {
-                                                                                                setDeleteReplyPopup(true);
-                                                                                                setCommentAnchorEl(null);
-                                                                                            }}
-                                                                                        >
-                                                                                            <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
-                                                                                        </MenuItem>
-                                                                                    </Menu>
-
-                                                                                </>
-                                                                            )}
-                                                                        </Stack>
-
-                                                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-                                                                            {formatCambodiaDate(c.created_at)}
-                                                                        </Typography>
-                                                                        <Typography variant="body2" sx={{ mb: 1, whiteSpace: "pre-wrap" }}>
-                                                                            {c.content}
-                                                                        </Typography>
-
-                                                                        {/* Comment actions */}
-                                                                        <Stack direction="row" spacing={1}>
-                                                                            <Button
-                                                                                size="small"
-                                                                                startIcon={<FavoriteIcon sx={{ fontSize: 18, color: isCommentLiked ? "error.main" : "grey.600" }} />}
-                                                                                sx={{ textTransform: "none", fontSize: 13, color: isCommentLiked ? "error.main" : "grey.600" }}
-                                                                                onClick={() => handleLikeComment(d.id, c.id)}
-                                                                            >
-                                                                                {totalCommentLikes} {isCommentLiked ? "Liked" : "Like"}
-                                                                            </Button>
-
-                                                                            <Button
-                                                                                size="small"
-                                                                                startIcon={<ReplyIcon sx={{ fontSize: 18 }} />}
-                                                                                sx={{ textTransform: "none", fontSize: 13, color: "grey.700" }}
-                                                                                onClick={() => handleReplyComment(d.id, c.id)}
-                                                                            >
-                                                                                Reply
-                                                                            </Button>
-                                                                        </Stack>
-                                                                    </Box>
-                                                                </Stack>
-                                                            </Paper>
-                                                        );
-                                                    })
-                                                )}
-
-                                            </Collapse>
+                                                </Collapse>
+                                            </Paper>
                                         </Paper>
                                     );
                                 })
@@ -829,6 +916,21 @@ const GroupSideComponent = () => {
                 onClose={() => setUpdateCommentPopup(false)}
                 onSuccess={handleSuccess}
                 comment={selectedComment}
+            />
+
+            <ShareDiaryDialog
+                open={openShareDiary}
+                onClose={() => setOpenShareDiary(false)}
+                onSuccess={handleSuccess}
+                diary={selectedDiary}
+            />
+
+            <DeleteDialog
+                open={openDeletePopup}
+                onClose={() => setOpenDeletePopup(false)}
+                title="Delete share"
+                description="Are you sure want to delete this share?"
+                onConfirm={handleDeleteShare}
             />
         </Box>
 

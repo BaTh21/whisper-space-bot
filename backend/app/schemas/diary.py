@@ -19,6 +19,10 @@ class DiaryCreate(BaseModel):
             return v.strip()
         return v
     
+class DiaryShare(BaseModel):
+    # share_type: ShareTypeInput
+    group_ids: List[int] = None
+    
 class CreateDiaryForGroup(BaseModel):
     title: str
     content: str
@@ -50,10 +54,15 @@ class DiaryOut(TimestampMixin):
     title: str
     content: str
     share_type: ShareTypeOutput
-    groups: Optional[List[GroupResponse]] = []
-    likes: Optional[list[DiaryLikeResponse]] = []
-    comments: Optional[list[CommentResponse]] = []
-    is_deleted: bool = False
+    groups: Optional[List[GroupResponse]] = None
+    likes: Optional[list[DiaryLikeResponse]] = None
+    comments: Optional[list[CommentResponse]] = None
+    is_deleted: Optional[bool] = None,
+    
+    shared_id: Optional[int] = None
+    is_shared: Optional[bool] = None
+    shared_by: Optional[CreatorResponse] = None
+    shared_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

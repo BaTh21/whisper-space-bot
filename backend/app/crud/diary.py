@@ -4,7 +4,7 @@ from app.models.diary import Diary, ShareType
 from app.models.diary_comment import DiaryComment
 from app.models.diary_like import DiaryLike
 from app.models.diary_group import DiaryGroup
-from app.schemas.diary import DiaryCreate, DiaryUpdate, CreateDiaryForGroup, CommentUpdate
+from app.schemas.diary import DiaryCreate, DiaryUpdate, CreateDiaryForGroup, CommentUpdate, DiaryShare
 from typing import List, Optional
 from app.models.friend import Friend, FriendshipStatus
 from app.models.group_member import GroupMember
@@ -209,6 +209,58 @@ def delete_diary(db: Session, diary_id: int, current_user_id: int):
     db.delete(diary)
     db.commit()
     return {"detail": "Diary has been deleted"}
+
+def share_diary(db: Session, diary_id: int, diary_data: DiaryShare, current_user_id: int):
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    if not diary:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Diary not found")
+    
+    shared_groups = []
+    for group_id in diary_data.group_ids:
+        check_existing = db.query(DiaryGroup).filter(
+            DiaryGroup.group_id == group_id,
+            DiaryGroup.diary_id == diary_id
+        ).first()
+        if check_existing:
+            continue
+        
+        new_share = DiaryGroup(
+            diary_id=diary_id, 
+            group_id=group_id,
+            shared_by=current_user_id,
+            is_shared=True,
+            shared_at=datetime.utcnow()
+            )
+        
+        db.add(new_share)
+        shared_groups.append(group_id)
+        
+    if not shared_groups:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="Diary already shared to selected group")
+    
+    db.commit()
+    db.refresh(diary)
+    return diary
+        
+def delete_share(db: Session, share_id: int, current_user_id: int):
+    
+    share = db.query(DiaryGroup).filter(
+        DiaryGroup.id == share_id,
+    ).first()
+    if not share:
+        raise HTTPException(status_code.status.HTTP_404_NOT_FOUND,
+                            detail="Share not found")
+        
+    if share.shared_by != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only who share can delete this share")
+
+    db.delete(share)
+    db.commit()
+    return {"detail": "Share has been remove"}
+    
 
 def create_comment(db: Session, diary_id: int, user_id: int, content: str) -> DiaryComment:
     comment = DiaryComment(diary_id=diary_id, user_id=user_id, content=content)

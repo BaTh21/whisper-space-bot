@@ -6,6 +6,7 @@ from datetime import datetime
 import enum
 import enum
 from sqlalchemy import Enum
+from app.models.group_message_seen import GroupMessageSeen
 
 class MessageType(enum.Enum):
     text = "text"
@@ -18,12 +19,20 @@ class GroupMessage(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    forwarded_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     content = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime())
     message_type = Column(Enum(MessageType), default=MessageType.text)
     file_url = Column(String(255), nullable=True)
     public_id = Column(String(255), nullable=True)
+    
+    parent_message_id = Column(Integer, ForeignKey("group_messages.id", ondelete="SET NULL"), nullable=True)
+    forwarded_at = Column(DateTime(timezone=True), nullable=True)
 
     group = relationship("Group", back_populates="messages")
-    sender = relationship("User")
+    sender = relationship("User", foreign_keys=[sender_id])
+    parent_message = relationship("GroupMessage", remote_side=[id], back_populates="replies", uselist=False)
+    replies = relationship("GroupMessage", back_populates="parent_message", cascade="all, delete-orphan")
+    forwarded_by = relationship("User", foreign_keys=[forwarded_by_id])
+    seen_by = relationship("GroupMessageSeen", back_populates="message", cascade="all, delete-orphan")

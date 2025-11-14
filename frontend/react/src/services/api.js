@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "https://whisper-space-bot.onrender.com";
+const BASE_URL =
+  import.meta.env.VITE_API_URL || "https://whisper-space-bot.onrender.com";
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
@@ -395,19 +396,17 @@ export const createDiary = async (data) => {
 };
 
 export const createDiaryForGroup = async (groupId, data) => {
-  try{
+  try {
     const res = await api.post(`/api/v1/diaries/groups/${groupId}`, data, {
       headers: {
-        "Content-Type": "application/json"
-      }
+        "Content-Type": "application/json",
+      },
     });
     return res.data;
-  }catch(error){
-    throw new Error(
-      error?.response?.data?.detail || "Failed to created diary"
-    )
+  } catch (error) {
+    throw new Error(error?.response?.data?.detail || "Failed to created diary");
   }
-}
+};
 
 export const updateDiaryById = async (diaryId, data) => {
   try {
@@ -430,6 +429,31 @@ export const deleteDiaryById = async (diaryId) => {
     throw new Error(error?.response?.data?.detail || "Failed to delete diary");
   }
 };
+
+export const shareDiaryById = async (diaryId, data) => {
+  try {
+    const res = await api.post(`/api/v1/diaries/${diaryId}/share`, data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return res.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.detail || error.message || "Failed to share diary";
+    throw new Error(message);
+  }
+};
+
+export const deleteShareById = async (shareId) => {
+  try{
+    await api.delete(`/api/v1/diaries/share/${shareId}`);
+    return true;
+  }catch(error){
+    const errorMessage = error.response?.data?.detail || "Failed to remove share";
+    throw new Error(errorMessage);
+  }
+}
 
 export const getFeed = async () => {
   try {
@@ -500,30 +524,30 @@ export const getDiaryComments = async (diaryId) => {
 };
 
 export const updateCommentById = async (commentId, data) => {
-  try{
+  try {
     const res = await api.put(`/api/v1/diaries/comments/${commentId}`, data, {
       headers: {
-        "Content-Type": "application/json"
-      }
+        "Content-Type": "application/json",
+      },
     });
     return res.data;
-  }catch(error){
+  } catch (error) {
     throw new Error(
       error?.data?.response?.detail || "Failed to update to comment"
-    )
+    );
   }
-}
+};
 
 export const deleteCommentById = async (commentId) => {
-  try{
+  try {
     await api.delete(`/api/v1/diaries/comments/${commentId}`);
     return true;
-  }catch(error){
+  } catch (error) {
     throw new Error(
       error?.data?.response?.detail || "Failed to delete comment"
-    )
+    );
   }
-}
+};
 
 export const getDiaryLikes = async (diaryId) => {
   try {
@@ -838,10 +862,12 @@ export const uploadFileMessage = async (groupId, file) => {
   return response.data;
 };
 
-export const getGroupMembers = async (groupId, search="") => {
+export const getGroupMembers = async (groupId, search = "") => {
   try {
-    const params = search ? {search} : {};
-    const response = await api.get(`/api/v1/groups/${groupId}/members/`, {params});
+    const params = search ? { search } : {};
+    const response = await api.get(`/api/v1/groups/${groupId}/members/`, {
+      params,
+    });
     return response.data;
   } catch (error) {
     console.error("Get members error:", error.response?.data);
@@ -879,10 +905,12 @@ export const leaveGroupById = async (groupId) => {
   }
 };
 
-export const getGroupDiaries = async (groupId , search="") => {
+export const getGroupDiaries = async (groupId, search = "") => {
   try {
-    const params = search ? {search} : {};
-    const response = await api.get(`/api/v1/groups/${groupId}/diaries/`, { params });
+    const params = search ? { search } : {};
+    const response = await api.get(`/api/v1/groups/${groupId}/diaries/`, {
+      params,
+    });
     console.log(response.data);
     return response.data;
   } catch (error) {

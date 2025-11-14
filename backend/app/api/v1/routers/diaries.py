@@ -3,13 +3,14 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count, update_diary, delete_diary, create_diary_for_group, delete_comment, update_comment
+from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count, update_diary, delete_diary, create_diary_for_group, delete_comment, update_comment, share_diary, delete_share
 from app.models.user import User
-from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse, DiaryLikeResponse, DiaryUpdate, CreateDiaryForGroup, CommentUpdate
+from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse, DiaryLikeResponse, DiaryUpdate, CreateDiaryForGroup, CommentUpdate, DiaryShare
 from app.services.websocket_manager import manager
 from app.models.diary import Diary
 from app.models.friend import Friend, FriendshipStatus
 from app.models.diary_like import DiaryLike
+from app.models.group_member import GroupMember
 
 router = APIRouter()
 
@@ -24,7 +25,11 @@ def create_diary_endpoint(
             raise HTTPException(status_code=400, detail="group_ids are required for group share")
 
         for group_id in diary_in.group_ids:
-            if not exists_member(db, group_id, current_user.id):
+            check_member = db.query(GroupMember).filter(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == current_user.id
+            ).all()
+            if not check_member:
                 raise HTTPException(status_code=403, detail=f"You are not a member of group {group_id}")
 
     elif diary_in.share_type == "friends":
@@ -122,6 +127,22 @@ def delete_diary_by_id(diary_id: int,
                        db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)):
     return delete_diary(db, diary_id, current_user.id)
+
+@router.post("/{diary_id}/share", response_model=DiaryOut)
+def share_diary_by_id(diary_id: int,
+                      diary_data: DiaryShare,
+                      db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)
+                      ):
+    return share_diary(db, diary_id, diary_data, current_user.id)
+
+
+@router.delete("/share/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_share_by_id(share_id: int,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)
+                       ):
+    return delete_share(db, share_id, current_user.id)
 
 @router.post("/{diary_id}/comment", response_model=DiaryCommentOut)
 def comment_on_diary(

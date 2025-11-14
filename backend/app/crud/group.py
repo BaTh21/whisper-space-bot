@@ -194,32 +194,48 @@ def get_group_members(db: Session, group_id: int, user_id: int, search: Optional
     return query.all()
 
 def get_group_diaries(db: Session, group_id: int, user_id: int, search: Optional[str] = None) -> List[Diary]:
-    # Optional: verify membership
     member_check = db.query(GroupMember).filter(
         GroupMember.group_id == group_id,
         GroupMember.user_id == user_id
     ).first()
     if not member_check:
-        # raise HTTPException(status_code=400, detail="You are not member of this group")
         return []
 
-    query = (
+    diaries = (
         db.query(Diary)
         .join(DiaryGroup, Diary.id == DiaryGroup.diary_id)
         .filter(DiaryGroup.group_id == group_id)
-        .options(joinedload(Diary.groups))
+        .options(
+            joinedload(Diary.groups),
+            joinedload(Diary.author),
+            joinedload(Diary.likes),
+            joinedload(Diary.comments)
+        )
     )
-    
+
     if search:
         search_pattern = f"%{search.strip()}%"
-        query = query.filter(
+        diaries = diaries.filter(
             or_(
                 func.lower(Diary.title).like(func.lower(search_pattern)),
                 func.lower(Diary.content).like(func.lower(search_pattern))
             )
         )
-        
-    return query.order_by(Diary.created_at.desc()).all()
+
+    diaries = diaries.all()
+
+    # Add group-specific shared info
+    for diary in diaries:
+        dg = next((g for g in diary.diary_groups if g.group_id == group_id), None)
+        if dg:
+            # diary.id = dg.shared_id
+            diary.is_shared = dg.is_shared
+            diary.shared_by = dg.shared_user
+            diary.shared_at = dg.shared_at
+            diary.shared_id = dg.id
+
+    return diaries
+
 
 def create_group(db: Session, name: str, creator_id: int, description: str = None) -> Group:
     group = Group(name=name, creator_id=creator_id, description=description)
