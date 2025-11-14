@@ -1,4 +1,4 @@
-//dashboard/NotesTab.jsx
+// dashboard/NotesTab.jsx
 import { Add as AddIcon, Group as GroupIcon, Notes as NotesIcon } from '@mui/icons-material';
 import {
   Box,
@@ -22,6 +22,7 @@ import {
 import NoteCard from '../notes/NoteCard';
 import NoteEditor from '../notes/NoteEditor';
 import ShareDialog from '../ShareDialog';
+import { useAuth } from '../../context/AuthContext';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -51,11 +52,9 @@ const NotesTab = ({ setError, setSuccess }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
-  const currentUser = {
-    id: 1,
-    name: "Current User",
-    email: "user@example.com"
-  };
+  // Get current user from auth context
+  const { auth } = useAuth();
+  const currentUser = auth.user;
 
   useEffect(() => {
     loadNotes();
@@ -74,7 +73,7 @@ const NotesTab = ({ setError, setSuccess }) => {
       }
     } catch (error) {
       console.error('Error loading notes:', error);
-      setError(error.message || 'Failed to load notes');
+      showTimedAlert('error', error.message || 'Failed to load notes');
       setNotes([]);
       setSharedNotes([]);
     } finally {
@@ -92,102 +91,73 @@ const NotesTab = ({ setError, setSuccess }) => {
     setIsEditorOpen(true);
   };
 
-  const showTimedAlert = (type, message, duration = 2000) => {
-  if (type === 'success') {
-    setSuccess(message);
-    setTimeout(() => setSuccess(''), duration);
-  } else {
-    setError(message);
-    setTimeout(() => setError(''), duration);
-  }
-};
-
-const handleSaveNote = async (noteData) => {
-  try {
-    let result;
-    if (editingNote) {
-      result = await updateNote(editingNote.id, noteData);
-      showTimedAlert('success', 'Note updated successfully');
+  const showTimedAlert = (type, message, duration = 3000) => {
+    if (type === 'success') {
+      setSuccess(message);
+      setTimeout(() => setSuccess(''), duration);
     } else {
-      result = await createNote(noteData);
-      showTimedAlert('success', 'Note created successfully');
+      setError(message);
+      setTimeout(() => setError(''), duration);
     }
-    
-    setIsEditorOpen(false);
-    setEditingNote(null);
-    loadNotes();
-  } catch (error) {
-    console.error('Error saving note:', error);
-    showTimedAlert('error', error.message || 'Failed to save note');
-  }
-};
+  };
+
+  const handleSaveNote = async (noteData) => {
+    try {
+      let result;
+      if (editingNote) {
+        result = await updateNote(editingNote.id, noteData);
+        showTimedAlert('success', 'Note updated successfully');
+      } else {
+        result = await createNote(noteData);
+        showTimedAlert('success', 'Note created successfully');
+      }
+      
+      setIsEditorOpen(false);
+      setEditingNote(null);
+      loadNotes();
+    } catch (error) {
+      console.error('Error saving note:', error);
+      showTimedAlert('error', error.message || 'Failed to save note');
+    }
+  };
 
   const handleDeleteNote = async (noteId) => {
-  try {
-    await deleteNote(noteId);
-    setSuccess('Note deleted successfully');
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setSuccess('');
-    }, 2000);
-    
-    loadNotes();
-  } catch (error) {
-    console.error('Error deleting note:', error);
-    setError(error.message || 'Failed to delete note');
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setError('');
-    }, 2000);
-  }
-};
+    if (!window.confirm) {
+      return;
+    }
+
+    try {
+      await deleteNote(noteId);
+      showTimedAlert('success', 'Note deleted successfully');
+      loadNotes();
+    } catch (error) {
+      console.error('Error deleting note:', error);
+      showTimedAlert('error', error.message || 'Failed to delete note');
+    }
+  };
 
   const handleTogglePin = async (noteId) => {
-  try {
-    await togglePinNote(noteId);
-    setSuccess('Note pinned status updated');
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setSuccess('');
-    }, 2000);
-    
-    loadNotes();
-  } catch (error) {
-    console.error('Error toggling pin:', error);
-    setError(error.message || 'Failed to toggle pin');
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setError('');
-    }, 2000);
-  }
-};
+    try {
+      await togglePinNote(noteId);
+      showTimedAlert('success', 'Note pin status updated');
+      loadNotes();
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      showTimedAlert('error', error.message || 'Failed to toggle pin');
+    }
+  };
 
   const handleToggleArchive = async (noteId) => {
-  try {
-    await toggleArchiveNote(noteId);
-    const action = activeTab === 0 ? 'archived' : 'unarchived';
-    setSuccess(`Note ${action} successfully`);
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setSuccess('');
-    }, 2000);
-    
-    loadNotes();
-  } catch (error) {
-    console.error('Error toggling archive:', error);
-    setError(error.message || 'Failed to toggle archive');
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setError('');
-    }, 2000);
-  }
-};
+    try {
+      await toggleArchiveNote(noteId);
+      const action = activeTab === 0 ? 'archived' : 'unarchived';
+      showTimedAlert('success', `Note ${action} successfully`);
+      loadNotes();
+    } catch (error) {
+      console.error('Error toggling archive:', error);
+      showTimedAlert('error', error.message || 'Failed to toggle archive');
+    }
+  };
 
   const handleShareNote = (note) => {
     setSharingNote(note);
@@ -195,38 +165,32 @@ const handleSaveNote = async (noteData) => {
   };
 
   const handleShare = async (shareData) => {
-  try {
-    await shareNote(sharingNote.id, shareData);
-    
-    let successMessage = 'Sharing settings updated';
-    if (shareData.share_type === 'public') {
-      successMessage = 'Note is now public';
-    } else if (shareData.share_type === 'shared') {
-      successMessage = `Note shared with ${shareData.friend_ids.length} friend${shareData.friend_ids.length !== 1 ? 's' : ''}`;
-    } else {
-      successMessage = 'Note is now private';
+    if (!sharingNote) {
+      showTimedAlert('error', 'No note selected for sharing');
+      return;
     }
-    
-    setSuccess(successMessage);
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setSuccess('');
-    }, 2000);
-    
-    setShareDialogOpen(false);
-    setSharingNote(null);
-    loadNotes();
-  } catch (error) {
-    console.error('Error sharing note:', error);
-    setError(error.message || 'Failed to update sharing settings');
-    
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      setError('');
-    }, 2000);
-  }
-};
+
+    try {
+      await shareNote(sharingNote.id, shareData);
+      
+      let successMessage = 'Sharing settings updated';
+      if (shareData.share_type === 'public') {
+        successMessage = 'Note is now public';
+      } else if (shareData.share_type === 'shared') {
+        successMessage = `Note shared with ${shareData.friend_ids.length} friend${shareData.friend_ids.length !== 1 ? 's' : ''}`;
+      } else {
+        successMessage = 'Note is now private';
+      }
+      
+      showTimedAlert('success', successMessage);
+      setShareDialogOpen(false);
+      setSharingNote(null);
+      loadNotes();
+    } catch (error) {
+      console.error('Error sharing note:', error);
+      showTimedAlert('error', error.message || 'Failed to update sharing settings');
+    }
+  };
 
   const filteredNotes = notes.filter(note => {
     if (activeTab === 0) return !note.is_archived;
@@ -285,7 +249,6 @@ const handleSaveNote = async (noteData) => {
                       onTogglePin={handleTogglePin}
                       onToggleArchive={handleToggleArchive}
                       onShare={handleShareNote}
-                      currentUser={currentUser}
                     />
                   </Grid>
                 ))}
@@ -310,7 +273,6 @@ const handleSaveNote = async (noteData) => {
                       onTogglePin={handleTogglePin}
                       onToggleArchive={handleToggleArchive}
                       onShare={handleShareNote}
-                      currentUser={currentUser}
                     />
                   </Grid>
                 ))}
@@ -347,7 +309,6 @@ const handleSaveNote = async (noteData) => {
                     onTogglePin={handleTogglePin}
                     onToggleArchive={handleToggleArchive}
                     onShare={handleShareNote}
-                    currentUser={currentUser}
                   />
                 </Grid>
               ))}
@@ -376,12 +337,11 @@ const handleSaveNote = async (noteData) => {
                 <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
                   <NoteCard
                     note={note}
-                    onEdit={note.can_edit ? handleEditNote : undefined}
-                    onDelete={undefined}
-                    onTogglePin={undefined}
-                    onToggleArchive={undefined}
-                    onShare={undefined}
-                    currentUser={currentUser}
+                    onEdit={handleEditNote}
+                    onDelete={handleDeleteNote}
+                    onTogglePin={handleTogglePin}
+                    onToggleArchive={handleToggleArchive}
+                    onShare={handleShareNote}
                   />
                 </Grid>
               ))}

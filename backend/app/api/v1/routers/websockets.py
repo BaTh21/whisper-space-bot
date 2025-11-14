@@ -1,15 +1,18 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from datetime import datetime
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect,Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db, SessionLocal
 from app.core.security import get_current_user, get_current_user_ws
 from app.crud.friend import is_friend
-from app.crud.chat import create_private_message, is_group_member, create_group_message
+from app.crud.chat import create_private_message, is_group_member, create_group_message, mark_message_as_read
 from app.models.user import User
 from app.schemas.chat import MessageOut, GroupMessageOut
 from app.services.websocket_manager import manager
 from app.models.group_message import MessageType
 from app.schemas.chat import MessageCreate, AuthorResponse
 import json
+
+from app.api.v1.routers.websocket_server import handle_websocket_private
 router = APIRouter()
 
 
@@ -24,12 +27,10 @@ async def ws_private_chat(
     friend_id: int,
     db: Session = Depends(get_db)
 ):
-    # === WebSocket Auth: Manual token from query params ===
     current_user: User | None = await get_current_user_ws(websocket, db)
     if not current_user:
-        return  # Already closed with code 4401/4403/4404
+        return
 
-    # === Friendship Check ===
     if not is_friend(db, current_user.id, friend_id):
         await websocket.close(code=4003, reason="Not friends")
         return
@@ -52,6 +53,7 @@ async def ws_private_chat(
 
             msg_type = data.get("type")
             content = data.get("content")
+            reply_to_id = data.get("reply_to_id")
 
             # === Handle Incoming Message ===
             if msg_type == "message" and content and content.strip():
@@ -60,24 +62,54 @@ async def ws_private_chat(
                     db=db,
                     sender_id=current_user.id,
                     receiver_id=friend_id,
-                    content=content.strip()
+                    content=content.strip(),
+                    reply_to_id=reply_to_id
                 )
 
-                # Prepare response
-                message_out = MessageOut.from_orm(msg)
+                # Prepare response with proper sender info
+                message_data = {
+                    "type": "message",
+                    "id": msg.id,
+                    "sender_id": msg.sender_id,
+                    "sender_username": current_user.username,
+                    "receiver_id": msg.receiver_id,
+                    "content": msg.content,
+                    "message_type": msg.message_type.value,
+                    "is_read": getattr(msg, 'is_read', False),
+                    "created_at": msg.created_at.isoformat() if hasattr(msg.created_at, 'isoformat') else str(msg.created_at),
+                    "reply_to_id": msg.reply_to_id,
+                }
 
                 # Broadcast to both users
-                await manager.broadcast(chat_id, message_out.dict())
+                await manager.broadcast(chat_id, message_data)
+                print(f"[WS] Broadcasted message: {message_data}")
 
             elif msg_type == "read":
-                # Optional: Mark as read
-                pass
+                # Handle read receipts with database update
+                message_id = data.get("message_id")
+                if message_id:
+                    # Mark message as read in database
+                    success = mark_message_as_read(db, message_id, current_user.id)
+                    
+                    if success:
+                        # Broadcast read receipt to both users
+                        await manager.broadcast(chat_id, {
+                            "type": "read_receipt",
+                            "message_id": message_id,
+                            "read_by": current_user.id,
+                            "read_at": datetime.utcnow().isoformat()
+                        })
+                        print(f"[WS] Message {message_id} marked as read by user {current_user.id}")
+                    else:
+                        print(f"[WS] Failed to mark message {message_id} as read")
 
     except WebSocketDisconnect:
         print(f"[WS] Private Chat Disconnected: User {current_user.id}")
         manager.disconnect(chat_id, websocket)
     except Exception as e:
         print(f"[WS] Private Chat Error: {e}")
+        import traceback
+        traceback.print_exc()  # This will show the full error stack
         manager.disconnect(chat_id, websocket)
         await websocket.close(code=1011, reason="Server error")
         
@@ -152,4 +184,13 @@ async def ws_group_chat(
         manager.disconnect(chat_id, websocket)
         print(f"[WS Error] {e}")
 
-
+@router.websocket("/private/{friend_id}")
+async def websocket_private_chat(
+    websocket: WebSocket,
+    friend_id: int,
+    token: str = Query(..., description="JWT token")
+):
+    """
+    WebSocket endpoint for private chat with a friend
+    """
+    await handle_websocket_private(websocket, friend_id, token)
