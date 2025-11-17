@@ -1,13 +1,16 @@
-// src/components/chat/ChatMessage.jsx
 import {
+  Close as CloseIcon,
   Delete as DeleteIcon,
   DoneAll as DoneAllIcon,
   Done as DoneIcon,
+  Download as DownloadIcon,
   Edit as EditIcon,
   Forward as ForwardIcon,
+  Image as ImageIcon,
   MoreVert as MoreVertIcon,
   PushPin as PushPinIcon,
   Reply as ReplyIcon,
+  ZoomIn as ZoomInIcon,
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -17,7 +20,7 @@ import {
   Menu,
   MenuItem,
   TextField,
-  Typography,
+  Typography
 } from '@mui/material';
 import { useState } from 'react';
 import { formatCambodiaTime } from '../../utils/dateUtils';
@@ -42,13 +45,37 @@ const ChatMessage = ({
   const [editText, setEditText] = useState(message.content);
   const [avatarError, setAvatarError] = useState(false);
   const [seenAvatarError, setSeenAvatarError] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  /* ---------------------------------------------------------- */
+  /*                     MESSAGE TYPE DETECTION                */
+  /* ---------------------------------------------------------- */
+  const detectMessageType = (msg) => {
+    // If message_type is explicitly set to 'image', use it
+    if (msg.message_type === 'image') {
+      return 'image';
+    }
+    
+    // Auto-detect from content
+    const content = msg.content || '';
+    const isImageUrl = 
+      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) || 
+      content.includes('cloudinary.com') ||
+      content.includes('res.cloudinary.com') ||
+      content.startsWith('data:image/') ||
+      content.startsWith('blob:');
+    
+    return isImageUrl ? 'image' : 'text';
+  };
+
+  const actualMessageType = detectMessageType(message);
 
   /* ---------------------------------------------------------- */
   /*                     MENU HANDLERS                         */
   /* ---------------------------------------------------------- */
   const handleMenu = (e) => {
     e.stopPropagation();
-    console.log('Menu button clicked for message:', message.id);
     setAnchorEl(e.currentTarget);
   };
   
@@ -67,7 +94,6 @@ const ChatMessage = ({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this message permanently?')) return;
     if (onDelete) {
       try {
         await onDelete(message.id, message.is_temp);
@@ -79,18 +105,11 @@ const ChatMessage = ({
   };
 
   const handleReplyClick = () => { 
-  console.log('Reply clicked for message:', message.id, message.content);
-  
-  // Call onReply immediately without any conditions
-  if (onReply) {
-    console.log('Calling onReply with message');
-    onReply(message);
-  } else {
-    console.error('onReply is undefined - prop not passed from parent');
-  }
-  
-  handleClose(); 
-};
+    if (onReply) {
+      onReply(message);
+    }
+    handleClose(); 
+  };
 
   const handlePinClick = () => { 
     onPin?.(message); 
@@ -102,8 +121,45 @@ const ChatMessage = ({
     handleClose(); 
   };
 
-  // Show menu for all messages
   const showMenu = true;
+
+  /* ---------------------------------------------------------- */
+  /*                     IMAGE HANDLERS                        */
+  /* ---------------------------------------------------------- */
+  const handleImageError = () => {
+    setImageError(true);
+  };
+
+  const handleDownloadImage = async (e) => {
+    e.stopPropagation();
+    try {
+      const response = await fetch(message.content);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      
+      const filename = `chat-image-${message.id}-${Date.now()}.jpg`;
+      a.download = filename;
+      
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Download failed:', err);
+    }
+  };
+
+  const handleViewFullImage = (e) => {
+    e?.stopPropagation();
+    setImageModalOpen(true);
+  };
+
+  const retryImageLoad = () => {
+    setImageError(false);
+  };
 
   /* ---------------------------------------------------------- */
   /*                     AVATAR HELPERS                        */
@@ -214,6 +270,100 @@ const ChatMessage = ({
   };
 
   /* ---------------------------------------------------------- */
+  /*                     RENDER IMAGE CONTENT                  */
+  /* ---------------------------------------------------------- */
+  const renderImageContent = () => (
+    <Box sx={{ mb: 1, position: 'relative' }}>
+      {/* Error state */}
+      {imageError && (
+        <Box 
+          sx={{ 
+            width: '100%', 
+            height: 200, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            bgcolor: 'grey.100',
+            borderRadius: '8px',
+            border: '1px dashed',
+            borderColor: 'grey.300',
+            flexDirection: 'column',
+            gap: 1
+          }}
+        >
+          <ImageIcon sx={{ color: 'grey.400', fontSize: 40 }} />
+          <Typography variant="body2" color="text.secondary" align="center">
+            Failed to load image
+          </Typography>
+          <Button 
+            size="small" 
+            variant="outlined"
+            onClick={retryImageLoad}
+          >
+            Retry
+          </Button>
+        </Box>
+      )}
+      
+      {/* Image */}
+      {!imageError && (
+        <>
+          <img 
+            src={message.content} 
+            alt="Chat image" 
+            onError={handleImageError}
+            style={{ 
+              maxWidth: '100%', 
+              maxHeight: 300,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              objectFit: 'cover',
+            }}
+            onClick={handleViewFullImage}
+          />
+          
+          {/* Image actions overlay */}
+          <Box 
+            sx={{ 
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              display: 'flex',
+              gap: 0.5,
+              opacity: 0,
+              transition: 'opacity 0.2s',
+            }}
+            className="image-actions"
+          >
+            <IconButton
+              size="small"
+              onClick={handleViewFullImage}
+              sx={{
+                bgcolor: 'rgba(0,0,0,0.7)',
+                color: 'white',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' },
+              }}
+            >
+              <ZoomInIcon fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={handleDownloadImage}
+              sx={{
+                bgcolor: 'rgba(0,0,0,0.7)',
+                color: 'white',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' },
+              }}
+            >
+              <DownloadIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </>
+      )}
+    </Box>
+  );
+
+  /* ---------------------------------------------------------- */
   /*                     RENDER                                 */
   /* ---------------------------------------------------------- */
   return (
@@ -226,6 +376,85 @@ const ChatMessage = ({
         position: 'relative',
       }}
     >
+      {/* Image Modal */}
+      {imageModalOpen && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            bgcolor: 'rgba(0,0,0,0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => setImageModalOpen(false)}
+        >
+          <Box
+            sx={{
+              position: 'relative',
+              maxWidth: '90%',
+              maxHeight: '90%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <IconButton
+              sx={{
+                position: 'absolute',
+                top: -40,
+                right: 0,
+                color: 'white',
+                bgcolor: 'rgba(0,0,0,0.5)',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+              }}
+              onClick={() => setImageModalOpen(false)}
+            >
+              <CloseIcon />
+            </IconButton>
+            
+            <img 
+              src={message.content} 
+              alt="Full size chat image"
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '90vh',
+                borderRadius: '8px',
+                objectFit: 'contain',
+              }}
+            />
+            
+            {/* Modal actions */}
+            <Box sx={{ position: 'absolute', bottom: -40, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 1 }}>
+              <IconButton
+                onClick={handleDownloadImage}
+                sx={{
+                  color: 'white',
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                }}
+              >
+                <DownloadIcon />
+              </IconButton>
+              {isMine && (
+                <IconButton
+                  onClick={handleDelete}
+                  sx={{
+                    color: 'white',
+                    bgcolor: 'rgba(244,67,54,0.7)',
+                    '&:hover': { bgcolor: 'rgba(244,67,54,0.9)' },
+                  }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      )}
+
       {/* Pin badge */}
       {isPinned && (
         <Box
@@ -299,7 +528,7 @@ const ChatMessage = ({
             </Box>
           </Box>
         ) : (
-          <Box sx={{ position: 'relative' }}>
+          <Box sx={{ position: 'relative' }} className="message-bubble">
             {/* Reply preview */}
             {message.reply_to && (
               <Box
@@ -339,7 +568,12 @@ const ChatMessage = ({
                 border: isPinned ? '2px solid' : 'none',
                 borderColor: isPinned ? 'warning.main' : 'transparent',
                 transition: 'all 0.2s ease',
-                '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
+                '&:hover': { 
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  '& .image-actions': {
+                    opacity: 1
+                  }
+                },
               }}
             >
               {/* Forwarded badge */}
@@ -352,13 +586,17 @@ const ChatMessage = ({
                 </Box>
               )}
 
-              {/* Content */}
-              <Typography
-                variant="body2"
-                sx={{ wordBreak: 'break-word', lineHeight: 1.4, fontSize: '0.9rem' }}
-              >
-                {message.content}
-              </Typography>
+              {/* Content - AUTO DETECT IMAGES */}
+              {actualMessageType === 'image' ? (
+                renderImageContent()
+              ) : (
+                <Typography
+                  variant="body2"
+                  sx={{ wordBreak: 'break-word', lineHeight: 1.4, fontSize: '0.9rem' }}
+                >
+                  {message.content}
+                </Typography>
+              )}
 
               {/* Time + tick */}
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 1, gap: 0.5 }}>
@@ -408,7 +646,7 @@ const ChatMessage = ({
         {/* Seen: Friend's avatar + "Seen" */}
         {renderSeenAvatar()}
 
-        {/* Context menu */}
+        {/* Context menu - FIXED: No Fragment */}
         {showMenu && (
           <Menu
             anchorEl={anchorEl}
@@ -423,53 +661,59 @@ const ChatMessage = ({
               } 
             }}
           >
+            {/* Image message specific options */}
+            {actualMessageType === 'image' && [
+              <MenuItem key="view-full" onClick={handleViewFullImage}>
+                <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
+                View Full Image
+              </MenuItem>,
+              <MenuItem key="download" onClick={handleDownloadImage}>
+                <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
+                Download Image
+              </MenuItem>
+            ]}
+
             {/* For MY messages - Show ALL menu items */}
-            {isMine && (
-              <>
-                <MenuItem onClick={() => { setEditing(true); setEditText(message.content); handleClose(); }}>
+            {isMine && [
+              actualMessageType !== 'image' && (
+                <MenuItem key="edit" onClick={() => { setEditing(true); setEditText(message.content); handleClose(); }}>
                   <EditIcon fontSize="small" sx={{ mr: 1.5 }} />
                   Edit
                 </MenuItem>
-                
-                <MenuItem onClick={handleReplyClick}>
-                  <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  Reply
-                </MenuItem>
-                
-                <MenuItem onClick={handlePinClick}>
-                  <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  {isPinned ? 'Unpin Message' : 'Pin Message'}
-                </MenuItem>
-                
-                <MenuItem onClick={handleForwardClick}>
-                  <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  Forward
-                </MenuItem>
-                
-                <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
-                  <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  Delete
-                </MenuItem>
-              </>
-            )}
+              ),
+              <MenuItem key="reply" onClick={handleReplyClick}>
+                <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
+                Reply
+              </MenuItem>,
+              <MenuItem key="pin" onClick={handlePinClick}>
+                <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
+                {isPinned ? 'Unpin Message' : 'Pin Message'}
+              </MenuItem>,
+              <MenuItem key="forward" onClick={handleForwardClick}>
+                <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                Forward
+              </MenuItem>,
+              <MenuItem key="delete" onClick={handleDelete} sx={{ color: 'error.main' }}>
+                <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
+                Delete
+              </MenuItem>
+            ].filter(Boolean)}
 
             {/* For FRIEND'S messages - Show Reply, Pin, Forward */}
-            {!isMine && (
-              <>
-                <MenuItem onClick={handleReplyClick}>
-                  <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  Reply
-                </MenuItem>
-                <MenuItem onClick={handlePinClick}>
-                  <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  {isPinned ? 'Unpin Message' : 'Pin Message'}
-                </MenuItem>
-                <MenuItem onClick={handleForwardClick}>
-                  <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  Forward
-                </MenuItem>
-              </>
-            )}
+            {!isMine && [
+              <MenuItem key="reply" onClick={handleReplyClick}>
+                <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
+                Reply
+              </MenuItem>,
+              <MenuItem key="pin" onClick={handlePinClick}>
+                <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
+                {isPinned ? 'Unpin Message' : 'Pin Message'}
+              </MenuItem>,
+              <MenuItem key="forward" onClick={handleForwardClick}>
+                <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                Forward
+              </MenuItem>
+            ]}
           </Menu>
         )}
       </Box>

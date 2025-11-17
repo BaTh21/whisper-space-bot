@@ -1071,17 +1071,28 @@ export const getBlockedUsers = async () => {
 
 export const markMessagesAsRead = async (messageIds) => {
   try {
-    console.log("Simulating mark as read for messages:", messageIds);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    return {
-      success: true,
-      message_ids: messageIds,
-      timestamp: new Date().toISOString(),
-    };
+    const response = await api.post('/api/v1/chats/messages/read', { 
+      message_ids: messageIds 
+    });
+    return response.data;
   } catch (error) {
-    console.error("Error in markMessagesAsRead simulation:", error);
-    return { success: true, message_ids: messageIds };
+    console.error("Mark messages as read error:", error.response?.data);
+    
+    // If endpoint doesn't exist, return success anyway for UX
+    if (error.response?.status === 404) {
+      console.log("Mark as read endpoint not found, returning success");
+      return {
+        success: true,
+        message_ids: messageIds,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to mark messages as read"
+    );
   }
 };
 
@@ -1159,6 +1170,77 @@ export const getSharedNotes = async () => {
 export const getPublicNote = async (shareToken) => {
   const response = await api.get(`/api/v1/notes/public/${shareToken}`);
   return response.data;
+};
+
+export const uploadImage = async (friendId, file) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post(`/api/v1/chats/private/${friendId}/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Upload image error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Upload failed"
+    );
+  }
+};
+
+export const sendImageMessage = async (friendId, imageUrl) => {
+  try {
+    const formData = new FormData();
+    formData.append('image_url', imageUrl);
+    formData.append('message_type', 'image');
+
+    const response = await api.post(`/api/v1/chats/private/${friendId}/image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Send image message error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to send image message"
+    );
+  }
+};
+
+export const deleteImageMessage = async (messageId) => {
+  try {
+    const response = await api.delete(`/api/v1/chats/private/image/${messageId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Delete image message error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to delete image message"
+    );
+  }
+};
+
+export const getMessageInfo = async (messageId) => {
+  try {
+    const response = await api.get(`/api/v1/chats/private/${messageId}/info`);
+    return response.data;
+  } catch (error) {
+    console.error("Get message info error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to get message info"
+    );
+  }
 };
 
 export default api;
