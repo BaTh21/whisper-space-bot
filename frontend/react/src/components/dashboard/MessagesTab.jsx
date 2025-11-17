@@ -1,4 +1,3 @@
-// src/components/message/MessagesTab.jsx
 import {
   Chat as ChatIcon,
   Close as CloseIcon,
@@ -6,6 +5,7 @@ import {
   PushPin as PushPinIcon,
   Reply as ReplyIcon,
   Send as SendIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -23,6 +23,7 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
+  CircularProgress,
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
@@ -32,6 +33,9 @@ import {
   editMessage,
   getPrivateChat,
   sendPrivateMessage,
+  deleteImageMessage,
+  uploadImage,
+  sendImageMessage,
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
@@ -58,6 +62,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [pinnedMessage, setPinnedMessage] = useState(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [friendTyping, setFriendTyping] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState(null);
 
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -86,6 +94,19 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       const { type } = data;
 
       if (type === 'message') {
+        // AUTO-DETECT message type for images
+        const detectMessageType = (msgData) => {
+          if (msgData.message_type === 'image') return 'image';
+          const content = msgData.content || '';
+          const isImageUrl = 
+            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) || 
+            content.includes('cloudinary.com') ||
+            content.includes('res.cloudinary.com') ||
+            content.startsWith('data:image/') ||
+            content.startsWith('blob:');
+          return isImageUrl ? 'image' : 'text';
+        };
+
         const incomingMsg = {
           ...data,
           is_temp: false,
@@ -102,11 +123,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 read_at: data.reply_to.read_at
               }
             : null,
-          // Ensure these fields are properly set
+          // AUTO-DETECT and ensure message_type is set correctly
+          message_type: detectMessageType(data),
           is_read: data.is_read || false,
           read_at: data.read_at,
           delivered_at: data.delivered_at
         };
+
+        console.log('Incoming message:', incomingMsg); // Debug log
 
         setMessages((prev) => {
           const filtered = prev.filter(
@@ -120,7 +144,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         });
 
       } else if (type === 'read_receipt') {
-        // Update the specific message with read status
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === data.message_id
@@ -136,7 +159,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       } else if (type === 'typing') {
         setFriendTyping(data.is_typing);
       } else if (type === 'message_status_update') {
-        // Handle other status updates like delivered
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === data.message_id
@@ -150,9 +172,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               : msg
           )
         );
+      } else if (type === 'message_deleted') {
+        setMessages((prev) => prev.filter((msg) => msg.id !== data.message_id));
+        if (pinnedMessage?.id === data.message_id) setPinnedMessage(null);
+        if (replyingTo?.id === data.message_id) setReplyingTo(null);
       }
     },
-    [getAvatarUrl]
+    [getAvatarUrl, pinnedMessage, replyingTo]
   );
 
   const handleWebSocketOpen = useCallback(() => {
@@ -197,6 +223,164 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   });
 
   /* --------------------------------------------------------------------- */
+  /*                         Image Upload & Deletion                      */
+  /* --------------------------------------------------------------------- */
+const handleImageUpload = async (file) => {
+    if (!selectedFriend) return;
+
+    const tempId = `temp-img-${Date.now()}`;
+    
+    try {
+      setUploadingImage(true);
+      
+      console.log('Starting image upload...');
+      
+      // Upload image to get URL
+      const result = await uploadImage(selectedFriend.id, file);
+      console.log('Upload result:', result);
+      
+      const { url } = result;
+      
+      // Create temp message with EXPLICIT image type
+      const tempMsg = {
+        id: tempId,
+        sender_id: profile.id,
+        receiver_id: selectedFriend.id,
+        content: url,
+        message_type: 'image', // Explicitly set to image
+        is_read: false,
+        created_at: new Date().toISOString(),
+        is_temp: true,
+        sender: {
+          username: profile.username,
+          avatar_url: getUserAvatar(profile),
+          id: profile.id,
+        },
+      };
+
+      console.log('Temp message created:', tempMsg);
+
+      // Add to messages immediately
+      setMessages((prev) => [...prev, tempMsg]);
+      setImagePreview(null);
+
+      // Send via WebSocket
+      const payload = {
+        type: 'message',
+        content: url,
+        message_type: 'image', // Ensure WebSocket knows it's an image
+      };
+
+      console.log('WebSocket payload:', payload);
+
+      if (sendWsMessage(payload)) {
+        console.log('Message sent via WebSocket');
+      } else {
+        console.log('WebSocket failed, using HTTP fallback...');
+        // HTTP fallback
+        try {
+          const sentMessage = await sendImageMessage(selectedFriend.id, url);
+          console.log('HTTP response:', sentMessage);
+          
+          // Replace temp message with real message
+          setMessages((prev) =>
+            prev
+              .filter((m) => m.id !== tempId)
+              .concat({
+                ...sentMessage,
+                is_temp: false,
+                message_type: 'image', // Ensure type is preserved
+                sender: {
+                  username: profile.username,
+                  avatar_url: getUserAvatar(profile),
+                  id: profile.id,
+                },
+              })
+          );
+        } catch (httpError) {
+          console.error('HTTP fallback failed:', httpError);
+          // Keep the temp message for now
+        }
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError('Failed to upload image: ' + (err.message || 'Unknown error'));
+      // Remove temp message on error
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image size should be less than 5MB');
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload the image
+    handleImageUpload(file);
+  };
+
+  const handleRemoveImagePreview = () => {
+    setImagePreview(null);
+  };
+
+  const handleDeleteMessage = (messageId, isTemp = false) => {
+    const message = messages.find(m => m.id === messageId);
+    if (!message) return;
+
+    setMessageToDelete({ id: messageId, isTemp, message });
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!messageToDelete) return;
+
+    const { id, isTemp, message } = messageToDelete;
+    const isImage = message.message_type === 'image';
+
+    // Remove from UI immediately
+    setMessages(prev => prev.filter(m => m.id !== id));
+    if (pinnedMessage?.id === id) setPinnedMessage(null);
+    if (replyingTo?.id === id) setReplyingTo(null);
+
+    // Call API for non-temp messages
+    if (!isTemp) {
+      try {
+        if (isImage) {
+          await deleteImageMessage(id);
+        } else {
+          await deleteMessage(id);
+        }
+        setSuccess(isImage ? 'Image deleted' : 'Message deleted');
+        setTimeout(() => setSuccess(null), 2000);
+      } catch (err) {
+        setError('Failed to delete message',err);
+        // Revert UI change on error
+        setMessages(prev => [...prev, message]);
+      }
+    }
+
+    setDeleteConfirmOpen(false);
+    setMessageToDelete(null);
+  };
+
+  /* --------------------------------------------------------------------- */
   /*                         Read Receipt System                          */
   /* --------------------------------------------------------------------- */
   const sendReadReceipt = useCallback((messageId) => {
@@ -209,36 +393,28 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, [isConnected, sendWsMessage]);
 
-  /* --------------------------------------------------------------------- */
-  /*                         Auto-Mark as Read                            */
-  /* --------------------------------------------------------------------- */
   const markMessagesAsRead = useCallback(() => {
     if (!selectedFriend || !messages.length) return;
 
-    // Find the last message from friend that is not read
     const unreadMessages = messages.filter(
       msg => msg.sender_id === selectedFriend.id && !msg.is_read
     );
 
     if (unreadMessages.length > 0 && isConnected) {
-      // Mark all unread messages as read
       const lastUnreadMessage = unreadMessages[unreadMessages.length - 1];
       
-      // Update local state immediately for better UX
+      // Update local state immediately
       setMessages(prev => prev.map(msg => 
         msg.sender_id === selectedFriend.id && !msg.is_read 
           ? { ...msg, is_read: true, read_at: new Date().toISOString() }
           : msg
       ));
 
-      // Send read receipt for the last message
+      // Send read receipt
       sendReadReceipt(lastUnreadMessage.id);
     }
   }, [messages, selectedFriend, isConnected, sendReadReceipt]);
 
-  /* --------------------------------------------------------------------- */
-  /*                         Scroll & Read Handler                        */
-  /* --------------------------------------------------------------------- */
   const handleScroll = useCallback(() => {
     if (!messagesContainerRef.current || !selectedFriend) return;
 
@@ -247,7 +423,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     const scrollHeight = container.scrollHeight;
     const clientHeight = container.clientHeight;
 
-    // If user is near the bottom (viewing latest messages), mark as read
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
 
     if (isNearBottom) {
@@ -255,18 +430,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, [selectedFriend, markMessagesAsRead]);
 
-  /* --------------------------------------------------------------------- */
-  /*                         Auto-Mark on Message Receive                 */
-  /* --------------------------------------------------------------------- */
   useEffect(() => {
     if (selectedFriend && isConnected) {
       markMessagesAsRead();
     }
   }, [messages, selectedFriend, isConnected, markMessagesAsRead]);
 
-  /* --------------------------------------------------------------------- */
-  /*                         Scroll Event Listener                        */
-  /* --------------------------------------------------------------------- */
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (container) {
@@ -307,27 +476,46 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     try {
       const chatMessages = await getPrivateChat(selectedFriend.id);
-      const enhanced = chatMessages.map((msg) => ({
-        ...msg,
-        is_temp: false,
-        sender: {
-          id: msg.sender_id,
-          username:
-            msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
-          avatar_url: getUserAvatar(
-            msg.sender_id === profile?.id ? profile : selectedFriend
-          ),
-        },
-        reply_to: msg.reply_to
-          ? {
-              ...msg.reply_to,
-              sender_username:
-                msg.reply_to.sender_id === profile?.id
-                  ? profile.username
-                  : selectedFriend.username,
-            }
-          : null,
-      }));
+      
+      // Auto-detect message types for images
+      const enhanced = chatMessages.map((msg) => {
+        const detectMessageType = (message) => {
+          if (message.message_type === 'image') return 'image';
+          const content = message.content || '';
+          const isImageUrl = 
+            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) || 
+            content.includes('cloudinary.com') ||
+            content.includes('res.cloudinary.com') ||
+            content.startsWith('data:image/') ||
+            content.startsWith('blob:');
+          return isImageUrl ? 'image' : 'text';
+        };
+
+        return {
+          ...msg,
+          is_temp: false,
+          message_type: detectMessageType(msg), // Auto-detect
+          sender: {
+            id: msg.sender_id,
+            username:
+              msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
+            avatar_url: getUserAvatar(
+              msg.sender_id === profile?.id ? profile : selectedFriend
+            ),
+          },
+          reply_to: msg.reply_to
+            ? {
+                ...msg.reply_to,
+                sender_username:
+                  msg.reply_to.sender_id === profile?.id
+                    ? profile.username
+                    : selectedFriend.username,
+              }
+            : null,
+        };
+      });
+
+      console.log('Loaded messages:', enhanced);
 
       setMessages(
         enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
@@ -355,77 +543,77 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setNewMessage('');
     setFriendTyping(false);
     setIsTyping(false);
+    setImagePreview(null);
   };
 
   /* --------------------------------------------------------------------- */
   /*                            Send Message                               */
   /* --------------------------------------------------------------------- */
   const handleSendMessage = async () => {
-  const content = newMessage.trim();
-  if (!content || !selectedFriend) return;
+    const content = newMessage.trim();
+    if (!content || !selectedFriend) return;
 
-  const tempId = `temp-${Date.now()}`;
-  const tempMsg = {
-    id: tempId,
-    sender_id: profile.id,
-    receiver_id: selectedFriend.id,
-    content,
-    message_type: 'text',
-    is_read: false,
-    created_at: new Date().toISOString(),
-    is_temp: true,
-    reply_to_id: replyingTo?.id || null, // IMPORTANT: Include reply_to_id
-    reply_to: replyingTo ? { // Include the full reply_to object for UI
-      ...replyingTo,
-      sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
-    } : null,
-    sender: {
-      username: profile.username,
-      avatar_url: getUserAvatar(profile),
-      id: profile.id,
-    },
-  };
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg = {
+      id: tempId,
+      sender_id: profile.id,
+      receiver_id: selectedFriend.id,
+      content,
+      message_type: 'text',
+      is_read: false,
+      created_at: new Date().toISOString(),
+      is_temp: true,
+      reply_to_id: replyingTo?.id || null,
+      reply_to: replyingTo ? {
+        ...replyingTo,
+        sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
+      } : null,
+      sender: {
+        username: profile.username,
+        avatar_url: getUserAvatar(profile),
+        id: profile.id,
+      },
+    };
 
-  setMessages((prev) => [...prev, tempMsg]);
-  setNewMessage('');
-  setReplyingTo(null); // Clear the reply after sending
-  handleTypingStop();
+    setMessages((prev) => [...prev, tempMsg]);
+    setNewMessage('');
+    setReplyingTo(null);
+    handleTypingStop();
 
-  const payload = {
-    type: 'message',
-    content,
-    message_type: 'text',
-    reply_to_id: replyingTo?.id || null, // IMPORTANT: Send reply_to_id to server
-  };
+    const payload = {
+      type: 'message',
+      content,
+      message_type: 'text',
+      reply_to_id: replyingTo?.id || null,
+    };
 
-  if (!sendWsMessage(payload)) {
-    // fallback HTTP
-    try {
-      const sent = await sendPrivateMessage(selectedFriend.id, payload);
-      setMessages((prev) =>
-        prev
-          .filter((m) => m.id !== tempId)
-          .concat({
-            ...sent,
-            is_temp: false,
-            reply_to: replyingTo ? { // Include reply_to in the response
-              ...replyingTo,
-              sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
-            } : null,
-            sender: {
-              username: profile.username,
-              avatar_url: getUserAvatar(profile),
-              id: profile.id,
-            },
-          })
-      );
-    } catch (err) {
-      setError(err.message);
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setNewMessage(content);
+    if (!sendWsMessage(payload)) {
+      try {
+        const sent = await sendPrivateMessage(selectedFriend.id, payload);
+        setMessages((prev) =>
+          prev
+            .filter((m) => m.id !== tempId)
+            .concat({
+              ...sent,
+              is_temp: false,
+              reply_to: replyingTo ? {
+                ...replyingTo,
+                sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
+              } : null,
+              sender: {
+                username: profile.username,
+                avatar_url: getUserAvatar(profile),
+                id: profile.id,
+              },
+            })
+        );
+      } catch (err) {
+        setError(err.message);
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setNewMessage(content);
+      }
     }
-  }
-};
+  };
 
   const handleInputChange = (e) => {
     setNewMessage(e.target.value);
@@ -505,7 +693,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     });
   }, []);
 
-  // Trigger scroll on any change that can add/remove messages
   useEffect(() => {
     if (messages.length !== lastMessageCount.current) {
       lastMessageCount.current = messages.length;
@@ -513,121 +700,92 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, [messages, scrollToBottom]);
 
-  // Also scroll when reply preview or pinned message changes
   useEffect(() => {
     scrollToBottom();
   }, [replyingTo, pinnedMessage, scrollToBottom]);
 
-  // Scroll when a new friend is selected (first load)
   useEffect(() => {
     if (selectedFriend) scrollToBottom();
   }, [selectedFriend, scrollToBottom]);
 
   /* --------------------------------------------------------------------- */
-/*                     Edit / Delete / Reply / Pin / Forward            */
-/* --------------------------------------------------------------------- */
-const handleEditMessage = async (messageId, newContent) => {
-  const msg = messages.find((m) => m.id === messageId);
-  if (!msg) return;
+  /*                     Edit / Delete / Reply / Pin / Forward            */
+  /* --------------------------------------------------------------------- */
+  const handleEditMessage = async (messageId, newContent) => {
+    const msg = messages.find((m) => m.id === messageId);
+    if (!msg) return;
 
-  const oldContent = msg.content;
-  const oldUpdatedAt = msg.updated_at;
+    const oldContent = msg.content;
+    const oldUpdatedAt = msg.updated_at;
 
-  // Optimistic UI update — show instantly
-  setMessages((prev) =>
-    prev.map((m) =>
-      m.id === messageId
-        ? { ...m, content: newContent, updated_at: new Date().toISOString() }
-        : m
-    )
-  );
-
-  // Block editing temp messages (still sending)
-  if (String(messageId).startsWith("temp-")) {
-    setError("Wait for message to send before editing");
-    setTimeout(() => setError(null), 3000);
-
-    // Revert optimistic change
     setMessages((prev) =>
       prev.map((m) =>
         m.id === messageId
-          ? { ...m, content: oldContent, updated_at: oldUpdatedAt }
-          : m
-      )
-    );
-    return;
-  }
-
-  try {
-    // Call API to edit real message
-    const updated = await editMessage(messageId, newContent);
-
-    // Sync with server response (exact values)
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === messageId
-          ? { ...m, content: updated.content, updated_at: updated.updated_at }
+          ? { ...m, content: newContent, updated_at: new Date().toISOString() }
           : m
       )
     );
 
-    setSuccess("Edited");
-    setTimeout(() => setSuccess(null), 2000);
-  } catch (err) {
-    setError(err.message || "Failed to edit message");
-    setTimeout(() => setError(null), 3000);
+    if (String(messageId).startsWith("temp-")) {
+      setError("Wait for message to send before editing");
+      setTimeout(() => setError(null), 3000);
 
-    // Revert on error
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === messageId
-          ? { ...m, content: oldContent, updated_at: oldUpdatedAt }
-          : m
-      )
-    );
-  }
-};
-
-
-const handleDeleteMessage = async (messageId, isTemp = false) => {
-  // Remove immediately from UI
-  setMessages(prev => prev.filter(m => m.id !== messageId));
-  
-  if (pinnedMessage?.id === messageId) setPinnedMessage(null);
-  if (replyingTo?.id === messageId) setReplyingTo(null);
-  
-  // Only call API for non-temp messages
-  if (!isTemp) {
-    try { 
-      await deleteMessage(messageId); 
-    } catch (err) { 
-      console.error(err); 
-      setError('Failed to delete message');
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, content: oldContent, updated_at: oldUpdatedAt }
+            : m
+        )
+      );
+      return;
     }
-  }
-};
 
-// ONLY CHANGE: Fixed Reply handler
-const handleReply = (msg) => {
-  console.log('🎯 REPLY: Setting reply target:', msg?.id, msg?.content);
-  if (msg && msg.id) {
-    setReplyingTo(msg);
-    console.log('✅ REPLY: Target set successfully');
-  } else {
-    console.error('❌ REPLY: Invalid message received');
-  }
-};
+    try {
+      const updated = await editMessage(messageId, newContent);
 
-const handlePinMessage = (msg) => setPinnedMessage(pinnedMessage?.id === msg.id ? null : msg);
-const handleForward = (msg) => {
-  setForwardingMessage(msg);
-  setForwardDialogOpen(true);
-};
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, content: updated.content, updated_at: updated.updated_at }
+            : m
+        )
+      );
+
+      setSuccess("Edited");
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err) {
+      setError(err.message || "Failed to edit message");
+      setTimeout(() => setError(null), 3000);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, content: oldContent, updated_at: oldUpdatedAt }
+            : m
+        )
+      );
+    }
+  };
+
+  const handleReply = (msg) => {
+    console.log('🎯 REPLY: Setting reply target:', msg?.id, msg?.content);
+    if (msg && msg.id) {
+      setReplyingTo(msg);
+      console.log('✅ REPLY: Target set successfully');
+    } else {
+      console.error('❌ REPLY: Invalid message received');
+    }
+  };
+
+  const handlePinMessage = (msg) => setPinnedMessage(pinnedMessage?.id === msg.id ? null : msg);
+  const handleForward = (msg) => {
+    setForwardingMessage(msg);
+    setForwardDialogOpen(true);
+  };
 
   /* --------------------------------------------------------------------- */
   /*                         Seen Status Logic                            */
   /* --------------------------------------------------------------------- */
-  // Find the last message from current user to determine if it's seen
   const lastMyMessage = messages
     .filter(msg => msg.sender_id === profile?.id)
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
@@ -708,6 +866,77 @@ const handleForward = (msg) => {
         mx: { sm: 'auto', md: 0 },
       }}
     >
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirmOpen && messageToDelete && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            bgcolor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => setDeleteConfirmOpen(false)}
+        >
+          <Box
+            sx={{
+              bgcolor: 'white',
+              borderRadius: '12px',
+              p: 3,
+              maxWidth: 400,
+              width: '90%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Typography variant="h6" gutterBottom>
+              Delete {messageToDelete.message.message_type === 'image' ? 'Image' : 'Message'}?
+            </Typography>
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {messageToDelete.message.message_type === 'image' 
+                ? 'This image will be permanently deleted from the chat and Cloudinary storage. This action cannot be undone.'
+                : 'This message will be permanently deleted from the chat. This action cannot be undone.'
+              }
+            </Typography>
+
+            {messageToDelete.message.message_type === 'image' && (
+              <Box sx={{ mb: 2, textAlign: 'center' }}>
+                <img 
+                  src={messageToDelete.message.content} 
+                  alt="To be deleted"
+                  style={{ 
+                    maxWidth: '100%', 
+                    maxHeight: 150,
+                    borderRadius: '8px'
+                  }}
+                />
+              </Box>
+            )}
+
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+              <Button 
+                onClick={() => setDeleteConfirmOpen(false)}
+                variant="outlined"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={confirmDelete}
+                variant="contained" 
+                color="error"
+              >
+                Delete
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
       {/* Mobile Header */}
       {isMobile && selectedFriend && (
         <Box
@@ -1052,6 +1281,62 @@ const handleForward = (msg) => {
               flexShrink: 0,
             }}
           >
+            {/* Image Preview */}
+            {imagePreview && (
+              <Box sx={{ position: 'relative', mb: 1 }}>
+                <img 
+                  src={imagePreview} 
+                  alt="Preview" 
+                  style={{ 
+                    width: 100, 
+                    height: 100, 
+                    objectFit: 'cover', 
+                    borderRadius: '8px' 
+                  }} 
+                />
+                <IconButton
+                  size="small"
+                  onClick={handleRemoveImagePreview}
+                  sx={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    bgcolor: 'error.main',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'error.dark' },
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            )}
+
+            {/* Upload Button */}
+            <input
+              accept="image/*"
+              style={{ display: 'none' }}
+              id="image-upload"
+              type="file"
+              onChange={handleFileSelect}
+              disabled={!selectedFriend || uploadingImage}
+            />
+            <label htmlFor="image-upload">
+              <IconButton
+                component="span"
+                disabled={!selectedFriend || uploadingImage}
+                sx={{
+                  borderRadius: '50%',
+                  width: { xs: 44, sm: 46, md: 48 },
+                  height: { xs: 44, sm: 46, md: 48 },
+                  color: 'primary.main',
+                  flexShrink: 0,
+                }}
+              >
+                {uploadingImage ? <CircularProgress size={24} /> : <ImageIcon />}
+              </IconButton>
+            </label>
+
+            {/* Message Input */}
             <TextField
               fullWidth
               size="small"
@@ -1072,7 +1357,7 @@ const handleForward = (msg) => {
               }}
               multiline
               maxRows={3}
-              disabled={!selectedFriend}
+              disabled={!selectedFriend || uploadingImage}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: '24px',
@@ -1081,10 +1366,12 @@ const handleForward = (msg) => {
                 bgcolor: '#f8f9fa',
               }}
             />
+
+            {/* Send Button */}
             <IconButton
               color="primary"
               onClick={handleSendMessage}
-              disabled={!selectedFriend || !newMessage.trim()}
+              disabled={!selectedFriend || (!newMessage.trim() && !imagePreview) || uploadingImage}
               sx={{
                 borderRadius: '50%',
                 width: { xs: 44, sm: 46, md: 48 },
