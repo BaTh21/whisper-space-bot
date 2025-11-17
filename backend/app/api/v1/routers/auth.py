@@ -45,7 +45,14 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
     user = create(db, user_in)
     code = "".join(random.choices("0123456789", k=6))
     create_verification_code(db, user.id, code)
-    await send_verification_email(user_in.email, code)
+    
+    # Send verification email using Resend
+    email_sent = await send_verification_email(user_in.email, code)
+    
+    if not email_sent:
+        # Don't fail registration if email fails, just log it
+        print(f"Warning: Failed to send verification email to {user_in.email}")
+        # You might want to handle this differently based on your requirements
     
     return BaseResponse(msg="Verification code sent")
 
@@ -111,3 +118,39 @@ def logout(
 ):
     revoke_refresh_token(db, req.refresh_token)
     return BaseResponse(msg="Logged out")
+
+@router.post("/resend-verification", response_model=BaseResponse)
+async def resend_verification(email: str, db: Session = Depends(get_db)):
+    """
+    Resend verification code to user's email
+    """
+    user = get_by_email(db, email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found"
+        )
+    
+    if user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already verified"
+        )
+    
+    # Generate new verification code
+    code = "".join(random.choices("0123456789", k=6))
+    
+    # Delete any existing codes and create new one
+    # (You might need to implement delete_user_codes function)
+    create_verification_code(db, user.id, code)
+    
+    # Send verification email
+    email_sent = await send_verification_email(email, code)
+    
+    if not email_sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email"
+        )
+    
+    return BaseResponse(msg="Verification code sent")
