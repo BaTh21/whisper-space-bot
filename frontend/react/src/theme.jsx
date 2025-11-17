@@ -16,7 +16,7 @@ const theme = createTheme({
     },
   },
   typography: {
-    fontFamily: 'Roboto, Arial, sans-serif',
+    fontFamily: `'Suwannaphum', 'Share Tech', sans-serif`,
     h4: {
       fontWeight: 600,
       fontSize: { xs: '1.5rem', sm: '1.75rem' }, // Smaller on mobile
