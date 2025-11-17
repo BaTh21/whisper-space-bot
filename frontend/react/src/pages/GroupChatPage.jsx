@@ -57,6 +57,7 @@ const GroupChatPage = () => {
   const [openImage, setOpenImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const activeMessage = messages.find((m) => m.id === activeMessageId);
+  const [replyTo, setReplyTo] = useState(null);
 
   const openMenu = (event, messageId) => {
     setAnchorEl(event.currentTarget);
@@ -155,6 +156,11 @@ const GroupChatPage = () => {
 
       ws.onmessage = (event) => {
         const message = JSON.parse(event.data);
+
+        if (message.sender?.id === user?.id && message.reply_to_message) {
+          setReplyTo(null);
+        }
+        
         setMessages(prev => [...prev, message]);
       };
 
@@ -198,6 +204,7 @@ const GroupChatPage = () => {
     const messageData = {
       type: 'message',
       content: newMessage,
+      reply_to: replyTo ? replyTo?.id : null
     };
 
     // Add temporary message
@@ -206,13 +213,15 @@ const GroupChatPage = () => {
       sender: user,
       content: newMessage,
       created_at: new Date().toISOString(),
-      is_temp: true
+      is_temp: true,
+
+      reply_to_message: replyTo || null
     };
     setMessages(prev => [...prev, tempMessage]);
 
-    // Send via WebSocket
     wsRef.current.send(JSON.stringify(messageData));
     setNewMessage('');
+    setReplyTo(null);
   };
 
   const handleKeyPress = (e) => {
@@ -221,6 +230,12 @@ const GroupChatPage = () => {
       handleSendMessage();
     }
   };
+
+  const handleReply = (message) => {
+    setReplyTo(message);
+    closeMenu();
+  };
+
 
   const handleSuccess = () => {
     fetchGroupData();
@@ -504,6 +519,26 @@ const GroupChatPage = () => {
                             </Box>
                           ) : (
                             <>
+                              {message.reply_to_message && (
+                                <Box
+                                  sx={{
+                                    bgcolor: "#f0f0f0",
+                                    p: 1,
+                                    borderLeft: "3px solid #1976d2",
+                                    borderRadius: 1,
+                                    mb: 1,
+                                  }}
+                                >
+                                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                    {message.reply_to_message.sender?.username}
+                                  </Typography>
+
+                                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                                    {message.reply_to_message.content}
+                                  </Typography>
+                                </Box>
+                              )}
+
                               {message.file_url && (
                                 <Box
                                   sx={{
@@ -697,7 +732,7 @@ const GroupChatPage = () => {
                               key="reply"
                               onClick={() => {
                                 setReplyTo(activeMessage);
-                                closeMenu();
+                                // closeMenu();
                               }}
                             >
                               <ReplyIcon /> Reply
@@ -733,50 +768,106 @@ const GroupChatPage = () => {
             )}
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
 
-              <input
-                type="file"
-                accept="image/*"
-                id="file-upload"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
-              <label htmlFor="file-upload">
-                <IconButton sx={{ bgcolor: 'grey', color: 'white' }} component="span">
-                  <AttachFileIcon />
-                </IconButton>
-              </label>
 
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Type a message..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                multiline
-                maxRows={4}
+              <Box
                 sx={{
-                  bgcolor: 'grey.100',
-                  borderRadius: 2,
-                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                  width: '100%'
                 }}
-              />
-
-              <Button
-                variant="contained"
-                onClick={() => {
-                  if (file) {
-                    handleUploadFileMessage(groupId, file);
-                  }
-                  if (newMessage.trim()) {
-                    handleSendMessage();
-                  }
-                }}
-                disabled={!newMessage.trim() && !file}
-                sx={{ minWidth: 60, borderRadius: 2 }}
               >
-                <SendIcon />
-              </Button>
+                {replyTo && (
+                  <Box
+                    sx={{
+                      p: 1,
+                      mb: 1,
+                      bgcolor: "grey.200",
+                      borderRadius: 2,
+                      borderLeft: "4px solid #1976d2",
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alightItems: 'center'
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="caption" sx={{ fontWeight: "bold" }}>
+                        Replying to {replyTo.sender?.username}
+                      </Typography>
+
+                      <Typography variant="body2" noWrap>
+                        {replyTo.content}
+                      </Typography>
+                    </Box>
+
+                    <Button
+                      size="small"
+                      onClick={() => setReplyTo(null)}
+                      sx={{ textTransform: "none" }}
+                    >
+                      Cancel reply
+                    </Button>
+                  </Box>
+                )}
+
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="file-upload"
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                  />
+                  <label htmlFor="file-upload">
+                    <IconButton
+                      sx={{
+                        bgcolor: 'primary.main',
+                        color: 'white',
+                        borderRadius: 2,
+                        '&:hover': {
+                          bgcolor: '#1E90FF'
+                        }
+                      }}
+                      component="span">
+                      <AttachFileIcon />
+                    </IconButton>
+                  </label>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Type a message..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    multiline
+                    maxRows={4}
+                    sx={{
+                      bgcolor: 'grey.100',
+                      borderRadius: 2,
+                      '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                    }}
+                  />
+
+                  <Button
+                    variant="contained"
+                    onClick={() => {
+                      if (file) {
+                        handleUploadFileMessage(groupId, file);
+                      }
+                      if (newMessage.trim()) {
+                        handleSendMessage();
+                      }
+                    }}
+                    disabled={!newMessage.trim() && !file}
+                    sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
+                  >
+                    <SendIcon />
+                  </Button>
+                </Box>
+              </Box>
 
             </Box>
           </Box>
