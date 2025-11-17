@@ -24,7 +24,7 @@ async def send_verification_email(email: str, code: str):
     try:
         # For testing, send to your verified email instead
         # Remove this in production
-        test_email = "mok.kolsambath1234@gmail.com"  # Your verified email
+        test_email = "mokkolsambath21@gmail.com"  # Your verified email
         actual_recipient = email  # Keep track of who it was meant for
         
         print(f"📧 Sending verification email (test mode):")
