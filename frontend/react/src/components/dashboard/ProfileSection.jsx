@@ -29,12 +29,12 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const fileInputRef = useRef(null);
 
   const theme = useTheme();
-  
+
   // Media query breakpoints
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));      // 0-599px
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600-899px
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));       // 900px+
-  
+
   // Helper functions for responsive logic
   const getAvatarSize = () => {
     if (isMobile) return 80;
@@ -74,7 +74,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
 
       try {
         let avatarUrl = profile?.avatar_url;
-        
+
         // Upload new avatar if selected
         if (selectedFile) {
           setUploading(true);
@@ -108,7 +108,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         setProfile(response);
         setEditing(false);
         setSuccess(selectedFile ? 'Profile and avatar updated successfully!' : 'Profile updated successfully');
-        
+
         // Reset file state
         setSelectedFile(null);
         setImagePreview(null);
@@ -146,7 +146,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
       setImagePreview(e.target.result);
     };
     reader.readAsDataURL(file);
-    
+
     setSelectedFile(file);
     setError(null);
   };
@@ -178,334 +178,146 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
   return (
-    <Card sx={{ 
-      mb: 3, 
-      p: { xs: 2, sm: 3 }, 
-      borderRadius: { xs: '12px', sm: '16px' },
-      border: 1,
-      borderColor: 'divider',
-      bgcolor: 'background.paper',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    }}>
-      {/* Profile Header */}
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: { xs: 'column', sm: 'row' },
-        alignItems: { xs: 'center', sm: 'flex-start' },
-        textAlign: { xs: 'center', sm: 'left' },
-        mb: 3,
-        position: 'relative',
-        gap: { xs: 2, sm: 3 }
-      }}>
-        {/* Avatar */}
-        <Box sx={{ position: 'relative' }}>
-          <Avatar
-            src={currentAvatarUrl}
-            alt={profile?.username}
-            sx={{ 
-              width: getAvatarSize(), 
-              height: getAvatarSize(), 
-              border: imagePreview ? '3px solid' : 'none',
-              borderColor: imagePreview ? 'primary.main' : 'transparent',
-              fontSize: getAvatarFontSize(),
-              bgcolor: 'primary.light',
-            }}
-          >
-            {getUserInitials(profile?.username)}
-          </Avatar>
-        </Box>
-
-        {/* Profile Info */}
-        <Box sx={{ 
-          flexGrow: 1,
-          minWidth: 0 // Prevent text overflow
-        }}>
-          <Typography 
-            variant="h4" 
-            gutterBottom 
-            fontWeight="600" 
-            sx={{ 
-              fontSize: getTitleFontSize(),
-              lineHeight: 1.2
-            }}
-          >
-            {profile?.username}
-          </Typography>
-          <Typography 
-            variant="body1" 
-            color="text.secondary" 
-            sx={{ 
-              lineHeight: 1.6, 
-              mb: 2,
-              fontSize: { xs: '0.9rem', sm: '1rem' }
-            }}
-          >
-            {profile?.bio || 'No bio yet.'}
-          </Typography>
-          <Chip
-            label={profile?.is_verified ? 'Verified' : 'Not Verified'}
-            color={profile?.is_verified ? 'success' : 'default'}
-            size="small"
-            sx={{ 
-              borderRadius: '8px',
-              fontSize: { xs: '0.75rem', sm: '0.875rem' }
-            }}
-          />
-        </Box>
-        
-        {/* Edit Button */}
-        <IconButton 
-          onClick={() => setEditing(!editing)}
-          sx={{ 
-            position: { xs: 'absolute', sm: 'static' },
-            top: { xs: 8, sm: 'auto' },
-            right: { xs: 8, sm: 'auto' },
-            bgcolor: 'primary.main',
-            color: 'white',
-            '&:hover': {
-              bgcolor: 'primary.dark',
-            },
-            width: { xs: 40, sm: 48 },
-            height: { xs: 40, sm: 48 },
-            flexShrink: 0
-          }}
-          size={isMobile ? 'small' : 'medium'}
-        >
-          <EditIcon fontSize={isMobile ? 'small' : 'medium'} />
-        </IconButton>
+    <Card
+  sx={{
+    mb: 3,
+    p: { xs: 2, sm: 3 },
+    borderRadius: { xs: '12px', sm: '16px' },
+    border: 1,
+    borderColor: 'divider',
+    bgcolor: 'background.paper',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+  }}
+>
+  {/* Profile Header */}
+  <Box
+    sx={{
+      display: 'flex',
+      flexDirection: { xs: 'column', sm: 'row' },
+      alignItems: { xs: 'center', sm: 'flex-start' },
+      textAlign: { xs: 'center', sm: 'left' },
+      gap: { xs: 2, sm: 3 },
+      mb: 3,
+    }}
+  >
+    {/* Clickable Avatar */}
+    <Box sx={{ position: 'relative', cursor: 'pointer' }} onClick={handleAvatarClick}>
+      <Avatar
+        src={currentAvatarUrl}
+        alt={profile?.username}
+        sx={{
+          width: getAvatarSize(),
+          height: getAvatarSize(),
+          border: imagePreview ? '3px solid' : 'none',
+          borderColor: imagePreview ? 'primary.main' : 'transparent',
+          fontSize: getAvatarFontSize(),
+          bgcolor: 'primary.light',
+        }}
+      >
+        {getUserInitials(profile?.username)}
+      </Avatar>
+      <Box
+        sx={{
+          position: 'absolute',
+          bottom: 0,
+          right: 0,
+          bgcolor: 'primary.main',
+          borderRadius: '50%',
+          width: 24,
+          height: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontSize: 14,
+        }}
+      >
+        ✎
       </Box>
+    </Box>
 
-      {/* Hidden file input */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        accept="image/jpeg,image/jpg,image/png"
-        style={{ display: 'none' }}
+    {/* Editable Profile Info */}
+    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+      <Typography
+        variant="h4"
+        gutterBottom
+        fontWeight="600"
+        sx={{
+          fontSize: getTitleFontSize(),
+          lineHeight: 1.2,
+          '&:hover': { bgcolor: 'action.hover', borderRadius: 1 },
+        }}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={(e) => setProfile({ ...profile, username: e.target.innerText })}
+      >
+        {profile?.username}
+      </Typography>
+
+      <Typography
+        variant="body1"
+        color="text.secondary"
+        sx={{
+          lineHeight: 1.6,
+          mb: 1,
+          fontSize: { xs: '0.9rem', sm: '1rem' },
+          '&:hover': { bgcolor: 'action.hover', borderRadius: 1 },
+        }}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={(e) => setProfile({ ...profile, bio: e.target.innerText })}
+      >
+        {profile?.bio || 'No bio yet.'}
+      </Typography>
+
+      <Chip
+        label={profile?.is_verified ? 'Verified' : 'Not Verified'}
+        color={profile?.is_verified ? 'success' : 'default'}
+        size="small"
+        sx={{
+          borderRadius: '8px',
+          fontSize: { xs: '0.75rem', sm: '0.875rem' },
+        }}
       />
+    </Box>
+  </Box>
 
-      {/* Alerts */}
-      <Collapse in={!!error}>
-        <Alert 
-          severity="error" 
-          sx={{ 
-            mb: 2, 
-            borderRadius: '12px',
-            fontSize: { xs: '0.875rem', sm: '1rem' }
-          }} 
-          onClose={() => setError(null)}
-        >
-          {error}
-        </Alert>
-      </Collapse>
-      
-      <Collapse in={!!success}>
-        <Alert 
-          severity="success" 
-          sx={{ 
-            mb: 2, 
-            borderRadius: '12px',
-            fontSize: { xs: '0.875rem', sm: '1rem' }
-          }} 
-          onClose={() => setSuccess(null)}
-        >
-          {success}
-        </Alert>
-      </Collapse>
+  {/* Hidden file input */}
+  <input
+    type="file"
+    ref={fileInputRef}
+    onChange={handleFileSelect}
+    accept="image/jpeg,image/jpg,image/png"
+    style={{ display: 'none' }}
+  />
 
-      {/* Edit Form */}
-      <Collapse in={editing}>
-        <Card sx={{ 
-          p: { xs: 2, sm: 3 }, 
-          mt: 2, 
-          borderRadius: '12px',
-          border: 1,
-          borderColor: 'divider',
-          bgcolor: 'background.default'
-        }}>
-          <Typography 
-            variant="h6" 
-            gutterBottom 
-            fontWeight="600"
-            sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-          >
-            Edit Profile
-          </Typography>
-          
-          <Box component="form" onSubmit={formik.handleSubmit}>
-            {/* Username Field */}
-            <TextField
-              label="Username"
-              name="username"
-              value={formik.values.username}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              error={formik.touched.username && !!formik.errors.username}
-              helperText={formik.touched.username && formik.errors.username}
-              fullWidth
-              margin="normal"
-              size={isMobile ? 'small' : 'medium'}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '8px',
-                }
-              }}
-            />
-            
-            {/* Bio Field */}
-            <TextField
-              label="Bio"
-              name="bio"
-              multiline
-              rows={3}
-              value={formik.values.bio}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              error={formik.touched.bio && !!formik.errors.bio}
-              helperText={`${formik.values.bio?.length || 0}/500 characters`}
-              fullWidth
-              margin="normal"
-              placeholder="Tell us a bit about yourself..."
-              size={isMobile ? 'small' : 'medium'}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '8px',
-                }
-              }}
-            />
+  {/* Alerts */}
+  <Collapse in={!!error}>
+    <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
+      {error}
+    </Alert>
+  </Collapse>
 
-            {/* Avatar Upload Section */}
-            <Box sx={{ mb: 2, mt: 3 }}>
-              <Typography 
-                variant="subtitle2" 
-                gutterBottom 
-                fontWeight="600"
-                sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}
-              >
-                Profile Picture
-              </Typography>
-              <Box sx={{ 
-                display: 'flex', 
-                flexDirection: { xs: 'column', sm: 'row' },
-                alignItems: { xs: 'center', sm: 'flex-start' },
-                gap: 3, 
-                mb: 2 
-              }}>
-                {/* Avatar Preview */}
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center',
-                  gap: 1
-                }}>
-                  <Avatar
-                    src={currentAvatarUrl}
-                    sx={{
-                      width: { xs: 80, sm: 100 },
-                      height: { xs: 80, sm: 100 },
-                      border: imagePreview ? '3px solid' : 'none',
-                      borderColor: imagePreview ? 'primary.main' : 'transparent',
-                      fontSize: { xs: '1.5rem', sm: '2rem' },
-                    }}
-                  >
-                    {getUserInitials(profile?.username)}
-                  </Avatar>
-                  {selectedFile && (
-                    <Typography 
-                      variant="caption" 
-                      color="text.secondary"
-                      sx={{ textAlign: 'center' }}
-                    >
-                      {selectedFile.name}
-                    </Typography>
-                  )}
-                </Box>
+  <Collapse in={!!success}>
+    <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setSuccess(null)}>
+      {success}
+    </Alert>
+  </Collapse>
 
-                {/* Upload Controls */}
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: 2,
-                  alignItems: { xs: 'center', sm: 'flex-start' },
-                  textAlign: { xs: 'center', sm: 'left' },
-                  flexGrow: 1
-                }}>
-                  <Button
-                    variant="outlined"
-                    startIcon={<CloudUploadIcon />}
-                    onClick={handleAvatarClick}
-                    disabled={uploading}
-                    sx={{ 
-                      borderRadius: '8px',
-                      minWidth: { xs: '100%', sm: 160 }
-                    }}
-                    size={isMobile ? 'small' : 'medium'}
-                  >
-                    {uploading ? 'Uploading...' : 'Choose Image'}
-                  </Button>
-                  
-                  {(selectedFile || imagePreview) && (
-                    <Button
-                      variant="text"
-                      color="error"
-                      size="small"
-                      onClick={removeSelectedImage}
-                      sx={{ borderRadius: '8px' }}
-                    >
-                      Remove Image
-                    </Button>
-                  )}
-                </Box>
-              </Box>
-              <Typography 
-                variant="caption" 
-                color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
-              >
-                Supported formats: PNG, JPG. Max size: 2MB
-              </Typography>
-            </Box>
+  {/* Save Button */}
+  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+    <Button
+      variant="contained"
+      onClick={formik.handleSubmit}
+      disabled={loading || uploading}
+      sx={{ borderRadius: '8px' }}
+    >
+      {loading || uploading ? 'Saving...' : 'Save Changes'}
+    </Button>
+  </Box>
+</Card>
 
-            {/* Action Buttons */}
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: { xs: 'column', sm: 'row' },
-              gap: 2, 
-              mt: 4 
-            }}>
-              <Button 
-                type="submit" 
-                variant="contained" 
-                disabled={loading || uploading}
-                sx={{ 
-                  borderRadius: '8px', 
-                  minWidth: { xs: '100%', sm: 140 },
-                  py: { xs: 1, sm: 1.5 },
-                  order: { xs: 2, sm: 1 }
-                }}
-                size={isMobile ? 'small' : 'medium'}
-              >
-                {uploading ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={handleCancel}
-                disabled={loading || uploading}
-                sx={{ 
-                  borderRadius: '8px',
-                  minWidth: { xs: '100%', sm: 120 },
-                  py: { xs: 1, sm: 1.5 },
-                  order: { xs: 1, sm: 2 }
-                }}
-                size={isMobile ? 'small' : 'medium'}
-              >
-                Cancel
-              </Button>
-            </Box>
-          </Box>
-        </Card>
-      </Collapse>
-    </Card>
+
   );
 };
 

@@ -8,7 +8,9 @@ import {
   Tab,
   Tabs,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Button,
+  IconButton
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -26,6 +28,16 @@ import ViewGroupDialog from '../components/dialogs/ViewGroupDialog';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
+import HomeIcon from "@mui/icons-material/Home";
+import ReviewsIcon from '@mui/icons-material/Reviews';
+import PeopleIcon from "@mui/icons-material/People";
+import GroupsIcon from '@mui/icons-material/Groups';
+import StickyNote2Icon from '@mui/icons-material/StickyNote2';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+import BlockIcon from '@mui/icons-material/Block';
+import PersonIcon from "@mui/icons-material/Person";
+import MenuIcon from '@mui/icons-material/Menu';
+
 
 // Tab panel component
 function TabPanel({ children, value, index, ...other }) {
@@ -50,9 +62,7 @@ const DashboardPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
-
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [showLabel, setShowLabel] = useState(true);
 
   // Data states
   const [friends, setFriends] = useState([]);
@@ -138,98 +148,102 @@ const DashboardPage = () => {
     );
   }
 
-  // Tab labels for mobile (shorter versions)
-  const getTabLabel = (label) => {
-    if (!isMobile) return label;
-    
-    const mobileLabels = {
-      'Feed': 'Feed',
-      'Messages': 'Chat',
-      'Friends': 'Friends',
-      'Groups': 'Groups',
-      'Notes': 'Notes',
-      'Search Users': 'Search',
-      'Blocked Users': 'Blocked'
-    };
-    
-    return mobileLabels[label] || label;
-  };
-
   return (
-    <Layout>
-      <Backdrop open={loading} sx={{ zIndex: 1300, color: '#40C4FF' }}>
+    <Layout onProfileClick={setActiveTab}>
+      {/* Loading backdrop */}
+      <Backdrop open={loading} sx={{ zIndex: 1300 }}>
         <CircularProgress color="inherit" />
       </Backdrop>
 
-      <Box sx={{ 
-        width: '100%', 
-        maxWidth: 1200, 
-        mx: 'auto', 
-        p: { xs: 1, sm: 2 },
-        minHeight: '100vh'
-      }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: 'space-between',
+          height: "90vh",
+          bgcolor: "#f4f6f8",
+          overflow: "hidden",
+        }}
+      >
 
-        {/* Header */}
-        <ProfileSection 
-          profile={profile}
-          setProfile={setProfile}
-          error={error}
-          success={success}
-          setError={setError}
-          setSuccess={setSuccess}
-          onProfileUpdate={fetchDashboardData}
-        />
-
-        {/* Main Content with Tabs */}
-        <Card sx={{ 
-          borderRadius: '16px', 
-          overflow: 'hidden',
-          mb: { xs: 2, sm: 3 }
-        }}>
-          {/* Responsive Tabs */}
-          <Box sx={{ 
-            borderBottom: 1, 
-            borderColor: 'divider',
-            overflow: 'hidden'
-          }}>
-            <Tabs
-              value={activeTab}
-              onChange={handleTabChange}
-              variant={isMobile ? "scrollable" : "standard"}
-              scrollButtons={isMobile ? "auto" : false}
-              allowScrollButtonsMobile
-              sx={{
-                minHeight: { xs: 48, sm: 60 },
-                '& .MuiTab-root': {
-                  borderRadius: '8px 8px 0 0',
-                  minHeight: { xs: 48, sm: 60 },
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                  px: { xs: 1, sm: 2 },
-                  minWidth: 'auto',
-                  '&.Mui-selected': {
-                    bgcolor: 'primary.light',
-                    color: 'primary.contrastText',
-                  }
-                },
-                '& .MuiTabs-scrollButtons': {
-                  width: { xs: 32, sm: 40 },
-                  '&.Mui-disabled': {
-                    opacity: 0.3,
-                  }
-                }
-              }}
-            >
-              <Tab label={getTabLabel("Feed")} />
-              <Tab label={getTabLabel("Messages")} />
-              <Tab label={getTabLabel("Friends")} />
-              <Tab label={getTabLabel("Groups")} />
-              <Tab label={getTabLabel("Notes")} />
-              <Tab label={getTabLabel("Search Users")} />
-              <Tab label={getTabLabel("Blocked Users")} />
-            </Tabs>
+        {/* LEFT SIDEBAR (CHAT STYLE NAV) */}
+        <Box
+          sx={{
+            width: showLabel ? 200 : 100,
+            transition: "width 0.25s",
+            bgcolor: "white",
+            borderRight: "1px solid #e2e2e2",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Toggle button */}
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <IconButton onClick={() => setShowLabel(x => !x)}>
+              <MenuIcon />
+            </IconButton>
           </Box>
 
-          {/* Feed Tab */}
+          {/* Tabs */}
+          <Tabs
+            orientation="vertical"
+            value={activeTab}
+            onChange={handleTabChange}
+            sx={{
+              width: "100%",
+              "& .MuiTab-root": {
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: showLabel ? "flex-start" : "center",
+                gap: showLabel ? 1.5 : 0,
+                px: showLabel ? 2 : 1,
+                py: 1.2,
+                mb: 0.5,
+                minHeight: 48,
+                textTransform: "none",
+                fontSize: "0.9rem",
+                color: "#5f6368",
+                opacity: showLabel ? 1 : 0.9,
+                transition: "0.2s",
+
+                "&:hover": {
+                  bgcolor: "rgba(0,0,0,0.05)",
+                },
+              },
+
+              "& .Mui-selected": {
+                bgcolor: "primary.main",
+                color: "white !important",
+                fontWeight: "bold",
+                "& .MuiSvgIcon-root": {
+                  color: "white !important",
+                },
+              },
+
+              "& .MuiTab-iconWrapper": {
+                marginBottom: "0 !important",
+              },
+            }}
+          >
+            <Tab icon={<HomeIcon />} label={showLabel ? "Feed" : null} />
+            <Tab icon={<ReviewsIcon />} label={showLabel ? "Messages" : null} />
+            <Tab icon={<PeopleIcon />} label={showLabel ? "Friends" : null} />
+            <Tab icon={<GroupsIcon />} label={showLabel ? "Groups" : null} />
+            <Tab icon={<StickyNote2Icon />} label={showLabel ? "Notes" : null} />
+            <Tab icon={<PersonSearchIcon />} label={showLabel ? "Search" : null} />
+            <Tab icon={<BlockIcon />} label={showLabel ? "Blocked" : null} />
+            <Tab icon={<PersonIcon />} label={showLabel ? "Profile" : null} />
+          </Tabs>
+        </Box>
+
+        <Box sx={{
+          width: '100%'
+        }}>
           <TabPanel value={activeTab} index={0}>
             <FeedTab
               diaries={diaries}
@@ -241,19 +255,17 @@ const DashboardPage = () => {
             />
           </TabPanel>
 
-          {/* Messages Tab - Only load when active */}
+          {/* MESSAGES — chat style content fits perfectly */}
           <TabPanel value={activeTab} index={1}>
-            {activeTab === 1 && (
-              <MessagesTab
-                friends={friends}
-                profile={profile}
-                setError={setError}
-                setSuccess={setSuccess}
-              />
-            )}
+            <MessagesTab
+              friends={friends}
+              profile={profile}
+              setError={setError}
+              setSuccess={setSuccess}
+            />
           </TabPanel>
 
-          {/* Friends Tab */}
+          {/* FRIENDS */}
           <TabPanel value={activeTab} index={2}>
             <FriendsTab
               friends={friends}
@@ -266,7 +278,7 @@ const DashboardPage = () => {
             />
           </TabPanel>
 
-          {/* Groups Tab */}
+          {/* GROUPS */}
           <TabPanel value={activeTab} index={3}>
             <GroupsTab
               groups={groups}
@@ -275,7 +287,7 @@ const DashboardPage = () => {
             />
           </TabPanel>
 
-          {/* Notes Tab */}
+          {/* NOTES */}
           <TabPanel value={activeTab} index={4}>
             <NotesTab
               setError={setError}
@@ -283,7 +295,7 @@ const DashboardPage = () => {
             />
           </TabPanel>
 
-          {/* Search Users Tab */}
+          {/* SEARCH USERS */}
           <TabPanel value={activeTab} index={5}>
             <SearchUsersTab
               setError={setError}
@@ -295,7 +307,7 @@ const DashboardPage = () => {
             />
           </TabPanel>
 
-          {/* Blocked Users Tab */}
+          {/* BLOCKED USERS */}
           <TabPanel value={activeTab} index={6}>
             <BlockedUsersTab
               setError={setError}
@@ -303,7 +315,18 @@ const DashboardPage = () => {
               onDataUpdate={fetchDashboardData}
             />
           </TabPanel>
-        </Card>
+          <TabPanel value={activeTab} index={7}>
+            <ProfileSection
+              profile={profile}
+              setProfile={setProfile}
+              error={error}
+              success={success}
+              setError={setError}
+              setSuccess={setSuccess}
+              onProfileUpdate={fetchDashboardData}
+            />
+          </TabPanel>
+        </Box>
       </Box>
 
       {/* Create Diary Dialog */}
@@ -347,19 +370,16 @@ const DashboardPage = () => {
         setSuccess={setSuccess}
       />
 
-      {/* Global Error/Success Alerts */}
       <Collapse in={!!error}>
-        <Alert 
-          severity="error" 
-          sx={{ 
-            position: 'fixed', 
-            top: { xs: 70, sm: 80 }, 
-            right: { xs: 10, sm: 20 }, 
-            left: { xs: 10, sm: 'auto' },
-            zIndex: 9999,
-            width: { xs: 'calc(100% - 20px)', sm: 'auto' },
-            minWidth: { xs: 'auto', sm: 300 }
-          }} 
+        <Alert
+          severity="error"
+          sx={{
+            position: "fixed",
+            bottom: 20,
+            right: 20,
+            zIndex: 2000,
+            borderRadius: 2,
+          }}
           onClose={() => setError(null)}
         >
           {error}
@@ -367,17 +387,15 @@ const DashboardPage = () => {
       </Collapse>
 
       <Collapse in={!!success}>
-        <Alert 
-          severity="success" 
-          sx={{ 
-            position: 'fixed', 
-            top: { xs: 70, sm: 80 }, 
-            right: { xs: 10, sm: 20 }, 
-            left: { xs: 10, sm: 'auto' },
-            zIndex: 9999,
-            width: { xs: 'calc(100% - 20px)', sm: 'auto' },
-            minWidth: { xs: 'auto', sm: 300 }
-          }} 
+        <Alert
+          severity="success"
+          sx={{
+            position: "fixed",
+            bottom: 20,
+            right: 20,
+            zIndex: 2000,
+            borderRadius: 2,
+          }}
           onClose={() => setSuccess(null)}
         >
           {success}

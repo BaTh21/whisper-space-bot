@@ -111,29 +111,37 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
   };
 
   return (
-    <Box sx={{ 
-      p: { xs: 2, sm: 3 },
-      maxWidth: '100%',
-      overflow: 'hidden'
-    }}>
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: { xs: 'column', sm: 'row' },
-        justifyContent: 'space-between', 
-        alignItems: { xs: 'stretch', sm: 'center' },
-        gap: { xs: 2, sm: 0 },
-        mb: 3 
-      }}>
-        <Typography variant="h5" fontWeight="600" sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
+    <Box
+      sx={{
+        p: { xs: 2, sm: 3 },
+        maxWidth: '100%',
+        overflow: 'hidden',
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: { xs: 2, sm: 0 },
+          mb: 3,
+        }}
+      >
+        <Typography
+          variant="h5"
+          fontWeight="600"
+          sx={{ textAlign: { xs: 'center', sm: 'left' } }}
+        >
           Your Feed
         </Typography>
         <Button
           variant="contained"
           onClick={onNewDiary}
           startIcon={<ArticleIcon />}
-          sx={{ 
+          sx={{
             borderRadius: '8px',
-            minWidth: { xs: '100%', sm: 'auto' }
+            minWidth: { xs: '100%', sm: 'auto' },
           }}
           size={isMobile ? 'small' : 'medium'}
         >
@@ -146,27 +154,40 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
           No diaries in your feed yet. Create one or follow more friends!
         </Typography>
       ) : (
-        diaries.map((diary) => (
-          <Card key={diary.id} sx={{ 
-            p: { xs: 2, sm: 3 }, 
-            mb: 2, 
+        // Scrollable container
+        <Box
+          sx={{
+            maxHeight: '70vh', // adjust as needed
+            overflowY: 'auto',
+            /* Hide scrollbar for WebKit browsers */
+            '&::-webkit-scrollbar': { display: 'none' },
+            /* Hide scrollbar for Firefox */
+            scrollbarWidth: 'none',
+            /* Hide scrollbar for IE, Edge */
+            msOverflowStyle: 'none',
+          }}
+        >
+        {diaries.map((diary) => (
+          <Card key={diary.id} sx={{
+            p: { xs: 2, sm: 3 },
+            mb: 2,
             borderRadius: '12px',
             mx: { xs: 0, sm: 0 }
           }}>
-            <Box sx={{ 
-              display: 'flex', 
+            <Box sx={{
+              display: 'flex',
               flexDirection: { xs: 'column', sm: 'row' },
-              justifyContent: 'space-between', 
+              justifyContent: 'space-between',
               alignItems: { xs: 'flex-start', sm: 'flex-start' },
               gap: { xs: 1, sm: 0 },
-              mb: 2 
+              mb: 2
             }}>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="h6" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
                   {diary.title}
                 </Typography>
-                <Box sx={{ 
-                  display: 'flex', 
+                <Box sx={{
+                  display: 'flex',
                   flexDirection: { xs: 'column', sm: 'row' },
                   alignItems: { xs: 'flex-start', sm: 'center' },
                   gap: { xs: 0.5, sm: 1 }
@@ -187,9 +208,9 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
                 size="small"
                 color={
                   diary.share_type === 'public' ? 'primary' :
-                  diary.share_type === 'friends' ? 'secondary' : 'default'
+                    diary.share_type === 'friends' ? 'secondary' : 'default'
                 }
-                sx={{ 
+                sx={{
                   borderRadius: '8px',
                   mt: { xs: 1, sm: 0 },
                   alignSelf: { xs: 'flex-start', sm: 'auto' }
@@ -197,20 +218,20 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
               />
             </Box>
 
-            <Typography variant="body1" sx={{ 
-              mb: 3, 
+            <Typography variant="body1" sx={{
+              mb: 3,
               lineHeight: 1.6,
               fontSize: { xs: '0.9rem', sm: '1rem' }
             }}>
               {diary.content}
             </Typography>
 
-            <Box sx={{ 
-              display: 'flex', 
+            <Box sx={{
+              display: 'flex',
               flexDirection: { xs: 'column', sm: 'row' },
-              gap: { xs: 1, sm: 2 }, 
+              gap: { xs: 1, sm: 2 },
               alignItems: { xs: 'stretch', sm: 'center' },
-              mb: expandedDiary === diary.id ? 0 : 2 
+              mb: expandedDiary === diary.id ? 0 : 2
             }}>
               <Button
                 startIcon={likedDiaries.has(diary.id) ? <Favorite color="error" /> : <FavoriteBorder />}
@@ -233,8 +254,8 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
                 onClick={() => handleExpandDiary(diary.id)}
                 size="small"
                 color={expandedDiary === diary.id ? 'primary' : 'inherit'}
-                sx={{ 
-                  minWidth: 'auto', 
+                sx={{
+                  minWidth: 'auto',
                   borderRadius: '8px',
                   justifyContent: { xs: 'flex-start', sm: 'center' }
                 }}
@@ -245,17 +266,17 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
             </Box>
 
             <Collapse in={expandedDiary === diary.id}>
-              <Box sx={{ 
-                mt: 2, 
-                p: { xs: 1.5, sm: 2 }, 
-                bgcolor: 'grey.50', 
-                borderRadius: '12px' 
+              <Box sx={{
+                mt: 2,
+                p: { xs: 1.5, sm: 2 },
+                bgcolor: 'grey.50',
+                borderRadius: '12px'
               }}>
-                <Box sx={{ 
-                  display: 'flex', 
+                <Box sx={{
+                  display: 'flex',
                   flexDirection: { xs: 'column', sm: 'row' },
-                  gap: 1, 
-                  mb: 2 
+                  gap: 1,
+                  mb: 2
                 }}>
                   <TextField
                     fullWidth
@@ -276,7 +297,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
                     variant="contained"
                     onClick={() => handleAddComment(diary.id)}
                     disabled={!commentTexts[diary.id]?.trim() || commentLoading[diary.id]}
-                    sx={{ 
+                    sx={{
                       minWidth: { xs: '100%', sm: '60px' },
                       borderRadius: '8px'
                     }}
@@ -286,29 +307,29 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
                 </Box>
 
                 {diaryComments[diary.id]?.length > 0 ? (
-                  <List sx={{ 
-                    maxHeight: 200, 
+                  <List sx={{
+                    maxHeight: 200,
                     overflow: 'auto',
-                    py: 0 
+                    py: 0
                   }}>
                     {diaryComments[diary.id].map((comment) => (
-                      <ListItem key={comment.id} sx={{ 
-                        px: { xs: 0, sm: 0 }, 
-                        py: 1 
+                      <ListItem key={comment.id} sx={{
+                        px: { xs: 0, sm: 0 },
+                        py: 1
                       }}>
                         <ListItemAvatar>
-                          <Avatar sx={{ 
-                            width: { xs: 28, sm: 32 }, 
-                            height: { xs: 28, sm: 32 }, 
-                            fontSize: { xs: '0.7rem', sm: '0.8rem' } 
+                          <Avatar sx={{
+                            width: { xs: 28, sm: 32 },
+                            height: { xs: 28, sm: 32 },
+                            fontSize: { xs: '0.7rem', sm: '0.8rem' }
                           }}>
                             {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText
                           primary={
-                            <Box sx={{ 
-                              display: 'flex', 
+                            <Box sx={{
+                              display: 'flex',
                               flexDirection: { xs: 'column', sm: 'row' },
                               alignItems: { xs: 'flex-start', sm: 'center' },
                               gap: { xs: 0.5, sm: 1 }
@@ -322,8 +343,8 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
                             </Box>
                           }
                           secondary={
-                            <Typography variant="body2" sx={{ 
-                              mt: 0.5, 
+                            <Typography variant="body2" sx={{
+                              mt: 0.5,
                               lineHeight: 1.5,
                               fontSize: { xs: '0.8rem', sm: '0.875rem' }
                             }}>
@@ -342,7 +363,8 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
               </Box>
             </Collapse>
           </Card>
-        ))
+        ))}
+        </Box>
       )}
     </Box>
   );

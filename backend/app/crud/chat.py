@@ -2,11 +2,14 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.group_message import GroupMessage
+from app.models.group_message_reply import GroupMessageReply
 from app.models.group_member import GroupMember
 from typing import List
 from datetime import datetime, timezone
 from fastapi import HTTPException,status
 from app.models.user_message_status import UserMessageStatus
+from sqlalchemy.orm import joinedload
+
 from fastapi import HTTPException
 from app.schemas.chat import MessageCreate
 
@@ -91,14 +94,20 @@ def create_group_message(
     
     return msg
 
-def get_group_messages(
-    db: Session, 
-    group_id: int, 
-    limit: int = 50, 
-    offset: int = 0
-) -> List[GroupMessage]:
-    return db.query(GroupMessage).filter(GroupMessage.group_id == group_id)\
-        .order_by(GroupMessage.created_at.desc()).offset(offset).limit(limit).all()
+def get_group_messages(db: Session, group_id: int, limit=50, offset=0):
+    return (
+        db.query(GroupMessage)
+        .filter(GroupMessage.group_id == group_id)
+        .options(
+            joinedload(GroupMessage.sender),
+            joinedload(GroupMessage.replies).joinedload(GroupMessageReply.sender),
+            joinedload(GroupMessage.parent_message).joinedload(GroupMessage.sender)
+        )
+        .order_by(GroupMessage.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
         
 def edit_private_message(db, message_id, user_id, new_content):
     if not new_content:

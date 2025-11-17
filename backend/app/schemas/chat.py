@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
 
@@ -57,6 +57,15 @@ class AuthorResponse(BaseModel):
     username: str
     avatar_url: Optional[str] = None
     
+class ReplyResponse(BaseModel):
+    id: Optional[int] = None
+    content: Optional[str] = None
+    created_at: Optional[datetime] = None
+    sender: AuthorResponse
+
+    class Config:
+        from_attributes = True
+    
 class GroupMessageOut(BaseModel):
     id: int
     sender: AuthorResponse
@@ -65,7 +74,8 @@ class GroupMessageOut(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     file_url: Optional[str] = None
-    # public_id: Optional[datetime] = None
+    
+    replies: Optional[list[ReplyResponse]] = []
 
     class Config:
         from_attributes = True

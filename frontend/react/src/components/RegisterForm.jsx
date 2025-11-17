@@ -56,6 +56,7 @@ const RegisterForm = () => {
         maxWidth: 500, // Moderate size, not too large
         mx: 'auto',
         p: { xs: 2, sm: 3 },
+        mt:12,
         bgcolor: 'background.paper',
       }}
     >

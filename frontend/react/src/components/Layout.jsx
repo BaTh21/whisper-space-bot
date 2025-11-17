@@ -1,35 +1,50 @@
 import MailIcon from '@mui/icons-material/Mail';
-import { AppBar, Box, Button, Toolbar, Typography } from '@mui/material';
+import { AppBar, Box, Button, Toolbar, Typography, Avatar, Menu, MenuItem } from '@mui/material';
 import Badge from '@mui/material/Badge';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getPendingGroupInvites } from '../services/api'; // Updated import
+import { getPendingGroupInvites, getMe } from '../services/api';
 import InboxComponent from './dialogs/InboxComponentDialog';
 import DeleteDialog from './dialogs/DeleteDialog';
 
-const Layout = ({ children }) => {
+const Layout = ({ children, onProfileClick }) => {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const [popup, setPopup] = useState(false);
   const [invites, setInvites] = useState([]);
   const [open, setOpen] = useState(false);
+  const [profile, setProfile] = useState(null);
+
+  // Menu state
+  const [anchorEl, setAnchorEl] = useState(null);
+  const menuOpen = Boolean(anchorEl);
 
   const fetchInvites = async () => {
     try {
-      const res = await getPendingGroupInvites(); // Updated function call
+      const res = await getPendingGroupInvites();
       setInvites(res);
     } catch (error) {
-      // console.error("Error fetching invites:", error);
       setInvites([]);
+    }
+  };
+
+  const fetchMe = async () => {
+    try {
+      const res = await getMe();
+      setProfile(res);
+      console.log("Profile", res);
+    } catch (error) {
+      console.log("Failed to get profile", error);
     }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchInvites();
+      fetchMe();
     }
-  }, [isAuthenticated]); // Added dependency
+  }, [isAuthenticated]);
 
   const handleLogout = () => {
     logout();
@@ -38,8 +53,16 @@ const Layout = ({ children }) => {
 
   const handleSuccess = () => {
     setPopup(false);
-    fetchInvites(); // Refresh invites after success
-  }
+    fetchInvites();
+  };
+
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
 
   const totalInvites = invites.length;
 
@@ -55,104 +78,91 @@ const Layout = ({ children }) => {
         p: 0,
       }}
     >
-      <AppBar position="static">
-        <Toolbar
-          sx={{
-            px: { xs: 1, sm: 2 },
-            py: { xs: 1, sm: 1.5 },
-          }}
-        >
-          <Typography
-            variant="h5"
-            component="div"
-            sx={{ flexGrow: 1, fontSize: { xs: '1.2rem', sm: '1.5rem' } }}
-            aria-label="Whisper Space Logo"
-          >
+      <AppBar position="static" sx={{ m: 0, px: 4 }}>
+        <Toolbar sx={{ px: 2, py: 1, m: 0 }}>
+          <Typography variant="h5" component="div" sx={{ flexGrow: 1 }}>
             Whisper Space
           </Typography>
-          <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 } }}>
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
             {!isAuthenticated ? (
               <>
-                <Button
-                  color="inherit"
-                  component={Link}
-                  to="/register"
-                  sx={{
-                    borderRadius: 20,
-                    px: { xs: 1, sm: 2 },
-                    fontSize: { xs: '0.8rem', sm: '0.9rem' },
-                  }}
-                  aria-label="Register"
-                >
+                <Button color="inherit" component={Link} to="/register" sx={{ borderRadius: 20 }}>
                   Register
                 </Button>
-                <Button
-                  color="inherit"
-                  component={Link}
-                  to="/login"
-                  sx={{
-                    borderRadius: 20,
-                    px: { xs: 1, sm: 2 },
-                    fontSize: { xs: '0.8rem', sm: '0.9rem' },
-                  }}
-                  aria-label="Login"
-                >
+                <Button color="inherit" component={Link} to="/login" sx={{ borderRadius: 20 }}>
                   Login
                 </Button>
               </>
             ) : (
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Box sx={{ marginRight: 2 }}>
+                <Box sx={{ mr: 3 }}>
                   <Badge badgeContent={totalInvites || 0} color="secondary">
-                    <MailIcon color="white" sx={{ '&:hover': { color: 'grey.300' } }} onClick={() => setPopup(true)} />
+                    <MailIcon sx={{ cursor: 'pointer' }} onClick={() => setPopup(true)} />
                   </Badge>
                 </Box>
-                <Button
-                  color="inherit"
-                  onClick={()=> setOpen(true)}
-                  sx={{
-                    borderRadius: 20,
-                    px: { xs: 1, sm: 2 },
-                    fontSize: { xs: '0.8rem', sm: '0.9rem' },
-                  }}
-                  aria-label="Logout"
-                >
-                  Logout
-                </Button>
 
+                <Box
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+                  onClick={handleMenuOpen}
+                >
+                  <Avatar src={profile?.avatar_url} alt={profile?.username}>
+                    {profile?.username?.charAt(0) || "P"}
+                  </Avatar>
+                  <Typography>{profile?.username}</Typography>
+                </Box>
+
+                {/* Profile Menu */}
+                <Menu
+                  anchorEl={anchorEl}
+                  open={menuOpen}
+                  onClose={handleMenuClose}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'right',
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                >
+                  <MenuItem
+                    onClick={() => {
+                      handleMenuClose();
+                      if (onProfileClick) onProfileClick(7);
+                    }}
+                  >
+                    Profile
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      handleMenuClose();
+                      setOpen(true);
+                    }}
+                  >
+                    Logout
+                  </MenuItem>
+                </Menu>
               </Box>
             )}
           </Box>
         </Toolbar>
       </AppBar>
-      <Box
-        sx={{
-          flexGrow: 1,
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          px: { xs: 1, sm: 2 },
-          py: { xs: 2, sm: 3 },
-        }}
-      >
+
+      <Box>
         {children}
       </Box>
 
-      {/* Only show inbox component when authenticated */}
       {isAuthenticated && (
-        <InboxComponent
-          open={popup}
-          onClose={() => setPopup(false)}
-          onSuccess={handleSuccess}
-        />
+        <InboxComponent open={popup} onClose={() => setPopup(false)} onSuccess={handleSuccess} />
       )}
+
       <DeleteDialog
         open={open}
         onClose={() => setOpen(false)}
         onSuccess={handleSuccess}
         title="Logout"
-        tag='Logout'
+        tag="Logout"
         description="Are you sure want to logout?"
         onConfirm={handleLogout}
       />

@@ -138,26 +138,8 @@ async def ws_group_chat(
             message_type = data.get("message_type", "text")
             content = data.get("content")
             reply_to_id = data.get("reply_to")
-
-            if msg_type == "message" and content:
-                if message_type in ["image", "file"]:
-                    filename = data.get("filename", "upload")
-                    # Extract base64 content
-                    if content.startswith("data:"):
-                        header, base64_data = content.split(",", 1)
-                        file_bytes = base64.b64decode(base64_data)
-                    else:
-                        file_bytes = base64.b64decode(content)
-
-                    configure_cloudinary()
-                    upload_result = upload_to_cloudinary(
-                        file_bytes,
-                        folder=f"group_{group_id}"
-                    )
-
-                    content = upload_result.get("secure_url")
                     
-                if reply_to_id:
+            if reply_to_id:
                     reply = GroupMessageReply(
                         message_id=reply_to_id,
                         sender_id=current_user.id,
@@ -175,10 +157,22 @@ async def ws_group_chat(
                         "group_id": group_id,
                         "content": reply.content,
                         "message_type": reply.message_type.value,
-                        "reply_to": reply_to_id,
-                        "created_at": reply.created_at.isoformat()
+                        "created_at": reply.created_at.isoformat(),
+                        "reply_to_message": {
+                            "id": parent_msg.id,
+                            "content": parent_msg.content,
+                            "message_type": parent_msg.message_type.value,
+                            "sender": {
+                                "id": parent_msg.sender.id,
+                                "username": parent_msg.sender.username,
+                                "avatar_url": parent_msg.sender.avatar_url
+                            }
+                        }
                     }
-                else:
+                    
+                    await manager.broadcast(chat_id, msg_out)
+                    
+            else:
                 # Create and save the message
                     msg = create_group_message(
                         db,
