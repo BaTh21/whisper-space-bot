@@ -1,20 +1,21 @@
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import {
-    Alert,
-    Box,
-    Button,
-    Card,
-    Collapse,
-    IconButton,
-    InputAdornment,
-    TextField,
-    Typography,
+  Alert,
+  Box,
+  Button,
+  Card,
+  Collapse,
+  IconButton,
+  InputAdornment,
+  TextField,
+  Typography,
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
 import { register } from '../services/api';
+import RegisterImg from '@/assets/register.gif';
 
 const RegisterForm = () => {
   const [error, setError] = useState(null);
@@ -52,107 +53,179 @@ const RegisterForm = () => {
   return (
     <Card
       sx={{
-        width: { xs: '100%', sm: '90%' },
-        maxWidth: 500, // Moderate size, not too large
-        mx: 'auto',
-        p: { xs: 2, sm: 3 },
-        mt:12,
-        bgcolor: 'background.paper',
+        display: "flex",
+        flexDirection: { xs: "column", md: "row-reverse" },
+        width: "100%",
+        minHeight: "100vh",
       }}
     >
-      <Typography
-        variant="h4"
-        gutterBottom
-        align="center"
-        color="primary"
-        sx={{ fontWeight: 600 }}
+      {/* Alerts */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 16,
+          left: 0,
+          right: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          zIndex: 10,
+          px: 2
+        }}
       >
-        Create Your Account
-      </Typography>
-      <Collapse in={!!error}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      </Collapse>
-      <Collapse in={!!success}>
-        <Alert severity="success" sx={{ mb: 2 }}>
-          {success}
-        </Alert>
-      </Collapse>
-      <Box component="form" onSubmit={formik.handleSubmit}>
-        <TextField
-          label="Username"
-          name="username"
-          value={formik.values.username}
-          onChange={formik.handleChange}
-          onBlur={formik.handleBlur}
-          error={formik.touched.username && !!formik.errors.username}
-          helperText={formik.touched.username && formik.errors.username}
-          fullWidth
-          margin="normal"
-          required
-          disabled={loading}
-          aria-label="Username"
-          sx={{ mb: { xs: 1, sm: 2 } }}
-        />
-        <TextField
-          label="Email"
-          name="email"
-          type="email"
-          value={formik.values.email}
-          onChange={formik.handleChange}
-          onBlur={formik.handleBlur}
-          error={formik.touched.email && !!formik.errors.email}
-          helperText={formik.touched.email && formik.errors.email}
-          fullWidth
-          margin="normal"
-          required
-          disabled={loading}
-          aria-label="Email"
-          sx={{ mb: { xs: 1, sm: 2 } }}
-        />
-        <TextField
-          label="Password"
-          name="password"
-          type={showPassword ? 'text' : 'password'}
-          value={formik.values.password}
-          onChange={formik.handleChange}
-          onBlur={formik.handleBlur}
-          error={formik.touched.password && !!formik.errors.password}
-          helperText={formik.touched.password && formik.errors.password}
-          fullWidth
-          margin="normal"
-          required
-          disabled={loading}
-          aria-label="Password"
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  onClick={() => setShowPassword(!showPassword)}
-                  edge="end"
-                  aria-label="Toggle password visibility"
-                >
-                  {showPassword ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              </InputAdornment>
-            ),
+        <Collapse in={!!error} sx={{ width: "100%", maxWidth: 600 }}>
+          <Alert severity="error" sx={{ mb: 1 }}>
+            {error}
+          </Alert>
+        </Collapse>
+        <Collapse in={!!success} sx={{ width: "100%", maxWidth: 600 }}>
+          <Alert severity="success" sx={{ mb: 1 }}>
+            {success}
+          </Alert>
+        </Collapse>
+      </Box>
+
+      {/* Image Section */}
+      <Box
+        sx={{
+          width: { xs: "100%", md: "40%" },
+          alignItems: "center",
+          justifyContent: "center",
+          display: 'flex'
+        }}
+      >
+        <Box
+          component="img"
+          src={RegisterImg}
+          sx={{
+            width: { xs: "75%", sm: 280, md: 450 },
+            maxWidth: "100%",
+            height: "auto",
           }}
-          sx={{ mb: { xs: 1, sm: 2 } }}
         />
-        <Button
-          type="submit"
-          variant="contained"
-          color="primary"
-          fullWidth
-          sx={{ mt: 2, py: { xs: 1, sm: 1.5 } }}
-          disabled={loading}
-          aria-label="Register Button"
+
+      </Box>
+
+      <Box
+        sx={{
+          flex: { xs: "0 0 auto", md: 1 },
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: {md: "grey.200", sm: 'white'},
+          height: {md: '100vh'}
+        }}
+      >
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 430,
+            backgroundColor: "white",
+            p: { xs: 3, sm: 5 },
+            borderRadius: 3,
+            boxShadow: {md: 5},
+          }}
+          component="form"
+          onSubmit={formik.handleSubmit}
         >
-          {loading ? 'Registering...' : 'Register'}
-        </Button>
+          <Typography
+            variant="h4"
+            gutterBottom
+            color="primary"
+            sx={{ fontWeight: 600, mb: 3 }}
+          >
+            Create Your Account
+          </Typography>
+
+          {/* Username */}
+          <TextField
+            label="Username"
+            name="username"
+            value={formik.values.username}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
+            error={formik.touched.username && !!formik.errors.username}
+            helperText={formik.touched.username && formik.errors.username}
+            fullWidth
+            margin="normal"
+            required
+            disabled={loading}
+          />
+
+          {/* Email */}
+          <TextField
+            label="Email"
+            name="email"
+            type="email"
+            value={formik.values.email}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
+            error={formik.touched.email && !!formik.errors.email}
+            helperText={formik.touched.email && formik.errors.email}
+            fullWidth
+            margin="normal"
+            required
+            disabled={loading}
+          />
+
+          {/* Password */}
+          <TextField
+            label="Password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            value={formik.values.password}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
+            error={formik.touched.password && !!formik.errors.password}
+            helperText={formik.touched.password && formik.errors.password}
+            fullWidth
+            margin="normal"
+            required
+            disabled={loading}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+
+          {/* Login Link */}
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mt: 2,
+            }}
+          >
+            <Typography variant="body2">Already have an account?</Typography>
+            <Button sx={{ color: "red" }} onClick={() => navigate("/login")}>
+              Login
+            </Button>
+          </Box>
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            fullWidth
+            sx={{ mt: 3 }}
+            disabled={loading}
+          >
+            {loading ? "Registering..." : "Register"}
+          </Button>
+        </Box>
       </Box>
     </Card>
+
   );
 };
 
