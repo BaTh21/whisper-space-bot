@@ -924,35 +924,13 @@ export const getGroupDiaries = async (groupId, search = "") => {
 };
 
 export const editMessage = async (msgId, content) => {
-  try {
-    console.log("Editing message:", { msgId, content });
+  console.log("Editing message:", { msgId, content });
 
-    const res = await api.patch(`/api/v1/chats/private/${msgId}`, {
-      content: content,
-    });
+  const res = await api.patch(`/api/v1/chats/private/${msgId}`, {
+    content: content.trim(),
+  });
 
-    return res.data;
-  } catch (err) {
-    const errorData = err.response?.data;
-    console.error("Edit message FULL error response:", errorData);
-
-    let errorMessage = "Failed to edit message";
-
-    if (errorData?.detail && Array.isArray(errorData.detail)) {
-      errorMessage = errorData.detail.join(", ");
-    } else if (errorData?.detail) {
-      errorMessage = errorData.detail;
-    } else if (errorData?.message) {
-      errorMessage = errorData.message;
-    } else if (typeof errorData === "string") {
-      errorMessage = errorData;
-    } else if (errorData) {
-      errorMessage = JSON.stringify(errorData);
-    }
-
-    console.error("Extracted error message:", errorMessage);
-    throw new Error(errorMessage);
-  }
+  return res.data;
 };
 
 // Group message operations

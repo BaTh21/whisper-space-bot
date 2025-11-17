@@ -200,38 +200,32 @@ async def send_private_message(
         created_at=full_msg.created_at.isoformat() if full_msg.created_at else None
     )
 
-@router.patch("/private/{message_id}", response_model=MessageOut)
+def _chat_id(a, b):
+    return f"private_{min(a, b)}_{max(a, b)}"
+
+@router.patch("/private/{message_id}")
 async def edit_message(
-    message_id: int, 
-    data: MessageCreate, 
-    db: Session = Depends(get_db), 
+    message_id,
+    data: MessageCreate,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    msg = edit_private_message(db, message_id, current_user.id, data.content)
-    
-    # Convert the message to MessageOut manually instead of using from_orm
-    message_out = MessageOut(
-        id=msg.id,
-        sender_id=msg.sender_id,
-        receiver_id=msg.receiver_id,
-        content=msg.content,
-        message_type=msg.message_type.value,
-        is_read=msg.is_read,
-        read_at=msg.read_at.isoformat() if msg.read_at else None,
-        delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,
-        reply_to_id=msg.reply_to_id,
-        is_forwarded=msg.is_forwarded,
-        original_sender=msg.original_sender,
-        sender_username=msg.sender.username if msg.sender else "Unknown User",
-        receiver_username=msg.receiver.username if msg.receiver else "Unknown User",
-        created_at=msg.created_at.isoformat() if msg.created_at else None,
-        updated_at=msg.updated_at.isoformat() if msg.updated_at else None
-    )
-    
-    chat_id = _chat_id(msg.sender_id, msg.receiver_id)
-    await manager.broadcast(chat_id, message_out.dict())
-    return message_out
+    msg = edit_private_message(db, message_id, current_user.id, data.content.strip())
 
+    chat_id = _chat_id(msg.sender_id, msg.receiver_id)
+    payload = {
+        "type": "edit",
+        "id": msg.id,
+        "content": msg.content,
+        "updated_at": msg.updated_at.isoformat(),
+        "sender_id": msg.sender_id,
+        "receiver_id": msg.receiver_id,
+        "sender_username": msg.sender.username if msg.sender else None,
+        "receiver_username": msg.receiver.username if msg.receiver else None,
+    }
+
+    await manager.broadcast(chat_id, payload)
+    return payload
 @router.delete("/private/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_message_forever_endpoint(
     message_id: int,

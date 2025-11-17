@@ -7,7 +7,6 @@ from typing import List
 from datetime import datetime, timezone
 from fastapi import HTTPException,status
 from app.models.user_message_status import UserMessageStatus
-
 from fastapi import HTTPException
 from app.schemas.chat import MessageCreate
 
@@ -101,18 +100,25 @@ def get_group_messages(
     return db.query(GroupMessage).filter(GroupMessage.group_id == group_id)\
         .order_by(GroupMessage.created_at.desc()).offset(offset).limit(limit).all()
         
-def edit_private_message(db: Session, message_id: int, user_id: int, new_content: str) -> PrivateMessage:
+def edit_private_message(db, message_id, user_id, new_content):
+    if not new_content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Message content cannot be empty.")
+
     msg = db.query(PrivateMessage).filter(
         PrivateMessage.id == message_id,
-        PrivateMessage.sender_id == user_id,
+        PrivateMessage.sender_id == user_id
     ).first()
+
     if not msg:
-        raise HTTPException(404, "Message not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            "Message not found or you don't have permission to edit it.")
+
     msg.content = new_content
     msg.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(msg)
     return msg
+
 
 def delete_message_for_user(db: Session, message_id: int, user_id: int):
     status = UserMessageStatus(user_id=user_id, message_id=message_id, is_deleted=True)

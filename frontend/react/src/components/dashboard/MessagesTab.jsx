@@ -526,88 +526,68 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
 /*                     Edit / Delete / Reply / Pin / Forward            */
 /* --------------------------------------------------------------------- */
-const handleEditMessage = async (messageId, newContent, isTemp = false) => {
+const handleEditMessage = async (messageId, newContent) => {
+  const msg = messages.find((m) => m.id === messageId);
+  if (!msg) return;
+
+  const oldContent = msg.content;
+  const oldUpdatedAt = msg.updated_at;
+
+  // Optimistic UI update — show instantly
+  setMessages((prev) =>
+    prev.map((m) =>
+      m.id === messageId
+        ? { ...m, content: newContent, updated_at: new Date().toISOString() }
+        : m
+    )
+  );
+
+  // Block editing temp messages (still sending)
+  if (String(messageId).startsWith("temp-")) {
+    setError("Wait for message to send before editing");
+    setTimeout(() => setError(null), 3000);
+
+    // Revert optimistic change
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, content: oldContent, updated_at: oldUpdatedAt }
+          : m
+      )
+    );
+    return;
+  }
+
   try {
-    // Update UI immediately
-    setMessages(prev => prev.map(m => 
-      m.id === messageId ? { ...m, content: newContent, updated_at: new Date().toISOString() } : m
-    ));
-    
-    if (isTemp) {
-      // For temp messages, we need to send as a new message
-      const messageToEdit = messages.find(m => m.id === messageId);
-      
-      // Remove the temp message
-      setMessages(prev => prev.filter(m => m.id !== messageId));
-      
-      // Send as a new message
-      const tempId = `temp-${Date.now()}`;
-      const tempMsg = {
-        id: tempId,
-        sender_id: profile.id,
-        receiver_id: selectedFriend.id,
-        content: newContent,
-        message_type: 'text',
-        is_read: false,
-        created_at: new Date().toISOString(),
-        is_temp: true,
-        reply_to_id: messageToEdit?.reply_to_id || null,
-        sender: {
-          username: profile.username,
-          avatar_url: getUserAvatar(profile),
-          id: profile.id,
-        },
-      };
+    // Call API to edit real message
+    const updated = await editMessage(messageId, newContent);
 
-      setMessages((prev) => [...prev, tempMsg]);
-      
-      // Send via WebSocket
-      const payload = {
-        type: 'message',
-        content: newContent,
-        message_type: 'text',
-        reply_to_id: messageToEdit?.reply_to_id || null,
-      };
+    // Sync with server response (exact values)
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, content: updated.content, updated_at: updated.updated_at }
+          : m
+      )
+    );
 
-      if (!sendWsMessage(payload)) {
-        // fallback HTTP
-        try {
-          const sent = await sendPrivateMessage(selectedFriend.id, payload);
-          setMessages((prev) =>
-            prev
-              .filter((m) => m.id !== tempId)
-              .concat({
-                ...sent,
-                is_temp: false,
-                sender: {
-                  username: profile.username,
-                  avatar_url: getUserAvatar(profile),
-                  id: profile.id,
-                },
-              })
-          );
-        } catch (err) {
-          setError(err.message);
-          setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        }
-      }
-    } else {
-      // For regular messages, call edit API
-      const updated = await editMessage(messageId, newContent);
-      setMessages(prev => prev.map(m => 
-        m.id === messageId ? { ...m, ...updated } : m
-      ));
-    }
-    
-    setSuccess('Message updated');
+    setSuccess("Edited");
+    setTimeout(() => setSuccess(null), 2000);
   } catch (err) {
-    setError('Failed to edit message',err);
+    setError(err.message || "Failed to edit message");
+    setTimeout(() => setError(null), 3000);
+
     // Revert on error
-    setMessages(prev => prev.map(m => 
-      m.id === messageId ? { ...m, content: messages.find(msg => msg.id === messageId)?.content } : m
-    ));
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, content: oldContent, updated_at: oldUpdatedAt }
+          : m
+      )
+    );
   }
 };
+
 
 const handleDeleteMessage = async (messageId, isTemp = false) => {
   // Remove immediately from UI
