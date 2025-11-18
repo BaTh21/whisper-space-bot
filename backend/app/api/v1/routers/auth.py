@@ -36,27 +36,29 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
 
 @router.post("/register", response_model=BaseResponse)
 async def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    if get_by_email(db, user_in.email):
+    user_by_email = db.query(User).filter(User.email == user_in.email).first()
+    if user_by_email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Email already registered"
-        )
+            status_code=status.HTTP_409_CONFLICT, 
+            detail="Email already registered")
     
-    user = create(db, user_in)
+    user_by_username = db.query(User).filter(User.username == user_in.username).first()
+    if user_by_username:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, 
+            detail="Username already registered")
+    
+    new_user = create(db, user_in)
+    
     code = "".join(random.choices("0123456789", k=6))
-    create_verification_code(db, user.id, code)
+    create_verification_code(db, new_user.id, code)
     
-    # Send verification email using Resend
-    email_sent = await send_verification_email(user_in.email, code)
-    
-    if not email_sent:
-        # Don't fail registration if email fails, just log it
-        print(f"Warning: Failed to send verification email to {user_in.email}")
-        # You might want to handle this differently based on your requirements
+    await send_verification_email(user_in.email, code)
     
     return BaseResponse(msg="Verification code sent")
 
-@router.post("/verify-code", response_model=BaseResponse)
+
+@router.post("/verify-code", response_model=Token)
 def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
     user = get_by_email(db, req.email)
     if not user:
@@ -74,7 +76,16 @@ def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
 
     verify(db, user.id)
     delete_code(db, code_obj.id)
-    return BaseResponse(msg="Email verified")
+    
+    access_token = create_access_token(user.id)
+    refresh_token_jwt = create_refresh_token(user.id)
+    store_refresh_token(db, user.id, refresh_token_jwt)
+
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token_jwt,
+        token_type="bearer"
+    )
 
 @router.post("/login", response_model=Token)
 def login(

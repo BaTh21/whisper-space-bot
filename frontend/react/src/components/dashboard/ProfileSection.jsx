@@ -19,6 +19,7 @@ import { useRef, useState } from 'react';
 import * as Yup from 'yup';
 import { useAvatar } from '../../hooks/useAvatar';
 import { updateMe, uploadAvatar } from '../../services/api';
+import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 
 const ProfileSection = ({ profile, setProfile, error, success, setError, setSuccess }) => {
   const [editing, setEditing] = useState(false);
@@ -179,143 +180,160 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
 
   return (
     <Card
-  sx={{
-    mb: 3,
-    p: { xs: 2, sm: 3 },
-    borderRadius: { xs: '12px', sm: '16px' },
-    border: 1,
-    borderColor: 'divider',
-    bgcolor: 'background.paper',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-  }}
->
-  {/* Profile Header */}
-  <Box
-    sx={{
-      display: 'flex',
-      flexDirection: { xs: 'column', sm: 'row' },
-      alignItems: { xs: 'center', sm: 'flex-start' },
-      textAlign: { xs: 'center', sm: 'left' },
-      gap: { xs: 2, sm: 3 },
-      mb: 3,
-    }}
-  >
-    {/* Clickable Avatar */}
-    <Box sx={{ position: 'relative', cursor: 'pointer' }} onClick={handleAvatarClick}>
-      <Avatar
-        src={currentAvatarUrl}
-        alt={profile?.username}
-        sx={{
-          width: getAvatarSize(),
-          height: getAvatarSize(),
-          border: imagePreview ? '3px solid' : 'none',
-          borderColor: imagePreview ? 'primary.main' : 'transparent',
-          fontSize: getAvatarFontSize(),
-          bgcolor: 'primary.light',
-        }}
-      >
-        {getUserInitials(profile?.username)}
-      </Avatar>
+      sx={{
+        mb: 3,
+        p: { xs: 2, sm: 3 },
+        borderRadius: { xs: '12px', sm: '16px' },
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        // textAlign: 'center',
+      }}
+    >
+      {/* Profile Header */}
       <Box
         sx={{
-          position: 'absolute',
-          bottom: 0,
-          right: 0,
-          bgcolor: 'primary.main',
-          borderRadius: '50%',
-          width: 24,
-          height: 24,
           display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' }, // stack avatar and info vertically
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'white',
-          fontSize: 14,
+          gap: 3,
+          width: '100%',
+          maxWidth: 500,
         }}
       >
-        ✎
+        {/* Clickable Avatar */}
+        <Box
+          sx={{
+            position: 'relative',
+            cursor: 'pointer',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          onClick={handleAvatarClick}
+        >
+          <Avatar
+            src={currentAvatarUrl}
+            alt={profile?.username}
+            sx={{
+              width: 200,
+              height: 200,
+              border: imagePreview ? '3px solid' : 'none',
+              borderColor: imagePreview ? 'primary.main' : 'transparent',
+              fontSize: getAvatarFontSize(),
+              bgcolor: 'primary.light',
+              borderRadius: 3,
+            }}
+          >
+            {getUserInitials(profile?.username)}
+          </Avatar>
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              bgcolor: 'primary.main',
+              borderRadius: '50%',
+              width: 24,
+              height: 24,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: 14,
+              p: 2
+            }}
+          >
+            <CameraswitchIcon sx={{fontSize: 20}}/>
+          </Box>
+        </Box>
+
+        {/* Editable Profile Info */}
+        <Box sx={{ width: '100%' }}>
+          <Typography
+            variant="h4"
+            gutterBottom
+            fontWeight="600"
+            sx={{
+              fontSize: getTitleFontSize(),
+              lineHeight: 1.2,
+              '&:hover': { bgcolor: 'action.hover', borderRadius: 1 },
+            }}
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) => setProfile({ ...profile, username: e.target.innerText })}
+          >
+            {profile?.username}
+          </Typography>
+
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            sx={{
+              lineHeight: 1.6,
+              mb: 1,
+              fontSize: { xs: '0.9rem', sm: '1rem' },
+              '&:hover': { bgcolor: 'action.hover', borderRadius: 1 },
+            }}
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) => setProfile({ ...profile, bio: e.target.innerText })}
+          >
+            {profile?.bio || 'No bio yet.'}
+          </Typography>
+
+          <Chip
+            label={profile?.is_verified ? 'Verified' : 'Not Verified'}
+            color={profile?.is_verified ? 'success' : 'default'}
+            size="small"
+            sx={{ borderRadius: '8px', fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+          />
+
+          {/* Save Button */}
+          <Box sx={{mt: 3, width: '100%' }}>
+            <Button
+              variant="contained"
+              onClick={formik.handleSubmit}
+              disabled={loading || uploading}
+              sx={{ borderRadius: '8px' }}
+            >
+              {loading || uploading ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </Box>
+        </Box>
+
       </Box>
-    </Box>
 
-    {/* Editable Profile Info */}
-    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-      <Typography
-        variant="h4"
-        gutterBottom
-        fontWeight="600"
-        sx={{
-          fontSize: getTitleFontSize(),
-          lineHeight: 1.2,
-          '&:hover': { bgcolor: 'action.hover', borderRadius: 1 },
-        }}
-        contentEditable
-        suppressContentEditableWarning
-        onBlur={(e) => setProfile({ ...profile, username: e.target.innerText })}
-      >
-        {profile?.username}
-      </Typography>
-
-      <Typography
-        variant="body1"
-        color="text.secondary"
-        sx={{
-          lineHeight: 1.6,
-          mb: 1,
-          fontSize: { xs: '0.9rem', sm: '1rem' },
-          '&:hover': { bgcolor: 'action.hover', borderRadius: 1 },
-        }}
-        contentEditable
-        suppressContentEditableWarning
-        onBlur={(e) => setProfile({ ...profile, bio: e.target.innerText })}
-      >
-        {profile?.bio || 'No bio yet.'}
-      </Typography>
-
-      <Chip
-        label={profile?.is_verified ? 'Verified' : 'Not Verified'}
-        color={profile?.is_verified ? 'success' : 'default'}
-        size="small"
-        sx={{
-          borderRadius: '8px',
-          fontSize: { xs: '0.75rem', sm: '0.875rem' },
-        }}
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept="image/jpeg,image/jpg,image/png"
+        style={{ display: 'none' }}
       />
-    </Box>
-  </Box>
 
-  {/* Hidden file input */}
-  <input
-    type="file"
-    ref={fileInputRef}
-    onChange={handleFileSelect}
-    accept="image/jpeg,image/jpg,image/png"
-    style={{ display: 'none' }}
-  />
+      {/* Alerts */}
+      <Collapse in={!!error}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      </Collapse>
 
-  {/* Alerts */}
-  <Collapse in={!!error}>
-    <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
-      {error}
-    </Alert>
-  </Collapse>
+      <Collapse in={!!success}>
+        <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setSuccess(null)}>
+          {success}
+        </Alert>
+      </Collapse>
 
-  <Collapse in={!!success}>
-    <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setSuccess(null)}>
-      {success}
-    </Alert>
-  </Collapse>
+    </Card>
 
-  {/* Save Button */}
-  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-    <Button
-      variant="contained"
-      onClick={formik.handleSubmit}
-      disabled={loading || uploading}
-      sx={{ borderRadius: '8px' }}
-    >
-      {loading || uploading ? 'Saving...' : 'Save Changes'}
-    </Button>
-  </Box>
-</Card>
 
 
   );

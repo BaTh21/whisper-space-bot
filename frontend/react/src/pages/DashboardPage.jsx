@@ -148,6 +148,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
 
         <Box sx={{
           width: '100%',
+          mt: 6
         }}>
           <TabPanel value={activeTab} index={0}>
             <FeedTab

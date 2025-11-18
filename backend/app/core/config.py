@@ -9,17 +9,17 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 7
-    # SMTP_HOST: str
-    # SMTP_PORT: int
-    # SMTP_USER: str
-    # SMTP_PASS: str
-    # SMTP_FROM: str
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_USER: str
+    SMTP_PASS: str
+    SMTP_FROM: str
     FRONTEND_URL: str
     
     
     # Add Resend settings:
-    RESEND_API_KEY: str
-    EMAIL_FROM: str = "onboarding@resend.dev"  # Default Resend domain
+    # RESEND_API_KEY: str
+    # EMAIL_FROM: str = "onboarding@resend.dev"
     
     # Cloudinary
     CLOUDINARY_CLOUD_NAME: str
