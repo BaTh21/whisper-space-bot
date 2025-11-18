@@ -49,7 +49,7 @@ async def send_verification_email(email: str, code: str):
         message,
         hostname=settings.SMTP_HOST,
         port=settings.SMTP_PORT,
-        start_tls=True,
+        use_tls=True,
         username=settings.SMTP_USER,
         password=settings.SMTP_PASS,
     )

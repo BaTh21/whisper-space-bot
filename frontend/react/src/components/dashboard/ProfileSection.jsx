@@ -34,7 +34,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   // Media query breakpoints
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));      // 0-599px
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600-899px
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));       // 900px+
 
   // Helper functions for responsive logic
   const getAvatarSize = () => {
@@ -164,17 +163,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     }
   };
 
-  const handleCancel = () => {
-    setEditing(false);
-    setSelectedFile(null);
-    setImagePreview(null);
-    setError(null);
-    formik.resetForm();
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
   // Current avatar display: preview > current profile avatar
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
@@ -193,6 +181,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         justifyContent: 'center',
         alignItems: 'center',
         // textAlign: 'center',
+        height: '80vh'
       }}
     >
       {/* Profile Header */}

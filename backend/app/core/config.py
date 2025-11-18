@@ -16,10 +16,9 @@ class Settings(BaseSettings):
     SMTP_FROM: str
     FRONTEND_URL: str
     
-    
     # Add Resend settings:
     # RESEND_API_KEY: str
-    # EMAIL_FROM: str = "onboarding@resend.dev"
+    # EMAIL_FROM: str
     
     # Cloudinary
     CLOUDINARY_CLOUD_NAME: str

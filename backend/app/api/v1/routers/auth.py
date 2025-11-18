@@ -48,12 +48,16 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT, 
             detail="Username already registered")
     
-    new_user = create(db, user_in)
     
     code = "".join(random.choices("0123456789", k=6))
-    create_verification_code(db, new_user.id, code)
     
-    await send_verification_email(user_in.email, code)
+    verify_code = await send_verification_email(user_in.email, code)
+    if not verify_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Failed to verify code")
+    
+    new_user = create(db, user_in)
+    create_verification_code(db, new_user.id, code)
     
     return BaseResponse(msg="Verification code sent")
 
