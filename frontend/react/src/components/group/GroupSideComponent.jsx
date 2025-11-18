@@ -45,7 +45,6 @@ import {
 } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
-import { useParams } from 'react-router-dom';
 import DeleteDialog from '../dialogs/DeleteDialog';
 import UserProfileDialog from '../dialogs/UserProfileDialog';
 import DiaryDialog from '../dialogs/DiaryDialog';
@@ -57,8 +56,7 @@ import ClearIcon from "@mui/icons-material/Clear";
 import CommentUpdateDialog from '../dialogs/CommentUpdateDialog';
 import ShareDiaryDialog from '../dialogs/ShareDiaryDailog';
 
-const GroupSideComponent = () => {
-    const { groupId } = useParams();
+const GroupSideComponent = ({groupId}) => {
     const [members, setMembers] = useState([]);
     const [diaries, setDiaries] = useState([]);
     const [loading, setLoading] = useState(true);

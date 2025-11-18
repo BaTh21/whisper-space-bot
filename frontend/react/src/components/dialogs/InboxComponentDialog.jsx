@@ -92,7 +92,7 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
                         top: '50%',
                         left: '50%',
                         transform: 'translate(-50%, -50%)',
-                        width: 800,
+                        width: {xs: '90%', md: 800},
                         bgcolor: 'background.paper',
                         borderRadius: 2,
                         boxShadow: 24,

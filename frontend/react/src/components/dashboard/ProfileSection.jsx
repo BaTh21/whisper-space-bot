@@ -31,11 +31,9 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
 
   const theme = useTheme();
 
-  // Media query breakpoints
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));      // 0-599px
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md')); // 600-899px
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
-  // Helper functions for responsive logic
   const getAvatarSize = () => {
     if (isMobile) return 80;
     if (isTablet) return 100;
@@ -54,7 +52,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     return '2.125rem'; // desktop
   };
 
-  // Use the avatar hook
   const { getAvatarUrl, getUserInitials } = useAvatar();
 
   const formik = useFormik({
@@ -75,7 +72,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
       try {
         let avatarUrl = profile?.avatar_url;
 
-        // Upload new avatar if selected
         if (selectedFile) {
           setUploading(true);
           try {
@@ -91,25 +87,21 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           setUploading(false);
         }
 
-        // Prepare update data
         const updateData = {
           username: values.username,
           bio: values.bio,
           ...(avatarUrl && { avatar_url: avatarUrl })
         };
 
-        // Remove empty values
         const cleanData = Object.fromEntries(
           Object.entries(updateData).filter(([, value]) => value !== '' && value !== null)
         );
 
-        // Update profile
         const response = await updateMe(cleanData);
         setProfile(response);
         setEditing(false);
         setSuccess(selectedFile ? 'Profile and avatar updated successfully!' : 'Profile updated successfully');
 
-        // Reset file state
         setSelectedFile(null);
         setImagePreview(null);
         if (fileInputRef.current) {
@@ -140,7 +132,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
       return;
     }
 
-    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setImagePreview(e.target.result);
@@ -155,15 +146,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     fileInputRef.current?.click();
   };
 
-  const removeSelectedImage = () => {
-    setSelectedFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Current avatar display: preview > current profile avatar
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
   return (
@@ -180,15 +162,13 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        // textAlign: 'center',
         height: '80vh'
       }}
     >
-      {/* Profile Header */}
       <Box
         sx={{
           display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' }, // stack avatar and info vertically
+          flexDirection: { xs: 'column', md: 'row' },
           alignItems: 'center',
           justifyContent: 'center',
           gap: 3,
@@ -196,7 +176,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           maxWidth: 500,
         }}
       >
-        {/* Clickable Avatar */}
         <Box
           sx={{
             position: 'relative',
@@ -243,7 +222,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           </Box>
         </Box>
 
-        {/* Editable Profile Info */}
         <Box sx={{ width: '100%' }}>
           <Typography
             variant="h4"
@@ -284,7 +262,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
             sx={{ borderRadius: '8px', fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
           />
 
-          {/* Save Button */}
           <Box sx={{mt: 3, width: '100%' }}>
             <Button
               variant="contained"
@@ -299,7 +276,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
 
       </Box>
 
-      {/* Hidden file input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -308,7 +284,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         style={{ display: 'none' }}
       />
 
-      {/* Alerts */}
       <Collapse in={!!error}>
         <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
           {error}

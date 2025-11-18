@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import random
@@ -35,7 +35,10 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
     )
 
 @router.post("/register", response_model=BaseResponse)
-async def register(user_in: UserCreate, db: Session = Depends(get_db)):
+async def register(user_in: UserCreate, 
+                   background_tasks: BackgroundTasks,
+                   db: Session = Depends(get_db), 
+                   ):
     user_by_email = db.query(User).filter(User.email == user_in.email).first()
     if user_by_email:
         raise HTTPException(
@@ -48,16 +51,12 @@ async def register(user_in: UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_409_CONFLICT, 
             detail="Username already registered")
     
-    
     code = "".join(random.choices("0123456789", k=6))
-    
-    verify_code = await send_verification_email(user_in.email, code)
-    if not verify_code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Failed to verify code")
     
     new_user = create(db, user_in)
     create_verification_code(db, new_user.id, code)
+    
+    background_tasks.add_task(send_verification_email, user_in.email, code)
     
     return BaseResponse(msg="Verification code sent")
 
