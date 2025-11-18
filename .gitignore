@@ -1,0 +1,4 @@
+backend/.env
+frontend/react/.env
+frontend/react/.env.*
+*.env

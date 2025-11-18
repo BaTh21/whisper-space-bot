@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
 import { useAuth } from '../context/AuthContext';
 import { login as loginApi } from '../services/api';
-import LogoImg from '@/assets/login1.gif';
+import LogoImg from '@/assets/Login1.gif';
 
 const LoginForm = () => {
   const [error, setError] = useState(null);
