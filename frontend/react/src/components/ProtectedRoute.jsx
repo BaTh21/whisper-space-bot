@@ -31,6 +31,8 @@ const ProtectedRoute = ({ children }) => {
           message: 'Please log in to access this page'
         }
       });
+    }else{
+      navigate("/dashboard");
     }
   }, [authChecked, loading, isAuthenticated, navigate, location]);
 
