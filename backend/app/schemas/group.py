@@ -11,21 +11,22 @@ class GroupCreate(BaseModel):
     name: str
     description: Optional[str] = None
     invite_user_ids: List[int] = []
+    
+class ImageResponse(BaseModel):
+    id: int
+    url: str
+    uploaded_by: int
+    created_at: datetime
 
 class GroupOut(TimestampMixin):
     id: int
     name: str
     creator_id: int
     description: Optional[str] = None
+    images: Optional[List[ImageResponse]] = []
     
     class Config:
         from_attributes = True
-        
-class ImageResponse(BaseModel):
-    id: int
-    url: str
-    uploaded_by: int
-    created_at: datetime
         
 class GroupDetailsOut(TimestampMixin):
     id: int

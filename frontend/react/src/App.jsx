@@ -49,14 +49,14 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
+            {/* <Route
               path="/group/:groupId"
               element={
                 <ProtectedRoute>
                   <GroupChatPage />
                 </ProtectedRoute>
               }
-            />
+            /> */}
 
             {/* Redirect root to login */}
             <Route path="/" element={<Navigate to="/login" />} />

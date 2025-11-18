@@ -9,7 +9,6 @@ import {
     IconButton,
     Typography
 } from '@mui/material';
-import ViewGroupContent from '../group/ViewGroupContent';
 
 const ViewGroupDialog = ({ 
   open, 
@@ -44,17 +43,6 @@ const ViewGroupDialog = ({
         </Box>
       </DialogTitle>
       <DialogContent dividers>
-        {group ? (
-          <ViewGroupContent
-            group={group}
-            profile={profile}
-            onJoinSuccess={onJoinSuccess}
-            setSuccess={setSuccess}
-            setError={setError}
-          />
-        ) : (
-          <Typography>Loading...</Typography>
-        )}
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>
