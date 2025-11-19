@@ -52,12 +52,10 @@ const ChatMessage = ({
   /*                     MESSAGE TYPE DETECTION                */
   /* ---------------------------------------------------------- */
   const detectMessageType = (msg) => {
-    // If message_type is explicitly set to 'image', use it
     if (msg.message_type === 'image') {
       return 'image';
     }
     
-    // Auto-detect from content
     const content = msg.content || '';
     const isImageUrl = 
       content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) || 
@@ -646,7 +644,7 @@ const ChatMessage = ({
         {/* Seen: Friend's avatar + "Seen" */}
         {renderSeenAvatar()}
 
-        {/* Context menu - FIXED: No Fragment */}
+        {/* Context menu */}
         {showMenu && (
           <Menu
             anchorEl={anchorEl}
