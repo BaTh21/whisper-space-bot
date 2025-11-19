@@ -281,7 +281,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ mt: 8, p: 2 }}>
+        <Box>
           {children}
         </Box>
 

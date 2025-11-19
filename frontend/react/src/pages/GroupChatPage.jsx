@@ -33,8 +33,8 @@ import ReplyIcon from '@mui/icons-material/Reply';
 import ShortcutIcon from '@mui/icons-material/Shortcut';
 import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
 
-const GroupChatPage = () => {
-  const { groupId } = useParams();
+const GroupChatPage = ({ groupId }) => {
+
   const navigate = useNavigate();
   const { auth } = useAuth();
   const user = auth?.user;
@@ -114,8 +114,11 @@ const GroupChatPage = () => {
   }, [groupId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 0);
+  }, [groupId]);
+
 
   const fetchGroupData = async () => {
     try {
@@ -160,7 +163,7 @@ const GroupChatPage = () => {
         if (message.sender?.id === user?.id && message.reply_to_message) {
           setReplyTo(null);
         }
-        
+
         setMessages(prev => [...prev, message]);
       };
 
@@ -351,7 +354,12 @@ const GroupChatPage = () => {
   }
 
   return (
-    <>
+    <Box
+      sx={{
+        width: '100%',
+        border: '1px solid #dcdcdcff',
+      }}
+    >
       <AppBar
         position="static"
         color="default"
@@ -400,8 +408,10 @@ const GroupChatPage = () => {
       </AppBar>
 
 
-      <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
-        <GroupSideComponent />
+      <Box sx={{ display: 'flex', height: '80vh' }}>
+        <GroupSideComponent 
+        groupId={groupId}
+        />
 
         <Box
           sx={{
@@ -410,7 +420,7 @@ const GroupChatPage = () => {
             flexDirection: 'column',
             // ml: 3,
             overflow: 'hidden',
-            borderLeft: '1px solid #dcdcdcff'
+            borderLeft: '1px solid #dcdcdcff',
           }}
         >
 
@@ -886,7 +896,7 @@ const GroupChatPage = () => {
         onClose={() => setOpenImage(false)}
         imgUrl={selectedImage}
       />
-    </>
+    </Box>
 
   );
 };

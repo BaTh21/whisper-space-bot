@@ -106,12 +106,9 @@ export const register = async (data) => {
     const response = await api.post(`/api/v1/auth/register`, data);
     return response.data;
   } catch (error) {
-    console.error("Registration error details:", error.response?.data);
 
     const errorMessage =
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      error.response?.data?.message ||
       "Registration failed";
 
     throw new Error(errorMessage);

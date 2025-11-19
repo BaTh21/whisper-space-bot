@@ -40,10 +40,10 @@ const RegisterForm = () => {
       setLoading(true);
       try {
         await register(values);
+        navigate(`/verify-code/${values.email}`);
         setSuccess('Verification code sent to your email');
-        navigate('/verify-code', { state: { email: values.email } });
       } catch (err) {
-        setError(err.msg || 'Registration failed');
+        setError(err.message || 'Registration failed');
       } finally {
         setLoading(false);
       }

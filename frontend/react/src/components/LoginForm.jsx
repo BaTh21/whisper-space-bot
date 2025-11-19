@@ -18,6 +18,7 @@ import * as Yup from 'yup';
 import { useAuth } from '../context/AuthContext';
 import { login as loginApi } from '../services/api';
 import LogoImg from '@/assets/Login1.gif';
+import {toast} from 'react-toastify';
 
 const LoginForm = () => {
   const [error, setError] = useState(null);
@@ -36,20 +37,16 @@ const LoginForm = () => {
       setError(null);
       setLoading(true);
       try {
-        // Pass the values directly to loginApi - it will handle the form data conversion
         const response = await loginApi({
           email: values.username,
           password: values.password
         });
 
-        if (login(response)) {
-          navigate('/dashboard');
-        } else {
-          setError('Login failed: Invalid tokens received');
-        }
+        await login(response);
+        navigate('/dashboard');
       } catch (err) {
-        // Use err.message instead of err.msg
         setError(err.message || 'Login failed');
+        toast.error(`Failed : ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -70,9 +67,9 @@ const LoginForm = () => {
         sx={{
           width: { xs: "100%", md: "40%" },
           display: 'flex',
-          alignItems: {xs: 'end', md: "center"},
+          alignItems: { xs: 'end', md: "center" },
           justifyContent: "center",
-          mt: {xs: 8, md: 0}
+          mt: { xs: 8, md: 0 }
         }}
       >
         <Box
@@ -91,11 +88,11 @@ const LoginForm = () => {
         sx={{
           flex: 1,
           display: "flex",
-          alignItems: {xs: 'start', md: "center"},
+          alignItems: { xs: 'start', md: "center" },
           justifyContent: "center",
           // p: { xs: 2, sm: 4 },
-          backgroundColor: {xs: 'transparent', md: "grey.300"},
-          height: {md: '100vh'},
+          backgroundColor: { xs: 'transparent', md: "grey.300" },
+          height: { md: '100vh' },
         }}
       >
         <Box
@@ -105,7 +102,7 @@ const LoginForm = () => {
             backgroundColor: "white",
             p: { xs: 3, sm: 5 },
             borderRadius: 3,
-            boxShadow: {xs: 'none', md: 5},
+            boxShadow: { xs: 'none', md: 5 },
           }}
         >
           <Typography
