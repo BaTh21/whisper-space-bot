@@ -689,6 +689,17 @@ export const joinGroup = async (groupId) => {
   }
 };
 
+export const getGroupMessageSeen = async (messageId) => {
+  try{
+    const res = await api.get(`/api/v1/messages/${messageId}/seen`);
+    return res.data;
+  }catch(error){
+    throw new Error(
+      error.response?.data?.detail || "Failed tp get seen messages"
+    )
+  }
+}
+
 // Group Invites - SINGLE FUNCTION (removed duplicates)
 export const getPendingGroupInvites = async () => {
   try {

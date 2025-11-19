@@ -65,7 +65,18 @@ class ReplyResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ParentMessageResponse(BaseModel):
+    id: int
+    sender: AuthorResponse
+    content: Optional[str] = None
+    file_url: Optional[str] = None
     
+class GroupMessageSeen(BaseModel):
+    id: int
+    user: AuthorResponse    
+    seen_at: datetime
+
 class GroupMessageOut(BaseModel):
     id: int
     sender: AuthorResponse
@@ -74,8 +85,9 @@ class GroupMessageOut(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     file_url: Optional[str] = None
+    seen_by: Optional[List[GroupMessageSeen]] = []
     
-    replies: Optional[list[ReplyResponse]] = []
+    parent_message: Optional[ParentMessageResponse] = None
 
     class Config:
         from_attributes = True

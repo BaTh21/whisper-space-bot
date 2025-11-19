@@ -1,10 +1,7 @@
-import { Chat as ChatIcon, Group as GroupIcon, Visibility as VisibilityIcon } from '@mui/icons-material';
 import {
   Box,
   Button,
   Card,
-  IconButton,
-  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -14,6 +11,7 @@ import { formatCambodiaDate } from '../../utils/dateUtils';
 import GroupChatPage from '../../pages/GroupChatPage';
 import { useState } from 'react';
 import AddBoxIcon from '@mui/icons-material/AddBox';
+import CreateGroupDialog from '../CreateGroupDialog';
 
 const GroupsTab = ({ groups }) => {
   const theme = useTheme();

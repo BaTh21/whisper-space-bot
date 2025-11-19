@@ -24,15 +24,6 @@ import ViewGroupDialog from '../components/dialogs/ViewGroupDialog';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
-import HomeIcon from "@mui/icons-material/Home";
-import ReviewsIcon from '@mui/icons-material/Reviews';
-import PeopleIcon from "@mui/icons-material/People";
-import GroupsIcon from '@mui/icons-material/Groups';
-import StickyNote2Icon from '@mui/icons-material/StickyNote2';
-import PersonSearchIcon from '@mui/icons-material/PersonSearch';
-import BlockIcon from '@mui/icons-material/Block';
-import PersonIcon from "@mui/icons-material/Person";
-import MenuIcon from '@mui/icons-material/Menu';
 
 
 function TabPanel({ children, value, index, ...other }) {

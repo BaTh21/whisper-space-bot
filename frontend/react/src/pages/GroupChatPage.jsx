@@ -15,7 +15,7 @@ import {
   Typography
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
 import GroupSideComponent from '../components/group/GroupSideComponent';
 import Layout from '../components/Layout';
@@ -24,7 +24,6 @@ import { getGroupMembers, getGroupMessage, getGroupById, updateMessageById, dele
 import { formatCambodiaTime } from '../utils/dateUtils';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import ImageDialog from '../components/dialogs/ImageDialog';
@@ -32,6 +31,10 @@ import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import ReplyIcon from '@mui/icons-material/Reply';
 import ShortcutIcon from '@mui/icons-material/Shortcut';
 import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import CheckIcon from '@mui/icons-material/Check';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
+import SeenMessageListDialog from '../components/dialogs/SeenMessageListDialog';
 
 const GroupChatPage = ({ groupId }) => {
 
@@ -58,6 +61,61 @@ const GroupChatPage = ({ groupId }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const activeMessage = messages.find((m) => m.id === activeMessageId);
   const [replyTo, setReplyTo] = useState(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [seenMessages, setSeenMessages] = useState(new Set());
+  const messagesContainerRef = useRef(null);
+  const [openSeenMessage, setOpenSeenMessage] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState(null);
+
+  const sendSeenEvent = (messageId) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: "seen",
+        message_id: messageId
+      }));
+    }
+  };
+
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    setShowScrollButton(scrollTop + clientHeight < scrollHeight - 50);
+
+    if (!messagesContainerRef.current) return;
+
+    const container = messagesContainerRef.current;
+    const messageElements = container.querySelectorAll("[data-message-id]");
+
+    messageElements.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+
+      if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+        const id = Number(el.dataset.messageId);
+
+        const msg = messages.find((m) => m.id === id);
+        if (!msg) return;
+
+        if (msg.sender?.id === user?.id) return;
+
+        if (!seenMessages.has(id)) {
+          setSeenMessages((prev) => new Set(prev).add(id));
+          sendSeenEvent(id);
+        }
+      }
+    });
+  };
+
+
+  const scrollToBottom = () => {
+    const container = messagesEndRef.current;
+    if (container) {
+      const scrollContainer = container.parentElement;
+
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   const openMenu = (event, messageId) => {
     setAnchorEl(event.currentTarget);
@@ -113,12 +171,6 @@ const GroupChatPage = ({ groupId }) => {
     };
   }, [groupId]);
 
-  useEffect(() => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-    }, 0);
-  }, [groupId]);
-
 
   const fetchGroupData = async () => {
     try {
@@ -147,6 +199,28 @@ const GroupChatPage = ({ groupId }) => {
     }
   };
 
+  const markVisibleMessagesAsSeen = () => {
+    if (!messagesContainerRef.current) return;
+    const container = messagesContainerRef.current;
+
+    const messageElements = container.querySelectorAll("[data-message-id]");
+
+    messageElements.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+
+      if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+        const id = Number(el.dataset.messageId);
+        const msg = messages.find((m) => m.id === id);
+
+        if (msg && msg.sender?.id !== user?.id && !seenMessages.has(id)) {
+          setSeenMessages((prev) => new Set(prev).add(id));
+          sendSeenEvent(id);
+        }
+      }
+    });
+  };
+
+
   const setupWebSocket = () => {
     try {
       const wsUrl = `${BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
@@ -160,11 +234,25 @@ const GroupChatPage = ({ groupId }) => {
       ws.onmessage = (event) => {
         const message = JSON.parse(event.data);
 
+        setMessages(prev => {
+          const tempIndex = prev.findIndex(
+            m => typeof m.id === 'string' && m.id.startsWith('temp-') && m.content === message.content
+          );
+
+          if (tempIndex !== -1) {
+            prev[tempIndex] = message;
+            return [...prev];
+          }
+          return [...prev, message];
+        });
+
         if (message.sender?.id === user?.id && message.reply_to_message) {
           setReplyTo(null);
         }
 
-        setMessages(prev => [...prev, message]);
+        setTimeout(() => {
+          markVisibleMessagesAsSeen();
+        }, 50);
       };
 
       ws.onclose = (event) => {
@@ -173,7 +261,6 @@ const GroupChatPage = ({ groupId }) => {
 
       ws.onerror = (error) => {
         console.log('WebSocket connection failed, using fallback polling', error);
-        // Fallback to HTTP polling if WebSocket fails
         setupPolling();
       };
     } catch (error) {
@@ -182,7 +269,6 @@ const GroupChatPage = ({ groupId }) => {
     }
   };
 
-  // Add polling fallback
   const setupPolling = () => {
     const pollMessages = async () => {
       try {
@@ -193,11 +279,9 @@ const GroupChatPage = ({ groupId }) => {
       }
     };
 
-    // Poll immediately and every 5 seconds
     pollMessages();
     const pollInterval = setInterval(pollMessages, 5000);
 
-    // Store interval for cleanup
     pollingIntervalRef.current = pollInterval;
   };
 
@@ -210,7 +294,6 @@ const GroupChatPage = ({ groupId }) => {
       reply_to: replyTo ? replyTo?.id : null
     };
 
-    // Add temporary message
     const tempMessage = {
       id: `temp-${Date.now()}`,
       sender: user,
@@ -233,12 +316,6 @@ const GroupChatPage = ({ groupId }) => {
       handleSendMessage();
     }
   };
-
-  const handleReply = (message) => {
-    setReplyTo(message);
-    closeMenu();
-  };
-
 
   const handleSuccess = () => {
     fetchGroupData();
@@ -264,14 +341,12 @@ const GroupChatPage = ({ groupId }) => {
       progress: 0,
     };
 
-    // Add temporary message to chat
     setMessages((prev) => [...prev, tempMessage]);
 
     try {
       const uploadedMessage = await uploadFileMessage(groupId, file, (progressEvent) => {
         if (progressEvent.total) {
           const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-          // Update temp message progress
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === tempId ? { ...msg, progress: percent } : msg
@@ -280,13 +355,11 @@ const GroupChatPage = ({ groupId }) => {
         }
       });
 
-      // Replace temp message with the real one
       setMessages((prev) =>
         prev.map((msg) => (msg.id === tempId ? uploadedMessage : msg))
       );
     } catch (error) {
       console.error("Upload error", error);
-      // Mark temp message as failed
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === tempId ? { ...msg, uploading: false, failed: true } : msg
@@ -409,8 +482,8 @@ const GroupChatPage = ({ groupId }) => {
 
 
       <Box sx={{ display: 'flex', height: '80vh' }}>
-        <GroupSideComponent 
-        groupId={groupId}
+        <GroupSideComponent
+          groupId={groupId}
         />
 
         <Box
@@ -436,6 +509,8 @@ const GroupChatPage = ({ groupId }) => {
               '&::-webkit-scrollbar': { display: 'none' },
               scrollbarWidth: 'none',
             }}
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
           >
             {messages.length === 0 ? (
               <Box
@@ -460,10 +535,14 @@ const GroupChatPage = ({ groupId }) => {
                 .map((message) => {
                   const isOwn = message.sender?.id === user?.id;
                   const isEditing = editingMessageId === message.id;
+                  const key = message.id ?? `temp-${message.created_at}`;
+
+                  const isSeen = message.seen_by?.length > 0;
 
                   return (
                     <Box
-                      key={message.id}
+                      key={key}
+                      data-message-id={message.id}
                       sx={{
                         display: 'flex',
                         justifyContent: isOwn ? 'flex-end' : 'flex-start',
@@ -529,23 +608,31 @@ const GroupChatPage = ({ groupId }) => {
                             </Box>
                           ) : (
                             <>
-                              {message.reply_to_message && (
+                              {message.parent_message && (
                                 <Box
                                   sx={{
                                     bgcolor: "#f0f0f0",
-                                    p: 1,
+                                    py: 1,
+                                    px: 3,
                                     borderLeft: "3px solid #1976d2",
                                     borderRadius: 1,
                                     mb: 1,
+                                    display: 'flex',
+                                    gap: 1,
                                   }}
                                 >
-                                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                                    {message.reply_to_message.sender?.username}
+                                  <Typography variant="body2" sx={{ fontSize: 12, mt: 0.3 }}>
+                                    Reply to
                                   </Typography>
+                                  <Box>
+                                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                      {message.parent_message.sender?.username}
+                                    </Typography>
 
-                                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                                    {message.reply_to_message.content}
-                                  </Typography>
+                                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                                      {message.parent_message.content}
+                                    </Typography>
+                                  </Box>
                                 </Box>
                               )}
 
@@ -596,15 +683,41 @@ const GroupChatPage = ({ groupId }) => {
                           )}
                         </Box>
 
-
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
-                        >
-                          {formatCambodiaTime(message.created_at)}
-                          {message.is_temp && ' • Sending...'}
-                        </Typography>
+                        <Box sx={{
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
+                          >
+                            {formatCambodiaTime(message.created_at)}
+                            {message.is_temp && ' • Sending...'}
+                          </Typography>
+                          <Box sx={{
+                            mt: 0.5
+                          }}>
+                            {isSeen ?
+                              <DoneAllIcon fontSize='12' color='green'
+                                sx={{
+                                  color: 'green',
+                                  transition: 'transform 0.2s',
+                                  '&:hover': {
+                                    transform: 'scale(1.3)'
+                                  }
+                                }}
+                                onClick={() => {
+                                  setSelectedMessageId(message.id);
+                                  setOpenSeenMessage(true);
+                                }}
+                              />
+                              :
+                              <CheckIcon
+                                fontSize='12'
+                              />}
+                          </Box>
+                        </Box>
                       </Box>
 
                       {isOwn ? (
@@ -767,6 +880,22 @@ const GroupChatPage = ({ groupId }) => {
                 })
             )}
 
+            {showScrollButton && (
+              <IconButton
+                onClick={scrollToBottom}
+                variant="contained"
+                sx={{
+                  position: 'fixed',
+                  bottom: 80,
+                  right: 16,
+                  backgroundColor: 'primary.main'
+                }}
+              >
+                <ArrowDownwardIcon sx={{ color: 'white' }} />
+              </IconButton>
+
+            )}
+
             <div ref={messagesEndRef} />
           </Box>
 
@@ -895,6 +1024,12 @@ const GroupChatPage = ({ groupId }) => {
         open={openImage}
         onClose={() => setOpenImage(false)}
         imgUrl={selectedImage}
+      />
+
+      <SeenMessageListDialog
+        open={openSeenMessage}
+        onClose={() => setOpenSeenMessage(false)}
+        messageId={selectedMessageId}
       />
     </Box>
 

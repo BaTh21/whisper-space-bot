@@ -7,6 +7,8 @@ from datetime import datetime
 from app.core.cloudinary import upload_to_cloudinary, delete_from_cloudinary, configure_cloudinary, extract_public_id_from_url
 from pathlib import Path
 import uuid
+from app.models.group_message_seen import GroupMessageSeen
+from app.services.websocket_manager import manager
 
 configure_cloudinary()
 
@@ -130,5 +132,58 @@ async def update_file_message(db: Session, message_id: int, file: UploadFile, cu
     db.refresh(message)
     
     return message
+
+async def handle_seen_message(db, current_user_id, group_id, message_id, chat_id):
+    try:
     
+        msg = db.query(GroupMessage).filter(
+            GroupMessage.id == message_id,
+            GroupMessage.group_id == group_id
+        ).first()
+        if not msg:
+            return 
+
+        seen_record = db.query(GroupMessageSeen).filter_by(
+            message_id = message_id,
+            user_id=current_user_id
+        ).first()
+        if seen_record and seen_record.seen:
+            return 
+        
+        now = datetime.utcnow()
+        
+        if not seen_record:
+            seen_record = GroupMessageSeen(
+                message_id=message_id,
+                user_id=current_user_id,
+                seen=True,
+                seen_at=now
+            )
+            db.add(seen_record)
+        else:
+            seen_record.seen = True
+            seen_record.seen_at = now
+            
+        db.commit()
+
+        await manager.broadcast(chat_id, {
+            "event": "message_seen",
+            "message_id": message_id,
+            "user_id": current_user_id,
+            "seen_at": now.isoformat(),
+        })
+
+    except Exception as e:
+        db.rollback()
+        print(f"[Seen Error] {e}")
+        
+def get_seen_messages(db: Session, message_id):
+    seen_messages = db.query(GroupMessageSeen).filter(
+        GroupMessageSeen.message_id == message_id
+    ).all()
+    if not seen_messages:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Seen message not found")
+    
+    return seen_messages
     

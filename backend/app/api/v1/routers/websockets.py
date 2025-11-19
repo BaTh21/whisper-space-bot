@@ -8,10 +8,11 @@ from app.crud.chat import create_private_message, is_group_member, create_group_
 from app.models.user import User
 from app.schemas.chat import MessageOut, GroupMessageOut
 from app.services.websocket_manager import manager
-from app.models.group_message import MessageType
+from app.models.group_message import MessageType, GroupMessage
 from app.schemas.chat import MessageCreate, AuthorResponse
 import json
 from app.models.group_message_reply import GroupMessageReply
+from app.crud.message import handle_seen_message
 
 from app.api.v1.routers.websocket_server import handle_websocket_private
 router = APIRouter()
@@ -134,67 +135,65 @@ async def ws_group_chat(
     try:
         while True:
             data = await websocket.receive_json()
-            msg_type = data.get("type")
             message_type = data.get("message_type", "text")
             content = data.get("content")
-            reply_to_id = data.get("reply_to")
-                    
-            if reply_to_id:
-                    reply = GroupMessageReply(
-                        message_id=reply_to_id,
-                        sender_id=current_user.id,
-                        content=content,
-                        message_type=MessageType(message_type)
-                    )
-                    db.add(reply)
-                    db.commit()
-                    db.refresh(reply)
+            parent_message_id = data.get("reply_to")  # Optional
+            action = data.get("action")
+            
+            if action == "seen":
+                message_id = data.get("message_id")
+                await handle_seen_message(db, current_user.id, group_id, message_id, chat_id)
+                continue
 
-                    # Prepare reply output
-                    msg_out = {
-                        "id": reply.id,
-                        "sender": {"id": current_user.id, "username": current_user.username},
-                        "group_id": group_id,
-                        "content": reply.content,
-                        "message_type": reply.message_type.value,
-                        "created_at": reply.created_at.isoformat(),
-                        "reply_to_message": {
-                            "id": parent_msg.id,
-                            "content": parent_msg.content,
-                            "message_type": parent_msg.message_type.value,
-                            "sender": {
-                                "id": parent_msg.sender.id,
-                                "username": parent_msg.sender.username,
-                                "avatar_url": parent_msg.sender.avatar_url
-                            }
-                        }
-                    }
-                    
-                    await manager.broadcast(chat_id, msg_out)
-                    
+            try:
+                msg = GroupMessage(
+                    group_id=group_id,
+                    sender_id=current_user.id,
+                    content=content,
+                    message_type=MessageType(message_type),
+                    parent_message_id=parent_message_id
+                )
+                db.add(msg)
+                db.commit()
+                db.refresh(msg)
+            except Exception as e:
+                db.rollback()
+                print(f"[DB Error] {e}")
+                await websocket.send_json({"error": "Failed to save message"})
+                continue
+            
+            # Build parent message if it exists
+            if msg.parent_message:
+                parent_msg_data = ParentMessageResponse(
+                    id=msg.parent_message.id,
+                    content=msg.parent_message.content,
+                    file_url=msg.parent_message.file_url,
+                    sender=AuthorResponse(
+                        id=msg.parent_message.sender.id,
+                        username=msg.parent_message.sender.username,
+                        avatar_url=msg.parent_message.sender.avatar_url
+                    )
+                )
             else:
-                # Create and save the message
-                    msg = create_group_message(
-                        db,
-                        sender_id=current_user.id,
-                        group_id=group_id,
-                        content=content,
-                        message_type=MessageType(message_type)
-                    )
+                parent_msg_data = None
 
-                    msg_out = GroupMessageOut(
-                        id=msg.id,
-                        sender=AuthorResponse(
-                            id=msg.sender.id,
-                            username=msg.sender.username
-                        ),
-                        group_id=msg.group_id,
-                        content=msg.content,
-                        created_at=msg.created_at,
-                        message_type=msg.message_type.value
-                    )
+            # Build main message output
+            msg_out = GroupMessageOut(
+                id=msg.id,
+                sender=AuthorResponse(
+                    id=msg.sender.id,
+                    username=msg.sender.username,
+                    avatar_url=msg.sender.avatar_url
+                ),
+                group_id=msg.group_id,
+                content=msg.content,
+                created_at=msg.created_at,
+                updated_at=msg.updated_at,
+                file_url=msg.file_url,
+                parent_message=parent_msg_data
+            )
 
-                    await manager.broadcast(chat_id, msg_out.dict())
+            await manager.broadcast(chat_id, msg_out)
 
     except WebSocketDisconnect:
         manager.disconnect(chat_id, websocket)
