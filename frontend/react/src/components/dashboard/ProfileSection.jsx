@@ -17,7 +17,7 @@ import {
 import { useFormik } from 'formik';
 import { useRef, useState } from 'react';
 import * as Yup from 'yup';
-import { useAvatar } from '../../hooks/useAvatar';
+import { useAvatar } from '../chat/hooks/useAvatar';
 import { updateMe, uploadAvatar } from '../../services/api';
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 
