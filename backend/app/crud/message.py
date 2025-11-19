@@ -177,6 +177,76 @@ async def handle_seen_message(db, current_user_id, group_id, message_id, chat_id
         db.rollback()
         print(f"[Seen Error] {e}")
         
+async def handle_forward_message(
+    db: Session,
+    current_user_id: int,
+    message_id: int,
+    target_group_ids: list[int],
+):
+    forwarded_messages = []
+
+    original = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+    if not original:
+        raise HTTPException(
+            status_code=404, detail="Original message not found"
+        )
+
+    for group_id in target_group_ids:
+        chat_id = f"group_{group_id}"
+
+        new_msg = GroupMessage(
+            group_id=group_id,
+            sender_id=current_user_id,
+            forwarded_by_id=current_user_id,
+            forwarded_at=datetime.utcnow(),
+            parent_message_id=original.id,
+            content=original.content,
+            file_url=original.file_url,
+            public_id=original.public_id,
+            message_type=original.message_type
+        )
+
+        try:
+            db.add(new_msg)
+            db.commit()
+            db.refresh(new_msg)
+        except Exception as e:
+            db.rollback()
+            print(f"[Forward Error] Group {group_id}: {e}")
+            continue
+
+        parent_msg_data = ParentMessageResponse(
+            id=original.id,
+            content=original.content,
+            file_url=original.file_url,
+            sender=AuthorResponse(
+                id=original.sender.id,
+                username=original.sender.username,
+                avatar_url=original.sender.avatar_url
+            )
+        )
+
+        msg_out = GroupMessageOut(
+            id=new_msg.id,
+            sender=AuthorResponse(
+                id=new_msg.sender.id,
+                username=new_msg.sender.username,
+                avatar_url=new_msg.sender.avatar_url
+            ),
+            group_id=group_id,
+            content=new_msg.content,
+            created_at=new_msg.created_at,
+            updated_at=new_msg.updated_at,
+            file_url=new_msg.file_url,
+            parent_message=parent_msg_data
+        )
+
+        await manager.broadcast(chat_id, msg_out)
+        forwarded_messages.append(msg_out)
+
+    return forwarded_messages
+
+        
 def get_seen_messages(db: Session, message_id):
     seen_messages = db.query(GroupMessageSeen).filter(
         GroupMessageSeen.message_id == message_id

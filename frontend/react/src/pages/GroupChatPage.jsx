@@ -12,7 +12,8 @@ import {
   Menu, MenuItem,
   TextField,
   Toolbar,
-  Typography
+  Typography,
+  Drawer
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +36,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CheckIcon from '@mui/icons-material/Check';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import SeenMessageListDialog from '../components/dialogs/SeenMessageListDialog';
+import GroupListComponent from '../components/chat/components/GroupListComponent';
 
 const GroupChatPage = ({ groupId }) => {
 
@@ -66,6 +68,26 @@ const GroupChatPage = ({ groupId }) => {
   const messagesContainerRef = useRef(null);
   const [openSeenMessage, setOpenSeenMessage] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState(null);
+  const [openDrawer, setOpenDrawer] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+
+  const toggleDrawer = () => {
+    setOpenDrawer(prev => !prev);
+  };
+
+  const DrawerBox = (
+    <Box
+      sx={{
+        width: 350
+      }}
+      role="presentation"
+      onClick={() => setOpenDrawer(false)}
+    >
+      <GroupListComponent
+        message={selectedMessage}
+      />
+    </Box>
+  )
 
   const sendSeenEvent = (messageId) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -485,6 +507,12 @@ const GroupChatPage = ({ groupId }) => {
         <GroupSideComponent
           groupId={groupId}
         />
+        <Drawer
+          anchor='right'
+          open={openDrawer}
+          onClose={toggleDrawer}>
+          {DrawerBox}
+        </Drawer>
 
         <Box
           sx={{
@@ -616,7 +644,7 @@ const GroupChatPage = ({ groupId }) => {
                                     px: 3,
                                     borderLeft: "3px solid #1976d2",
                                     borderRadius: 1,
-                                    mb: 1,
+                                    // mb: 1,
                                     display: 'flex',
                                     gap: 1,
                                   }}
@@ -632,6 +660,32 @@ const GroupChatPage = ({ groupId }) => {
                                     <Typography variant="body2" sx={{ color: "text.secondary" }}>
                                       {message.parent_message.content}
                                     </Typography>
+
+                                    {message.parent_message.file_url && (
+                                      <Box
+                                        sx={{
+                                          position: 'relative',
+                                          display: 'inline-block',
+                                          width: '100%',
+                                          maxWidth: 70,
+                                          borderRadius: 2,
+                                          overflow: 'hidden',
+                                        }}
+                                      >
+                                        <Box
+                                          component="img"
+                                          src={message.parent_message.file_url}
+                                          onClick={(e) => openMenu(e, message.id)}
+                                          alt="upload"
+                                          sx={{
+                                            width: '100%',
+                                            opacity: message.uploading ? 0.6 : 1,
+                                            filter: message.failed ? 'grayscale(100%)' : 'none',
+                                          }}
+                                        />
+                                      </Box>
+                                    )}
+
                                   </Box>
                                 </Box>
                               )}
@@ -642,7 +696,7 @@ const GroupChatPage = ({ groupId }) => {
                                     position: 'relative',
                                     display: 'inline-block',
                                     width: '100%',
-                                    maxWidth: 300,
+                                    maxWidth: 200,
                                     borderRadius: 2,
                                     overflow: 'hidden',
                                   }}
@@ -730,6 +784,28 @@ const GroupChatPage = ({ groupId }) => {
                           >
                             {/* TEXT options */}
                             {activeMessage && activeMessage.sender?.id === user?.id && !activeMessage.file_url && [
+
+                              <MenuItem
+                                key="reply"
+                                onClick={() => {
+                                  setReplyTo(activeMessage);
+                                  // closeMenu();
+                                }}
+                              >
+                                <ReplyIcon /> Reply
+                              </MenuItem>,
+
+                              <MenuItem
+                                key="forward"
+                                onClick={() => {
+                                  setSelectedMessage(message);
+                                  toggleDrawer();
+                                  closeMenu();
+                                }}
+                              >
+                                <ShortcutIcon /> Forward
+                              </MenuItem>,
+
                               <MenuItem
                                 key="edit"
                                 onClick={() => {
@@ -864,7 +940,8 @@ const GroupChatPage = ({ groupId }) => {
                             <MenuItem
                               key="forward"
                               onClick={() => {
-                                setForwardMessage(activeMessage);
+                                setSelectedMessage(message);
+                                toggleDrawer();
                                 closeMenu();
                               }}
                             >

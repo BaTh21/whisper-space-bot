@@ -6,13 +6,13 @@ from app.core.security import get_current_user, get_current_user_ws
 from app.crud.friend import is_friend
 from app.crud.chat import create_private_message, is_group_member, create_group_message, mark_message_as_read
 from app.models.user import User
-from app.schemas.chat import MessageOut, GroupMessageOut
+from app.schemas.chat import MessageOut, GroupMessageOut, ParentMessageResponse
 from app.services.websocket_manager import manager
 from app.models.group_message import MessageType, GroupMessage
 from app.schemas.chat import MessageCreate, AuthorResponse
 import json
 from app.models.group_message_reply import GroupMessageReply
-from app.crud.message import handle_seen_message
+from app.crud.message import handle_seen_message, handle_forward_message
 
 from app.api.v1.routers.websocket_server import handle_websocket_private
 router = APIRouter()
@@ -144,6 +144,19 @@ async def ws_group_chat(
                 message_id = data.get("message_id")
                 await handle_seen_message(db, current_user.id, group_id, message_id, chat_id)
                 continue
+            
+            if action == "forward_to_groups":
+                message_id = data.get("message_id")
+                target_group_ids = data.get("group_ids", [])
+                
+                await handle_forward_message(
+                    db,
+                    current_user_id=current_user.id,
+                    message_id=message_id,
+                    group_id=target_group_ids
+                )
+                
+                continue
 
             try:
                 msg = GroupMessage(
@@ -190,7 +203,16 @@ async def ws_group_chat(
                 created_at=msg.created_at,
                 updated_at=msg.updated_at,
                 file_url=msg.file_url,
-                parent_message=parent_msg_data
+                parent_message=ParentMessageResponse(
+                    id=original.id,
+                    content=original.content,
+                    file_url=original.file_url,
+                    sender=AuthorResponse(
+                        id=original.sender.id,
+                        username=original.sender.username,
+                        avatar_url=original.sender.avatar_url
+                    )
+                )
             )
 
             await manager.broadcast(chat_id, msg_out)
