@@ -1,7 +1,7 @@
-import { getUserGroups } from "../../../services/api";
 import { useState, useEffect } from "react";
 import { Box, Avatar, Typography, Card, Button } from "@mui/material";
-import { formatCambodiaTime } from '../../../utils/dateUtils';
+import { formatCambodiaTime } from '../../utils/dateUtils';
+import { getUserGroups } from "../../services/api";
 
 function GroupListComponent({ message, onForward, onClose }) {
     const [groups, setGroups] = useState([]);

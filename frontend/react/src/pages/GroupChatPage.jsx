@@ -36,7 +36,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CheckIcon from '@mui/icons-material/Check';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import SeenMessageListDialog from '../components/dialogs/SeenMessageListDialog';
-import GroupListComponent from '../components/chat/components/GroupListComponent';
+import GroupListComponent from '../components/chat/GroupListComponent';
 
 const GroupChatPage = ({ groupId }) => {
 

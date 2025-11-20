@@ -17,7 +17,7 @@ import {
   useTheme
 } from '@mui/material';
 import { useState } from 'react';
-import { useAvatar } from '../chat/hooks/useAvatar';
+import { useAvatar } from '../../hooks/useAvatar';
 import { acceptFriendRequest, blockUser, unfriend } from '../../services/api';
 
 const FriendsTab = ({ 

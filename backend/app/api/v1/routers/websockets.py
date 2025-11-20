@@ -80,6 +80,7 @@ async def ws_private_chat(
                     "is_read": getattr(msg, 'is_read', False),
                     "created_at": msg.created_at.isoformat() if hasattr(msg.created_at, 'isoformat') else str(msg.created_at),
                     "reply_to_id": msg.reply_to_id,
+                    "avatar_url": msg.sender.avatar_url,
                 }
 
                 # Broadcast to both users

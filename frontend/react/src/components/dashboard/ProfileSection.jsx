@@ -1,5 +1,5 @@
 //dashboard/ProfileSection.jsx
-import { CloudUpload as CloudUploadIcon, Edit as EditIcon } from '@mui/icons-material';
+import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 import {
   Alert,
   Avatar,
@@ -8,8 +8,6 @@ import {
   Card,
   Chip,
   Collapse,
-  IconButton,
-  TextField,
   Typography,
   useMediaQuery,
   useTheme
@@ -17,9 +15,8 @@ import {
 import { useFormik } from 'formik';
 import { useRef, useState } from 'react';
 import * as Yup from 'yup';
-import { useAvatar } from '../chat/hooks/useAvatar';
+import { useAvatar } from '../../hooks/useAvatar';
 import { updateMe, uploadAvatar } from '../../services/api';
-import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 
 const ProfileSection = ({ profile, setProfile, error, success, setError, setSuccess }) => {
   const [editing, setEditing] = useState(false);
