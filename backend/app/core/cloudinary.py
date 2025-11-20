@@ -4,6 +4,7 @@ import cloudinary.api
 from cloudinary.utils import cloudinary_url
 from app.core.config import settings
 
+
 def configure_cloudinary():
     cloudinary.config(
         cloud_name=settings.CLOUDINARY_CLOUD_NAME,
@@ -11,7 +12,7 @@ def configure_cloudinary():
         api_secret=settings.CLOUDINARY_API_SECRET,
         secure=True
     )
-
+configure_cloudinary()
 def upload_to_cloudinary(file_content, public_id=None, folder=None):
     """
     Upload file to Cloudinary

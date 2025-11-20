@@ -1,7 +1,7 @@
 import os
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.friend import is_friend
@@ -128,7 +128,9 @@ async def get_private_chat(
             original_sender=msg.original_sender,
             created_at=msg.created_at.isoformat() if msg.created_at else None,
             sender_username=msg.sender.username if msg.sender else "Unknown User",
-            receiver_username=msg.receiver.username if msg.receiver else "Unknown User"
+            receiver_username=msg.receiver.username if msg.receiver else "Unknown User",
+            voice_duration=msg.voice_duration,  # ADDED
+            file_size=msg.file_size  # ADDED
         )
         
         # Add reply_to data if exists
@@ -146,7 +148,9 @@ async def get_private_chat(
                 original_sender=msg.reply_to.original_sender,
                 created_at=msg.reply_to.created_at.isoformat() if msg.reply_to.created_at else None,
                 sender_username=msg.reply_to.sender.username if msg.reply_to.sender else "Unknown User",
-                receiver_username=msg.reply_to.receiver.username if msg.reply_to.receiver else "Unknown User"
+                receiver_username=msg.reply_to.receiver.username if msg.reply_to.receiver else "Unknown User",
+                voice_duration=msg.reply_to.voice_duration,  # ADDED
+                file_size=msg.reply_to.file_size  # ADDED
             )
         
         result.append(msg_out)
@@ -172,7 +176,9 @@ async def send_private_message(
         msg_in.message_type,
         msg_in.reply_to_id,
         msg_in.is_forwarded,
-        msg_in.original_sender
+        msg_in.original_sender,
+        msg_in.voice_duration,  # ADDED
+        msg_in.file_size  # ADDED
     )
     
     # Get the full message with user relationships
@@ -198,7 +204,9 @@ async def send_private_message(
         "original_sender": full_msg.original_sender,
         "created_at": full_msg.created_at.isoformat() if full_msg.created_at else None,
         "sender_username": full_msg.sender.username if full_msg.sender else "Unknown User",
-        "receiver_username": full_msg.receiver.username if full_msg.receiver else "Unknown User"
+        "receiver_username": full_msg.receiver.username if full_msg.receiver else "Unknown User",
+        "voice_duration": full_msg.voice_duration,  # ADDED
+        "file_size": full_msg.file_size  # ADDED
     }
     
     # Add reply_to data if exists (with usernames)
@@ -213,7 +221,9 @@ async def send_private_message(
             "is_read": full_msg.reply_to.is_read,
             "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
             "delivered_at": full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
-            "sender_username": full_msg.reply_to.sender.username if full_msg.reply_to.sender else "Unknown User"
+            "sender_username": full_msg.reply_to.sender.username if full_msg.reply_to.sender else "Unknown User",
+            "voice_duration": full_msg.reply_to.voice_duration,  # ADDED
+            "file_size": full_msg.reply_to.file_size  # ADDED
         }
     
     await manager.broadcast(chat_id, broadcast_data)
@@ -233,6 +243,8 @@ async def send_private_message(
         original_sender=full_msg.original_sender,
         sender_username=full_msg.sender.username if full_msg.sender else "Unknown User",
         receiver_username=full_msg.receiver.username if full_msg.receiver else "Unknown User",
+        voice_duration=full_msg.voice_duration,  # ADDED
+        file_size=full_msg.file_size,  # ADDED
         reply_to=MessageOut(
             id=full_msg.reply_to.id,
             sender_id=full_msg.reply_to.sender_id,
@@ -245,12 +257,127 @@ async def send_private_message(
             is_forwarded=full_msg.reply_to.is_forwarded,
             original_sender=full_msg.reply_to.original_sender,
             created_at=full_msg.reply_to.created_at.isoformat() if full_msg.reply_to.created_at else None,
-            sender_username=full_msg.reply_to.sender.username if full_msg.reply_to.sender else "Unknown User"
+            sender_username=full_msg.reply_to.sender.username if full_msg.reply_to.sender else "Unknown User",
+            voice_duration=full_msg.reply_to.voice_duration,  # ADDED
+            file_size=full_msg.reply_to.file_size  # ADDED
         ) if full_msg.reply_to else None,
         created_at=full_msg.created_at.isoformat() if full_msg.created_at else None
     )
+    
 
-# Send image message
+# Send voice message (NEW ENDPOINT)
+
+@router.post("/private/{friend_id}/voice", response_model=MessageOut)
+async def send_voice_message(
+    friend_id: int,
+    voice_file: UploadFile = File(...),
+    duration: float = Form(...),
+    reply_to_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload voice message to Cloudinary and send to friend
+    """
+    if not is_friend(db, current_user.id, friend_id):
+        raise HTTPException(403, "Not friends")
+
+    # Validate file type
+    allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4']
+    if not voice_file.content_type or voice_file.content_type not in allowed_types:
+        raise HTTPException(400, "Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A")
+
+    # Validate file size (10MB limit)
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    try:
+        contents = await voice_file.read()
+        file_size = len(contents)
+        
+        if file_size > MAX_FILE_SIZE:
+            raise HTTPException(400, f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
+            
+    except Exception as e:
+        raise HTTPException(500, f"Could not read voice message: {str(e)}")
+
+    try:
+        # Upload to Cloudinary
+        upload_result = cloudinary.uploader.upload(
+            contents,
+            resource_type="video",
+            folder="whisper_space/voice_messages",
+            public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
+            overwrite=False
+        )
+        
+        # Get the secure URL
+        voice_url = upload_result["secure_url"]
+        
+    except Exception as e:
+        raise HTTPException(500, f"Could not upload voice message to cloud storage: {str(e)}")
+
+    # Create message in database - CORRECTED: use msg_type instead of message_type
+    msg = create_private_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=friend_id,
+        content=voice_url,
+        msg_type="voice",  # CORRECTED parameter name
+        reply_to_id=reply_to_id,
+        voice_duration=duration,
+        file_size=file_size
+    )
+
+    # Get full message with relationships
+    full_msg = db.query(PrivateMessage).options(
+        joinedload(PrivateMessage.sender),
+        joinedload(PrivateMessage.receiver)
+    ).filter(PrivateMessage.id == msg.id).first()
+
+    # Prepare broadcast data for WebSocket
+    broadcast_data = {
+        "type": "message",
+        "id": full_msg.id,
+        "sender_id": full_msg.sender_id,
+        "receiver_id": full_msg.receiver_id,
+        "content": voice_url,
+        "message_type": full_msg.message_type.value,
+        "is_read": full_msg.is_read,
+        "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
+        "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+        "reply_to_id": full_msg.reply_to_id,
+        "is_forwarded": full_msg.is_forwarded,
+        "original_sender": full_msg.original_sender,
+        "created_at": full_msg.created_at.isoformat() if full_msg.created_at else None,
+        "sender_username": full_msg.sender.username if full_msg.sender else "Unknown User",
+        "receiver_username": full_msg.receiver.username if full_msg.receiver else "Unknown User",
+        "voice_duration": full_msg.voice_duration,
+        "file_size": full_msg.file_size
+    }
+
+    # Broadcast via WebSocket
+    chat_id = _chat_id(current_user.id, friend_id)
+    await manager.broadcast(chat_id, broadcast_data)
+
+    return MessageOut(
+        id=full_msg.id,
+        sender_id=full_msg.sender_id,
+        receiver_id=full_msg.receiver_id,
+        content=voice_url,
+        message_type=full_msg.message_type.value,
+        is_read=full_msg.is_read,
+        read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
+        delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+        created_at=full_msg.created_at.isoformat() if full_msg.created_at else None, 
+        updated_at=full_msg.updated_at.isoformat() if full_msg.updated_at else None,
+        reply_to_id=full_msg.reply_to_id,
+        is_forwarded=full_msg.is_forwarded,
+        original_sender=full_msg.original_sender,
+        sender_username=full_msg.sender.username if full_msg.sender else "Unknown User",
+        receiver_username=full_msg.receiver.username if full_msg.receiver else "Unknown User",
+        voice_duration=full_msg.voice_duration,
+        file_size=full_msg.file_size
+    )
+    
 @router.post("/private/{friend_id}/image")
 async def send_image_message(
     friend_id: int,

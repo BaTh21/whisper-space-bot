@@ -56,6 +56,9 @@ async def ws_private_chat(
             msg_type = data.get("type")
             content = data.get("content")
             reply_to_id = data.get("reply_to_id")
+            message_type = data.get("message_type", "text")
+            voice_duration = data.get("voice_duration")
+            file_size = data.get("file_size")
 
             # === Handle Incoming Message ===
             if msg_type == "message" and content and content.strip():
@@ -65,7 +68,10 @@ async def ws_private_chat(
                     sender_id=current_user.id,
                     receiver_id=friend_id,
                     content=content.strip(),
-                    reply_to_id=reply_to_id
+                    reply_to_id=reply_to_id,
+                    msg_type=message_type,  # FIXED: Changed from message_type to msg_type
+                    voice_duration=voice_duration,
+                    file_size=file_size
                 )
 
                 # Prepare response with proper sender info
@@ -81,6 +87,8 @@ async def ws_private_chat(
                     "created_at": msg.created_at.isoformat() if hasattr(msg.created_at, 'isoformat') else str(msg.created_at),
                     "reply_to_id": msg.reply_to_id,
                     "avatar_url": msg.sender.avatar_url,
+                    "voice_duration": msg.voice_duration,
+                    "file_size": msg.file_size
                 }
 
                 # Broadcast to both users

@@ -4,7 +4,7 @@ from app.models.private_message import MessageType, PrivateMessage
 from app.models.group_message import GroupMessage
 from app.models.group_message_reply import GroupMessageReply
 from app.models.group_member import GroupMember
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import HTTPException,status
 from app.models.user_message_status import UserMessageStatus
@@ -26,7 +26,9 @@ def create_private_message(
     msg_type: str = "text",
     reply_to_id: int | None = None,
     is_forwarded: bool = False,
-    original_sender: str | None = None
+    original_sender: str | None = None,
+    voice_duration: Optional[float] = None,
+    file_size: Optional[int] = None
 ) -> PrivateMessage:
 
     msg = PrivateMessage(
@@ -37,13 +39,16 @@ def create_private_message(
         reply_to_id=reply_to_id,
         is_forwarded=is_forwarded,
         original_sender=original_sender,
+        voice_duration=voice_duration,
+        file_size=file_size,
         created_at=datetime.now(timezone.utc),
-        delivered_at=datetime.now(timezone.utc),  # ADD THIS - mark as delivered when saved
+        delivered_at=datetime.now(timezone.utc),
     )
     db.add(msg)
     db.commit()
     db.refresh(msg)
     return msg
+
 
 def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int = 50, offset: int = 0) -> List[PrivateMessage]:
     return db.query(PrivateMessage).filter(
