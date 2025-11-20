@@ -157,6 +157,17 @@ const GroupChatPage = ({ groupId }) => {
     }
   };
 
+  const autoScrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  };
+
+  useEffect(() => {
+    autoScrollToBottom();
+  }, [messages]);
+
+
   const openSecondMenu = (event, messageId) => {
     setSecondAnchorEl(event.currentTarget);
     setActiveMessageId(messageId);
@@ -344,7 +355,7 @@ const GroupChatPage = ({ groupId }) => {
       id: `temp-${Date.now()}`,
       sender: user,
       content: newMessage,
-      created_at: new Date().toISOString(), 
+      created_at: new Date().toISOString(),
 
       //Diable temp stop tracking time and sending is disable too
       is_temp: false,
@@ -356,6 +367,8 @@ const GroupChatPage = ({ groupId }) => {
     wsRef.current.send(JSON.stringify(messageData));
     setNewMessage('');
     setReplyTo(null);
+
+    autoScrollToBottom();
   };
 
   const handleKeyPress = (e) => {
@@ -384,7 +397,7 @@ const GroupChatPage = ({ groupId }) => {
       file_url: URL.createObjectURL(file),
       sender: user,
       created_at: new Date().toISOString(),
-      is_temp: true,
+      is_temp: false,
       uploading: true,
       progress: 0,
     };
@@ -596,13 +609,6 @@ const GroupChatPage = ({ groupId }) => {
                   const isOwn = isForwarded
                     ? message?.forwarded_by?.id === user?.id
                     : message.sender?.id === user?.id;
-
-                  const isOwnerOfMessage = (msg) => {
-                    if (msg.forwarded_by) {
-                      return msg.forwarded_by.id === user?.id;
-                    }
-                    return msg.sender?.id === user?.id;
-                  };
 
                   return (
                     <Box
@@ -845,8 +851,8 @@ const GroupChatPage = ({ groupId }) => {
                         open={Boolean(secondAnchorEl)}
                         onClose={closeSecondMenu}
                       >
-                        {isOwn && (
-                          <>
+                        {isOwn
+                          ? [
                             <MenuItem
                               key="reply"
                               onClick={() => {
@@ -855,7 +861,7 @@ const GroupChatPage = ({ groupId }) => {
                               }}
                             >
                               <ReplyIcon /> Reply
-                            </MenuItem>
+                            </MenuItem>,
 
                             <MenuItem
                               key="forward"
@@ -866,10 +872,9 @@ const GroupChatPage = ({ groupId }) => {
                               }}
                             >
                               <ShortcutIcon /> Forward
-                            </MenuItem>
+                            </MenuItem>,
 
-
-                            {activeMessage?.content && activeMessage?.sender?.id == user?.id && (
+                            activeMessage?.content && activeMessage?.sender?.id === user?.id && (
                               <MenuItem
                                 key="edit"
                                 onClick={() => {
@@ -880,102 +885,60 @@ const GroupChatPage = ({ groupId }) => {
                               >
                                 <EditIcon /> Edit
                               </MenuItem>
-                            )}
+                            ),
 
-                            {activeMessage?.file_url && (
-                              <>
-                                <MenuItem
-                                  key="view-img"
-                                  onClick={() => {
-                                    setSelectedImage(activeMessage.file_url);
-                                    setOpenImage(true);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <RemoveRedEyeIcon /> View Image
-                                </MenuItem>
+                            activeMessage?.file_url && (
+                              <MenuItem
+                                key="view-img"
+                                onClick={() => {
+                                  setSelectedImage(activeMessage.file_url);
+                                  setOpenImage(true);
+                                  closeSecondMenu();
+                                }}
+                              >
+                                <RemoveRedEyeIcon /> View Image
+                              </MenuItem>
+                            ),
 
-                                <MenuItem
-                                  key="save-img"
-                                  onClick={async () => {
-                                    const response = await fetch(activeMessage.file_url);
-                                    const blob = await response.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement("a");
-                                    a.href = url;
-                                    a.download = activeMessage.file_url.split("/").pop();
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <SaveAltIcon /> Save Image
-                                </MenuItem>
+                            activeMessage?.file_url && (
+                              <MenuItem key="save-img"
+                                onClick={async () => {
+                                  const response = await fetch(activeMessage.file_url);
+                                  const blob = await response.blob();
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url; a.download = activeMessage.file_url.split("/").pop(); a.click();
+                                  URL.revokeObjectURL(url); closeSecondMenu();
+                                }} >
+                                <SaveAltIcon /> Save Image </MenuItem>
+                            ),
 
-                                <MenuItem
-                                  key="replace-img"
-                                  onClick={() => {
-                                    const input = document.createElement("input");
-                                    input.type = "file";
-                                    input.accept = "image/*";
-                                    input.onchange = (e) => {
-                                      if (e.target.files[0]) updateFileMessage(activeMessage.id, e.target.files[0]);
-                                    };
-                                    input.click();
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <PhotoCameraIcon /> Replace Image
-                                </MenuItem>
-                              </>
-                            )}
+                            activeMessage?.file_url && activeMessage?.sender?.id === user?.id && (
+                              <MenuItem key="replace-img" onClick={() => {
+                                const input = document.createElement("input");
+                                input.type = "file"; input.accept = "image/*";
+                                input.onchange = (e) => {
+                                  if (e.target.files[0])
+                                    updateFileMessage(activeMessage.id, e.target.files[0]);
+                                };
+                                input.click(); closeSecondMenu();
+                              }} >
+                                <PhotoCameraIcon /> Replace Image </MenuItem>
+                            ),
 
-                            {/* Delete */}
-                            <MenuItem
-                              key="delete"
-                              onClick={() => {
-                                onDelete(activeMessage);
-                                closeSecondMenu();
-                              }}
-                            >
-                              <DeleteIcon /> Delete
-                            </MenuItem>
-                          </>)}
-
-                        {!isOwn && (
-                          <>
-                            {activeMessage?.file_url && (
-                              <>
-                                <MenuItem
-                                  key="view-img"
-                                  onClick={() => {
-                                    setSelectedImage(activeMessage.file_url);
-                                    setOpenImage(true);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <RemoveRedEyeIcon /> View Image
-                                </MenuItem>
-
-                                <MenuItem
-                                  key="save-img"
-                                  onClick={async () => {
-                                    const response = await fetch(activeMessage.file_url);
-                                    const blob = await response.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement("a");
-                                    a.href = url;
-                                    a.download = activeMessage.file_url.split("/").pop();
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <SaveAltIcon /> Save Image
-                                </MenuItem>
-                              </>
-                            )}
-
+                            activeMessage?.sender?.id === user?.id && (
+                              <MenuItem
+                                key="delete"
+                                onClick={() => {
+                                  onDelete(activeMessage);
+                                  closeSecondMenu();
+                                }}
+                              >
+                                <DeleteIcon /> Delete
+                              </MenuItem>
+                            )
+                          ]
+                          : [
                             <MenuItem
                               key="reply"
                               onClick={() => {
@@ -984,7 +947,7 @@ const GroupChatPage = ({ groupId }) => {
                               }}
                             >
                               <ReplyIcon /> Reply
-                            </MenuItem>
+                            </MenuItem>,
 
                             <MenuItem
                               key="forward"
@@ -996,9 +959,9 @@ const GroupChatPage = ({ groupId }) => {
                             >
                               <ShortcutIcon /> Forward
                             </MenuItem>
-                          </>)}
-
+                          ]}
                       </Menu>
+
                     </Box>
                   );
                 })
