@@ -81,10 +81,15 @@ const GroupChatPage = ({ groupId }) => {
         width: 350
       }}
       role="presentation"
-      onClick={() => setOpenDrawer(false)}
+    // onClick={() => setOpenDrawer(false)}
     >
       <GroupListComponent
+        onClose={()=> setOpenDrawer(false)}
         message={selectedMessage}
+        onForward={(msg, groupIds) => {
+        handleForwardMessage(msg, groupIds);
+        setOpenDrawer(false);
+      }}
       />
     </Box>
   )
@@ -97,6 +102,19 @@ const GroupChatPage = ({ groupId }) => {
       }));
     }
   };
+
+  const handleForwardMessage = (message, targetGroupIds) => {
+    if (!wsRef.current || !targetGroupIds?.length) return;
+
+    const forwardPayload = {
+      action: 'forward_to_groups',
+      message_id: message.id,
+      group_ids: targetGroupIds
+    };
+
+    wsRef.current.send(JSON.stringify(forwardPayload));
+  };
+
 
   const handleScroll = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
