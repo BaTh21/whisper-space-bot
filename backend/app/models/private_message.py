@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, Boolean, DateTime, ForeignKey, Text, Integer, String
+from sqlalchemy import Column, Enum, Boolean, DateTime, Float, ForeignKey, Text, Integer, String
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 from datetime import datetime
@@ -8,6 +8,7 @@ class MessageType(enum.Enum):
     text = "text"
     image = "image"
     file = "file"
+    voice = "voice"
 
 class PrivateMessage(Base):
     __tablename__ = "private_messages"
@@ -25,6 +26,8 @@ class PrivateMessage(Base):
     reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
     is_forwarded = Column(Boolean, default=False)
     original_sender = Column(String(255), nullable=True)
+    voice_duration = Column(Float, nullable=True)
+    file_size = Column(Integer, nullable=True)  
     
     reply_to = relationship("PrivateMessage", remote_side=[id], uselist=False)
     sender = relationship("User", foreign_keys=[sender_id])

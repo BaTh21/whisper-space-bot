@@ -5,8 +5,10 @@ import {
   Menu as MenuIcon,
   PushPin as PushPinIcon,
   Reply as ReplyIcon,
-  Send as SendIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
+import MicIcon from '@mui/icons-material/Mic';
+import StopIcon from '@mui/icons-material/Stop';
 import {
   Avatar,
   Box,
@@ -29,14 +31,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import {
-  deleteImageMessage,
+  sendVoiceMessage as apiSendVoiceMessage, deleteImageMessage,
   deleteMessage,
   editMessage,
   getPrivateChat,
   sendImageMessage,
   sendPrivateMessage,
-  uploadImage,
+  uploadImage
 } from '../../services/api';
+
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 
@@ -51,6 +54,23 @@ const getWebSocketBaseUrl = () => {
 };
 
 const BASE_URI = getWebSocketBaseUrl();
+
+// Utility functions for audio handling
+const convertWebmToMp3Url = (webmUrl) => {
+  if (webmUrl.includes('cloudinary.com') && webmUrl.includes('.webm')) {
+    return webmUrl
+      .replace('/upload/', '/upload/f_mp3,fl_attachment/')
+      .replace('.webm', '.mp3');
+  }
+  return webmUrl;
+};
+
+const ensureMp3VoiceUrl = (message) => {
+  if (message.message_type === 'voice' && message.content.includes('.webm')) {
+    return convertWebmToMp3Url(message.content);
+  }
+  return message.content;
+};
 
 const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -67,6 +87,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
+
+  // VOICE STATES
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const recordingIntervalRef = useRef(null);
 
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -95,21 +124,40 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       const { type } = data;
 
       if (type === 'message') {
-        // AUTO-DETECT message type for images
+        // UPDATED: Proper message type detection for MP3 voice and images
         const detectMessageType = (msgData) => {
           if (msgData.message_type === 'image') return 'image';
+          if (msgData.message_type === 'voice') return 'voice';
+          
           const content = msgData.content || '';
+          
+          // Voice detection - ONLY MP3 files (and convert existing WEBM)
+          const isVoiceUrl = 
+            content.match(/\.mp3$/i) ||
+            content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm'));
+          
+          if (isVoiceUrl) return 'voice';
+          
+          // Image detection
           const isImageUrl = 
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) || 
-            content.includes('cloudinary.com') ||
-            content.includes('res.cloudinary.com') ||
-            content.startsWith('data:image/') ||
-            content.startsWith('blob:');
+            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+            content.includes('cloudinary.com') && !content.includes('/voice_messages/') ||
+            content.startsWith('data:image/');
+          
           return isImageUrl ? 'image' : 'text';
         };
 
+        const messageType = detectMessageType(data);
+        let content = data.content;
+        
+        // Convert WEBM to MP3 for voice messages
+        if (messageType === 'voice' && content.includes('.webm')) {
+          content = convertWebmToMp3Url(content);
+        }
+
         const incomingMsg = {
           ...data,
+          content: content,
           is_temp: false,
           sender: {
             id: data.sender_id,
@@ -124,14 +172,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 read_at: data.reply_to.read_at
               }
             : null,
-          // AUTO-DETECT and ensure message_type is set correctly
-          message_type: detectMessageType(data),
+          message_type: messageType,
           is_read: data.is_read || false,
           read_at: data.read_at,
           delivered_at: data.delivered_at
         };
 
-        console.log('Incoming message:', incomingMsg); // Debug log
+        console.log('Incoming message type:', incomingMsg.message_type, 'URL:', incomingMsg.content);
 
         setMessages((prev) => {
           const filtered = prev.filter(
@@ -223,10 +270,196 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     debug: true,
   });
 
+
+  /* --------------------------------------------------------------------- */
+  /*                         Voice Recording Logic                        */
+  /* --------------------------------------------------------------------- */
+  const startRecording = async () => {
+    if (!selectedFriend) {
+      setError('Please select a friend first');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+          channelCount: 1,
+        }
+      });
+      
+      const options = {
+        mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 128000
+      };
+      
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options.mimeType = 'audio/webm';
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      
+      const audioChunks = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunks, { 
+          type: options.mimeType.includes('opus') ? 'audio/ogg; codecs=opus' : 'audio/webm'
+        });
+        
+        const mp3Blob = new Blob([blob], { 
+          type: 'audio/mpeg'
+        });
+        
+        const url = URL.createObjectURL(blob);
+        setAudioBlob(mp3Blob);
+        setAudioUrl(url);
+        
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event.error);
+        setError('Recording failed: ' + event.error.name);
+        setIsRecording(false);
+        if (recordingIntervalRef.current) {
+          clearInterval(recordingIntervalRef.current);
+        }
+      };
+      
+      mediaRecorder.start(1000);
+      setIsRecording(true);
+      setRecordingTime(0);
+      
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev >= 120) {
+            stopRecording();
+            setError('Recording stopped automatically after 2 minutes');
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+      
+    } catch (err) {
+      console.error('Error starting recording:', err);
+      if (err.name === 'NotAllowedError') {
+        setError('Microphone access denied. Please allow microphone permissions.');
+      } else if (err.name === 'NotFoundError') {
+        setError('No microphone found. Please check your audio device.');
+      } else {
+        setError('Microphone access failed: ' + err.message);
+      }
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    }
+  };
+
+  const cancelRecording = () => {
+    stopRecording();
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingTime(0);
+  };
+
+  const sendVoiceMessage = async () => {
+    if (!audioBlob || !selectedFriend) return;
+
+    const tempId = `temp-voice-${Date.now()}`;
+    
+    const tempMsg = {
+      id: tempId,
+      sender_id: profile.id,
+      receiver_id: selectedFriend.id,
+      content: 'Voice message...',
+      message_type: 'voice',
+      is_read: false,
+      created_at: new Date().toISOString(),
+      is_temp: true,
+      reply_to_id: replyingTo?.id || null,
+      reply_to: replyingTo ? {
+        ...replyingTo,
+        sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
+      } : null,
+      sender: {
+        username: profile.username,
+        avatar_url: getUserAvatar(profile),
+        id: profile.id,
+      },
+      voice_duration: recordingTime,
+      file_size: audioBlob?.size || 0,
+    };
+
+    setMessages((prev) => [...prev, tempMsg]);
+
+    try {
+      setIsUploadingVoice(true);
+
+      const formData = new FormData();
+      formData.append('voice_file', audioBlob, 'voice-message.mp3');
+      formData.append('duration', recordingTime);
+      
+      if (replyingTo?.id) {
+        formData.append('reply_to_id', replyingTo.id);
+      }
+
+      const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
+      
+      console.log('Voice message sent, URL:', sentMessage.content);
+      
+      setMessages((prev) =>
+        prev
+          .filter((m) => m.id !== tempId)
+          .concat({
+            ...sentMessage,
+            is_temp: false,
+            sender: {
+              username: profile.username,
+              avatar_url: getUserAvatar(profile),
+              id: profile.id,
+            },
+          })
+      );
+
+      setAudioBlob(null);
+      setAudioUrl(null);
+      setRecordingTime(0);
+      
+      setSuccess('Voice message sent');
+      setTimeout(() => setSuccess(null), 2000);
+
+    } catch (err) {
+      console.error('Error sending voice message:', err);
+      setError(err.message || 'Failed to send voice message');
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    } finally {
+      setIsUploadingVoice(false);
+    }
+  };
+
   /* --------------------------------------------------------------------- */
   /*                         Image Upload & Deletion                      */
   /* --------------------------------------------------------------------- */
-const handleImageUpload = async (file) => {
+  const handleImageUpload = async (file) => {
     if (!selectedFriend) return;
 
     const tempId = `temp-img-${Date.now()}`;
@@ -236,19 +469,17 @@ const handleImageUpload = async (file) => {
       
       console.log('Starting image upload...');
       
-      // Upload image to get URL
       const result = await uploadImage(selectedFriend.id, file);
       console.log('Upload result:', result);
       
       const { url } = result;
       
-      // Create temp message with EXPLICIT image type
       const tempMsg = {
         id: tempId,
         sender_id: profile.id,
         receiver_id: selectedFriend.id,
         content: url,
-        message_type: 'image', // Explicitly set to image
+        message_type: 'image',
         is_read: false,
         created_at: new Date().toISOString(),
         is_temp: true,
@@ -261,15 +492,13 @@ const handleImageUpload = async (file) => {
 
       console.log('Temp message created:', tempMsg);
 
-      // Add to messages immediately
       setMessages((prev) => [...prev, tempMsg]);
       setImagePreview(null);
 
-      // Send via WebSocket
       const payload = {
         type: 'message',
         content: url,
-        message_type: 'image', // Ensure WebSocket knows it's an image
+        message_type: 'image',
       };
 
       console.log('WebSocket payload:', payload);
@@ -278,19 +507,17 @@ const handleImageUpload = async (file) => {
         console.log('Message sent via WebSocket');
       } else {
         console.log('WebSocket failed, using HTTP fallback...');
-        // HTTP fallback
         try {
           const sentMessage = await sendImageMessage(selectedFriend.id, url);
           console.log('HTTP response:', sentMessage);
           
-          // Replace temp message with real message
           setMessages((prev) =>
             prev
               .filter((m) => m.id !== tempId)
               .concat({
                 ...sentMessage,
                 is_temp: false,
-                message_type: 'image', // Ensure type is preserved
+                message_type: 'image',
                 sender: {
                   username: profile.username,
                   avatar_url: getUserAvatar(profile),
@@ -300,18 +527,17 @@ const handleImageUpload = async (file) => {
           );
         } catch (httpError) {
           console.error('HTTP fallback failed:', httpError);
-          // Keep the temp message for now
         }
       }
     } catch (err) {
       console.error('Upload error:', err);
       setError('Failed to upload image: ' + (err.message || 'Unknown error'));
-      // Remove temp message on error
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setUploadingImage(false);
     }
   };
+
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -326,14 +552,12 @@ const handleImageUpload = async (file) => {
       return;
     }
 
-    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setImagePreview(e.target.result);
     };
     reader.readAsDataURL(file);
 
-    // Upload the image
     handleImageUpload(file);
   };
 
@@ -355,12 +579,10 @@ const handleImageUpload = async (file) => {
     const { id, isTemp, message } = messageToDelete;
     const isImage = message.message_type === 'image';
 
-    // Remove from UI immediately
     setMessages(prev => prev.filter(m => m.id !== id));
     if (pinnedMessage?.id === id) setPinnedMessage(null);
     if (replyingTo?.id === id) setReplyingTo(null);
 
-    // Call API for non-temp messages
     if (!isTemp) {
       try {
         if (isImage) {
@@ -372,7 +594,6 @@ const handleImageUpload = async (file) => {
         setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
         setError('Failed to delete message',err);
-        // Revert UI change on error
         setMessages(prev => [...prev, message]);
       }
     }
@@ -404,14 +625,12 @@ const handleImageUpload = async (file) => {
     if (unreadMessages.length > 0 && isConnected) {
       const lastUnreadMessage = unreadMessages[unreadMessages.length - 1];
       
-      // Update local state immediately
       setMessages(prev => prev.map(msg => 
         msg.sender_id === selectedFriend.id && !msg.is_read 
           ? { ...msg, is_read: true, read_at: new Date().toISOString() }
           : msg
       ));
 
-      // Send read receipt
       sendReadReceipt(lastUnreadMessage.id);
     }
   }, [messages, selectedFriend, isConnected, sendReadReceipt]);
@@ -478,24 +697,39 @@ const handleImageUpload = async (file) => {
     try {
       const chatMessages = await getPrivateChat(selectedFriend.id);
       
-      // Auto-detect message types for images
       const enhanced = chatMessages.map((msg) => {
         const detectMessageType = (message) => {
           if (message.message_type === 'image') return 'image';
+          if (message.message_type === 'voice') return 'voice';
+          
           const content = message.content || '';
+          
+          const isVoiceUrl = 
+            content.match(/\.mp3$/i) ||
+            content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm'));
+          
+          if (isVoiceUrl) return 'voice';
+          
           const isImageUrl = 
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) || 
-            content.includes('cloudinary.com') ||
-            content.includes('res.cloudinary.com') ||
-            content.startsWith('data:image/') ||
-            content.startsWith('blob:');
+            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+            content.includes('cloudinary.com') && !content.includes('/voice_messages/') ||
+            content.startsWith('data:image/');
+          
           return isImageUrl ? 'image' : 'text';
         };
 
+        const messageType = detectMessageType(msg);
+        
+        let content = msg.content;
+        if (messageType === 'voice') {
+          content = ensureMp3VoiceUrl({ ...msg, message_type: messageType });
+        }
+
         return {
           ...msg,
+          content: content,
           is_temp: false,
-          message_type: detectMessageType(msg), // Auto-detect
+          message_type: messageType,
           sender: {
             id: msg.sender_id,
             username:
@@ -516,11 +750,8 @@ const handleImageUpload = async (file) => {
         };
       });
 
-      console.log('Loaded messages:', enhanced);
-
-      setMessages(
-        enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-      );
+      console.log('Loaded messages with MP3 conversion:', enhanced);
+      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
     } catch (err) {
       setError('Failed to load messages');
       console.error(err);
@@ -547,6 +778,10 @@ const handleImageUpload = async (file) => {
     setFriendTyping(false);
     setIsTyping(false);
     setImagePreview(null);
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingTime(0);
+    setIsRecording(false);
   };
 
   /* --------------------------------------------------------------------- */
@@ -554,14 +789,28 @@ const handleImageUpload = async (file) => {
   /* --------------------------------------------------------------------- */
   const handleSendMessage = async () => {
     const content = newMessage.trim();
-    if (!content || !selectedFriend) return;
+    
+    if ((!content && !audioUrl) || !selectedFriend) return;
 
+    if (audioUrl && audioBlob) {
+      await sendVoiceMessage();
+      return;
+    }
+
+    if (content) {
+      await sendTextMessage();
+    }
+  };
+
+  const sendTextMessage = async () => {
+    const content = newMessage.trim();
     const tempId = `temp-${Date.now()}`;
+    
     const tempMsg = {
       id: tempId,
       sender_id: profile.id,
       receiver_id: selectedFriend.id,
-      content,
+      content: content,
       message_type: 'text',
       is_read: false,
       created_at: new Date().toISOString(),
@@ -585,7 +834,7 @@ const handleImageUpload = async (file) => {
 
     const payload = {
       type: 'message',
-      content,
+      content: content,
       message_type: 'text',
       reply_to_id: replyingTo?.id || null,
     };
@@ -1284,35 +1533,59 @@ const handleImageUpload = async (file) => {
               flexShrink: 0,
             }}
           >
-            {/* Image Preview */}
-            {imagePreview && (
-              <Box sx={{ position: 'relative', mb: 1 }}>
-                <img 
-                  src={imagePreview} 
-                  alt="Preview" 
-                  style={{ 
-                    width: 100, 
-                    height: 100, 
-                    objectFit: 'cover', 
-                    borderRadius: '8px' 
-                  }} 
-                />
-                <IconButton
+            {/* Voice Recording UI */}
+            {isRecording && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 0,
+                  right: 0,
+                  bgcolor: 'error.main',
+                  color: 'white',
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ 
+                    width: 12, 
+                    height: 12, 
+                    borderRadius: '50%', 
+                    bgcolor: 'white', 
+                    animation: 'pulse 1s infinite' 
+                  }} />
+                  <Typography variant="body2">
+                    Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                  </Typography>
+                </Box>
+                <Button 
+                  variant="contained" 
+                  color="secondary" 
+                  onClick={stopRecording}
                   size="small"
-                  onClick={handleRemoveImagePreview}
-                  sx={{
-                    position: 'absolute',
-                    top: -8,
-                    right: -8,
-                    bgcolor: 'error.main',
-                    color: 'white',
-                    '&:hover': { bgcolor: 'error.dark' },
-                  }}
                 >
-                  <CloseIcon fontSize="small" />
-                </IconButton>
+                  Stop
+                </Button>
               </Box>
             )}
+
+            {/* Voice Record Button */}
+            <IconButton
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={!selectedFriend || uploadingImage || isUploadingVoice}
+              sx={{
+                borderRadius: '50%',
+                width: { xs: 44, sm: 46, md: 48 },
+                height: { xs: 44, sm: 46, md: 48 },
+                color: isRecording ? 'error.main' : 'primary.main',
+                flexShrink: 0,
+              }}
+            >
+              {isRecording ? <StopIcon /> : <MicIcon />}
+            </IconButton>
 
             {/* Upload Button */}
             <input
@@ -1360,7 +1633,7 @@ const handleImageUpload = async (file) => {
               }}
               multiline
               maxRows={3}
-              disabled={!selectedFriend || uploadingImage}
+              disabled={!selectedFriend || uploadingImage || isRecording}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: '24px',
@@ -1370,23 +1643,72 @@ const handleImageUpload = async (file) => {
               }}
             />
 
-            {/* Send Button */}
-            <IconButton
-              color="primary"
-              onClick={handleSendMessage}
-              disabled={!selectedFriend || (!newMessage.trim() && !imagePreview) || uploadingImage}
-              sx={{
-                borderRadius: '50%',
-                width: { xs: 44, sm: 46, md: 48 },
-                height: { xs: 44, sm: 46, md: 48 },
-                bgcolor: 'primary.main',
-                color: 'white',
-                '&.Mui-disabled': { bgcolor: 'grey.300' },
-                flexShrink: 0,
-              }}
-            >
-              <SendIcon fontSize={isMobile ? 'small' : 'medium'} />
-            </IconButton>
+            {/* Send Button - Shows voice send when recording, regular send otherwise */}
+            {audioUrl && !isRecording ? (
+              <IconButton
+                color="primary"
+                onClick={sendVoiceMessage}
+                disabled={!selectedFriend || isUploadingVoice}
+                sx={{
+                  borderRadius: '50%',
+                  width: { xs: 44, sm: 46, md: 48 },
+                  height: { xs: 44, sm: 46, md: 48 },
+                  bgcolor: 'primary.main',
+                  color: 'white',
+                  '&.Mui-disabled': { bgcolor: 'grey.300' },
+                  flexShrink: 0,
+                }}
+              >
+                {isUploadingVoice ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
+              </IconButton>
+            ) : (
+              <IconButton
+                color="primary"
+                onClick={handleSendMessage}
+                disabled={!selectedFriend || (!newMessage.trim() && !imagePreview) || uploadingImage || isRecording}
+                sx={{
+                  borderRadius: '50%',
+                  width: { xs: 44, sm: 46, md: 48 },
+                  height: { xs: 44, sm: 46, md: 48 },
+                  bgcolor: 'primary.main',
+                  color: 'white',
+                  '&.Mui-disabled': { bgcolor: 'grey.300' },
+                  flexShrink: 0,
+                }}
+              >
+                <SendIcon fontSize={isMobile ? 'small' : 'medium'} />
+              </IconButton>
+            )}
+
+            {/* Image Preview */}
+            {imagePreview && (
+              <Box sx={{ position: 'relative', mb: 1 }}>
+                <img 
+                  src={imagePreview} 
+                  alt="Preview" 
+                  style={{ 
+                    width: 100, 
+                    height: 100, 
+                    objectFit: 'cover', 
+                    borderRadius: '8px' 
+                  }} 
+                />
+                <IconButton
+                  size="small"
+                  onClick={handleRemoveImagePreview}
+                  sx={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    bgcolor: 'error.main',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'error.dark' },
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            )}
           </Box>
         </Box>
       </Box>
