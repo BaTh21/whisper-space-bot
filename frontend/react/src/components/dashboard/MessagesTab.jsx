@@ -1,11 +1,11 @@
 import {
   Chat as ChatIcon,
   Close as CloseIcon,
+  Image as ImageIcon,
   Menu as MenuIcon,
   PushPin as PushPinIcon,
   Reply as ReplyIcon,
   Send as SendIcon,
-  Image as ImageIcon,
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -13,6 +13,7 @@ import {
   Button,
   Card,
   Chip,
+  CircularProgress,
   Drawer,
   IconButton,
   List,
@@ -23,19 +24,18 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
-  CircularProgress,
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import {
+  deleteImageMessage,
   deleteMessage,
   editMessage,
   getPrivateChat,
-  sendPrivateMessage,
-  deleteImageMessage,
-  uploadImage,
   sendImageMessage,
+  sendPrivateMessage,
+  uploadImage,
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
@@ -54,6 +54,7 @@ const BASE_URI = getWebSocketBaseUrl();
 
 const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [selectedFriend, setSelectedFriend] = useState(null);
+  const [currentSelectedFriend, setCurrentSSelectedFriend] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
@@ -113,7 +114,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           sender: {
             id: data.sender_id,
             username: data.sender_username,
-            avatar_url: getAvatarUrl(data.sender_username ? null : data.sender_id),
+            avatar_url: getAvatarUrl(data.avatar_url),
           },
           reply_to: data.reply_to
             ? { 
@@ -531,9 +532,11 @@ const handleImageUpload = async (file) => {
   /* --------------------------------------------------------------------- */
   const handleSelectFriend = (friend) => {
     if (isMobile) setMobileDrawerOpen(false);
+    if (currentSelectedFriend?.id == friend?.id) return;
     if (selectedFriend) closeConnection(1000, 'Switching friends');
     setSelectedFriend(friend);
     clearChatState();
+    setCurrentSSelectedFriend(friend);
   };
 
   const clearChatState = () => {
