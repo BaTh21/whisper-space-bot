@@ -124,6 +124,7 @@ async def ws_group_chat(
 ):
     current_user = await get_current_user_ws(websocket, db)
     if not current_user:
+        # await websocket.close(code=4001, reason="PLease login to use chat")
         return
 
     if not is_group_member(db, group_id, current_user.id):
@@ -140,6 +141,7 @@ async def ws_group_chat(
             content = data.get("content")
             parent_message_id = data.get("reply_to")  # Optional
             action = data.get("action")
+            incoming_temp_id = data.get("temp_id")
             
             if action == "seen":
                 message_id = data.get("message_id")
@@ -148,15 +150,21 @@ async def ws_group_chat(
             
             if action == "forward_to_groups":
                 message_id = data.get("message_id")
-                target_group_ids = data.get("group_ids", [])
-                
-                await handle_forward_message(
+                target_group_ids = data.get("group_ids") or data.get("target_group_ids") or []
+                target_group_ids = [int(g) for g in target_group_ids]
+
+                forwarded_msgs = await handle_forward_message(
                     db,
                     current_user_id=current_user.id,
                     message_id=message_id,
-                    group_id=target_group_ids
+                    target_group_ids=target_group_ids
                 )
-                
+
+                await websocket.send_json({
+                    "action": "forwarded",
+                    "message_id": message_id,
+                    "forwarded_to": [m.group_id for m in forwarded_msgs]
+                })
                 continue
 
             try:
@@ -204,19 +212,14 @@ async def ws_group_chat(
                 created_at=msg.created_at,
                 updated_at=msg.updated_at,
                 file_url=msg.file_url,
-                parent_message=ParentMessageResponse(
-                    id=original.id,
-                    content=original.content,
-                    file_url=original.file_url,
-                    sender=AuthorResponse(
-                        id=original.sender.id,
-                        username=original.sender.username,
-                        avatar_url=original.sender.avatar_url
-                    )
-                )
+                parent_message=parent_msg_data
             )
 
-            await manager.broadcast(chat_id, msg_out)
+            try:
+                await manager.broadcast(chat_id, msg_out)
+            except Exception as e:
+                print(f"[Broadcast Error] Group {group_id}: {e}")
+                continue
 
     except WebSocketDisconnect:
         manager.disconnect(chat_id, websocket)

@@ -39,8 +39,14 @@ async def delete_message(db: Session, message_id: int, current_user_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Message not found")
         
-    if message.sender_id != current_user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if message.forwarded_by_id:
+        if message.forwarded_by_id != current_user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Only sender can delete this message")
+    else:
+        if message.sender_id != current_user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Only sender can delete this message")
     
     if message.file_url:
         public_id = extract_public_id_from_url(message.file_url)
@@ -193,13 +199,15 @@ async def handle_forward_message(
 
     for group_id in target_group_ids:
         chat_id = f"group_{group_id}"
+        
+        parent_id = original.parent_message_id
 
         new_msg = GroupMessage(
             group_id=group_id,
-            sender_id=current_user_id,
+            sender_id=original.sender_id,
             forwarded_by_id=current_user_id,
             forwarded_at=datetime.utcnow(),
-            parent_message_id=original.id,
+            parent_message_id=parent_id,
             content=original.content,
             file_url=original.file_url,
             public_id=original.public_id,
@@ -229,16 +237,21 @@ async def handle_forward_message(
         msg_out = GroupMessageOut(
             id=new_msg.id,
             sender=AuthorResponse(
-                id=new_msg.sender.id,
-                username=new_msg.sender.username,
-                avatar_url=new_msg.sender.avatar_url
+                id=original.sender.id,
+                username=original.sender.username,
+                avatar_url=original.sender.avatar_url
+            ),
+            forwarded_by=AuthorResponse(
+                id=current_user.id,
+                username=current_user.username,
+                avatar_url=current_user.avatar_url
             ),
             group_id=group_id,
             content=new_msg.content,
             created_at=new_msg.created_at,
             updated_at=new_msg.updated_at,
             file_url=new_msg.file_url,
-            parent_message=parent_msg_data
+            parent_message=parent_msg_data,
         )
 
         await manager.broadcast(chat_id, msg_out)
