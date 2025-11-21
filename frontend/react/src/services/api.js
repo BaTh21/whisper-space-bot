@@ -791,8 +791,29 @@ export const sendPrivateMessage = async (friendId, data) => {
     throw new Error(
       error.response?.data?.detail ||
         error.response?.data?.msg ||
-        "Failed to send message"
+        "Failed to send message"  
     );
+  }
+};
+
+export const forwardMessage = async (friendId, messageData) => {
+  try {
+    console.log('📤 Forwarding message to:', friendId, 'Data:', messageData);
+    
+    // Use the exact same payload without modification
+    // Let the backend handle the validation
+    const response = await api.post(`/api/v1/chats/private/${friendId}`, messageData);
+
+    console.log('✅ Forward successful:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error("❌ Forward message error:", {
+      status: error.response?.status,
+      data: error.response?.data,
+      detail: error.response?.data?.detail
+    });
+    
+    throw error;
   }
 };
 
@@ -1253,25 +1274,50 @@ export const getMessageInfo = async (messageId) => {
 
 export const sendVoiceMessage = async (friendId, formData) => {
   try {
-    // Add Cloudinary transformation parameters for MP3 conversion
-    formData.append('format', 'mp3'); // Convert to MP3 format
-    formData.append('resource_type', 'video'); // Cloudinary uses 'video' for audio files
-    formData.append('quality', '80'); // Set audio quality
-    formData.append('audio_codec', 'mp3'); // Force MP3 codec
-    
+    console.log('🌐 DEBUG - API Request details:', {
+      url: `/api/v1/chats/private/${friendId}/voice`,
+      friendId: friendId,
+      hasFormData: !!formData
+    });
+
     const response = await api.post(`/api/v1/chats/private/${friendId}/voice`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      timeout: 30000,
     });
+    
+    console.log('✅ DEBUG - API success response:', response.data);
     return response.data;
   } catch (error) {
-    console.error("Send voice message error:", error.response?.data);
-    throw new Error(
-      error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to send voice message"
-    );
+    console.error("❌ DEBUG - API call failed:", {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      responseData: error.response?.data,
+      message: error.message
+    });
+    
+    // The error message is coming from somewhere else, let's check the full error
+    console.error("❌ DEBUG - Full error object:", error);
+    
+    let errorMessage = "Failed to send voice message";
+    
+    // Try to extract the actual error message from different places
+    if (error.response?.data) {
+      console.error("❌ DEBUG - Response data:", error.response.data);
+      errorMessage = error.response.data.detail || 
+                    error.response.data.msg || 
+                    error.response.data.message || 
+                    error.response.data.error ||
+                    JSON.stringify(error.response.data);
+    } else if (error.message && error.message.includes('Invalid file type')) {
+      // Use the message directly if it contains the file type error
+      errorMessage = error.message;
+    }
+    
+    throw new Error(errorMessage);
   }
 };
 export default api;

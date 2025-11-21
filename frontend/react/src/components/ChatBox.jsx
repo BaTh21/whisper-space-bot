@@ -1,39 +1,40 @@
 import {
   Close as CloseIcon,
-  Forward as ForwardIcon,
   Reply as ReplyIcon,
-  Send as SendIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import {
   Avatar,
   Box,
   Button,
-  Card,
-  Checkbox,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   TextField,
-  Typography,
+  Typography
 } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { deleteMessage, editMessage, getPrivateChat, sendPrivateMessage } from '../services/api';
 import ChatMessage from './ChatMessage';
+import ForwardMessageDialog from './ForwardMessageDialog';
 
 export default function ChatBox({ selectedFriend, profile, friends }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [forwardingMessage, setForwardingMessage] = useState(null);
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Helper functions for avatars
+  const getAvatarUrl = (avatarUrl) => {
+    return avatarUrl || '';
+  };
+
+  const getUserInitials = (username) => {
+    return username?.charAt(0)?.toUpperCase() || 'F';
+  };
 
   // Enhanced message fetching with proper sender information
   useEffect(() => {
@@ -273,30 +274,47 @@ export default function ChatBox({ selectedFriend, profile, friends }) {
     }, 100);
   };
 
-  // Handle forward function
+  // Handle forward function - FIXED: Proper forward handling
   const handleForward = (message) => {
     setForwardingMessage(message);
+    setForwardDialogOpen(true);
   };
 
-  // Handle actual forwarding
-  const handleForwardMessage = async (message, friendIds) => {
+  // Handle actual forwarding - FIXED: Proper forwarding implementation
+  const handleForwardMessage = async (message, friend) => {
     try {
       setMessageLoading(true);
       
-      // Send the message to each selected friend
-      const forwardPromises = friendIds.map(friendId =>
-        sendPrivateMessage(friendId, {
-          content: message.content,
-          message_type: 'text',
-          is_forwarded: true,
-          original_sender: message.sender?.username || profile?.username || 'Unknown',
-          reply_to_id: message.reply_to_id || null,
-        })
-      );
-
-      await Promise.all(forwardPromises);
+      // Determine message type and content
+      let content = message.content;
+      let messageType = message.message_type || 'text';
       
-      console.log(`Message forwarded to ${friendIds.length} ${friendIds.length === 1 ? 'friend' : 'friends'}`);
+      // For voice messages, show appropriate content
+      if (message.content.match(/\.(mp4|mp3|wav|m4a|ogg|aac|flac)$/i) || 
+          message.content.includes('voice_messages') ||
+          message.content.includes('audio')) {
+        content = 'Voice message';
+        messageType = 'voice';
+      }
+      // For images
+      else if (message.content.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i) ||
+               message.content.includes('images') ||
+               message.content.includes('photos')) {
+        content = 'Image';
+        messageType = 'image';
+      }
+
+      // Send the forwarded message
+      await sendPrivateMessage(friend.id, {
+        content: content,
+        message_type: messageType,
+        is_forwarded: true,
+        original_sender: message.sender?.username || profile?.username || 'Unknown',
+        reply_to_id: message.reply_to_id || null,
+      });
+
+      console.log(`Message forwarded to ${friend.username}`);
+      setForwardDialogOpen(false);
       setForwardingMessage(null);
       
     } catch (err) {
@@ -414,7 +432,7 @@ export default function ChatBox({ selectedFriend, profile, friends }) {
         ) : (
           <>
             {messages
-              .filter(message => !message.is_temp) // REMOVED: unsent filtering
+              .filter(message => !message.is_temp)
               .map((message) => (
                 <ChatMessage
                   key={message.id}
@@ -526,187 +544,19 @@ export default function ChatBox({ selectedFriend, profile, friends }) {
         </Button>
       </Box>
 
-      {/* Forward Dialog */}
+      {/* Forward Dialog - SINGLE USAGE */}
       <ForwardMessageDialog
-        open={!!forwardingMessage}
-        onClose={() => setForwardingMessage(null)}
+        open={forwardDialogOpen}
+        onClose={() => {
+          setForwardDialogOpen(false);
+          setForwardingMessage(null);
+        }}
         message={forwardingMessage}
-        friends={friends.filter(friend => friend.id !== selectedFriend?.id)}
+        friends={friends.filter((f) => f.id !== selectedFriend?.id)}
         onForward={handleForwardMessage}
+        getAvatarUrl={getAvatarUrl}
+        getUserInitials={getUserInitials}
       />
     </Box>
   );
 }
-
-// Forward Message Dialog Component (unchanged)
-const ForwardMessageDialog = ({ open, onClose, message, friends, onForward }) => {
-  const [selectedFriends, setSelectedFriends] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredFriends = friends.filter(friend =>
-    friend.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    friend.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleToggleFriend = (friendId) => {
-    setSelectedFriends(prev =>
-      prev.includes(friendId)
-        ? prev.filter(id => id !== friendId)
-        : [...prev, friendId]
-    );
-  };
-
-  const handleForward = () => {
-    if (selectedFriends.length > 0 && message) {
-      onForward(message, selectedFriends);
-      setSelectedFriends([]);
-      setSearchTerm('');
-      onClose();
-    }
-  };
-
-  const handleCloseDialog = () => {
-    setSelectedFriends([]);
-    setSearchTerm('');
-    onClose();
-  };
-
-  return (
-    <Dialog 
-      open={open} 
-      onClose={handleCloseDialog} 
-      maxWidth="sm" 
-      fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: '16px',
-        }
-      }}
-    >
-      <DialogTitle sx={{ pb: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ForwardIcon color="primary" />
-          <Typography variant="h6" fontWeight="600">Forward Message</Typography>
-        </Box>
-      </DialogTitle>
-      <DialogContent>
-        {/* Message Preview */}
-        <Card 
-          sx={{ 
-            p: 2, 
-            mb: 2, 
-            bgcolor: 'grey.50',
-            borderRadius: '12px',
-            border: '1px solid',
-            borderColor: 'divider'
-          }}
-        >
-          <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 1, opacity: 0.8 }}>
-            Forwarding:
-          </Typography>
-          <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
-            {message?.content}
-          </Typography>
-          {message?.reply_to && (
-            <Box sx={{ mt: 1, p: 1.5, bgcolor: 'rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-              <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 500 }}>
-                Replying to: {message.reply_to.content}
-              </Typography>
-            </Box>
-          )}
-        </Card>
-
-        {/* Search */}
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Search friends..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          sx={{ mb: 2 }}
-          InputProps={{
-            sx: {
-              borderRadius: '12px',
-            }
-          }}
-        />
-
-        {/* Friends List */}
-        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-          Select friends to forward to:
-        </Typography>
-        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-          {filteredFriends.length === 0 ? (
-            <Typography color="text.secondary" align="center" sx={{ py: 3 }}>
-              No friends found
-            </Typography>
-          ) : (
-            filteredFriends.map((friend) => (
-              <ListItem
-                key={friend.id}
-                sx={{
-                  border: '1px solid',
-                  borderColor: selectedFriends.includes(friend.id) ? 'primary.main' : 'divider',
-                  borderRadius: '12px',
-                  mb: 1,
-                  bgcolor: selectedFriends.includes(friend.id) ? 'primary.light' : 'background.paper',
-                  color: selectedFriends.includes(friend.id) ? 'primary.contrastText' : 'text.primary',
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    transform: 'translateY(-1px)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  }
-                }}
-                onClick={() => handleToggleFriend(friend.id)}
-                button
-              >
-                <ListItemAvatar>
-                  <Avatar 
-                    src={friend.avatar_url}
-                    sx={{
-                      width: 40,
-                      height: 40,
-                    }}
-                  >
-                    {friend.username?.charAt(0)?.toUpperCase() || 'F'}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={
-                    <Typography variant="body1" fontWeight="500">
-                      {friend.username}
-                    </Typography>
-                  }
-                  secondary={friend.email}
-                />
-                <Checkbox
-                  checked={selectedFriends.includes(friend.id)}
-                  onChange={() => handleToggleFriend(friend.id)}
-                  color="primary"
-                />
-              </ListItem>
-            ))
-          )}
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ p: 2, pt: 1 }}>
-        <Button 
-          onClick={handleCloseDialog}
-          sx={{ borderRadius: '8px' }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleForward}
-          disabled={selectedFriends.length === 0}
-          startIcon={<ForwardIcon />}
-          sx={{ borderRadius: '8px' }}
-        >
-          Forward to {selectedFriends.length} {selectedFriends.length === 1 ? 'friend' : 'friends'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
