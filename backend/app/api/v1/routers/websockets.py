@@ -13,6 +13,7 @@ from app.schemas.chat import MessageCreate, AuthorResponse
 import json
 from app.models.group_message_reply import GroupMessageReply
 from app.crud.message import handle_seen_message, handle_forward_message
+import traceback
 
 from app.api.v1.routers.websocket_server import handle_websocket_private
 router = APIRouter()
@@ -240,8 +241,9 @@ async def ws_group_chat(
     except WebSocketDisconnect:
         manager.disconnect(chat_id, websocket)
     except Exception as e:
-        manager.disconnect(chat_id, websocket)
+        traceback.print_exc()
         print(f"[WS Error] {e}")
+        await websocket.close(code=1011, reason="Server error")
 
 @router.websocket("/private/{friend_id}")
 async def websocket_private_chat(

@@ -166,7 +166,7 @@ const GroupsTab = ({ groups }) => {
               pl: 3,
             }}
           >
-            <GroupChatPage groupId={selectedGroupId} />
+            <GroupChatPage key={selectedGroupId} groupId={selectedGroupId} />
           </Box>
         )}
       </Box>

@@ -37,6 +37,9 @@ import CheckIcon from '@mui/icons-material/Check';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import SeenMessageListDialog from '../components/dialogs/SeenMessageListDialog';
 import GroupListComponent from '../components/chat/GroupListComponent';
+import KeyboardVoiceIcon from '@mui/icons-material/KeyboardVoice';
+import CallIcon from '@mui/icons-material/Call';
+import VideocamIcon from '@mui/icons-material/Videocam';
 
 const GroupChatPage = ({ groupId }) => {
 
@@ -220,7 +223,6 @@ const GroupChatPage = ({ groupId }) => {
     }
   };
 
-
   useEffect(() => {
     if (!groupId) return;
 
@@ -228,15 +230,10 @@ const GroupChatPage = ({ groupId }) => {
     setupWebSocket();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
+      if (wsRef.current) wsRef.current.close();
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
     };
   }, [groupId]);
-
 
   const fetchGroupData = async () => {
     try {
@@ -350,7 +347,6 @@ const GroupChatPage = ({ groupId }) => {
       setupPolling();
     }
   };
-
 
   const setupPolling = () => {
     const pollMessages = async () => {
@@ -539,6 +535,9 @@ const GroupChatPage = ({ groupId }) => {
         elevation={2}
         onClick={() => setOpen(true)}
         sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alightItems: 'center',
           '&:hover': { bgcolor: 'grey.200' },
         }}
       >
@@ -576,6 +575,16 @@ const GroupChatPage = ({ groupId }) => {
             <Typography variant="caption" color="text.secondary" noWrap>
               {members.length} members
             </Typography>
+          </Box>
+          <Box sx={{
+            display: 'flex',
+            gap: 2,
+            alightItems: 'center'
+          }}>
+            <CallIcon sx={{fontSize: 24, color: 'primary.main'}}/>
+            <VideocamIcon 
+            sx={{fontSize: 26, color: 'primary.main'}}
+            />
           </Box>
         </Toolbar>
       </AppBar>
@@ -1080,7 +1089,7 @@ const GroupChatPage = ({ groupId }) => {
                     style={{ display: 'none' }}
                     onChange={handleFileChange}
                   />
-                  <label htmlFor="file-upload">
+                  <label htmlFor="file-upload" >
                     <IconButton
                       sx={{
                         bgcolor: 'primary.main',
@@ -1094,6 +1103,18 @@ const GroupChatPage = ({ groupId }) => {
                       <AttachFileIcon />
                     </IconButton>
                   </label>
+                  <IconButton
+                    sx={{
+                      bgcolor: 'primary.main',
+                      color: 'white',
+                      borderRadius: 2,
+                      '&:hover': {
+                        bgcolor: '#1E90FF'
+                      }
+                    }}
+                    component="span">
+                    <KeyboardVoiceIcon />
+                  </IconButton>
                   <TextField
                     fullWidth
                     size="small"
