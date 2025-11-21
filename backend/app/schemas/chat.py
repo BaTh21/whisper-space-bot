@@ -4,14 +4,16 @@ from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
 
-MessageTypeInput = Literal["text", "image", "file"]
+MessageTypeInput = Literal["text", "image", "file", "voice"]
 
 class MessageCreate(BaseModel):
     content: str
     message_type: MessageTypeInput = "text"
     reply_to_id: Optional[int] = None
-    is_forwarded: Optional[bool] = False  # NEW: Forward flag
-    original_sender: Optional[str] = None  # NEW: Original sender username
+    is_forwarded: Optional[bool] = False  
+    original_sender: Optional[str] = None  
+    voice_duration: Optional[float] = None 
+    file_size: Optional[int] = None 
 
 class MessageOut(TimestampMixin):
     id: int
@@ -24,11 +26,14 @@ class MessageOut(TimestampMixin):
     reply_to: Optional["MessageOut"] = None
     read_at: Optional[str] = None  
     delivered_at: Optional[str] = None
+    created_at: str 
     is_forwarded: Optional[bool] = False
     original_sender: Optional[str] = None
     # ADD THESE TWO FIELDS
     sender_username: Optional[str] = None
     receiver_username: Optional[str] = None
+    voice_duration: Optional[float] = None  # ADDED
+    file_size: Optional[int] = None  # ADDED
 
     @classmethod
     def from_orm(cls, obj):
@@ -80,6 +85,7 @@ class GroupMessageSeen(BaseModel):
 class GroupMessageOut(BaseModel):
     id: int
     sender: AuthorResponse
+    forwarded_by: Optional[AuthorResponse] = None
     group_id: int
     content: Optional[str] = None
     created_at: datetime

@@ -8,9 +8,11 @@ import {
   Forward as ForwardIcon,
   Image as ImageIcon,
   MoreVert as MoreVertIcon,
+  PlayArrow as PlayArrowIcon,
   PushPin as PushPinIcon,
   Reply as ReplyIcon,
-  ZoomIn as ZoomInIcon,
+  Stop as StopIcon,
+  ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -22,7 +24,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 
 const ChatMessage = ({
@@ -47,27 +49,46 @@ const ChatMessage = ({
   const [seenAvatarError, setSeenAvatarError] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef(null);
 
-  /* ---------------------------------------------------------- */
-  /*                     MESSAGE TYPE DETECTION                */
-  /* ---------------------------------------------------------- */
-  const detectMessageType = (msg) => {
-    if (msg.message_type === 'image') {
-      return 'image';
-    }
-    
-    const content = msg.content || '';
-    const isImageUrl = 
-      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) || 
-      content.includes('cloudinary.com') ||
-      content.includes('res.cloudinary.com') ||
-      content.startsWith('data:image/') ||
-      content.startsWith('blob:');
-    
-    return isImageUrl ? 'image' : 'text';
-  };
+/* ---------------------------------------------------------- */
+/*                     MESSAGE TYPE DETECTION                */
+/* ---------------------------------------------------------- */
+const detectMessageType = (msg) => {
+  // First check explicit message_type from server
+  if (msg.message_type === 'image') return 'image';
+  if (msg.message_type === 'voice') return 'voice';
+  
+  const content = msg.content || '';
+  
+  // Voice detection - ONLY MP3 files
+  const isVoiceUrl = 
+    content.match(/\.mp3$/i) || // Only .mp3 extension
+    content.startsWith('data:audio/mp3') ||
+    content.startsWith('data:audio/mpeg') ||
+    (content.startsWith('blob:') && content.includes('audio/mp3'));
+  
+  if (isVoiceUrl) return 'voice';
+  
+  // Image detection - everything else that looks like media
+  const isImageUrl = 
+    content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|webm)$/i) || // Added webm to images
+    content.includes('cloudinary.com') ||
+    content.includes('res.cloudinary.com') ||
+    content.startsWith('data:image/') ||
+    content.startsWith('data:video/') || // Video data URLs
+    content.startsWith('blob:');
+  
+  if (isImageUrl) return 'image';
+  
+  // Default to text
+  return 'text';
+};
 
-  const actualMessageType = detectMessageType(message);
+const actualMessageType = detectMessageType(message);
 
   /* ---------------------------------------------------------- */
   /*                     MENU HANDLERS                         */
@@ -120,6 +141,44 @@ const ChatMessage = ({
   };
 
   const showMenu = true;
+
+  /* ---------------------------------------------------------- */
+  /*                     VOICE MESSAGE HANDLING                */
+  /* ---------------------------------------------------------- */
+  const handlePlayVoice = async (e) => {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        await audioRef.current.play();
+        setIsPlaying(true);
+      }
+    } catch (err) {
+      console.error('Error playing voice message:', err);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+      setDuration(audioRef.current.duration || message.voice_duration || 0);
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration || message.voice_duration || 0);
+    }
+  };
 
   /* ---------------------------------------------------------- */
   /*                     IMAGE HANDLERS                        */
@@ -263,6 +322,94 @@ const ChatMessage = ({
         >
           {friendAv.initial}
         </Avatar>
+      </Box>
+    );
+  };
+
+  /* ---------------------------------------------------------- */
+  /*                     RENDER VOICE                           */
+  /* ---------------------------------------------------------- */
+  const renderVoiceContent = () => {
+    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+    return (
+      <Box sx={{ mb: 1 }}>
+        <audio
+          ref={audioRef}
+          src={message.content}
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={handleEnded}
+          onLoadedMetadata={handleLoadedMetadata}
+          preload="metadata"
+        />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            p: 2,
+            bgcolor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+            borderRadius: '12px',
+            border: '1px solid',
+            borderColor: isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            '&:hover': {
+              bgcolor: isMine ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
+            },
+            maxWidth: '300px',
+          }}
+          onClick={handlePlayVoice}
+        >
+          <IconButton 
+            size="small" 
+            sx={{
+              bgcolor: isMine ? 'white' : 'primary.main',
+              color: isMine ? 'primary.main' : 'white',
+              '&:hover': {
+                bgcolor: isMine ? 'grey.100' : 'primary.dark',
+              },
+            }}
+          >
+            {isPlaying ? <StopIcon /> : <PlayArrowIcon />}
+          </IconButton>
+          
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5, color: isMine ? 'white' : 'text.primary' }}>
+              Voice message
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box 
+                sx={{ 
+                  flex: 1, 
+                  height: 4, 
+                  bgcolor: isMine ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
+                  borderRadius: 2,
+                  overflow: 'hidden'
+                }}
+              >
+                <Box 
+                  sx={{ 
+                    height: '100%', 
+                    bgcolor: isMine ? 'white' : 'primary.main',
+                    width: `${progress}%`,
+                    borderRadius: 2,
+                    transition: 'width 0.1s ease'
+                  }} 
+                />
+              </Box>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  opacity: 0.7, 
+                  minWidth: 40,
+                  color: isMine ? 'white' : 'text.primary'
+                }}
+              >
+                {Math.floor(message.voice_duration || duration || 0)}s
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
       </Box>
     );
   };
@@ -542,13 +689,30 @@ const ChatMessage = ({
                 }}
                 onClick={() => onReply?.(message.reply_to)}
               >
-                <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', fontWeight: 500 }}>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    opacity: 0.7, 
+                    display: 'block', 
+                    fontWeight: 500,
+                    color: isMine ? 'white' : 'text.primary'
+                  }}
+                >
                   Replying to{' '}
                   {message.reply_to.sender_id === profile?.id
                     ? 'yourself'
                     : message.reply_to.sender_username ?? senderInfo.username}
                 </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8, fontStyle: 'italic', lineHeight: 1.3 }}>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    mt: 0.5, 
+                    opacity: 0.8, 
+                    fontStyle: 'italic', 
+                    lineHeight: 1.3,
+                    color: isMine ? 'white' : 'text.primary'
+                  }}
+                >
                   {message.reply_to.content}
                 </Typography>
               </Box>
@@ -584,9 +748,11 @@ const ChatMessage = ({
                 </Box>
               )}
 
-              {/* Content - AUTO DETECT IMAGES */}
+              {/* Content */}
               {actualMessageType === 'image' ? (
                 renderImageContent()
+              ) : actualMessageType === 'voice' ? (
+                renderVoiceContent()
               ) : (
                 <Typography
                   variant="body2"
@@ -673,7 +839,7 @@ const ChatMessage = ({
 
             {/* For MY messages - Show ALL menu items */}
             {isMine && [
-              actualMessageType !== 'image' && (
+              actualMessageType === 'text' && (
                 <MenuItem key="edit" onClick={() => { setEditing(true); setEditText(message.content); handleClose(); }}>
                   <EditIcon fontSize="small" sx={{ mr: 1.5 }} />
                   Edit

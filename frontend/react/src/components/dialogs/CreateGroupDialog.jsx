@@ -1,28 +1,28 @@
-// components/dialogs/CreateGroupDialog.jsx
 import {
-    Alert,
-    Avatar,
-    Box,
-    Button,
-    Checkbox,
-    Chip,
-    CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Divider,
-    List,
-    ListItem,
-    ListItemAvatar,
-    ListItemText,
-    TextField,
-    Typography
+  Alert,
+  Avatar,
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  TextField,
+  Typography
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useState } from 'react';
 import * as Yup from 'yup';
 import { createGroup, inviteToGroup } from '../../services/api';
+import { toast } from 'react-toastify';
 
 const CreateGroupDialog = ({ open, onClose, onSuccess, friends }) => {
   const [loading, setLoading] = useState(false);
@@ -44,40 +44,32 @@ const CreateGroupDialog = ({ open, onClose, onSuccess, friends }) => {
       setError('');
 
       try {
-        // First, create the group
-        console.log('Creating group with data:', values);
         const newGroup = await createGroup({
           name: values.name,
           description: values.description
         });
 
-        console.log('Group created successfully:', newGroup);
-
-        // Then, send invitations to selected friends
         if (values.inviteeIds.length > 0) {
-          console.log('Sending invitations to friends:', values.inviteeIds);
-          const invitePromises = values.inviteeIds.map(friendId =>
-            inviteToGroup(newGroup.id, friendId).catch(err => {
-              console.warn(`Failed to invite friend ${friendId}:`, err);
-              // Continue even if some invites fail
-              return null;
-            })
+          await Promise.all(
+            values.inviteeIds.map(friendId =>
+              inviteToGroup(newGroup.id, friendId).catch(() => null)
+            )
           );
-
-          await Promise.all(invitePromises);
-          console.log('All invitations sent');
         }
 
+        toast.success("Group has been created");
         formik.resetForm();
         onSuccess(newGroup);
-        
+
       } catch (err) {
-        console.error('Failed to create group:', err);
-        setError(err.message || 'Failed to create group. Please try again.');
+        const errorMessage = err.message;
+        toast.error(`Error: ${errorMessage}`);
+        setError(errorMessage || 'Failed to create group.');
       } finally {
         setLoading(false);
       }
-    },
+    }
+
   });
 
   const handleClose = () => {
@@ -92,7 +84,7 @@ const CreateGroupDialog = ({ open, onClose, onSuccess, friends }) => {
     const newInvitees = currentInvitees.includes(friendId)
       ? currentInvitees.filter(id => id !== friendId)
       : [...currentInvitees, friendId];
-    
+
     formik.setFieldValue('inviteeIds', newInvitees);
   };
 
@@ -159,19 +151,19 @@ const CreateGroupDialog = ({ open, onClose, onSuccess, friends }) => {
           ) : (
             <>
               <Box sx={{ mb: 2 }}>
-                <Chip 
+                <Chip
                   label={`${formik.values.inviteeIds.length} friends selected`}
-                  color="primary" 
+                  color="primary"
                   variant="outlined"
                 />
               </Box>
-              
-              <List sx={{ 
-                maxHeight: 300, 
-                overflow: 'auto', 
-                border: '1px solid', 
-                borderColor: 'divider', 
-                borderRadius: 1 
+
+              <List sx={{
+                maxHeight: 300,
+                overflow: 'auto',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1
               }}>
                 {friends.map((friend) => (
                   <ListItem
@@ -191,13 +183,13 @@ const CreateGroupDialog = ({ open, onClose, onSuccess, friends }) => {
                     }
                   >
                     <ListItemAvatar>
-                      <Avatar 
+                      <Avatar
                         src={friend.avatar_url}
                         sx={{ width: 40, height: 40 }}
-                        imgProps={{ 
-                          onError: (e) => { 
+                        imgProps={{
+                          onError: (e) => {
                             e.target.style.display = 'none';
-                          } 
+                          }
                         }}
                       >
                         {friend.username?.charAt(0)?.toUpperCase() || 'F'}

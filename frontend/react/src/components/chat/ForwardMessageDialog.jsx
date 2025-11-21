@@ -1,16 +1,18 @@
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Forward as ForwardIcon,
+} from '@mui/icons-material';
+import {
+  Avatar,
+  Box,
   Button,
-  List,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Avatar,
   Typography,
-  Box,
 } from '@mui/material';
 import { useState } from 'react';
 
@@ -26,7 +28,7 @@ const ForwardMessageDialog = ({
   const [selectedFriend, setSelectedFriend] = useState(null);
 
   const handleForward = () => {
-    if (selectedFriend && onForward) {
+    if (selectedFriend && onForward && message) {
       onForward(message, selectedFriend);
       setSelectedFriend(null);
       onClose();
@@ -37,12 +39,39 @@ const ForwardMessageDialog = ({
     setSelectedFriend(friend);
   };
 
+  const handleCloseDialog = () => {
+    setSelectedFriend(null);
+    onClose();
+  };
+
+  // Determine message type for display
+  const getMessagePreview = (msg) => {
+    if (!msg) return '';
+    
+    if (msg.content.match(/\.(mp4|mp3|wav|m4a|ogg|aac|flac)$/i) || 
+        msg.content.includes('voice_messages') ||
+        msg.content.includes('audio')) {
+      return '🎤 Voice message';
+    }
+    else if (msg.content.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i) ||
+             msg.content.includes('images') ||
+             msg.content.includes('photos')) {
+      return '🖼️ Image';
+    }
+    else {
+      return msg.content;
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
       <DialogTitle>
-        <Typography variant="h6" fontWeight="600">
-          Forward Message
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ForwardIcon color="primary" />
+          <Typography variant="h6" fontWeight="600">
+            Forward Message
+          </Typography>
+        </Box>
       </DialogTitle>
       
       <DialogContent>
@@ -62,8 +91,15 @@ const ForwardMessageDialog = ({
               Forwarding:
             </Typography>
             <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-              {message.content}
+              {getMessagePreview(message)}
             </Typography>
+            {message.reply_to && (
+              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0,0,0,0.05)', borderRadius: '4px' }}>
+                <Typography variant="caption" color="text.secondary">
+                  Replying to: {message.reply_to.content}
+                </Typography>
+              </Box>
+            )}
           </Box>
         )}
 
@@ -71,7 +107,7 @@ const ForwardMessageDialog = ({
           Select a friend to forward to:
         </Typography>
 
-        <List sx={{ maxHeight: 300, overflow: 'auto' }}>
+        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
           {friends.map((friend) => (
             <ListItem
               key={friend.id}
@@ -83,7 +119,6 @@ const ForwardMessageDialog = ({
                 mb: 1,
                 '&.Mui-selected': {
                   bgcolor: 'primary.light',
-                  color: 'primary.contrastText',
                   '&:hover': {
                     bgcolor: 'primary.light',
                   },
@@ -108,25 +143,26 @@ const ForwardMessageDialog = ({
               />
             </ListItem>
           ))}
-        </List>
 
-        {friends.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="body2" color="text.secondary">
-              No friends available to forward to
-            </Typography>
-          </Box>
-        )}
+          {friends.length === 0 && (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" color="text.secondary">
+                No friends available to forward to
+              </Typography>
+            </Box>
+          )}
+        </Box>
       </DialogContent>
 
       <DialogActions sx={{ p: 3 }}>
-        <Button onClick={onClose} variant="outlined">
+        <Button onClick={handleCloseDialog} variant="outlined">
           Cancel
         </Button>
         <Button
           onClick={handleForward}
           variant="contained"
           disabled={!selectedFriend}
+          startIcon={<ForwardIcon />}
         >
           Forward
         </Button>
