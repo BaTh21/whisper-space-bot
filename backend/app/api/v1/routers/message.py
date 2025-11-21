@@ -50,28 +50,29 @@ def get_seen_messages_(message_id: int,
                        ):
     return get_seen_messages(db, message_id)
 
+import tempfile
 import whisper
+import asyncio
+
+# Load Whisper model (base/tiny recommended on Render)
+model = whisper.load_model("tiny")
 
 @router.post("/transcribe")
-async def transcribe(file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def transcribe_file(file_path: str):
+    return await asyncio.to_thread(model.transcribe, file_path)
+
+@app.post("/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    suffix = os.path.splitext(file.filename)[1] or ".webm"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        temp_path = tmp.name
+        tmp.write(await file.read())
+
     try:
-        temp_path = os.path.join(os.getcwd(), "temp_audio.mp3")
-        with open(temp_path, "wb") as f:
-            f.write(await file.read())
-
-        # Verify file exists
-        if not os.path.exists(temp_path):
-            raise HTTPException(status_code=404, detail="Audio file not found after download")
-
-        # Load Whisper model (base/tiny recommended on Render)
-        model = whisper.load_model("tiny")
-
-        # Transcribe the audio
-        result = model.transcribe(temp_path)
+        result = await transcribe_file(temp_path)
         return {"text": result["text"]}
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Transcription error {e}")
+        raise HTTPException(status_code=500, detail=f"Transcription error: {e}")
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
