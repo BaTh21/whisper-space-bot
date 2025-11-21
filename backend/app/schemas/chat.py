@@ -4,7 +4,7 @@ from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
 
-MessageTypeInput = Literal["text", "image", "file"]
+MessageTypeInput = Literal["text", "image", "file", "voice"]
 
 class MessageCreate(BaseModel):
     content: str

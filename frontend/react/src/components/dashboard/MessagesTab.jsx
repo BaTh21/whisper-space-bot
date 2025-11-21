@@ -270,192 +270,261 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     debug: true,
   });
 
+/* --------------------------------------------------------------------- */
+/*                         Voice Recording Logic                        */
+/* --------------------------------------------------------------------- */
+const startRecording = async () => {
+  if (!selectedFriend) {
+    setError('Please select a friend first');
+    return;
+  }
 
-  /* --------------------------------------------------------------------- */
-  /*                         Voice Recording Logic                        */
-  /* --------------------------------------------------------------------- */
-  const startRecording = async () => {
-    if (!selectedFriend) {
-      setError('Please select a friend first');
-      return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 44100,
+        channelCount: 1,
+      }
+    });
+    
+    // Try different MIME types in order of preference
+    const supportedTypes = [
+      'audio/mp4', // Try MP4 first (usually AAC codec)
+      'audio/webm;codecs=opus',
+      'audio/webm'
+    ];
+    
+    let selectedType = 'audio/webm';
+    
+    for (const type of supportedTypes) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        console.log(`✅ Using recording format: ${type}`);
+        selectedType = type;
+        break;
+      }
     }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-          channelCount: 1,
-        }
+    
+    const options = {
+      mimeType: selectedType,
+      audioBitsPerSecond: 128000
+    };
+    
+    const mediaRecorder = new MediaRecorder(stream, options);
+    mediaRecorderRef.current = mediaRecorder;
+    
+    const audioChunks = [];
+    
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+    
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(audioChunks, { 
+        type: selectedType
       });
       
-      const options = {
-        mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 128000
-      };
+      console.log(`🎵 Final audio blob:`, {
+        type: blob.type,
+        size: blob.size,
+        duration: recordingTime
+      });
       
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options.mimeType = 'audio/webm';
-      }
+      const url = URL.createObjectURL(blob);
+      setAudioBlob(blob);
+      setAudioUrl(url);
       
-      const mediaRecorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = mediaRecorder;
-      
-      const audioChunks = [];
-      
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunks.push(event.data);
-        }
-      };
-      
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, { 
-          type: options.mimeType.includes('opus') ? 'audio/ogg; codecs=opus' : 'audio/webm'
-        });
-        
-        const mp3Blob = new Blob([blob], { 
-          type: 'audio/mpeg'
-        });
-        
-        const url = URL.createObjectURL(blob);
-        setAudioBlob(mp3Blob);
-        setAudioUrl(url);
-        
-        stream.getTracks().forEach(track => track.stop());
-      };
-      
-      mediaRecorder.onerror = (event) => {
-        console.error('MediaRecorder error:', event.error);
-        setError('Recording failed: ' + event.error.name);
-        setIsRecording(false);
-        if (recordingIntervalRef.current) {
-          clearInterval(recordingIntervalRef.current);
-        }
-      };
-      
-      mediaRecorder.start(1000);
-      setIsRecording(true);
-      setRecordingTime(0);
-      
-      recordingIntervalRef.current = setInterval(() => {
-        setRecordingTime(prev => {
-          if (prev >= 120) {
-            stopRecording();
-            setError('Recording stopped automatically after 2 minutes');
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-      
-    } catch (err) {
-      console.error('Error starting recording:', err);
-      if (err.name === 'NotAllowedError') {
-        setError('Microphone access denied. Please allow microphone permissions.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No microphone found. Please check your audio device.');
-      } else {
-        setError('Microphone access failed: ' + err.message);
-      }
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
+      stream.getTracks().forEach(track => track.stop());
+    };
+    
+    mediaRecorder.onerror = (event) => {
+      console.error('MediaRecorder error:', event.error);
+      setError('Recording failed: ' + event.error.name);
       setIsRecording(false);
-      
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
       }
+    };
+    
+    mediaRecorder.start(1000);
+    setIsRecording(true);
+    setRecordingTime(0);
+    
+    recordingIntervalRef.current = setInterval(() => {
+      setRecordingTime(prev => {
+        if (prev >= 120) {
+          stopRecording();
+          setError('Recording stopped automatically after 2 minutes');
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+    
+  } catch (err) {
+    console.error('Error starting recording:', err);
+    if (err.name === 'NotAllowedError') {
+      setError('Microphone access denied. Please allow microphone permissions.');
+    } else if (err.name === 'NotFoundError') {
+      setError('No microphone found. Please check your audio device.');
+    } else {
+      setError('Microphone access failed: ' + err.message);
     }
+  }
+};
+
+const stopRecording = () => {
+  if (mediaRecorderRef.current && isRecording) {
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+    
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+  }
+};
+
+const cancelRecording = () => {
+  stopRecording();
+  setAudioBlob(null);
+  setAudioUrl(null);
+  setRecordingTime(0);
+};
+
+// ADD THIS FUNCTION - Quick send that stops recording and sends immediately
+const quickSendVoice = async () => {
+  if (isRecording) {
+    stopRecording();
+    // Wait for the recording to process
+    setTimeout(() => {
+      if (audioBlob) {
+        sendVoiceMessage();
+      }
+    }, 300);
+  }
+};
+
+const sendVoiceMessage = async () => {
+  if (!audioBlob || !selectedFriend) return;
+
+  console.log('🔊 DEBUG - Starting voice message send:', {
+    audioBlob: {
+      type: audioBlob.type,
+      size: audioBlob.size,
+      hasData: !!audioBlob
+    },
+    selectedFriend: {
+      id: selectedFriend.id,
+      username: selectedFriend.username
+    },
+    recordingTime: recordingTime,
+    replyingTo: replyingTo?.id || 'none'
+  });
+
+  const tempId = `temp-voice-${Date.now()}`;
+  
+  const tempMsg = {
+    id: tempId,
+    sender_id: profile.id,
+    receiver_id: selectedFriend.id,
+    content: 'Voice message...',
+    message_type: 'voice',
+    is_read: false,
+    created_at: new Date().toISOString(),
+    is_temp: true,
+    reply_to_id: replyingTo?.id || null,
+    reply_to: replyingTo ? {
+      ...replyingTo,
+      sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
+    } : null,
+    sender: {
+      username: profile.username,
+      avatar_url: getUserAvatar(profile),
+      id: profile.id,
+    },
+    voice_duration: recordingTime,
+    file_size: audioBlob?.size || 0,
   };
 
-  const cancelRecording = () => {
-    stopRecording();
+  setMessages((prev) => [...prev, tempMsg]);
+
+  try {
+    setIsUploadingVoice(true);
+
+    const formData = new FormData();
+    
+    // Use MP3 filename since backend expects MP3 files
+    // Even though we record as WebM, we'll tell the backend it's MP3
+    // and let Cloudinary handle the conversion
+    formData.append('voice_file', audioBlob, 'voice-message.mp3');
+    formData.append('duration', recordingTime.toString());
+    
+    if (replyingTo?.id) {
+      formData.append('reply_to_id', replyingTo.id.toString());
+    }
+
+    // Debug FormData
+    console.log('📤 DEBUG - FormData contents:');
+    for (let [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        console.log(`  ${key}: File - ${value.name} (${value.size} bytes, ${value.type})`);
+      } else {
+        console.log(`  ${key}: ${value} (${typeof value})`);
+      }
+    }
+
+    console.log('🚀 DEBUG - Calling API with MP3 filename...');
+    const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
+    
+    console.log('✅ DEBUG - API response:', sentMessage);
+    
+    setMessages((prev) =>
+      prev
+        .filter((m) => m.id !== tempId)
+        .concat({
+          ...sentMessage,
+          is_temp: false,
+          sender: {
+            username: profile.username,
+            avatar_url: getUserAvatar(profile),
+            id: profile.id,
+          },
+        })
+    );
+
     setAudioBlob(null);
     setAudioUrl(null);
     setRecordingTime(0);
-  };
-
-  const sendVoiceMessage = async () => {
-    if (!audioBlob || !selectedFriend) return;
-
-    const tempId = `temp-voice-${Date.now()}`;
     
-    const tempMsg = {
-      id: tempId,
-      sender_id: profile.id,
-      receiver_id: selectedFriend.id,
-      content: 'Voice message...',
-      message_type: 'voice',
-      is_read: false,
-      created_at: new Date().toISOString(),
-      is_temp: true,
-      reply_to_id: replyingTo?.id || null,
-      reply_to: replyingTo ? {
-        ...replyingTo,
-        sender_username: replyingTo.sender_id === profile?.id ? profile.username : selectedFriend.username,
-      } : null,
-      sender: {
-        username: profile.username,
-        avatar_url: getUserAvatar(profile),
-        id: profile.id,
-      },
-      voice_duration: recordingTime,
-      file_size: audioBlob?.size || 0,
-    };
+    setSuccess('Voice message sent');
+    setTimeout(() => setSuccess(null), 2000);
 
-    setMessages((prev) => [...prev, tempMsg]);
-
-    try {
-      setIsUploadingVoice(true);
-
-      const formData = new FormData();
-      formData.append('voice_file', audioBlob, 'voice-message.mp3');
-      formData.append('duration', recordingTime);
-      
-      if (replyingTo?.id) {
-        formData.append('reply_to_id', replyingTo.id);
-      }
-
-      const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
-      
-      console.log('Voice message sent, URL:', sentMessage.content);
-      
-      setMessages((prev) =>
-        prev
-          .filter((m) => m.id !== tempId)
-          .concat({
-            ...sentMessage,
-            is_temp: false,
-            sender: {
-              username: profile.username,
-              avatar_url: getUserAvatar(profile),
-              id: profile.id,
-            },
-          })
-      );
-
-      setAudioBlob(null);
-      setAudioUrl(null);
-      setRecordingTime(0);
-      
-      setSuccess('Voice message sent');
-      setTimeout(() => setSuccess(null), 2000);
-
-    } catch (err) {
-      console.error('Error sending voice message:', err);
-      setError(err.message || 'Failed to send voice message');
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-    } finally {
-      setIsUploadingVoice(false);
+  } catch (err) {
+    console.error('❌ DEBUG - Voice message error:', {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+      statusText: err.response?.statusText
+    });
+    
+    let errorMessage = 'Failed to send voice message';
+    
+    if (err.message) {
+      errorMessage = err.message;
+    } else if (err.response?.data) {
+      errorMessage = JSON.stringify(err.response.data);
     }
-  };
-
+    
+    setError(errorMessage);
+    setMessages((prev) => prev.filter((m) => m.id !== tempId));
+  } finally {
+    setIsUploadingVoice(false);
+  }
+};
   /* --------------------------------------------------------------------- */
   /*                         Image Upload & Deletion                      */
   /* --------------------------------------------------------------------- */
@@ -790,20 +859,28 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const handleSendMessage = async () => {
     const content = newMessage.trim();
     
-    if ((!content && !audioUrl) || !selectedFriend) return;
+    // if ((!content && !audioUrl) || !selectedFriend) return;
 
     if (audioUrl && audioBlob) {
       await sendVoiceMessage();
       return;
     }
 
+
     if (content) {
       await sendTextMessage();
     }
+
+
+    if (!content && !audioUrl && !imagePreview) {
+    setError('Please enter a message or record voice');
+  }
   };
+  
 
   const sendTextMessage = async () => {
     const content = newMessage.trim();
+    if (!content || !selectedFriend) return;
     const tempId = `temp-${Date.now()}`;
     
     const tempMsg = {
@@ -831,6 +908,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setNewMessage('');
     setReplyingTo(null);
     handleTypingStop();
+
+    // Clear any voice recording if we're sending text
+  if (audioUrl) {
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingTime(0);
+  }
 
     const payload = {
       type: 'message',
@@ -876,6 +960,143 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   };
 
+/* --------------------------------------------------------------------- */
+/*                         Forward Message Handler                      */
+/* --------------------------------------------------------------------- */
+const handleForwardMessage = async (message, friend) => {
+  try {
+    console.log('🔊 DEBUG - Forwarding message:', {
+      content: message?.content,
+      type: message?.message_type,
+      friend: friend?.username
+    });
+
+    if (!message || !friend) {
+      setError('Invalid message or friend selection');
+      return;
+    }
+
+    let payload;
+
+    // Check for VOICE messages FIRST (most specific)
+    const isVoiceMessage = message.message_type === 'voice' || 
+                          message.content.includes('voice_messages') ||
+                          message.content.match(/\.(mp3|mp4|wav|m4a|ogg|aac|flac)$/i);
+
+    // Check for IMAGE messages (less specific)
+    const isImageMessage = !isVoiceMessage && (
+      message.message_type === 'image' ||
+      message.content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)
+    );
+
+    console.log('🔍 Message type detection:', {
+      isVoiceMessage,
+      isImageMessage,
+      content: message.content,
+      messageType: message.message_type
+    });
+
+    if (isVoiceMessage) {
+      // For VOICE messages - use the same approach as your voice recording
+      let voiceUrl = message.content;
+      
+      // Convert WEBM to MP3 if needed (same as your recording logic)
+      if (voiceUrl.includes('.webm')) {
+        voiceUrl = convertWebmToMp3Url(voiceUrl);
+      }
+      
+      // Use the same payload structure as your sendVoiceMessage but for forwarding
+      payload = {
+        content: voiceUrl,
+        message_type: 'voice', // Keep as 'voice' to match your recording logic
+        voice_duration: message.voice_duration || 0,
+        file_size: message.file_size || 0,
+        is_forwarded: true,
+        original_sender: message.sender?.username || profile?.username || 'Unknown',
+      };
+      console.log('🎵 Forwarding VOICE message with original URL');
+    }
+    else if (isImageMessage) {
+      // For IMAGE messages
+      payload = {
+        content: message.content,
+        message_type: 'image',
+        is_forwarded: true,
+        original_sender: message.sender?.username || profile?.username || 'Unknown',
+      };
+      console.log('🖼️ Forwarding IMAGE message');
+    }
+    else {
+      // For TEXT messages
+      payload = {
+        content: message.content,
+        message_type: 'text',
+        is_forwarded: true,
+        original_sender: message.sender?.username || profile?.username || 'Unknown',
+        reply_to_id: message.reply_to_id || null,
+      };
+      console.log('📝 Forwarding TEXT message');
+    }
+
+    console.log('📤 Final payload:', payload);
+
+    // Since we're using 'voice' type, we need to handle the backend limitation
+    let sentMessage;
+    
+    if (isVoiceMessage && payload.message_type === 'voice') {
+      // Try with 'voice' type first (preferred)
+      try {
+        sentMessage = await sendPrivateMessage(friend.id, payload);
+        console.log('✅ Voice forward successful with "voice" type');
+      } catch (voiceError) {
+        console.log('⚠️ Voice type failed, trying with "file" type...');
+        // If 'voice' type fails, fall back to 'file' type
+        const fallbackPayload = {
+          ...payload,
+          message_type: 'file' // Fallback to backend-supported type
+        };
+        sentMessage = await sendPrivateMessage(friend.id, fallbackPayload);
+        console.log('✅ Voice forward successful with "file" type fallback');
+      }
+    } else {
+      // For non-voice messages, send normally
+      sentMessage = await sendPrivateMessage(friend.id, payload);
+    }
+
+    console.log('✅ Forward successful!');
+    setForwardDialogOpen(false);
+    setForwardingMessage(null);
+    setSuccess(`Message forwarded to ${friend.username}`);
+    
+  } catch (err) {
+    console.error('❌ Forward failed:', {
+      status: err.response?.status,
+      data: err.response?.data,
+      message: err.message
+    });
+
+    if (err.response?.data?.detail) {
+      if (Array.isArray(err.response.data.detail)) {
+        const firstError = err.response.data.detail[0];
+        setError(`Cannot forward: ${firstError.msg}`);
+      } else {
+        setError(`Cannot forward: ${JSON.stringify(err.response.data.detail)}`);
+      }
+    } else {
+      setError('Failed to forward message');
+    }
+  }
+};
+
+// Make sure this function matches your recording logic
+const convertWebmToMp3Url = (webmUrl) => {
+  if (webmUrl.includes('cloudinary.com') && webmUrl.includes('.webm')) {
+    return webmUrl
+      .replace('/upload/', '/upload/f_mp3,fl_attachment/')
+      .replace('.webm', '.mp3');
+  }
+  return webmUrl;
+};
   /* --------------------------------------------------------------------- */
   /*                         Connection Status UI                         */
   /* --------------------------------------------------------------------- */
@@ -1101,7 +1322,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /*                                 Render                                 */
   /* --------------------------------------------------------------------- */
-  return (
+return (
     <Box
       sx={{
         display: 'flex',
@@ -1372,8 +1593,63 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                           {pinnedMessage.sender_id === profile?.id ? 'You' : selectedFriend.username}
                         </Typography>
                       </Box>
-                      <Typography variant="body2" sx={{ fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' } }}>
-                        {pinnedMessage.content}
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          fontSize: { xs: '0.8rem', sm: '0.85rem', md: '0.875rem' },
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.5
+                        }}
+                      >
+                        {(() => {
+                          // Check if it's a voice message (contains voice/audio file path)
+                          if (pinnedMessage.content.match(/\.(mp4|mp3|wav|m4a|ogg|aac|flac)$/i) || 
+                              pinnedMessage.content.includes('voice_messages') ||
+                              pinnedMessage.content.includes('audio')) {
+                            return (
+                              <>
+                                <MicIcon sx={{ fontSize: '0.9rem' }} />
+                                Voice message
+                              </>
+                            );
+                          }
+                          // Check if it's an image (contains image file extensions or paths)
+                          else if (pinnedMessage.content.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i) ||
+                                  pinnedMessage.content.includes('images') ||
+                                  pinnedMessage.content.includes('photos')) {
+                            return (
+                              <>
+                                <ImageIcon sx={{ fontSize: '0.9rem' }} />
+                                Image
+                              </>
+                            );
+                          }
+                          // Check if it's a video
+                          else if (pinnedMessage.content.match(/\.(mp4|mov|avi|mkv|webm)$/i) ||
+                                  pinnedMessage.content.includes('videos')) {
+                            return (
+                              <>
+                                <VideocamIcon sx={{ fontSize: '0.9rem' }} />
+                                Video
+                              </>
+                            );
+                          }
+                          // Check if it's a document
+                          else if (pinnedMessage.content.match(/\.(pdf|doc|docx|txt|rtf)$/i) ||
+                                  pinnedMessage.content.includes('documents')) {
+                            return (
+                              <>
+                                <DescriptionIcon sx={{ fontSize: '0.9rem' }} />
+                                Document
+                              </>
+                            );
+                          }
+                          // Default to text message
+                          else {
+                            return pinnedMessage.content;
+                          }
+                        })()}
                       </Typography>
                     </Box>
                     <IconButton size="small" onClick={() => setPinnedMessage(null)} sx={{ p: { xs: 0.5, sm: 0.75, md: 1 }, ml: 1 }}>
@@ -1437,54 +1713,103 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               </Box>
 
               {/* Reply Preview */}
-              {replyingTo && (
-                <Box
-                  sx={{
-                    p: { xs: 1, sm: 1.25, md: 1.5 },
-                    borderTop: 1,
-                    borderColor: 'divider',
-                    bgcolor: 'primary.light',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                        <ReplyIcon sx={{ mr: 1, color: 'primary.dark' }} fontSize={isMobile ? 'small' : 'medium'} />
+                {replyingTo && (
+                  <Box
+                    sx={{
+                      p: { xs: 1, sm: 1.25, md: 1.5 },
+                      borderTop: 1,
+                      borderColor: 'divider',
+                      bgcolor: 'primary.light',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                          <ReplyIcon sx={{ mr: 1, color: 'primary.dark' }} fontSize={isMobile ? 'small' : 'medium'} />
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: 'primary.dark',
+                              fontWeight: 600,
+                              fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.75rem' },
+                            }}
+                          >
+                            Replying to {replyingTo.sender_id === profile?.id ? 'yourself' : selectedFriend.username}
+                          </Typography>
+                        </Box>
                         <Typography
-                          variant="caption"
+                          variant="body2"
                           sx={{
-                            color: 'primary.dark',
-                            fontWeight: 600,
-                            fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.75rem' },
+                            color: 'primary.contrastText',
+                            fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.8rem' },
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            display: 'flex',
+                            alignItems: 'center',
                           }}
                         >
-                          Replying to {replyingTo.sender_id === profile?.id ? 'yourself' : selectedFriend.username}
+                          {(() => {
+                            // Check if it's a voice message (contains voice/audio file path)
+                            if (replyingTo.content.match(/\.(mp4|mp3|wav|m4a|ogg|aac|flac)$/i) || 
+                                replyingTo.content.includes('voice_messages') ||
+                                replyingTo.content.includes('audio')) {
+                              return (
+                                <>
+                                  <MicIcon sx={{ mr: 0.5, fontSize: '0.9rem' }} />
+                                  Voice message
+                                </>
+                              );
+                            }
+                            // Check if it's an image (contains image file extensions or paths)
+                            else if (replyingTo.content.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i) ||
+                                    replyingTo.content.includes('images') ||
+                                    replyingTo.content.includes('photos')) {
+                              return (
+                                <>
+                                  <ImageIcon sx={{ mr: 0.5, fontSize: '0.9rem' }} />
+                                  Image
+                                </>
+                              );
+                            }
+                            // Check if it's a video
+                            else if (replyingTo.content.match(/\.(mp4|mov|avi|mkv|webm)$/i) ||
+                                    replyingTo.content.includes('videos')) {
+                              return (
+                                <>
+                                  <VideocamIcon sx={{ mr: 0.5, fontSize: '0.9rem' }} />
+                                  Video
+                                </>
+                              );
+                            }
+                            // Check if it's a document
+                            else if (replyingTo.content.match(/\.(pdf|doc|docx|txt|rtf)$/i) ||
+                                    replyingTo.content.includes('documents')) {
+                              return (
+                                <>
+                                  <DescriptionIcon sx={{ mr: 0.5, fontSize: '0.9rem' }} />
+                                  Document
+                                </>
+                              );
+                            }
+                            // Default to text message
+                            else {
+                              return replyingTo.content;
+                            }
+                          })()}
                         </Typography>
                       </Box>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: 'primary.contrastText',
-                          fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.8rem' },
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
+                      <IconButton
+                        size="small"
+                        onClick={() => setReplyingTo(null)}
+                        sx={{ p: { xs: 0.5, sm: 0.75, md: 1 }, ml: 1 }}
                       >
-                        {replyingTo.content}
-                      </Typography>
+                        <CloseIcon fontSize={isMobile ? 'small' : 'medium' } />
+                      </IconButton>
                     </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => setReplyingTo(null)}
-                      sx={{ p: { xs: 0.5, sm: 0.75, md: 1 }, ml: 1 }}
-                    >
-                      <CloseIcon fontSize={isMobile ? 'small' : 'medium'} />
-                    </IconButton>
                   </Box>
-                </Box>
-              )}
+                )}
             </>
           ) : (
             <Box
@@ -1561,27 +1886,97 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
                   </Typography>
                 </Box>
-                <Button 
-                  variant="contained" 
-                  color="secondary" 
-                  onClick={stopRecording}
-                  size="small"
-                >
-                  Stop
-                </Button>
+                
+                {/* Send and Stop buttons side by side */}
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {/* Send Button - stops recording and sends immediately */}
+                  <Button 
+                    variant="contained" 
+                    color="success"
+                    onClick={quickSendVoice}
+                    disabled={recordingTime < 1}
+                    size="small"
+                    startIcon={<SendIcon />}
+                  >
+                    Send
+                  </Button>
+                  
+                  {/* Stop Button - just stops recording */}
+                  <Button 
+                    variant="contained" 
+                    color="secondary" 
+                    onClick={stopRecording}
+                    size="small"
+                    startIcon={<StopIcon />}
+                  >
+                    Stop
+                  </Button>
+                </Box>
+              </Box>
+            )}
+
+            {/* Voice Message Preview - Shows after recording stops */}
+            {audioUrl && !isRecording && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 0,
+                  right: 0,
+                  bgcolor: 'success.main',
+                  color: 'white',
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <MicIcon />
+                  <Typography variant="body2">
+                    Voice recorded ({Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')})
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {/* Cancel Button */}
+                  <Button 
+                    variant="outlined" 
+                    color="inherit"
+                    onClick={cancelRecording}
+                    size="small"
+                    sx={{ borderColor: 'white', color: 'white' }}
+                  >
+                    Cancel
+                  </Button>
+                  
+                  {/* Send Voice Button */}
+                  <Button 
+                    variant="contained" 
+                    color="secondary"
+                    onClick={sendVoiceMessage}
+                    size="small"
+                    startIcon={<SendIcon />}
+                    disabled={isUploadingVoice}
+                  >
+                    {isUploadingVoice ? 'Sending...' : 'Send'}
+                  </Button>
+                </Box>
               </Box>
             )}
 
             {/* Voice Record Button */}
             <IconButton
               onClick={isRecording ? stopRecording : startRecording}
-              disabled={!selectedFriend || uploadingImage || isUploadingVoice}
+              disabled={!selectedFriend || uploadingImage}
               sx={{
                 borderRadius: '50%',
                 width: { xs: 44, sm: 46, md: 48 },
                 height: { xs: 44, sm: 46, md: 48 },
-                color: isRecording ? 'error.main' : 'primary.main',
+                color: isRecording ? 'error.main' : (audioUrl ? 'success.main' : 'primary.main'),
                 flexShrink: 0,
+                border: audioUrl && !isRecording ? '2px solid' : 'none',
+                borderColor: 'success.main',
               }}
             >
               {isRecording ? <StopIcon /> : <MicIcon />}
@@ -1594,12 +1989,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               id="image-upload"
               type="file"
               onChange={handleFileSelect}
-              disabled={!selectedFriend || uploadingImage}
+             disabled={!selectedFriend || uploadingImage}
             />
             <label htmlFor="image-upload">
               <IconButton
                 component="span"
-                disabled={!selectedFriend || uploadingImage}
+               disabled={!selectedFriend || uploadingImage}
                 sx={{
                   borderRadius: '50%',
                   width: { xs: 44, sm: 46, md: 48 },
@@ -1619,6 +2014,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               placeholder={
                 !selectedFriend
                   ? 'Select a friend...'
+                  : isRecording
+                  ? 'Recording voice...' // Change placeholder during recording
                   : replyingTo
                   ? `Replying to ${replyingTo.sender_id === profile?.id ? 'you' : selectedFriend.username}...`
                   : 'Type a message...'
@@ -1626,14 +2023,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               value={newMessage}
               onChange={handleInputChange}
               onKeyPress={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && selectedFriend) {
+                if (e.key === 'Enter' && !e.shiftKey && selectedFriend && !isRecording) {
                   e.preventDefault();
                   handleSendMessage();
                 }
               }}
               multiline
               maxRows={3}
-              disabled={!selectedFriend || uploadingImage || isRecording}
+              disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: '24px',
@@ -1643,8 +2040,28 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               }}
             />
 
-            {/* Send Button - Shows voice send when recording, regular send otherwise */}
-            {audioUrl && !isRecording ? (
+            {/* Send Button - Shows different states based on recording status */}
+            {isRecording ? (
+              // During recording - show send button that stops and sends immediately
+              <IconButton
+                color="success"
+                onClick={quickSendVoice}
+                disabled={!selectedFriend || recordingTime < 1}
+                sx={{
+                  borderRadius: '50%',
+                  width: { xs: 44, sm: 46, md: 48 },
+                  height: { xs: 44, sm: 46, md: 48 },
+                  bgcolor: 'success.main',
+                  color: 'white',
+                  '&.Mui-disabled': { bgcolor: 'grey.300' },
+                  flexShrink: 0,
+                  animation: recordingTime >= 1 ? 'pulse 1s infinite' : 'none',
+                }}
+              >
+                <SendIcon fontSize={isMobile ? 'small' : 'medium'} />
+              </IconButton>
+            ) : audioUrl && !isRecording ? (
+              // After recording stopped - show send button for the recorded voice
               <IconButton
                 color="primary"
                 onClick={sendVoiceMessage}
@@ -1662,10 +2079,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 {isUploadingVoice ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
               </IconButton>
             ) : (
+              // Normal state - show regular send button for text messages
               <IconButton
                 color="primary"
                 onClick={handleSendMessage}
-                disabled={!selectedFriend || (!newMessage.trim() && !imagePreview) || uploadingImage || isRecording}
+                disabled={
+                  !selectedFriend}
                 sx={{
                   borderRadius: '50%',
                   width: { xs: 44, sm: 46, md: 48 },
@@ -1676,8 +2095,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   flexShrink: 0,
                 }}
               >
+                {isUploadingVoice ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
                 <SendIcon fontSize={isMobile ? 'small' : 'medium'} />
-              </IconButton>
+              )}
+            </IconButton>
             )}
 
             {/* Image Preview */}
@@ -1718,7 +2141,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         onClose={() => setForwardDialogOpen(false)}
         message={forwardingMessage}
         friends={friends.filter((f) => f.id !== selectedFriend?.id)}
-        onForward={() => {}}
+        onForward={handleForwardMessage} 
         getAvatarUrl={getAvatarUrl}
         getUserInitials={getUserInitials}
       />
