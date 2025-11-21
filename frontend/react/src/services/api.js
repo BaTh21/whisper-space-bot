@@ -1251,4 +1251,27 @@ export const getMessageInfo = async (messageId) => {
   }
 };
 
+export const sendVoiceMessage = async (friendId, formData) => {
+  try {
+    // Add Cloudinary transformation parameters for MP3 conversion
+    formData.append('format', 'mp3'); // Convert to MP3 format
+    formData.append('resource_type', 'video'); // Cloudinary uses 'video' for audio files
+    formData.append('quality', '80'); // Set audio quality
+    formData.append('audio_codec', 'mp3'); // Force MP3 codec
+    
+    const response = await api.post(`/api/v1/chats/private/${friendId}/voice`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Send voice message error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to send voice message"
+    );
+  }
+};
 export default api;

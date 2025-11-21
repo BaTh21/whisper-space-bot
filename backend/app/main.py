@@ -7,8 +7,13 @@ from app.models import base
 from app.core.database import engine
 import os
 
+from app.core.cloudinary import configure_cloudinary
+
 # Create database tables
 base.Base.metadata.create_all(bind=engine)
+
+# Configure Cloudinary
+configure_cloudinary()  # ADDED
 
 app = FastAPI(
     title="Whisper Space",

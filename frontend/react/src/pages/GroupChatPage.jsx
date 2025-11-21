@@ -51,7 +51,7 @@ const GroupChatPage = ({ groupId }) => {
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const pollingIntervalRef = useRef(null);
-  const BASE_URI = import.meta.env.VITE_API_URL;
+  const WS_BASE_URI = import.meta.env.VITE_WS_URL;
   const token = localStorage.getItem('accessToken');
   const [open, setOpen] = useState(false);
   const [editedContent, setEditedContent] = useState('');
@@ -280,7 +280,7 @@ const GroupChatPage = ({ groupId }) => {
 
   const setupWebSocket = () => {
     try {
-      const wsUrl = `${BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
+      const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -351,14 +351,16 @@ const GroupChatPage = ({ groupId }) => {
       reply_to: replyTo ? replyTo?.id : null
     };
 
+    const tempId = `updating-${Date.now()}`;
+
     const tempMessage = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       sender: user,
       content: newMessage,
       created_at: new Date().toISOString(),
 
       //Diable temp stop tracking time and sending is disable too
-      is_temp: false,
+      is_temp: true,
 
       reply_to_message: replyTo || null
     };
@@ -397,7 +399,7 @@ const GroupChatPage = ({ groupId }) => {
       file_url: URL.createObjectURL(file),
       sender: user,
       created_at: new Date().toISOString(),
-      is_temp: false,
+      is_temp: true,
       uploading: true,
       progress: 0,
     };
