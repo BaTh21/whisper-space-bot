@@ -26,9 +26,16 @@ const GroupsTab = ({ groups }) => {
     setFriends(res);
   }
 
-  useEffect(()=> {
+  useEffect(() => {
     fetchFriends();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      setSelectedGroupId(null);
+    };
+  }, []);
+
 
   const getLatestCover = (group) => {
     if (!group.images || group.images.length === 0) return null;
@@ -74,7 +81,7 @@ const GroupsTab = ({ groups }) => {
               minWidth: { xs: '100%', sm: 'auto' }
             }}
             size={isMobile ? 'small' : 'medium'}
-            onClick={()=> setOpenCreateGroup(true)}
+            onClick={() => setOpenCreateGroup(true)}
           >
             {isMobile ? 'Create' : 'Create Group'}
           </Button>
@@ -170,8 +177,8 @@ const GroupsTab = ({ groups }) => {
         onSuccess={handleSuccess}
         friends={friends}
       />
-      </Box>
-    );
+    </Box>
+  );
 };
 
 export default GroupsTab;
