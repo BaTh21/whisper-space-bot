@@ -14,6 +14,13 @@ class MessageCreate(BaseModel):
     original_sender: Optional[str] = None  
     voice_duration: Optional[float] = None 
     file_size: Optional[int] = None 
+    
+
+class MessageSeenByUser(BaseModel):
+    user_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    seen_at: str
 
 class MessageOut(TimestampMixin):
     id: int
@@ -34,6 +41,7 @@ class MessageOut(TimestampMixin):
     receiver_username: Optional[str] = None
     voice_duration: Optional[float] = None  # ADDED
     file_size: Optional[int] = None  # ADDED
+    seen_by: List[MessageSeenByUser] = []
 
     @classmethod
     def from_orm(cls, obj):
@@ -45,6 +53,18 @@ class MessageOut(TimestampMixin):
             data.sender_username = obj.sender.username
         if hasattr(obj, 'receiver') and obj.receiver:
             data.receiver_username = obj.receiver.username
+            
+        # ADD THIS: Populate seen_by information
+        if hasattr(obj, 'seen_statuses'):
+            data.seen_by = [
+                MessageSeenByUser(
+                    user_id=status.user.id,
+                    username=status.user.username,
+                    avatar_url=status.user.avatar_url,
+                    seen_at=status.seen_at.isoformat() if status.seen_at else None
+                )
+                for status in obj.seen_statuses
+            ]
         return data
 
     model_config = ConfigDict(
@@ -76,6 +96,23 @@ class ParentMessageResponse(BaseModel):
     sender: AuthorResponse
     content: Optional[str] = None
     file_url: Optional[str] = None
+    
+class MarkMessagesAsReadRequest(BaseModel):
+    message_ids: List[int]
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "message_ids": [1, 2, 3, 4]
+            }
+        }
+    )
+
+class MarkMessagesAsReadResponse(BaseModel):
+    status: str
+    marked_count: int
+    message_ids: List[int]    
+    
     
 class GroupMessageSeen(BaseModel):
     id: int

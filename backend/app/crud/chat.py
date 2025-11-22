@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from app.schemas.chat import MessageCreate
 
 from app.models.user_message_status import UserMessageStatus
+from app.models.message_seen_status import MessageSeenStatus
 
 def is_group_member(db: Session, group_id: int, user_id: int) -> bool:
     return db.query(GroupMember).filter_by(group_id=group_id, user_id=user_id).first() is not None
@@ -23,56 +24,124 @@ def create_private_message(
     sender_id: int,
     receiver_id: int,
     content: str,
-    msg_type: str = "text",
-    reply_to_id: int | None = None,
+    message_type: str = "text",  # CORRECTED: consistent parameter name
+    reply_to_id: Optional[int] = None,
     is_forwarded: bool = False,
-    original_sender: str | None = None,
+    original_sender: Optional[str] = None,
     voice_duration: Optional[float] = None,
     file_size: Optional[int] = None
 ) -> PrivateMessage:
+    """
+    Create a private message with proper type handling
+    """
+    try:
+        # Validate message type
+        try:
+            msg_type_enum = MessageType(message_type)
+        except ValueError:
+            msg_type_enum = MessageType.text  # Default to text if invalid
 
-    msg = PrivateMessage(
-        sender_id=sender_id,
-        receiver_id=receiver_id,
-        content=content,
-        message_type=MessageType(msg_type),
-        reply_to_id=reply_to_id,
-        is_forwarded=is_forwarded,
-        original_sender=original_sender,
-        voice_duration=voice_duration,
-        file_size=file_size,
-        created_at=datetime.now(timezone.utc),
-        delivered_at=datetime.now(timezone.utc),
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    return msg
+        msg = PrivateMessage(
+            sender_id=sender_id,
+            receiver_id=receiver_id,
+            content=content,
+            message_type=msg_type_enum,  # Use the enum
+            reply_to_id=reply_to_id,
+            is_forwarded=is_forwarded,
+            original_sender=original_sender,
+            voice_duration=voice_duration,
+            file_size=file_size,
+            created_at=datetime.now(timezone.utc),
+            delivered_at=datetime.now(timezone.utc),
+            is_read=False  # Default to unread
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+        return msg
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create message: {str(e)}"
+        )
 
 
 def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int = 50, offset: int = 0) -> List[PrivateMessage]:
-    return db.query(PrivateMessage).filter(
+    """Get private messages between two users"""
+    return db.query(PrivateMessage).options(
+        joinedload(PrivateMessage.sender),
+        joinedload(PrivateMessage.receiver),
+        joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+    ).filter(
         ((PrivateMessage.sender_id == user_id) & (PrivateMessage.receiver_id == friend_id)) |
         ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == user_id))
     ).order_by(PrivateMessage.created_at.desc()).offset(offset).limit(limit).all()
 
 # ADD THIS FUNCTION - Mark messages as read
-def mark_messages_as_read(db: Session, message_ids: List[int], user_id: int):
+def mark_messages_as_read(db: Session, message_ids: List[int], user_id: int) -> int:
     """
-    Mark messages as read by the receiver
+    Mark multiple messages as read by the receiver with validation
     """
-    messages = db.query(PrivateMessage).filter(
-        PrivateMessage.id.in_(message_ids),
-        PrivateMessage.receiver_id == user_id,
-        PrivateMessage.is_read == False  # Only mark unread messages
-    ).all()
+    try:
+        if not message_ids:
+            return 0
+            
+        # Get messages that belong to this user and are unread
+        messages = db.query(PrivateMessage).filter(
+            PrivateMessage.id.in_(message_ids),
+            PrivateMessage.receiver_id == user_id,  # Only receiver can mark as read
+            PrivateMessage.is_read == False
+        ).all()
+        
+        if not messages:
+            return 0
+        
+        marked_count = 0
+        current_time = datetime.now(timezone.utc)
+        
+        for message in messages:
+            # Update message read status
+            message.is_read = True
+            message.read_at = current_time
+            
+            # Add seen status entry if not exists
+            existing_seen = db.query(MessageSeenStatus).filter(
+                MessageSeenStatus.message_id == message.id,
+                MessageSeenStatus.user_id == user_id
+            ).first()
+            
+            if not existing_seen:
+                seen_status = MessageSeenStatus(
+                    message_id=message.id,
+                    user_id=user_id,
+                    seen_at=current_time
+                )
+                db.add(seen_status)
+                marked_count += 1
+        
+        db.commit()
+        return marked_count
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark messages as read: {str(e)}"
+        )
+
+# ADD NEW FUNCTION to get seen status
+def get_message_seen_status(db: Session, message_id: int):
+    """
+    Get who has seen a message and when
+    """
+    from app.models.message_seen_status import MessageSeenStatus
     
-    for message in messages:
-        message.is_read = True
-        message.read_at = datetime.now(timezone.utc)
+    seen_statuses = db.query(MessageSeenStatus).filter(
+        MessageSeenStatus.message_id == message_id
+    ).options(joinedload(MessageSeenStatus.user)).all()
     
-    db.commit()
-    return len(messages)
+    return seen_statuses
 
 def create_group_message(
     db: Session, 
@@ -114,9 +183,10 @@ def get_group_messages(db: Session, group_id: int, limit=50, offset=0):
         .all()
     )
         
-def edit_private_message(db, message_id, user_id, new_content):
-    if not new_content:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Message content cannot be empty.")
+def edit_private_message(db: Session, message_id: int, user_id: int, new_content: str) -> PrivateMessage:
+    """Edit a private message"""
+    if not new_content or not new_content.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message content cannot be empty.")
 
     msg = db.query(PrivateMessage).filter(
         PrivateMessage.id == message_id,
@@ -124,10 +194,12 @@ def edit_private_message(db, message_id, user_id, new_content):
     ).first()
 
     if not msg:
-        raise HTTPException(status.HTTP_404_NOT_FOUND,
-                            "Message not found or you don't have permission to edit it.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found or you don't have permission to edit it."
+        )
 
-    msg.content = new_content
+    msg.content = new_content.strip()
     msg.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(msg)
@@ -139,15 +211,14 @@ def delete_message_for_user(db: Session, message_id: int, user_id: int):
     db.merge(status)
     db.commit()
     
-def delete_message_forever(db: Session, message_id: int, user_id: int):
-    msg = (
-        db.query(PrivateMessage)
-        .filter(
-            PrivateMessage.id == message_id,
-            PrivateMessage.sender_id == user_id,
-        )
-        .first()
-    )
+def delete_message_forever(db: Session, message_id: int, user_id: int) -> dict:
+    """Permanently delete a message (sender only)"""
+    msg = db.query(PrivateMessage).options(
+        joinedload(PrivateMessage.seen_statuses)
+    ).filter(
+        PrivateMessage.id == message_id,
+        PrivateMessage.sender_id == user_id,  # Only sender can delete permanently
+    ).first()
 
     if not msg:
         raise HTTPException(
@@ -157,21 +228,19 @@ def delete_message_forever(db: Session, message_id: int, user_id: int):
 
     receiver_id = msg.receiver_id
 
-    db.query(UserMessageStatus).filter(
-        UserMessageStatus.message_id == message_id
-    ).delete(synchronize_session=False)
+    # Delete seen statuses first
+    if msg.seen_statuses:
+        for seen_status in msg.seen_statuses:
+            db.delete(seen_status)
 
+    # Then delete the message
     db.delete(msg)
-
     db.commit()
 
     return {"message_id": message_id, "receiver_id": receiver_id}
 
 def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
-    """Mark a private message as read by the receiver"""
-    from app.models.private_message import PrivateMessage
-    from datetime import datetime
-    
+    """Mark a private message as read by the receiver and create seen status"""
     try:
         message = db.query(PrivateMessage).filter(
             PrivateMessage.id == message_id,
@@ -179,8 +248,24 @@ def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
         ).first()
         
         if message and not message.is_read:
+            current_time = datetime.now(timezone.utc)
             message.is_read = True
-            message.read_at = datetime.utcnow()
+            message.read_at = current_time
+            
+            # Create seen status entry if not exists
+            existing_seen = db.query(MessageSeenStatus).filter(
+                MessageSeenStatus.message_id == message_id,
+                MessageSeenStatus.user_id == user_id
+            ).first()
+            
+            if not existing_seen:
+                seen_status = MessageSeenStatus(
+                    message_id=message_id,
+                    user_id=user_id,
+                    seen_at=current_time
+                )
+                db.add(seen_status)
+            
             db.commit()
             print(f"[DB] Message {message_id} marked as read by user {user_id}")
             return True

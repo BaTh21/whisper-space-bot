@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.friend import is_friend
 from app.models.user import User
-from app.schemas.chat import MessageCreate, MessageOut
+from app.schemas.chat import MarkMessagesAsReadRequest, MarkMessagesAsReadResponse, MessageCreate, MessageOut, MessageSeenByUser
 from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, mark_messages_as_read
 from app.services.websocket_manager import manager
 from datetime import datetime, timezone
@@ -18,6 +18,8 @@ from app.models.private_message import PrivateMessage
 import cloudinary
 import cloudinary.uploader
 import uuid
+
+from app.models.message_seen_status import MessageSeenStatus
 
 router = APIRouter()
 
@@ -70,30 +72,86 @@ def extract_public_id_from_url(url: str) -> str:
 
 # Mark messages as read endpoint
 @router.post("/messages/read")
-async def mark_messages_as_read_endpoint(
-    message_ids: List[int],
+async def mark_messages_as_read_batch(
+    request: MarkMessagesAsReadRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Mark multiple messages as read
+    Mark multiple messages as read with proper seen_by tracking
     """
     try:
-        count = mark_messages_as_read(db, message_ids, current_user.id)
+        # Get messages that belong to this user and are unread
+        messages = db.query(PrivateMessage).filter(
+            PrivateMessage.id.in_(request.message_ids),
+            PrivateMessage.receiver_id == current_user.id,
+            PrivateMessage.is_read == False
+        ).all()
         
-        # Notify sender via WebSocket that messages were read
-        for message_id in message_ids:
-            message = db.query(PrivateMessage).filter(PrivateMessage.id == message_id).first()
-            if message:
-                chat_id = _chat_id(message.sender_id, message.receiver_id)
-                await manager.broadcast(chat_id, {
-                    "type": "read_receipt",
-                    "message_id": message_id,
-                    "read_at": message.read_at.isoformat() if message.read_at else None
+        if not messages:
+            return MarkMessagesAsReadResponse(
+                status="success",
+                marked_count=0,
+                message_ids=request.message_ids
+            )
+        
+        marked_count = 0
+        for message in messages:
+            # Update message read status
+            message.is_read = True
+            message.read_at = datetime.now(timezone.utc)
+            
+            # Add seen status entry
+            existing_seen = db.query(MessageSeenStatus).filter(
+                MessageSeenStatus.message_id == message.id,
+                MessageSeenStatus.user_id == current_user.id
+            ).first()
+            
+            if not existing_seen:
+                seen_status = MessageSeenStatus(
+                    message_id=message.id,
+                    user_id=current_user.id,
+                    seen_at=datetime.now(timezone.utc)
+                )
+                db.add(seen_status)
+                marked_count += 1
+        
+        db.commit()
+        
+        # Get updated messages with seen_by information
+        updated_messages = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+        ).filter(PrivateMessage.id.in_([m.id for m in messages])).all()
+        
+        # Prepare WebSocket notification
+        for message in updated_messages:
+            chat_id = _chat_id(message.sender_id, message.receiver_id)
+            
+            # Prepare seen information
+            seen_info = []
+            for status in message.seen_statuses:
+                seen_info.append({
+                    "user_id": status.user.id,
+                    "username": status.user.username,
+                    "avatar_url": status.user.avatar_url,
+                    "seen_at": status.seen_at.isoformat() if status.seen_at else None
                 })
+            
+            await manager.broadcast(chat_id, {
+                "type": "message_updated",
+                "message_id": message.id,
+                "is_read": True,
+                "read_at": message.read_at.isoformat() if message.read_at else None,
+                "seen_by": seen_info
+            })
         
-        return {"status": "success", "marked_count": count}
+        return MarkMessagesAsReadResponse(
+            status="success",
+            marked_count=marked_count,
+            message_ids=request.message_ids
+        )
     except Exception as e:
+        db.rollback()
         raise HTTPException(500, f"Failed to mark messages as read: {str(e)}")
 
 # Get private chat messages
@@ -103,60 +161,100 @@ async def get_private_chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Join with User table to get sender and receiver usernames
-    messages = db.query(PrivateMessage).join(
-        User, PrivateMessage.sender_id == User.id
-    ).filter(
-        ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
-        ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
-    ).order_by(PrivateMessage.created_at.asc()).all()
-    
-    # Convert to MessageOut with user data
-    result = []
-    for msg in messages:
-        msg_out = MessageOut(
-            id=msg.id,
-            sender_id=msg.sender_id,
-            receiver_id=msg.receiver_id,
-            content=msg.content,
-            message_type=msg.message_type.value,
-            is_read=msg.is_read,
-            read_at=msg.read_at.isoformat() if msg.read_at else None,
-            delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,
-            reply_to_id=msg.reply_to_id,
-            is_forwarded=msg.is_forwarded,
-            original_sender=msg.original_sender,
-            created_at=msg.created_at.isoformat() if msg.created_at else None,
-            sender_username=msg.sender.username if msg.sender else "Unknown User",
-            receiver_username=msg.receiver.username if msg.receiver else "Unknown User",
-            voice_duration=msg.voice_duration,  # ADDED
-            file_size=msg.file_size  # ADDED
-        )
+    """
+    Get private chat messages between current user and friend
+    """
+    try:
+        # Verify friendship
+        if not is_friend(db, current_user.id, friend_id):
+            raise HTTPException(status_code=403, detail="Not friends")
         
-        # Add reply_to data if exists
-        if msg.reply_to:
-            msg_out.reply_to = MessageOut(
-                id=msg.reply_to.id,
-                sender_id=msg.reply_to.sender_id,
-                receiver_id=msg.reply_to.receiver_id,
-                content=msg.reply_to.content,
-                message_type=msg.reply_to.message_type.value,
-                is_read=msg.reply_to.is_read,
-                read_at=msg.reply_to.read_at.isoformat() if msg.reply_to.read_at else None,
-                delivered_at=msg.reply_to.delivered_at.isoformat() if msg.reply_to.delivered_at else None,
-                is_forwarded=msg.reply_to.is_forwarded,
-                original_sender=msg.reply_to.original_sender,
-                created_at=msg.reply_to.created_at.isoformat() if msg.reply_to.created_at else None,
-                sender_username=msg.reply_to.sender.username if msg.reply_to.sender else "Unknown User",
-                receiver_username=msg.reply_to.receiver.username if msg.reply_to.receiver else "Unknown User",
-                voice_duration=msg.reply_to.voice_duration,  # ADDED
-                file_size=msg.reply_to.file_size  # ADDED
+        # Query messages with all necessary relationships
+        messages = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)
+        ).filter(
+            ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
+            ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
+        ).order_by(PrivateMessage.created_at.asc()).all()
+        
+        # Convert to MessageOut with all data
+        result = []
+        for msg in messages:
+            # Build seen_by information
+            seen_by = []
+            for status in msg.seen_statuses:
+                seen_by.append(MessageSeenByUser(
+                    user_id=status.user.id,
+                    username=status.user.username,
+                    avatar_url=status.user.avatar_url,
+                    seen_at=status.seen_at.isoformat() if status.seen_at else None
+                ))
+            
+            # Build main message
+            msg_out = MessageOut(
+                id=msg.id,
+                sender_id=msg.sender_id,
+                receiver_id=msg.receiver_id,
+                content=msg.content,
+                message_type=msg.message_type.value,
+                is_read=msg.is_read,
+                read_at=msg.read_at.isoformat() if msg.read_at else None,
+                delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,
+                reply_to_id=msg.reply_to_id,
+                is_forwarded=msg.is_forwarded,
+                original_sender=msg.original_sender,
+                created_at=msg.created_at.isoformat(),
+                sender_username=msg.sender.username,
+                receiver_username=msg.receiver.username,
+                voice_duration=msg.voice_duration,
+                file_size=msg.file_size,
+                seen_by=seen_by
             )
+            
+            # Add reply_to data if exists
+            if msg.reply_to:
+                # Build seen information for replied message
+                reply_seen_by = []
+                if hasattr(msg.reply_to, 'seen_statuses'):
+                    for status in msg.reply_to.seen_statuses:
+                        reply_seen_by.append(MessageSeenByUser(
+                            user_id=status.user.id,
+                            username=status.user.username,
+                            avatar_url=status.user.avatar_url,
+                            seen_at=status.seen_at.isoformat() if status.seen_at else None
+                        ))
+                
+                msg_out.reply_to = MessageOut(
+                    id=msg.reply_to.id,
+                    sender_id=msg.reply_to.sender_id,
+                    receiver_id=msg.reply_to.receiver_id,
+                    content=msg.reply_to.content,
+                    message_type=msg.reply_to.message_type.value,
+                    is_read=msg.reply_to.is_read,
+                    read_at=msg.reply_to.read_at.isoformat() if msg.reply_to.read_at else None,
+                    delivered_at=msg.reply_to.delivered_at.isoformat() if msg.reply_to.delivered_at else None,
+                    reply_to_id=msg.reply_to.reply_to_id,
+                    is_forwarded=msg.reply_to.is_forwarded,
+                    original_sender=msg.reply_to.original_sender,
+                    created_at=msg.reply_to.created_at.isoformat(),
+                    sender_username=msg.reply_to.sender.username,
+                    receiver_username=msg.reply_to.receiver.username if msg.reply_to.receiver else None,
+                    voice_duration=msg.reply_to.voice_duration,
+                    file_size=msg.reply_to.file_size,
+                    seen_by=reply_seen_by
+                )
+            
+            result.append(msg_out)
         
-        result.append(msg_out)
-    
-    return result
-
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chat messages: {str(e)}")
 # Send text message
 @router.post("/private/{friend_id}", response_model=MessageOut)
 async def send_private_message(
@@ -165,106 +263,152 @@ async def send_private_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if not is_friend(db, current_user.id, friend_id):
-        raise HTTPException(403, "Not friends")
+    """
+    Send a private message to a friend
+    """
+    try:
+        if not is_friend(db, current_user.id, friend_id):
+            raise HTTPException(status_code=403, detail="Not friends")
 
-    msg = create_private_message(
-        db,
-        current_user.id,
-        friend_id,
-        msg_in.content,
-        msg_in.message_type,
-        msg_in.reply_to_id,
-        msg_in.is_forwarded,
-        msg_in.original_sender,
-        msg_in.voice_duration,  # ADDED
-        msg_in.file_size  # ADDED
-    )
-    
-    # Get the full message with user relationships
-    full_msg = db.query(PrivateMessage).options(
-        joinedload(PrivateMessage.sender),
-        joinedload(PrivateMessage.receiver)
-    ).filter(PrivateMessage.id == msg.id).first()
-    
-    chat_id = _chat_id(current_user.id, friend_id)
-    
-    # Prepare broadcast data with username info
-    broadcast_data = {
-        "id": full_msg.id,
-        "sender_id": full_msg.sender_id,
-        "receiver_id": full_msg.receiver_id,
-        "content": full_msg.content,
-        "message_type": full_msg.message_type.value,
-        "is_read": full_msg.is_read,
-        "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
-        "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-        "reply_to_id": full_msg.reply_to_id,
-        "is_forwarded": full_msg.is_forwarded,
-        "original_sender": full_msg.original_sender,
-        "created_at": full_msg.created_at.isoformat() if full_msg.created_at else None,
-        "sender_username": full_msg.sender.username if full_msg.sender else "Unknown User",
-        "receiver_username": full_msg.receiver.username if full_msg.receiver else "Unknown User",
-        "voice_duration": full_msg.voice_duration,  # ADDED
-        "file_size": full_msg.file_size  # ADDED
-    }
-    
-    # Add reply_to data if exists (with usernames)
-    if full_msg.reply_to:
-        broadcast_data["reply_to"] = {
-            "id": full_msg.reply_to.id,
-            "sender_id": full_msg.reply_to.sender_id,
-            "content": full_msg.reply_to.content,
-            "is_forwarded": full_msg.reply_to.is_forwarded,
-            "original_sender": full_msg.reply_to.original_sender,
-            "created_at": full_msg.reply_to.created_at.isoformat() if full_msg.reply_to.created_at else None,
-            "is_read": full_msg.reply_to.is_read,
-            "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
-            "delivered_at": full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
-            "sender_username": full_msg.reply_to.sender.username if full_msg.reply_to.sender else "Unknown User",
-            "voice_duration": full_msg.reply_to.voice_duration,  # ADDED
-            "file_size": full_msg.reply_to.file_size  # ADDED
+        # Create message in database
+        msg = create_private_message(
+            db=db,
+            sender_id=current_user.id,
+            receiver_id=friend_id,
+            content=msg_in.content,
+            message_type=msg_in.message_type,
+            reply_to_id=msg_in.reply_to_id,
+            is_forwarded=msg_in.is_forwarded,
+            original_sender=msg_in.original_sender,
+            voice_duration=msg_in.voice_duration,
+            file_size=msg_in.file_size
+        )
+        
+        # Get the full message with all relationships
+        full_msg = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)
+        ).filter(PrivateMessage.id == msg.id).first()
+        
+        if not full_msg:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created message")
+        
+        chat_id = _chat_id(current_user.id, friend_id)
+        
+        # Prepare seen information
+        seen_by = []
+        for status in full_msg.seen_statuses:
+            seen_by.append({
+                "user_id": status.user.id,
+                "username": status.user.username,
+                "avatar_url": status.user.avatar_url,
+                "seen_at": status.seen_at.isoformat() if status.seen_at else None
+            })
+        
+        # Prepare broadcast data
+        broadcast_data = {
+            "type": "message",
+            "id": full_msg.id,
+            "sender_id": full_msg.sender_id,
+            "receiver_id": full_msg.receiver_id,
+            "content": full_msg.content,
+            "message_type": full_msg.message_type.value,
+            "is_read": full_msg.is_read,
+            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
+            "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            "reply_to_id": full_msg.reply_to_id,
+            "is_forwarded": full_msg.is_forwarded,
+            "original_sender": full_msg.original_sender,
+            "created_at": full_msg.created_at.isoformat(),
+            "sender_username": full_msg.sender.username,
+            "receiver_username": full_msg.receiver.username,
+            "voice_duration": full_msg.voice_duration,
+            "file_size": full_msg.file_size,
+            "seen_by": seen_by
         }
-    
-    await manager.broadcast(chat_id, broadcast_data)
-    
-    # Return the full message with username data
-    return MessageOut(
-        id=full_msg.id,
-        sender_id=full_msg.sender_id,
-        receiver_id=full_msg.receiver_id,
-        content=full_msg.content,
-        message_type=full_msg.message_type.value,
-        is_read=full_msg.is_read,
-        read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
-        delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-        reply_to_id=full_msg.reply_to_id,
-        is_forwarded=full_msg.is_forwarded,
-        original_sender=full_msg.original_sender,
-        sender_username=full_msg.sender.username if full_msg.sender else "Unknown User",
-        receiver_username=full_msg.receiver.username if full_msg.receiver else "Unknown User",
-        voice_duration=full_msg.voice_duration,  # ADDED
-        file_size=full_msg.file_size,  # ADDED
-        reply_to=MessageOut(
-            id=full_msg.reply_to.id,
-            sender_id=full_msg.reply_to.sender_id,
-            receiver_id=full_msg.reply_to.receiver_id,
-            content=full_msg.reply_to.content,
-            message_type=full_msg.reply_to.message_type.value,
-            is_read=full_msg.reply_to.is_read,
-            read_at=full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
-            delivered_at=full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
-            is_forwarded=full_msg.reply_to.is_forwarded,
-            original_sender=full_msg.reply_to.original_sender,
-            created_at=full_msg.reply_to.created_at.isoformat() if full_msg.reply_to.created_at else None,
-            sender_username=full_msg.reply_to.sender.username if full_msg.reply_to.sender else "Unknown User",
-            voice_duration=full_msg.reply_to.voice_duration,  # ADDED
-            file_size=full_msg.reply_to.file_size  # ADDED
-        ) if full_msg.reply_to else None,
-        created_at=full_msg.created_at.isoformat() if full_msg.created_at else None
-    )
-    
-
+        
+        # Add reply_to data if exists
+        if full_msg.reply_to:
+            reply_seen_by = []
+            if hasattr(full_msg.reply_to, 'seen_statuses'):
+                for status in full_msg.reply_to.seen_statuses:
+                    reply_seen_by.append({
+                        "user_id": status.user.id,
+                        "username": status.user.username,
+                        "avatar_url": status.user.avatar_url,
+                        "seen_at": status.seen_at.isoformat() if status.seen_at else None
+                    })
+            
+            broadcast_data["reply_to"] = {
+                "id": full_msg.reply_to.id,
+                "sender_id": full_msg.reply_to.sender_id,
+                "content": full_msg.reply_to.content,
+                "is_forwarded": full_msg.reply_to.is_forwarded,
+                "original_sender": full_msg.reply_to.original_sender,
+                "created_at": full_msg.reply_to.created_at.isoformat(),
+                "is_read": full_msg.reply_to.is_read,
+                "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
+                "delivered_at": full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
+                "sender_username": full_msg.reply_to.sender.username,
+                "voice_duration": full_msg.reply_to.voice_duration,
+                "file_size": full_msg.reply_to.file_size,
+                "seen_by": reply_seen_by
+            }
+        
+        # Broadcast via WebSocket
+        await manager.broadcast(chat_id, broadcast_data)
+        
+        # Build response
+        response = MessageOut(
+            id=full_msg.id,
+            sender_id=full_msg.sender_id,
+            receiver_id=full_msg.receiver_id,
+            content=full_msg.content,
+            message_type=full_msg.message_type.value,
+            is_read=full_msg.is_read,
+            read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
+            delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            reply_to_id=full_msg.reply_to_id,
+            is_forwarded=full_msg.is_forwarded,
+            original_sender=full_msg.original_sender,
+            sender_username=full_msg.sender.username,
+            receiver_username=full_msg.receiver.username,
+            voice_duration=full_msg.voice_duration,
+            file_size=full_msg.file_size,
+            seen_by=[MessageSeenByUser(**item) for item in seen_by],
+            created_at=full_msg.created_at.isoformat()
+        )
+        
+        # Add reply_to to response if exists
+        if full_msg.reply_to:
+            response.reply_to = MessageOut(
+                id=full_msg.reply_to.id,
+                sender_id=full_msg.reply_to.sender_id,
+                receiver_id=full_msg.reply_to.receiver_id,
+                content=full_msg.reply_to.content,
+                message_type=full_msg.reply_to.message_type.value,
+                is_read=full_msg.reply_to.is_read,
+                read_at=full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
+                delivered_at=full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
+                reply_to_id=full_msg.reply_to.reply_to_id,
+                is_forwarded=full_msg.reply_to.is_forwarded,
+                original_sender=full_msg.reply_to.original_sender,
+                created_at=full_msg.reply_to.created_at.isoformat(),
+                sender_username=full_msg.reply_to.sender.username,
+                receiver_username=full_msg.reply_to.receiver.username if full_msg.reply_to.receiver else None,
+                voice_duration=full_msg.reply_to.voice_duration,
+                file_size=full_msg.reply_to.file_size,
+                seen_by=[MessageSeenByUser(**item) for item in reply_seen_by]
+            )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
 # Send voice message (NEW ENDPOINT)
 
 @router.post("/private/{friend_id}/voice", response_model=MessageOut)
@@ -279,104 +423,122 @@ async def send_voice_message(
     """
     Upload voice message to Cloudinary and send to friend
     """
-    if not is_friend(db, current_user.id, friend_id):
-        raise HTTPException(403, "Not friends")
-
-    # Validate file type
-    allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4']
-    if not voice_file.content_type or voice_file.content_type not in allowed_types:
-        raise HTTPException(400, "Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A")
-
-    # Validate file size (10MB limit)
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     try:
-        contents = await voice_file.read()
-        file_size = len(contents)
-        
-        if file_size > MAX_FILE_SIZE:
-            raise HTTPException(400, f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
+        if not is_friend(db, current_user.id, friend_id):
+            raise HTTPException(status_code=403, detail="Not friends")
+
+        # Validate file type
+        allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4']
+        if not voice_file.content_type or voice_file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A")
+
+        # Validate file size (10MB limit)
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        try:
+            contents = await voice_file.read()
+            file_size = len(contents)
             
-    except Exception as e:
-        raise HTTPException(500, f"Could not read voice message: {str(e)}")
+            if file_size > MAX_FILE_SIZE:
+                raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
+                
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not read voice message: {str(e)}")
 
-    try:
         # Upload to Cloudinary
-        upload_result = cloudinary.uploader.upload(
-            contents,
-            resource_type="video",
-            folder="whisper_space/voice_messages",
-            public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
-            overwrite=False
+        try:
+            upload_result = cloudinary.uploader.upload(
+                contents,
+                resource_type="video",
+                folder="whisper_space/voice_messages",
+                public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
+                overwrite=False
+            )
+            voice_url = upload_result["secure_url"]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not upload voice message to cloud storage: {str(e)}")
+
+        # Create message in database - CORRECTED parameter name
+        msg = create_private_message(
+            db=db,
+            sender_id=current_user.id,
+            receiver_id=friend_id,
+            content=voice_url,
+            message_type="voice",  # CORRECTED: using message_type instead of msg_type
+            reply_to_id=reply_to_id,
+            voice_duration=duration,
+            file_size=file_size
+        )
+
+        # Get full message with relationships
+        full_msg = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+        ).filter(PrivateMessage.id == msg.id).first()
+
+        if not full_msg:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created voice message")
+
+        # Prepare seen information
+        seen_by = []
+        for status in full_msg.seen_statuses:
+            seen_by.append({
+                "user_id": status.user.id,
+                "username": status.user.username,
+                "avatar_url": status.user.avatar_url,
+                "seen_at": status.seen_at.isoformat() if status.seen_at else None
+            })
+
+        # Prepare broadcast data for WebSocket
+        broadcast_data = {
+            "type": "message",
+            "id": full_msg.id,
+            "sender_id": full_msg.sender_id,
+            "receiver_id": full_msg.receiver_id,
+            "content": voice_url,
+            "message_type": full_msg.message_type.value,
+            "is_read": full_msg.is_read,
+            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
+            "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            "reply_to_id": full_msg.reply_to_id,
+            "is_forwarded": full_msg.is_forwarded,
+            "original_sender": full_msg.original_sender,
+            "created_at": full_msg.created_at.isoformat(),
+            "sender_username": full_msg.sender.username,
+            "receiver_username": full_msg.receiver.username,
+            "voice_duration": full_msg.voice_duration,
+            "file_size": full_msg.file_size,
+            "seen_by": seen_by
+        }
+
+        # Broadcast via WebSocket
+        chat_id = _chat_id(current_user.id, friend_id)
+        await manager.broadcast(chat_id, broadcast_data)
+
+        return MessageOut(
+            id=full_msg.id,
+            sender_id=full_msg.sender_id,
+            receiver_id=full_msg.receiver_id,
+            content=voice_url,
+            message_type=full_msg.message_type.value,
+            is_read=full_msg.is_read,
+            read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
+            delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            created_at=full_msg.created_at.isoformat(),
+            reply_to_id=full_msg.reply_to_id,
+            is_forwarded=full_msg.is_forwarded,
+            original_sender=full_msg.original_sender,
+            sender_username=full_msg.sender.username,
+            receiver_username=full_msg.receiver.username,
+            voice_duration=full_msg.voice_duration,
+            file_size=full_msg.file_size,
+            seen_by=[MessageSeenByUser(**item) for item in seen_by]
         )
         
-        # Get the secure URL
-        voice_url = upload_result["secure_url"]
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"Could not upload voice message to cloud storage: {str(e)}")
-
-    # Create message in database - CORRECTED: use msg_type instead of message_type
-    msg = create_private_message(
-        db=db,
-        sender_id=current_user.id,
-        receiver_id=friend_id,
-        content=voice_url,
-        msg_type="voice",  # CORRECTED parameter name
-        reply_to_id=reply_to_id,
-        voice_duration=duration,
-        file_size=file_size
-    )
-
-    # Get full message with relationships
-    full_msg = db.query(PrivateMessage).options(
-        joinedload(PrivateMessage.sender),
-        joinedload(PrivateMessage.receiver)
-    ).filter(PrivateMessage.id == msg.id).first()
-
-    # Prepare broadcast data for WebSocket
-    broadcast_data = {
-        "type": "message",
-        "id": full_msg.id,
-        "sender_id": full_msg.sender_id,
-        "receiver_id": full_msg.receiver_id,
-        "content": voice_url,
-        "message_type": full_msg.message_type.value,
-        "is_read": full_msg.is_read,
-        "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
-        "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-        "reply_to_id": full_msg.reply_to_id,
-        "is_forwarded": full_msg.is_forwarded,
-        "original_sender": full_msg.original_sender,
-        "created_at": full_msg.created_at.isoformat() if full_msg.created_at else None,
-        "sender_username": full_msg.sender.username if full_msg.sender else "Unknown User",
-        "receiver_username": full_msg.receiver.username if full_msg.receiver else "Unknown User",
-        "voice_duration": full_msg.voice_duration,
-        "file_size": full_msg.file_size
-    }
-
-    # Broadcast via WebSocket
-    chat_id = _chat_id(current_user.id, friend_id)
-    await manager.broadcast(chat_id, broadcast_data)
-
-    return MessageOut(
-        id=full_msg.id,
-        sender_id=full_msg.sender_id,
-        receiver_id=full_msg.receiver_id,
-        content=voice_url,
-        message_type=full_msg.message_type.value,
-        is_read=full_msg.is_read,
-        read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
-        delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-        created_at=full_msg.created_at.isoformat() if full_msg.created_at else None, 
-        updated_at=full_msg.updated_at.isoformat() if full_msg.updated_at else None,
-        reply_to_id=full_msg.reply_to_id,
-        is_forwarded=full_msg.is_forwarded,
-        original_sender=full_msg.original_sender,
-        sender_username=full_msg.sender.username if full_msg.sender else "Unknown User",
-        receiver_username=full_msg.receiver.username if full_msg.receiver else "Unknown User",
-        voice_duration=full_msg.voice_duration,
-        file_size=full_msg.file_size
-    )
+        raise HTTPException(status_code=500, detail=f"Failed to send voice message: {str(e)}")
     
 @router.post("/private/{friend_id}/image")
 async def send_image_message(
@@ -387,66 +549,91 @@ async def send_image_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if not is_friend(db, current_user.id, friend_id):
-        raise HTTPException(403, "Not friends")
+    """
+    Send an image message using pre-uploaded image URL
+    """
+    try:
+        if not is_friend(db, current_user.id, friend_id):
+            raise HTTPException(status_code=403, detail="Not friends")
 
-    # Create message with image URL as content
-    msg = create_private_message(
-        db,
-        current_user.id,
-        friend_id,
-        image_url,
-        message_type,
-        reply_to_id,
-        False,
-        None
-    )
-    
-    # Get the full message with user relationships
-    full_msg = db.query(PrivateMessage).options(
-        joinedload(PrivateMessage.sender),
-        joinedload(PrivateMessage.receiver)
-    ).filter(PrivateMessage.id == msg.id).first()
-    
-    chat_id = _chat_id(current_user.id, friend_id)
-    
-    # Prepare broadcast data for image message
-    broadcast_data = {
-        "type": "message",
-        "id": full_msg.id,
-        "sender_id": full_msg.sender_id,
-        "receiver_id": full_msg.receiver_id,
-        "content": full_msg.content,
-        "message_type": full_msg.message_type.value,
-        "is_read": full_msg.is_read,
-        "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
-        "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-        "reply_to_id": full_msg.reply_to_id,
-        "is_forwarded": full_msg.is_forwarded,
-        "original_sender": full_msg.original_sender,
-        "created_at": full_msg.created_at.isoformat() if full_msg.created_at else None,
-        "sender_username": full_msg.sender.username if full_msg.sender else "Unknown User",
-        "receiver_username": full_msg.receiver.username if full_msg.receiver else "Unknown User"
-    }
-    
-    await manager.broadcast(chat_id, broadcast_data)
-    
-    return MessageOut(
-        id=full_msg.id,
-        sender_id=full_msg.sender_id,
-        receiver_id=full_msg.receiver_id,
-        content=full_msg.content,
-        message_type=full_msg.message_type.value,
-        is_read=full_msg.is_read,
-        read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
-        delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-        reply_to_id=full_msg.reply_to_id,
-        is_forwarded=full_msg.is_forwarded,
-        original_sender=full_msg.original_sender,
-        sender_username=full_msg.sender.username if full_msg.sender else "Unknown User",
-        receiver_username=full_msg.receiver.username if full_msg.receiver else "Unknown User",
-        created_at=full_msg.created_at.isoformat() if full_msg.created_at else None
-    )
+        # Create message with image URL as content
+        msg = create_private_message(
+            db=db,
+            sender_id=current_user.id,
+            receiver_id=friend_id,
+            content=image_url,
+            message_type=message_type,
+            reply_to_id=reply_to_id,
+            is_forwarded=False,
+            original_sender=None
+        )
+        
+        # Get the full message with user relationships
+        full_msg = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+        ).filter(PrivateMessage.id == msg.id).first()
+        
+        if not full_msg:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created image message")
+        
+        chat_id = _chat_id(current_user.id, friend_id)
+        
+        # Prepare seen information
+        seen_by = []
+        for status in full_msg.seen_statuses:
+            seen_by.append({
+                "user_id": status.user.id,
+                "username": status.user.username,
+                "avatar_url": status.user.avatar_url,
+                "seen_at": status.seen_at.isoformat() if status.seen_at else None
+            })
+        
+        # Prepare broadcast data for image message
+        broadcast_data = {
+            "type": "message",
+            "id": full_msg.id,
+            "sender_id": full_msg.sender_id,
+            "receiver_id": full_msg.receiver_id,
+            "content": full_msg.content,
+            "message_type": full_msg.message_type.value,
+            "is_read": full_msg.is_read,
+            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
+            "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            "reply_to_id": full_msg.reply_to_id,
+            "is_forwarded": full_msg.is_forwarded,
+            "original_sender": full_msg.original_sender,
+            "created_at": full_msg.created_at.isoformat(),
+            "sender_username": full_msg.sender.username,
+            "receiver_username": full_msg.receiver.username,
+            "seen_by": seen_by
+        }
+        
+        await manager.broadcast(chat_id, broadcast_data)
+        
+        return MessageOut(
+            id=full_msg.id,
+            sender_id=full_msg.sender_id,
+            receiver_id=full_msg.receiver_id,
+            content=full_msg.content,
+            message_type=full_msg.message_type.value,
+            is_read=full_msg.is_read,
+            read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
+            delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            reply_to_id=full_msg.reply_to_id,
+            is_forwarded=full_msg.is_forwarded,
+            original_sender=full_msg.original_sender,
+            sender_username=full_msg.sender.username,
+            receiver_username=full_msg.receiver.username,
+            created_at=full_msg.created_at.isoformat(),
+            seen_by=[MessageSeenByUser(**item) for item in seen_by]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send image message: {str(e)}")
 
 # Upload image to Cloudinary
 @router.post("/private/{friend_id}/upload")
@@ -456,30 +643,39 @@ async def upload_image_to_cloudinary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if not is_friend(db, current_user.id, friend_id):
-        raise HTTPException(403, "Not friends")
-
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(400, "Only image files allowed")
-
+    """
+    Upload image to Cloudinary and return URL
+    """
     try:
-        # Generate unique filename
-        file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
-        unique_filename = f"chat_{current_user.id}_{friend_id}_{uuid.uuid4().hex}.{file_extension}"
-        
-        result = cloudinary.uploader.upload(
-            file.file,
-            folder="chat_images",
-            public_id=unique_filename,
-            resource_type="image",
-            transformation=[
-                {"width": 800, "crop": "limit"},
-                {"quality": "auto"}
-            ]
-        )
-        return {"url": result["secure_url"], "public_id": result["public_id"]}
+        if not is_friend(db, current_user.id, friend_id):
+            raise HTTPException(status_code=403, detail="Not friends")
+
+        if not file.content_type or not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Only image files allowed")
+
+        try:
+            # Generate unique filename
+            file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+            unique_filename = f"chat_{current_user.id}_{friend_id}_{uuid.uuid4().hex}.{file_extension}"
+            
+            result = cloudinary.uploader.upload(
+                file.file,
+                folder="chat_images",
+                public_id=unique_filename,
+                resource_type="image",
+                transformation=[
+                    {"width": 800, "crop": "limit"},
+                    {"quality": "auto"}
+                ]
+            )
+            return {"url": result["secure_url"], "public_id": result["public_id"]}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+            
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
 
 # Delete image message
 @router.delete("/private/image/{message_id}")
@@ -492,22 +688,24 @@ async def delete_image_message(
     Delete an image message and remove from Cloudinary
     """
     try:
-        # Get the message
-        message = db.query(PrivateMessage).filter(
+        # Get the message with relationships
+        message = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.seen_statuses)
+        ).filter(
             PrivateMessage.id == message_id,
             (PrivateMessage.sender_id == current_user.id) | (PrivateMessage.receiver_id == current_user.id)
         ).first()
         
         if not message:
-            raise HTTPException(404, "Message not found")
+            raise HTTPException(status_code=404, detail="Message not found")
         
         # Check if user has permission to delete (only sender can delete)
         if message.sender_id != current_user.id:
-            raise HTTPException(403, "Can only delete your own messages")
+            raise HTTPException(status_code=403, detail="Can only delete your own messages")
         
         # Check if it's an image message
         if message.message_type.value != 'image':
-            raise HTTPException(400, "Not an image message")
+            raise HTTPException(status_code=400, detail="Not an image message")
         
         # Extract public_id from Cloudinary URL
         image_url = message.content
@@ -524,6 +722,11 @@ async def delete_image_message(
         # Store info for WebSocket broadcast before deletion
         chat_id = _chat_id(message.sender_id, message.receiver_id)
         
+        # Delete seen statuses first
+        if message.seen_statuses:
+            for seen_status in message.seen_statuses:
+                db.delete(seen_status)
+        
         # Delete the message from database
         db.delete(message)
         db.commit()
@@ -535,61 +738,82 @@ async def delete_image_message(
             "deleted_at": datetime.now(timezone.utc).isoformat()
         })
         
-        return {"status": "success", "message": "Image message deleted"}
+        return {"status": "success", "message": "Image message deleted", "message_id": message_id}
         
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Failed to delete image message: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete image message: {str(e)}")
 
 # Enhanced delete endpoint for all message types
-@router.delete("/private/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/private/{message_id}")
 async def delete_message_forever_endpoint(
     message_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Enhanced delete to handle image messages
+    Enhanced delete to handle all message types with seen status
     """
-    # Get the message first
-    message = db.query(PrivateMessage).filter(PrivateMessage.id == message_id).first()
-    
-    if not message:
-        raise HTTPException(404, "Message not found")
-    
-    # Check permissions
-    if message.sender_id != current_user.id:
-        raise HTTPException(403, "Can only delete your own messages")
-    
-    # If it's an image message, delete from Cloudinary first
-    if message.message_type.value == 'image':
-        image_url = message.content
-        public_id = extract_public_id_from_url(image_url)
+    try:
+        # Get the message first with all relationships
+        message = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.seen_statuses)
+        ).filter(PrivateMessage.id == message_id).first()
         
-        if public_id:
-            try:
-                cloudinary.uploader.destroy(public_id)
-            except Exception as e:
-                print(f"Cloudinary deletion failed: {str(e)}")
-                # Continue with message deletion
-    
-    # Store info for broadcast
-    chat_id = _chat_id(message.sender_id, message.receiver_id)
-    
-    # Delete from database
-    db.delete(message)
-    db.commit()
-    
-    # Broadcast deletion
-    await manager.broadcast(chat_id, {
-        "type": "message_deleted", 
-        "message_id": message_id,
-        "deleted_at": datetime.now(timezone.utc).isoformat()
-    })
-    
-    return None
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        # Check permissions
+        if message.sender_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Can only delete your own messages")
+        
+        # Store info for broadcast before deletion
+        chat_id = _chat_id(message.sender_id, message.receiver_id)
+        
+        # If it's an image message, delete from Cloudinary first
+        if message.message_type.value == 'image':
+            image_url = message.content
+            public_id = extract_public_id_from_url(image_url)
+            
+            if public_id:
+                try:
+                    cloudinary.uploader.destroy(public_id)
+                except Exception as e:
+                    print(f"Cloudinary deletion failed: {str(e)}")
+                    # Continue with message deletion even if Cloudinary fails
+        
+        # Delete seen statuses first to avoid foreign key constraint
+        if message.seen_statuses:
+            for seen_status in message.seen_statuses:
+                db.delete(seen_status)
+            db.flush()  # Commit the deletion of seen statuses first
+        
+        # Now delete the message
+        db.delete(message)
+        db.commit()
+        
+        # Broadcast deletion
+        await manager.broadcast(chat_id, {
+            "type": "message_deleted", 
+            "message_id": message_id,
+            "deleted_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {
+            "status": "success", 
+            "message": "Message deleted successfully",
+            "message_id": message_id,
+            "deleted_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Delete error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete message: {str(e)}")
 
 # Get message info for deletion confirmation
 @router.get("/private/{message_id}/info")
@@ -601,23 +825,28 @@ async def get_message_info(
     """
     Get message information for deletion confirmation
     """
-    message = db.query(PrivateMessage).filter(
-        PrivateMessage.id == message_id,
-        (PrivateMessage.sender_id == current_user.id) | (PrivateMessage.receiver_id == current_user.id)
-    ).first()
-    
-    if not message:
-        raise HTTPException(404, "Message not found")
-    
-    return {
-        "id": message.id,
-        "sender_id": message.sender_id,
-        "content": message.content,
-        "message_type": message.message_type.value,
-        "created_at": message.created_at.isoformat(),
-        "is_own_message": message.sender_id == current_user.id
-    }
-
+    try:
+        message = db.query(PrivateMessage).filter(
+            PrivateMessage.id == message_id,
+            (PrivateMessage.sender_id == current_user.id) | (PrivateMessage.receiver_id == current_user.id)
+        ).first()
+        
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        return {
+            "id": message.id,
+            "sender_id": message.sender_id,
+            "content": message.content,
+            "message_type": message.message_type.value,
+            "created_at": message.created_at.isoformat(),
+            "is_own_message": message.sender_id == current_user.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get message info: {str(e)}")
 # Edit message endpoint
 @router.patch("/private/{message_id}")
 async def edit_message(
@@ -626,22 +855,31 @@ async def edit_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    msg = edit_private_message(db, message_id, current_user.id, data.content.strip())
+    """
+    Edit a message
+    """
+    try:
+        msg = edit_private_message(db, message_id, current_user.id, data.content.strip())
 
-    chat_id = _chat_id(msg.sender_id, msg.receiver_id)
-    payload = {
-        "type": "edit",
-        "id": msg.id,
-        "content": msg.content,
-        "updated_at": msg.updated_at.isoformat(),
-        "sender_id": msg.sender_id,
-        "receiver_id": msg.receiver_id,
-        "sender_username": msg.sender.username if msg.sender else None,
-        "receiver_username": msg.receiver.username if msg.receiver else None,
-    }
+        chat_id = _chat_id(msg.sender_id, msg.receiver_id)
+        payload = {
+            "type": "edit",
+            "id": msg.id,
+            "content": msg.content,
+            "updated_at": msg.updated_at.isoformat(),
+            "sender_id": msg.sender_id,
+            "receiver_id": msg.receiver_id,
+            "sender_username": msg.sender.username if msg.sender else None,
+            "receiver_username": msg.receiver.username if msg.receiver else None,
+        }
 
-    await manager.broadcast(chat_id, payload)
-    return payload
+        await manager.broadcast(chat_id, payload)
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to edit message: {str(e)}")
 
 # Delete image from Cloudinary only
 @router.post("/delete-image")
@@ -649,12 +887,15 @@ async def delete_cloudinary_image(
     data: dict,
     current_user: User = Depends(get_current_user)
 ):
-    public_id = data.get("public_id")
-    if not public_id:
-        raise HTTPException(400, "public_id required")
-
+    """
+    Delete image from Cloudinary only
+    """
     try:
+        public_id = data.get("public_id")
+        if not public_id:
+            raise HTTPException(status_code=400, detail="public_id required")
+
         cloudinary.uploader.destroy(public_id)
         return {"status": "deleted"}
     except Exception as e:
-        raise HTTPException(500, f"Cloudinary delete failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Cloudinary delete failed: {str(e)}")

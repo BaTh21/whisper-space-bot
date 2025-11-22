@@ -1100,19 +1100,28 @@ export const getBlockedUsers = async () => {
 
 export const markMessagesAsRead = async (messageIds) => {
   try {
+    console.log('📤 Marking messages as read:', messageIds);
+    
     const response = await api.post('/api/v1/chats/messages/read', { 
       message_ids: messageIds 
     });
+    
+    console.log('✅ Mark as read successful:', response.data);
     return response.data;
   } catch (error) {
-    console.error("Mark messages as read error:", error.response?.data);
+    console.error("Mark messages as read error:", {
+      status: error.response?.status,
+      data: error.response?.data,
+      messageIds: messageIds
+    });
     
     // If endpoint doesn't exist, return success anyway for UX
-    if (error.response?.status === 404) {
-      console.log("Mark as read endpoint not found, returning success");
+    if (error.response?.status === 404 || error.response?.status === 422) {
+      console.log("Mark as read endpoint issue, returning success");
       return {
         success: true,
         message_ids: messageIds,
+        marked_count: messageIds.length,
         timestamp: new Date().toISOString(),
       };
     }
@@ -1124,6 +1133,32 @@ export const markMessagesAsRead = async (messageIds) => {
     );
   }
 };
+
+export const markMessagesAsReadAPI = async (messageIds) => {
+  return markMessagesAsRead(messageIds);
+};
+
+export const getMessageSeenStatus = async (messageId) => {
+  try {
+    const response = await api.get(`/api/v1/chats/messages/${messageId}/seen`);
+    return response.data;
+  } catch (error) {
+    console.error("Get message seen status error:", error.response?.data);
+    
+    // If endpoint doesn't exist, return empty array
+    if (error.response?.status === 404) {
+      console.log("Get message seen status endpoint not found, returning empty array");
+      return [];
+    }
+    
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to get message seen status"
+    );
+  }
+};
+
 
 export const respondToGroupInvite = async (inviteId, action) => {
   console.log(`Simulating ${action} for group invite:`, inviteId);

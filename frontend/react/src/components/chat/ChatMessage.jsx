@@ -274,57 +274,58 @@ const actualMessageType = detectMessageType(message);
   /* ---------------------------------------------------------- */
   /*                     STATUS LOGIC                           */
   /* ---------------------------------------------------------- */
-  const getMessageStatus = () => {
-    if (!isMine) return 'sent';
-    if (message.is_temp) return 'sending';
+const getMessageStatus = () => {
+  if (!isMine) return 'sent';
+  if (message.is_temp) return 'sending';
 
-    if (message.is_read === true && message.read_at) return 'seen';
-    if (message.delivered_at) return 'delivered';
-    if (message.status === 'seen') return 'seen';
-    if (message.status === 'delivered') return 'delivered';
-    if (message.status === 'sent') return 'sent';
-    
-    if (message.seen_status === 'seen') return 'seen';
-    if (message.seen_status === 'delivered') return 'delivered';
-
-    return 'sent';
-  };
+  if (message.is_read === true && message.read_at) return 'seen';
+  if (message.delivered_at) return 'delivered';
+  if (message.status === 'seen') return 'seen';
+  if (message.status === 'delivered') return 'delivered';
+  if (message.status === 'sent') return 'sent';
   
-  const status = getMessageStatus();
+  if (message.seen_status === 'seen') return 'seen';
+  if (message.seen_status === 'delivered') return 'delivered';
 
-  const renderTick = () => {
-    switch (status) {
-      case 'sending':
-        return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.5)' }} />;
-      case 'sent':
-        return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
-      case 'delivered':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
-      case 'seen':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: '#34B7F1' }} />;
-      default:
-        return null;
-    }
-  };
+  return 'sent';
+};
 
-  const renderSeenAvatar = () => {
-    if (!showSeenStatus || !isMine || status !== 'seen') return null;
+const status = getMessageStatus();
 
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, gap: 0.5 }}>
-        <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7, color: 'text.secondary' }}>
-          Seen
-        </Typography>
-        <Avatar
-          src={seenAvatarError ? undefined : friendAv.avatar_url}
-          sx={{ width: 16, height: 16, fontSize: '0.5rem', bgcolor: 'primary.main' }}
-          imgProps={{ onError: () => setSeenAvatarError(true) }}
-        >
-          {friendAv.initial}
-        </Avatar>
-      </Box>
-    );
-  };
+const renderTick = () => {
+  switch (status) {
+    case 'sending':
+      return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.5)' }} />;
+    case 'sent':
+      return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
+    case 'delivered':
+      return <DoneAllIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
+    case 'seen':
+      return <DoneAllIcon sx={{ fontSize: '1rem', color: '#34B7F1' }} />; // ✅ BLUE TICKS
+    default:
+      return null;
+  }
+};
+
+const renderSeenAvatar = () => {
+  // ✅ SHOW if: It's my message AND it's read AND we have seen_by data
+  if (!isMine || !message.is_read || !message.seen_by || message.seen_by.length === 0) return null;
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, gap: 0.5 }}>
+      <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7, color: 'text.secondary' }}>
+        Seen
+      </Typography>
+      <Avatar
+        src={seenAvatarError ? undefined : friendAv.avatar_url}
+        sx={{ width: 16, height: 16, fontSize: '0.5rem', bgcolor: 'primary.main' }}
+        imgProps={{ onError: () => setSeenAvatarError(true) }}
+      >
+        {friendAv.initial}
+      </Avatar>
+    </Box>
+  );
+};
 
   /* ---------------------------------------------------------- */
   /*                     RENDER VOICE                           */
@@ -520,6 +521,8 @@ const actualMessageType = detectMessageType(message);
         px: 1,
         position: 'relative',
       }}
+      data-message-id={message.id}
+      data-is-unread={!isMine && !message.is_read && !message.is_temp ? "true" : "false"}
     >
       {/* Image Modal */}
       {imageModalOpen && (
