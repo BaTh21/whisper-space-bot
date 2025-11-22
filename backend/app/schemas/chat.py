@@ -121,6 +121,7 @@ class GroupMessageSeen(BaseModel):
 
 class GroupMessageOut(BaseModel):
     id: int
+    incoming_temp_id: Optional[str] = None
     sender: AuthorResponse
     forwarded_by: Optional[AuthorResponse] = None
     group_id: int

@@ -5,7 +5,10 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
-  Avatar
+  Avatar,
+  TextField,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import GroupChatPage from '../../pages/GroupChatPage';
@@ -13,6 +16,7 @@ import { useEffect, useState } from 'react';
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import CreateGroupDialog from '../CreateGroupDialog';
 import { getFriends } from '../../services/api';
+import SearchIcon from '@mui/icons-material/Search';
 
 const GroupsTab = ({ groups }) => {
   const theme = useTheme();
@@ -26,9 +30,16 @@ const GroupsTab = ({ groups }) => {
     setFriends(res);
   }
 
-  useEffect(()=> {
+  useEffect(() => {
     fetchFriends();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      setSelectedGroupId(null);
+    };
+  }, []);
+
 
   const getLatestCover = (group) => {
     if (!group.images || group.images.length === 0) return null;
@@ -74,10 +85,31 @@ const GroupsTab = ({ groups }) => {
               minWidth: { xs: '100%', sm: 'auto' }
             }}
             size={isMobile ? 'small' : 'medium'}
-            onClick={()=> setOpenCreateGroup(true)}
+            onClick={() => setOpenCreateGroup(true)}
           >
             {isMobile ? 'Create' : 'Create Group'}
           </Button>
+        </Box>
+
+        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 4}}>
+          <TextField
+            sx={{ width: "100%" }}
+            id="outlined-member-search"
+            label="Search group"
+            variant="outlined"
+            size="small"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                  >
+                    <SearchIcon />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+
         </Box>
 
         {groups.length === 0 ? (
@@ -159,7 +191,7 @@ const GroupsTab = ({ groups }) => {
               pl: 3,
             }}
           >
-            <GroupChatPage groupId={selectedGroupId} />
+            <GroupChatPage key={selectedGroupId} groupId={selectedGroupId} />
           </Box>
         )}
       </Box>
@@ -170,8 +202,8 @@ const GroupsTab = ({ groups }) => {
         onSuccess={handleSuccess}
         friends={friends}
       />
-      </Box>
-    );
+    </Box>
+  );
 };
 
 export default GroupsTab;
