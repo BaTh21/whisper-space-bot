@@ -19,3 +19,19 @@ class User(Base):
     
     diaries = relationship("Diary", back_populates="author")
     diary_likes = relationship("DiaryLike", back_populates="user", cascade="all, delete-orphan")
+    seen_messages = relationship("PrivateMessage", secondary="message_seen_status", back_populates="seen_by_users")
+
+# Relationship to seen message statuses
+    seen_message_statuses = relationship(
+        "MessageSeenStatus", 
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    
+    # Many-to-many relationship to seen messages (read-only)
+    seen_messages = relationship(
+        "PrivateMessage",
+        secondary="message_seen_status",
+        back_populates="seen_by_users",
+        viewonly=True  # This is read-only
+    )

@@ -32,3 +32,20 @@ class PrivateMessage(Base):
     reply_to = relationship("PrivateMessage", remote_side=[id], uselist=False)
     sender = relationship("User", foreign_keys=[sender_id])
     receiver = relationship("User", foreign_keys=[receiver_id])
+    
+    seen_by_users = relationship("User", secondary="message_seen_status", back_populates="seen_messages")
+    
+    # Relationship to seen statuses
+    seen_statuses = relationship(
+        "MessageSeenStatus",
+        back_populates="message",
+        cascade="all, delete-orphan"
+    )
+    
+    # Many-to-many relationship to users who saw the message (read-only)
+    seen_by_users = relationship(
+        "User",
+        secondary="message_seen_status",
+        back_populates="seen_messages",
+        viewonly=True  # This is read-only
+    )
