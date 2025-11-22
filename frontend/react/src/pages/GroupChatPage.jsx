@@ -74,6 +74,12 @@ const GroupChatPage = ({ groupId }) => {
   const [openDrawer, setOpenDrawer] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const messagesRef = useRef([]);
+  const [openListMember, setOpenListMember] = useState(false);
+
+  const toggleListMember = () => {
+    console.log("toggle open")
+    setOpenListMember(prev => !prev);
+  }
 
   const toggleDrawer = () => {
     setOpenDrawer(prev => !prev);
@@ -170,7 +176,7 @@ const GroupChatPage = ({ groupId }) => {
   useEffect(() => {
     requestAnimationFrame(() => {
       autoScrollToBottom();
-      // markVisibleMessagesAsSeen();
+      markVisibleMessagesAsSeen();
     });
   }, [messages]);
 
@@ -533,7 +539,6 @@ const GroupChatPage = ({ groupId }) => {
         position="static"
         color="default"
         elevation={2}
-        onClick={() => setOpen(true)}
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -545,7 +550,7 @@ const GroupChatPage = ({ groupId }) => {
           <IconButton
             edge="start"
             color="inherit"
-            onClick={() => navigate('/dashboard')}
+            onClick={toggleListMember}
             sx={{
               mr: 2,
               '&:hover': { bgcolor: 'grey.200' },
@@ -563,6 +568,7 @@ const GroupChatPage = ({ groupId }) => {
                 ).url
                 : undefined
             }
+            onClick={() => setOpen(true)}
           >
             {group?.name?.charAt(0) || 'G'}
           </Avatar>
@@ -581,9 +587,9 @@ const GroupChatPage = ({ groupId }) => {
             gap: 2,
             alightItems: 'center'
           }}>
-            <CallIcon sx={{fontSize: 24, color: 'primary.main'}}/>
-            <VideocamIcon 
-            sx={{fontSize: 26, color: 'primary.main'}}
+            <CallIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+            <VideocamIcon
+              sx={{ fontSize: 26, color: 'primary.main' }}
             />
           </Box>
         </Toolbar>
@@ -744,15 +750,35 @@ const GroupChatPage = ({ groupId }) => {
                                   }}
                                 >
                                   <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                                    Forwarded from {message?.sender?.username || "Unknown"}
+                                    Forwarded from {message?.forwarded_by?.id !== user?.id ?
+                                      <Box
+                                        sx={{
+                                          display: 'flex',
+                                          gap: 0.2,
+                                          alightItems: 'center'
+                                        }}
+                                      >
+                                        <Avatar
+                                          src={message?.forwarded_by?.avatar_url}
+                                          alt={message?.forwarded_by?.username || "author image"}
+                                          sx={{
+                                            width: 14,
+                                            height: 14,
+                                            mt: 0.3
+                                          }}
+                                        >{message?.forwarded_by?.avatar_url?.charAt(0) || "U"}</Avatar>
+                                        {message?.forwarded_by?.username}
+                                      </Box>
+                                      :
+                                      (" you")}
                                   </Typography>
 
-                                  <Typography
+                                  {/* <Typography
                                     variant="caption"
                                     sx={{ color: "text.secondary", ml: 1 }}
                                   >
-                                    by {message?.forwarded_by?.username}
-                                  </Typography>
+                                    by 
+                                  </Typography> */}
                                 </Box>
                               )}
 

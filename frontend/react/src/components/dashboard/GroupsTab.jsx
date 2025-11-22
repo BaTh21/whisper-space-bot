@@ -5,7 +5,10 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
-  Avatar
+  Avatar,
+  TextField,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import GroupChatPage from '../../pages/GroupChatPage';
@@ -13,6 +16,7 @@ import { useEffect, useState } from 'react';
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import CreateGroupDialog from '../CreateGroupDialog';
 import { getFriends } from '../../services/api';
+import SearchIcon from '@mui/icons-material/Search';
 
 const GroupsTab = ({ groups }) => {
   const theme = useTheme();
@@ -85,6 +89,27 @@ const GroupsTab = ({ groups }) => {
           >
             {isMobile ? 'Create' : 'Create Group'}
           </Button>
+        </Box>
+
+        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 4}}>
+          <TextField
+            sx={{ width: "100%" }}
+            id="outlined-member-search"
+            label="Search group"
+            variant="outlined"
+            size="small"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                  >
+                    <SearchIcon />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+
         </Box>
 
         {groups.length === 0 ? (

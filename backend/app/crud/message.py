@@ -205,8 +205,9 @@ async def handle_forward_message(
 
         new_msg = GroupMessage(
             group_id=group_id,
-            sender_id=original.sender_id,
-            forwarded_by_id=current_user_id,
+            sender_id=current_user_id,
+            # sender_id=original.sender_id,
+            forwarded_by_id=original.sender.id,
             forwarded_at=datetime.utcnow(),
             parent_message_id=parent_id,
             content=original.content,
