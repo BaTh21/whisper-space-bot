@@ -9,12 +9,13 @@ from app.crud.chat import create_private_message, is_group_member, create_group_
 from app.models.user import User
 from app.schemas.chat import MessageOut, GroupMessageOut
 from sqlalchemy.orm import Session, joinedload 
+from app.schemas.chat import MessageOut, GroupMessageOut, ParentMessageResponse
 from app.services.websocket_manager import manager
 from app.models.group_message import MessageType, GroupMessage
 from app.schemas.chat import MessageCreate, AuthorResponse
 import json
 from app.models.group_message_reply import GroupMessageReply
-from app.crud.message import handle_seen_message
+from app.crud.message import handle_seen_message, handle_forward_message
 
 from app.api.v1.routers.websocket_server import handle_websocket_private
 from app.models.message_seen_status import MessageSeenStatus
@@ -387,8 +388,12 @@ async def ws_group_chat(
     group_id: int,
     db: Session = Depends(get_db)
 ):
+    
+    await websocket.accept()
+
     current_user = await get_current_user_ws(websocket, db)
     if not current_user:
+        await websocket.close(code=4001, reason="PLease login to use chat")
         return
 
     if not is_group_member(db, group_id, current_user.id):
@@ -396,7 +401,7 @@ async def ws_group_chat(
         return
 
     chat_id = f"group_{group_id}"
-    await manager.connect(chat_id, websocket)
+    manager.active_connections.setdefault(chat_id, set()).add(websocket)
 
     try:
         while True:
@@ -405,10 +410,30 @@ async def ws_group_chat(
             content = data.get("content")
             parent_message_id = data.get("reply_to")  # Optional
             action = data.get("action")
+            incoming_temp_id = data.get("temp_id")
             
             if action == "seen":
                 message_id = data.get("message_id")
                 await handle_seen_message(db, current_user.id, group_id, message_id, chat_id)
+                continue
+            
+            if action == "forward_to_groups":
+                message_id = data.get("message_id")
+                target_group_ids = data.get("group_ids") or data.get("target_group_ids") or []
+                target_group_ids = [int(g) for g in target_group_ids]
+
+                forwarded_msgs = await handle_forward_message(
+                    db,
+                    current_user_id=current_user.id,
+                    message_id=message_id,
+                    target_group_ids=target_group_ids
+                )
+
+                await websocket.send_json({
+                    "action": "forwarded",
+                    "message_id": message_id,
+                    "forwarded_to": [m.group_id for m in forwarded_msgs]
+                })
                 continue
 
             try:
@@ -459,7 +484,11 @@ async def ws_group_chat(
                 parent_message=parent_msg_data
             )
 
-            await manager.broadcast(chat_id, msg_out)
+            try:
+                await manager.broadcast(chat_id, msg_out)
+            except Exception as e:
+                print(f"[Broadcast Error] Group {group_id}: {e}")
+                continue
 
     except WebSocketDisconnect:
         manager.disconnect(chat_id, websocket)

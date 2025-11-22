@@ -122,6 +122,7 @@ class GroupMessageSeen(BaseModel):
 class GroupMessageOut(BaseModel):
     id: int
     sender: AuthorResponse
+    forwarded_by: Optional[AuthorResponse] = None
     group_id: int
     content: Optional[str] = None
     created_at: datetime

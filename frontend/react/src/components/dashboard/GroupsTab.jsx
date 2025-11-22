@@ -9,14 +9,26 @@ import {
 } from '@mui/material';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import GroupChatPage from '../../pages/GroupChatPage';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import CreateGroupDialog from '../CreateGroupDialog';
+import { getFriends } from '../../services/api';
 
 const GroupsTab = ({ groups }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [openCreateGroup, setOpenCreateGroup] = useState(false);
+  const [friends, setFriends] = useState([]);
+
+  const fetchFriends = async () => {
+    const res = await getFriends();
+    setFriends(res);
+  }
+
+  useEffect(()=> {
+    fetchFriends();
+  }, []);
 
   const getLatestCover = (group) => {
     if (!group.images || group.images.length === 0) return null;
@@ -26,6 +38,10 @@ const GroupsTab = ({ groups }) => {
     ).url;
   };
 
+  const handleSuccess = () => {
+    fetchFriends();
+    setOpenCreateGroup(false);
+  }
 
   return (
     <Box sx={{
@@ -58,6 +74,7 @@ const GroupsTab = ({ groups }) => {
               minWidth: { xs: '100%', sm: 'auto' }
             }}
             size={isMobile ? 'small' : 'medium'}
+            onClick={()=> setOpenCreateGroup(true)}
           >
             {isMobile ? 'Create' : 'Create Group'}
           </Button>
@@ -146,8 +163,15 @@ const GroupsTab = ({ groups }) => {
           </Box>
         )}
       </Box>
-    </Box>
-  );
+
+      <CreateGroupDialog
+        open={openCreateGroup}
+        onClose={() => setOpenCreateGroup(false)}
+        onSuccess={handleSuccess}
+        friends={friends}
+      />
+      </Box>
+    );
 };
 
 export default GroupsTab;
