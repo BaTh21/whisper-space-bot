@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -48,3 +49,34 @@ def get_seen_messages_(message_id: int,
                        db: Session = Depends(get_db)
                        ):
     return get_seen_messages(db, message_id)
+
+import tempfile
+import whisper
+import asyncio
+
+# Load Whisper model (base/tiny recommended on Render)
+model = whisper.load_model("tiny")
+@router.post("/transcribe")
+async def transcribe(file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        temp_path = os.path.join(os.getcwd(), "temp_audio.mp3")
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        # Verify file exists
+        if not os.path.exists(temp_path):
+            raise HTTPException(status_code=404, detail="Audio file not found after download")
+
+        # Load Whisper model (base/tiny recommended on Render)
+        model = whisper.load_model("base")
+
+        # Transcribe the audio
+        result = model.transcribe(temp_path)
+        return {"text": result["text"]}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription error: {e}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
