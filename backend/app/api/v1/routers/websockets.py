@@ -39,7 +39,7 @@ async def ws_private_chat(
     heartbeat_task = None
     
     try:
-        # ✅ AUTHENTICATE USER (NO websocket.accept() - manager handles it)
+        # ✅ AUTHENTICATE USER
         current_user = await get_current_user_ws(websocket, db)
         if not current_user:
             await websocket.close(code=4001, reason="Authentication failed")
@@ -49,12 +49,75 @@ async def ws_private_chat(
         if not is_friend(db, current_user.id, friend_id):
             await websocket.close(code=4003, reason="Not friends")
             return
+        
+        # ✅ MARK EXISTING UNREAD MESSAGES AS SEEN ON CONNECTION
+        unread_msgs = db.query(PrivateMessage).filter(
+            PrivateMessage.receiver_id == current_user.id,
+            PrivateMessage.sender_id == friend_id,
+            PrivateMessage.is_read == False
+        ).all()
 
+        seen_ids = []
+        for msg in unread_msgs:
+            # Mark message as read
+            msg.is_read = True
+            msg.read_at = datetime.utcnow()
+            
+            # Add seen status
+            existing_seen = db.query(MessageSeenStatus).filter(
+                MessageSeenStatus.message_id == msg.id,
+                MessageSeenStatus.user_id == current_user.id
+            ).first()
+            
+            if not existing_seen:
+                seen_status = MessageSeenStatus(
+                    message_id=msg.id,
+                    user_id=current_user.id,
+                    seen_at=datetime.utcnow()
+                )
+                db.add(seen_status)
+            
+            seen_ids.append(msg.id)
+
+        db.commit()
+        
         chat_id = _chat_id(current_user.id, friend_id)
+        
+        # ✅ BROADCAST SEEN STATUS FOR ALL MARKED MESSAGES
+        if seen_ids:
+            for msg_id in seen_ids:
+                # Get complete message with seen status
+                message = db.query(PrivateMessage).options(
+                    joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+                ).filter(PrivateMessage.id == msg_id).first()
+                
+                if message:
+                    seen_by = []
+                    for status in message.seen_statuses:
+                        seen_by.append({
+                            "user_id": status.user.id,
+                            "username": status.user.username,
+                            "avatar_url": status.user.avatar_url,
+                            "seen_at": status.seen_at.isoformat() if status.seen_at else None
+                        })
+
+                    # Broadcast individual update for each message
+                    await manager.broadcast(
+                        chat_id,
+                        {
+                            "type": "message_updated",
+                            "message_id": msg_id,
+                            "is_read": True,
+                            "read_at": datetime.utcnow().isoformat(),
+                            "seen_by": seen_by,
+                            "reader_id": current_user.id
+                        }
+                    )
+                    print(f"📢 Broadcast initial seen status for message {msg_id}")
         
         # ✅ CONNECT TO MANAGER (This calls websocket.accept() internally)
         await manager.connect(chat_id, websocket)
-
+        
         # ✅ HEARTBEAT FUNCTION
         async def send_heartbeat():
             """Send periodic pings to keep connection alive and detect dead connections"""
@@ -186,7 +249,6 @@ async def ws_private_chat(
                             "message_type": full_msg.message_type.value,
                             "is_read": full_msg.is_read,
                             "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
-                            "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
                             "created_at": full_msg.created_at.isoformat(),
                             "reply_to_id": full_msg.reply_to_id,
                             "avatar_url": full_msg.sender.avatar_url,
@@ -219,14 +281,16 @@ async def ws_private_chat(
 
                         # ✅ BROADCAST TO BOTH USERS
                         await manager.broadcast(chat_id, message_data)
+                        print(f"📢 Broadcast new message {full_msg.id}")
 
-                    except Exception:
+                    except Exception as e:
+                        print(f"Error sending message: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to send message"
                         })
 
-                # ✅ READ RECEIPTS
+                # ✅ READ RECEIPTS (REAL-TIME)
                 elif msg_type == "read":
                     message_id = data.get("message_id")
                     if not message_id:
@@ -241,7 +305,7 @@ async def ws_private_chat(
                         success = mark_message_as_read(db, message_id, current_user.id)
                         
                         if success:
-                            # Get the updated message with seen status information
+                            # Get the updated message with complete seen status
                             updated_message = db.query(PrivateMessage).options(
                                 joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
                             ).filter(PrivateMessage.id == message_id).first()
@@ -257,22 +321,25 @@ async def ws_private_chat(
                                         "seen_at": status.seen_at.isoformat() if status.seen_at else None
                                     })
 
-                                # ✅ BROADCAST MESSAGE UPDATE
+                                # ✅ BROADCAST REAL-TIME SEEN STATUS
                                 await manager.broadcast(chat_id, {
                                     "type": "message_updated",
                                     "message_id": message_id,
                                     "is_read": True,
                                     "read_at": datetime.utcnow().isoformat(),
-                                    "seen_by": seen_by
+                                    "seen_by": seen_by,
+                                    "reader_id": current_user.id
                                 })
-
+                                print(f"📢 Broadcast REAL-TIME seen status for message {message_id} by user {current_user.id}")
+                                
                         else:
                             await websocket.send_json({
                                 "type": "error",
                                 "error": "Failed to mark message as read"
                             })
                             
-                    except Exception:
+                    except Exception as e:
+                        print(f"Error processing read receipt: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to process read receipt"
@@ -288,8 +355,8 @@ async def ws_private_chat(
                             "user_id": current_user.id,
                             "username": current_user.username
                         })
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"Error broadcasting typing: {e}")
 
                 # ✅ MESSAGE DELETION
                 elif msg_type == "delete":
@@ -330,8 +397,9 @@ async def ws_private_chat(
                                 "type": "error",
                                 "error": "Message not found or not authorized to delete"
                             })
-                    except Exception:
+                    except Exception as e:
                         db.rollback()
+                        print(f"Error deleting message: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to delete message"
@@ -352,7 +420,8 @@ async def ws_private_chat(
                 # ✅ CLIENT DISCONNECTED NORMALLY
                 break
                 
-            except Exception:
+            except Exception as e:
+                print(f"WebSocket error: {e}")
                 try:
                     await websocket.send_json({
                         "type": "error",
@@ -362,9 +431,9 @@ async def ws_private_chat(
                     break  # Client disconnected
 
     except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
+        print("Client disconnected normally")
+    except Exception as e:
+        print(f"WebSocket connection error: {e}")
     finally:
         # ✅ PROPER CLEANUP - ALWAYS EXECUTED
         try:
@@ -381,7 +450,6 @@ async def ws_private_chat(
         if current_user:
             chat_id = _chat_id(current_user.id, friend_id)
             manager.disconnect(chat_id, websocket)
-
 @router.websocket("/group/{group_id}")
 async def ws_group_chat(
     websocket: WebSocket,
