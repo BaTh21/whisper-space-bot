@@ -278,7 +278,7 @@ const getMessageStatus = () => {
   if (!isMine) return 'sent';
   if (message.is_temp) return 'sending';
 
-  if (message.is_read === true && message.read_at) return 'seen';
+  if (message.is_read === true) return 'seen';
   if (message.delivered_at) return 'delivered';
   if (message.status === 'seen') return 'seen';
   if (message.status === 'delivered') return 'delivered';
@@ -774,7 +774,7 @@ const renderSeenAvatar = () => {
                   {formatCambodiaTime(message.created_at)}
                   {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
                 </Typography>
-
+              
                 {isMine && renderTick()}
               </Box>
 
