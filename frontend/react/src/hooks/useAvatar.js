@@ -51,8 +51,7 @@ export const useAvatar = () => {
       
       // Try different possible avatar fields
       const avatarUrl = user.avatar_url || user.avatar || user.profile_picture || user.image;
-      
-      
+
       return getAvatarUrl(avatarUrl);
     };
   }, [getAvatarUrl]);

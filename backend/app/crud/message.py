@@ -3,6 +3,7 @@ from app.models.group_member import GroupMember
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status, UploadFile
 from app.schemas.group import GroupMessageUpdate
+from app.schemas.chat import ParentMessageResponse
 from datetime import datetime
 from app.core.cloudinary import upload_to_cloudinary, delete_from_cloudinary, configure_cloudinary, extract_public_id_from_url
 from pathlib import Path
@@ -204,8 +205,9 @@ async def handle_forward_message(
 
         new_msg = GroupMessage(
             group_id=group_id,
-            sender_id=original.sender_id,
-            forwarded_by_id=current_user_id,
+            sender_id=current_user_id,
+            # sender_id=original.sender_id,
+            forwarded_by_id=original.sender.id,
             forwarded_at=datetime.utcnow(),
             parent_message_id=parent_id,
             content=original.content,
