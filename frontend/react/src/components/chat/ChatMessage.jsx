@@ -54,41 +54,41 @@ const ChatMessage = ({
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
 
-/* ---------------------------------------------------------- */
-/*                     MESSAGE TYPE DETECTION                */
-/* ---------------------------------------------------------- */
-const detectMessageType = (msg) => {
-  // First check explicit message_type from server
-  if (msg.message_type === 'image') return 'image';
-  if (msg.message_type === 'voice') return 'voice';
-  
-  const content = msg.content || '';
-  
-  // Voice detection - ONLY MP3 files
-  const isVoiceUrl = 
-    content.match(/\.mp3$/i) || // Only .mp3 extension
-    content.startsWith('data:audio/mp3') ||
-    content.startsWith('data:audio/mpeg') ||
-    (content.startsWith('blob:') && content.includes('audio/mp3'));
-  
-  if (isVoiceUrl) return 'voice';
-  
-  // Image detection - everything else that looks like media
-  const isImageUrl = 
-    content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|webm)$/i) || // Added webm to images
-    content.includes('cloudinary.com') ||
-    content.includes('res.cloudinary.com') ||
-    content.startsWith('data:image/') ||
-    content.startsWith('data:video/') || // Video data URLs
-    content.startsWith('blob:');
-  
-  if (isImageUrl) return 'image';
-  
-  // Default to text
-  return 'text';
-};
+  /* ---------------------------------------------------------- */
+  /*                     MESSAGE TYPE DETECTION                */
+  /* ---------------------------------------------------------- */
+  const detectMessageType = (msg) => {
+    // First check explicit message_type from server
+    if (msg.message_type === 'image') return 'image';
+    if (msg.message_type === 'voice') return 'voice';
 
-const actualMessageType = detectMessageType(message);
+    const content = msg.content || '';
+
+    // Voice detection - ONLY MP3 files
+    const isVoiceUrl =
+      content.match(/\.mp3$/i) || // Only .mp3 extension
+      content.startsWith('data:audio/mp3') ||
+      content.startsWith('data:audio/mpeg') ||
+      (content.startsWith('blob:') && content.includes('audio/mp3'));
+
+    if (isVoiceUrl) return 'voice';
+
+    // Image detection - everything else that looks like media
+    const isImageUrl =
+      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|webm)$/i) || // Added webm to images
+      content.includes('cloudinary.com') ||
+      content.includes('res.cloudinary.com') ||
+      content.startsWith('data:image/') ||
+      content.startsWith('data:video/') || // Video data URLs
+      content.startsWith('blob:');
+
+    if (isImageUrl) return 'image';
+
+    // Default to text
+    return 'text';
+  };
+
+  const actualMessageType = detectMessageType(message);
 
   /* ---------------------------------------------------------- */
   /*                     MENU HANDLERS                         */
@@ -97,7 +97,7 @@ const actualMessageType = detectMessageType(message);
     e.stopPropagation();
     setAnchorEl(e.currentTarget);
   };
-  
+
   const handleClose = () => setAnchorEl(null);
 
   const handleEdit = async () => {
@@ -123,21 +123,21 @@ const actualMessageType = detectMessageType(message);
     handleClose();
   };
 
-  const handleReplyClick = () => { 
+  const handleReplyClick = () => {
     if (onReply) {
       onReply(message);
     }
-    handleClose(); 
+    handleClose();
   };
 
-  const handlePinClick = () => { 
-    onPin?.(message); 
-    handleClose(); 
+  const handlePinClick = () => {
+    onPin?.(message);
+    handleClose();
   };
 
-  const handleForwardClick = () => { 
-    onForward?.(message); 
-    handleClose(); 
+  const handleForwardClick = () => {
+    onForward?.(message);
+    handleClose();
   };
 
   const showMenu = true;
@@ -196,10 +196,10 @@ const actualMessageType = detectMessageType(message);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      
+
       const filename = `chat-image-${message.id}-${Date.now()}.jpg`;
       a.download = filename;
-      
+
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -248,7 +248,7 @@ const actualMessageType = detectMessageType(message);
     }
     return { username: 'Unknown', avatar_url: null, initial: 'U' };
   };
-  
+
   const senderInfo = getSenderInfo();
 
   const myAvatar = () => {
@@ -258,7 +258,7 @@ const actualMessageType = detectMessageType(message);
       initial: getUserInitials?.(profile?.username) ?? (profile?.username?.[0] ?? 'M').toUpperCase(),
     };
   };
-  
+
   const friendAvatar = () => {
     if (!currentFriend) return { avatar_url: null, initial: 'F' };
     const url = currentFriend.avatar_url || currentFriend.avatar;
@@ -267,65 +267,66 @@ const actualMessageType = detectMessageType(message);
       initial: getUserInitials?.(currentFriend.username) ?? (currentFriend.username?.[0] ?? 'F').toUpperCase(),
     };
   };
-  
+
   const myAv = myAvatar();
   const friendAv = friendAvatar();
 
   /* ---------------------------------------------------------- */
   /*                     STATUS LOGIC                           */
   /* ---------------------------------------------------------- */
-const getMessageStatus = () => {
-  if (!isMine) return 'sent';
-  if (message.is_temp) return 'sending';
+  const getMessageStatus = () => {
+    if (!isMine) return 'sent'; // Others' messages never show tick
+    if (message.is_temp) return 'sending'; // still sending
 
-  if (message.is_read === true) return 'seen';
-  if (message.delivered_at) return 'delivered';
-  if (message.status === 'seen') return 'seen';
-  if (message.status === 'delivered') return 'delivered';
-  if (message.status === 'sent') return 'sent';
-  
-  if (message.seen_status === 'seen') return 'seen';
-  if (message.seen_status === 'delivered') return 'delivered';
+    // Seen takes priority
+    if (message.is_read === true) return 'seen';
+    if (message.seen_by && message.seen_by.length > 0) return 'seen';
 
-  return 'sent';
-};
+    // Delivered next
+    if (message.delivered_at) return 'delivered';
 
-const status = getMessageStatus();
+    // Fallback to sent
+    return 'sent';
+  };
 
-const renderTick = () => {
-  switch (status) {
-    case 'sending':
-      return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.5)' }} />;
-    case 'sent':
-      return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
-    case 'delivered':
-      return <DoneAllIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
-    case 'seen':
-      return <DoneAllIcon sx={{ fontSize: '1rem', color: '#34B7F1' }} />; // ✅ BLUE TICKS
-    default:
-      return null;
-  }
-};
+  const status = getMessageStatus();
 
-const renderSeenAvatar = () => {
-  // ✅ SHOW if: It's my message AND it's read AND we have seen_by data
-  if (!isMine || !message.is_read || !message.seen_by || message.seen_by.length === 0) return null;
+  const renderTick = () => {
+    switch (status) {
+      case 'sending':
+        return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.5)' }} />;
+      case 'sent':
+        return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
+      case 'delivered':
+        return <DoneAllIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
+      case 'seen':
+        return <DoneAllIcon sx={{ fontSize: '1rem', color: '#34B7F1' }} />; // ✅ BLUE TICKS
+      default:
+        return null;
+    }
+  };
 
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, gap: 0.5 }}>
-      <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7, color: 'text.secondary' }}>
-        Seen
-      </Typography>
-      <Avatar
-        src={seenAvatarError ? undefined : friendAv.avatar_url}
-        sx={{ width: 16, height: 16, fontSize: '0.5rem', bgcolor: 'primary.main' }}
-        imgProps={{ onError: () => setSeenAvatarError(true) }}
-      >
-        {friendAv.initial}
-      </Avatar>
-    </Box>
-  );
-};
+  const renderSeenAvatar = () => {
+    if (!isMine || !message.is_read || !message.seen_by || message.seen_by.length === 0) return null;
+
+    const seenUser = message.seen_by[0]; // Only 1 friend
+
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, gap: 0.5 }}>
+        <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7, color: 'text.secondary' }}>
+          Seen
+        </Typography>
+        <Avatar
+          src={seenUser.avatar_url}
+          sx={{ width: 16, height: 16, fontSize: '0.5rem', bgcolor: 'primary.main' }}
+        >
+          {seenUser.username?.charAt(0).toUpperCase()}
+        </Avatar>
+      </Box>
+    );
+  };
+
+
 
   /* ---------------------------------------------------------- */
   /*                     RENDER VOICE                           */
@@ -361,8 +362,8 @@ const renderSeenAvatar = () => {
           }}
           onClick={handlePlayVoice}
         >
-          <IconButton 
-            size="small" 
+          <IconButton
+            size="small"
             sx={{
               bgcolor: isMine ? 'white' : 'primary.main',
               color: isMine ? 'primary.main' : 'white',
@@ -373,35 +374,35 @@ const renderSeenAvatar = () => {
           >
             {isPlaying ? <StopIcon /> : <PlayArrowIcon />}
           </IconButton>
-          
+
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5, color: isMine ? 'white' : 'text.primary' }}>
               Voice message
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box 
-                sx={{ 
-                  flex: 1, 
-                  height: 4, 
+              <Box
+                sx={{
+                  flex: 1,
+                  height: 4,
                   bgcolor: isMine ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
                   borderRadius: 2,
                   overflow: 'hidden'
                 }}
               >
-                <Box 
-                  sx={{ 
-                    height: '100%', 
+                <Box
+                  sx={{
+                    height: '100%',
                     bgcolor: isMine ? 'white' : 'primary.main',
                     width: `${progress}%`,
                     borderRadius: 2,
                     transition: 'width 0.1s ease'
-                  }} 
+                  }}
                 />
               </Box>
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  opacity: 0.7, 
+              <Typography
+                variant="caption"
+                sx={{
+                  opacity: 0.7,
                   minWidth: 40,
                   color: isMine ? 'white' : 'text.primary'
                 }}
@@ -422,12 +423,12 @@ const renderSeenAvatar = () => {
     <Box sx={{ mb: 1, position: 'relative' }}>
       {/* Error state */}
       {imageError && (
-        <Box 
-          sx={{ 
-            width: '100%', 
-            height: 200, 
-            display: 'flex', 
-            alignItems: 'center', 
+        <Box
+          sx={{
+            width: '100%',
+            height: 200,
+            display: 'flex',
+            alignItems: 'center',
             justifyContent: 'center',
             bgcolor: 'grey.100',
             borderRadius: '8px',
@@ -441,8 +442,8 @@ const renderSeenAvatar = () => {
           <Typography variant="body2" color="text.secondary" align="center">
             Failed to load image
           </Typography>
-          <Button 
-            size="small" 
+          <Button
+            size="small"
             variant="outlined"
             onClick={retryImageLoad}
           >
@@ -450,16 +451,16 @@ const renderSeenAvatar = () => {
           </Button>
         </Box>
       )}
-      
+
       {/* Image */}
       {!imageError && (
         <>
-          <img 
-            src={message.content} 
-            alt="Chat image" 
+          <img
+            src={message.content}
+            alt="Chat image"
             onError={handleImageError}
-            style={{ 
-              maxWidth: '100%', 
+            style={{
+              maxWidth: '100%',
               maxHeight: 300,
               borderRadius: '8px',
               cursor: 'pointer',
@@ -467,10 +468,10 @@ const renderSeenAvatar = () => {
             }}
             onClick={handleViewFullImage}
           />
-          
+
           {/* Image actions overlay */}
-          <Box 
-            sx={{ 
+          <Box
+            sx={{
               position: 'absolute',
               top: 8,
               right: 8,
@@ -562,18 +563,18 @@ const renderSeenAvatar = () => {
             >
               <CloseIcon />
             </IconButton>
-            
-            <img 
-              src={message.content} 
+
+            <img
+              src={message.content}
               alt="Full size chat image"
-              style={{ 
-                maxWidth: '100%', 
+              style={{
+                maxWidth: '100%',
                 maxHeight: '90vh',
                 borderRadius: '8px',
                 objectFit: 'contain',
               }}
             />
-            
+
             {/* Modal actions */}
             <Box sx={{ position: 'absolute', bottom: -40, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 1 }}>
               <IconButton
@@ -692,11 +693,11 @@ const renderSeenAvatar = () => {
                 }}
                 onClick={() => onReply?.(message.reply_to)}
               >
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    opacity: 0.7, 
-                    display: 'block', 
+                <Typography
+                  variant="caption"
+                  sx={{
+                    opacity: 0.7,
+                    display: 'block',
                     fontWeight: 500,
                     color: isMine ? 'white' : 'text.primary'
                   }}
@@ -706,12 +707,12 @@ const renderSeenAvatar = () => {
                     ? 'yourself'
                     : message.reply_to.sender_username ?? senderInfo.username}
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    mt: 0.5, 
-                    opacity: 0.8, 
-                    fontStyle: 'italic', 
+                <Typography
+                  variant="body2"
+                  sx={{
+                    mt: 0.5,
+                    opacity: 0.8,
+                    fontStyle: 'italic',
                     lineHeight: 1.3,
                     color: isMine ? 'white' : 'text.primary'
                   }}
@@ -733,7 +734,7 @@ const renderSeenAvatar = () => {
                 border: isPinned ? '2px solid' : 'none',
                 borderColor: isPinned ? 'warning.main' : 'transparent',
                 transition: 'all 0.2s ease',
-                '&:hover': { 
+                '&:hover': {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                   '& .image-actions': {
                     opacity: 1
@@ -774,7 +775,7 @@ const renderSeenAvatar = () => {
                   {formatCambodiaTime(message.created_at)}
                   {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
                 </Typography>
-              
+
                 {isMine && renderTick()}
               </Box>
 
@@ -797,8 +798,8 @@ const renderSeenAvatar = () => {
                     width: 24,
                     height: 24,
                     zIndex: 10,
-                    '&:hover': { 
-                      bgcolor: isMine ? '#0077b3' : '#e0e0e0', 
+                    '&:hover': {
+                      bgcolor: isMine ? '#0077b3' : '#e0e0e0',
                       transform: 'scale(1.1)',
                     },
                   }}
@@ -821,11 +822,11 @@ const renderSeenAvatar = () => {
             onClose={handleClose}
             anchorOrigin={{ vertical: 'top', horizontal: isMine ? 'left' : 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: isMine ? 'right' : 'left' }}
-            PaperProps={{ 
-              sx: { 
+            PaperProps={{
+              sx: {
                 borderRadius: '12px',
                 zIndex: 9999
-              } 
+              }
             }}
           >
             {/* Image message specific options */}

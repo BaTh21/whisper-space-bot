@@ -128,38 +128,41 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       const { type } = data;
 
       // ————————————————————————————————
-      // 1. NEW MESSAGE (from anyone, including your own confirmed message)
+      // 1. NEW MESSAGE (incoming OR your confirmed message)
       // ————————————————————————————————
-      if (type === 'message') {
+      if (type === "message") {
         const detectMessageType = (msgData) => {
-          if (msgData.message_type === 'image') return 'image';
-          if (msgData.message_type === 'voice') return 'voice';
+          if (msgData.message_type === "image") return "image";
+          if (msgData.message_type === "voice") return "voice";
 
-          const content = msgData.content || '';
+          const content = msgData.content || "";
           const isVoiceUrl =
             content.match(/\.mp3$/i) ||
-            (content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm')));
+            (content.includes("/voice_messages/") &&
+              (content.match(/\.mp3$/i) || content.includes(".webm")));
 
-          if (isVoiceUrl) return 'voice';
+          if (isVoiceUrl) return "voice";
 
           const isImageUrl =
             content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && !content.includes('/voice_messages/')) ||
-            content.startsWith('data:image/');
+            (content.includes("cloudinary.com") &&
+              !content.includes("/voice_messages/")) ||
+            content.startsWith("data:image/");
 
-          return isImageUrl ? 'image' : 'text';
+          return isImageUrl ? "image" : "text";
         };
 
         const messageType = detectMessageType(data);
+
         let content = data.content;
-        if (messageType === 'voice' && content.includes('.webm')) {
+        if (messageType === "voice" && content.includes(".webm")) {
           content = convertWebmToMp3Url(content);
         }
 
         const realMessage = {
           ...data,
           content,
-          is_temp: false,                               
+          is_temp: false,
           message_type: messageType,
           sender: {
             id: data.sender_id,
@@ -171,25 +174,24 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             : null,
           is_read: data.is_read || false,
           read_at: data.read_at,
-          // delivered_at: data.delivered_at,
           seen_by: data.seen_by || [],
         };
 
         setMessages((prev) => {
-          // Replace temp message (your own sent message) when server confirms
+          // ———————————————————————————————————
+          // STEP 3 — Replace temp messages using temp_id
+          // ———————————————————————————————————
           const tempMatch = prev.find(
-            (m) =>
-              m.is_temp &&
-              m.content === realMessage.content &&
-              m.sender_id === realMessage.sender_id &&
-              Math.abs(new Date(m.created_at) - new Date(realMessage.created_at)) < 15000
+            (m) => m.is_temp && m.temp_id && m.temp_id === data.temp_id
           );
 
           if (tempMatch) {
-            return prev.map((m) => (m.id === tempMatch.id ? realMessage : m));
+            return prev.map((m) =>
+              m.temp_id === data.temp_id ? realMessage : m
+            );
           }
 
-          // Avoid duplicates for normal incoming messages
+          // Avoid duplicates
           if (prev.some((m) => m.id === realMessage.id)) return prev;
 
           return [...prev, realMessage].sort(
@@ -198,10 +200,23 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         });
 
         // ————————————————————————————————
-        // 2. READ RECEIPT (friend saw your message)
+        // 2. READ RECEIPT / MESSAGE UPDATED
         // ————————————————————————————————
-      } else if (type === 'read_receipt' || type === 'message_updated') {
-        console.log('📩 READ RECEIPT RECEIVED:', data); // Debug log
+      } else if (type === "read_receipt" || type === "message_updated") {
+        // STEP 2 — FIX fallback for seen_by / reader info
+        const safeSeenBy =
+          data.seen_by && Array.isArray(data.seen_by)
+            ? data.seen_by
+            : [
+              {
+                user_id: data.reader_id || data.read_by || selectedFriend?.id,
+                username:
+                  data.reader_username || selectedFriend?.username || "Unknown",
+                avatar_url:
+                  data.reader_avatar_url || selectedFriend?.avatar_url || null,
+                seen_at: data.read_at || new Date().toISOString(),
+              },
+            ];
 
         setMessages((prev) =>
           prev.map((msg) =>
@@ -211,14 +226,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 is_temp: false,
                 is_read: true,
                 read_at: data.read_at || new Date().toISOString(),
-                seen_by: data.seen_by || [ // ✅ Ensure seen_by is populated
-                  {
-                    user_id: data.read_by || selectedFriend?.id,
-                    username: selectedFriend?.username,
-                    avatar_url: selectedFriend?.avatar_url,
-                    seen_at: data.read_at || new Date().toISOString()
-                  }
-                ],
+                seen_by: safeSeenBy,
               }
               : msg
           )
@@ -227,39 +235,61 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         // ————————————————————————————————
         // 3. TYPING INDICATOR
         // ————————————————————————————————
-      } else if (type === 'typing') {
+      } else if (type === "typing") {
         setFriendTyping(data.is_typing);
 
         // ————————————————————————————————
-        // 4. STATUS UPDATE (delivered, seen, etc.)
+        // 4. STATUS UPDATE
         // ————————————————————————————————
-      } else if (type === 'message_status_update') {
+      } else if (type === 'message_updated' || type === 'read_receipt') {
+        if (!data.message_id) return; // safety check
+
+        // ✅ Ensure seen_by is always an array
+        const safeSeenBy =
+          Array.isArray(data.seen_by) && data.seen_by.length > 0
+            ? data.seen_by
+            : [
+              {
+                user_id: data.reader_id || selectedFriend?.id,
+                username: data.reader_username || selectedFriend?.username,
+                avatar_url: data.reader_avatar_url || getUserAvatar(selectedFriend),
+                seen_at: data.read_at || new Date().toISOString(),
+              },
+            ];
+
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === data.message_id
-              ? {
-                ...msg,
-                is_temp: false,
-                // delivered_at: data.delivered_at || msg.delivered_at,
-                is_read: data.is_read ?? msg.is_read,
-                read_at: data.read_at || msg.read_at,
-                seen_by: data.seen_by || msg.seen_by || [],
-              }
-              : msg
-          )
+          prev.map((msg) => {
+            if (msg.id !== data.message_id) return msg;
+
+            // ✅ Merge existing seen_by with new updates to prevent duplicates
+            const existingSeenIds = msg.seen_by?.map((s) => s.user_id) || [];
+            const mergedSeenBy = [
+              ...msg.seen_by?.filter((s) => existingSeenIds.includes(s.user_id)) || [],
+              ...safeSeenBy.filter((s) => !existingSeenIds.includes(s.user_id)),
+            ];
+
+            return {
+              ...msg,
+              is_temp: false,
+              is_read: true,
+              read_at: data.read_at || new Date().toISOString(),
+              seen_by: mergedSeenBy,
+            };
+          })
         );
 
         // ————————————————————————————————
         // 5. MESSAGE DELETED
         // ————————————————————————————————
-      } else if (type === 'message_deleted') {
+      } else if (type === "message_deleted") {
         setMessages((prev) => prev.filter((msg) => msg.id !== data.message_id));
         if (pinnedMessage?.id === data.message_id) setPinnedMessage(null);
         if (replyingTo?.id === data.message_id) setReplyingTo(null);
       }
     },
-    [getAvatarUrl, pinnedMessage, replyingTo, selectedFriend] // ✅ Added selectedFriend dependency
+    [getAvatarUrl, pinnedMessage, replyingTo, selectedFriend]
   );
+
 
 
   const handleWebSocketOpen = useCallback(() => {
@@ -310,23 +340,39 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach(entry => {
+        entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            const messageId = entry.target.getAttribute('data-message-id');
+            const messageId = parseInt(entry.target.getAttribute('data-message-id'));
             const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
 
             if (messageId && isUnread && isConnected) {
-              // Mark this specific message as read
+              // 1️⃣ Send WS read receipt
               sendWsMessage({
                 type: 'read',
-                message_id: parseInt(messageId)
+                message_id: messageId,
               });
 
-              setMessages(prev => prev.map(msg =>
-                msg.id === parseInt(messageId)
-                  ? { ...msg, is_read: true, read_at: new Date().toISOString() }
-                  : msg
-              ));
+              // 2️⃣ Update local state instantly
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === messageId
+                    ? {
+                      ...msg,
+                      is_read: true,
+                      read_at: new Date().toISOString(),
+                      seen_by: [
+                        ...msg.seen_by.filter((s) => s.user_id !== selectedFriend.id),
+                        {
+                          user_id: selectedFriend.id,
+                          username: selectedFriend.username,
+                          avatar_url: getUserAvatar(selectedFriend),
+                          seen_at: new Date().toISOString(),
+                        },
+                      ],
+                    }
+                    : msg
+                )
+              );
             }
           }
         });
@@ -334,23 +380,24 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       {
         root: messagesContainerRef.current,
         rootMargin: '0px',
-        threshold: 0.8 // 80% of message visible
+        threshold: 0.8, // 80% visible
       }
     );
 
-    // Observe all unread messages from friend
+    // Observe all unread messages
     const unreadMessageElements = messagesContainerRef.current.querySelectorAll(
       '[data-message-id][data-is-unread="true"]'
     );
 
-    unreadMessageElements.forEach(element => {
-      observer.observe(element);
-    });
+    unreadMessageElements.forEach((el) => observer.observe(el));
 
     return () => {
       observer.disconnect();
     };
   }, [messages, selectedFriend, isConnected, sendWsMessage]);
+
+
+
   /* --------------------------------------------------------------------- */
   /*                         Voice Recording Logic                        */
   /* --------------------------------------------------------------------- */
@@ -1000,72 +1047,112 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /*                         Load Initial Messages                         */
   /* --------------------------------------------------------------------- */
-  const loadInitialMessages = async () => {
-    if (!selectedFriend || messages.length > 0) return;
+const loadInitialMessages = async () => {
+  if (!selectedFriend || messages.length > 0) return;
 
-    try {
-      const chatMessages = await getPrivateChat(selectedFriend.id);
+  try {
+    const chatMessages = await getPrivateChat(selectedFriend.id);
 
-      const enhanced = chatMessages.map((msg) => {
-        const detectMessageType = (message) => {
-          if (message.message_type === 'image') return 'image';
-          if (message.message_type === 'voice') return 'voice';
+    const enhanced = chatMessages.map((msg) => {
+      // ————————————————————————————
+      // 1. Detect message type
+      // ————————————————————————————
+      const detectMessageType = (message) => {
+        if (message.message_type === 'image') return 'image';
+        if (message.message_type === 'voice') return 'voice';
 
-          const content = message.content || '';
+        const content = message.content || '';
 
-          const isVoiceUrl =
-            content.match(/\.mp3$/i) ||
-            content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm'));
+        const isVoiceUrl =
+          content.match(/\.mp3$/i) ||
+          (content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm')));
 
-          if (isVoiceUrl) return 'voice';
+        if (isVoiceUrl) return 'voice';
 
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            content.includes('cloudinary.com') && !content.includes('/voice_messages/') ||
-            content.startsWith('data:image/');
+        const isImageUrl =
+          content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+          (content.includes('cloudinary.com') && !content.includes('/voice_messages/')) ||
+          content.startsWith('data:image/');
 
-          return isImageUrl ? 'image' : 'text';
-        };
+        return isImageUrl ? 'image' : 'text';
+      };
 
-        const messageType = detectMessageType(msg);
+      const messageType = detectMessageType(msg);
 
-        let content = msg.content;
-        if (messageType === 'voice') {
-          content = ensureMp3VoiceUrl({ ...msg, message_type: messageType });
-        }
+      // ————————————————————————————
+      // 2. Convert WebM voice URLs to MP3
+      // ————————————————————————————
+      let content = msg.content;
+      if (messageType === 'voice') {
+        content = ensureMp3VoiceUrl({ ...msg, message_type: messageType });
+      }
 
-        return {
-          ...msg,
-          content: content,
-          is_temp: false,
-          message_type: messageType,
-          sender: {
-            id: msg.sender_id,
-            username:
-              msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
-            avatar_url: getUserAvatar(
-              msg.sender_id === profile?.id ? profile : selectedFriend
-            ),
-          },
-          reply_to: msg.reply_to
-            ? {
-              ...msg.reply_to,
-              sender_username:
-                msg.reply_to.sender_id === profile?.id
-                  ? profile.username
-                  : selectedFriend.username,
-            }
-            : null,
-        };
-      });
+      // ————————————————————————————
+      // 3. Prepare sender info
+      // ————————————————————————————
+      const sender = {
+        id: msg.sender_id,
+        username: msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
+        avatar_url: getUserAvatar(msg.sender_id === profile?.id ? profile : selectedFriend),
+      };
 
-      console.log('Loaded messages with MP3 conversion:', enhanced);
-      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
-    } catch (err) {
-      setError('Failed to load messages');
-      console.error(err);
-    }
-  };
+      // ————————————————————————————
+      // 4. Prepare reply_to info
+      // ————————————————————————————
+      const reply_to = msg.reply_to
+        ? {
+            ...msg.reply_to,
+            sender_username:
+              msg.reply_to.sender_id === profile?.id ? profile.username : selectedFriend.username,
+          }
+        : null;
+
+      // ————————————————————————————
+      // 5. Ensure seen_by is always populated
+      // ————————————————————————————
+      const seen_by =
+        msg.seen_by && Array.isArray(msg.seen_by)
+          ? msg.seen_by
+          : msg.is_read
+          ? [
+              {
+                user_id: msg.receiver_id === profile?.id ? selectedFriend.id : profile.id,
+                username: msg.receiver_id === profile?.id ? selectedFriend.username : profile.username,
+                avatar_url:
+                  msg.receiver_id === profile?.id
+                    ? getUserAvatar(selectedFriend)
+                    : getUserAvatar(profile),
+                seen_at: msg.read_at || new Date().toISOString(),
+              },
+            ]
+          : [];
+
+      return {
+        ...msg,
+        content,
+        is_temp: false,
+        message_type: messageType,
+        sender,
+        reply_to,
+        is_read: msg.is_read || false,
+        read_at: msg.read_at || null,
+        seen_by,
+      };
+    });
+
+    // ————————————————————————————
+    // 6. Sort messages by creation time
+    // ————————————————————————————
+    setMessages(
+      enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    );
+    console.log('Loaded messages with seen_by and MP3 conversion:', enhanced);
+  } catch (err) {
+    setError('Failed to load messages');
+    console.error(err);
+  }
+};
+
 
   /* --------------------------------------------------------------------- */
   /*                           Friend Selection                            */
