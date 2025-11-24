@@ -53,7 +53,6 @@ const GroupChatPage = ({ groupId }) => {
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
-  const pollingIntervalRef = useRef(null);
   const WS_BASE_URI = import.meta.env.VITE_WS_URL;
   const token = localStorage.getItem('accessToken');
   const [open, setOpen] = useState(false);
@@ -75,6 +74,7 @@ const GroupChatPage = ({ groupId }) => {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const messagesRef = useRef([]);
   const [openListMember, setOpenListMember] = useState(false);
+  const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
   const toggleListMember = () => {
     console.log("toggle open")
@@ -106,10 +106,12 @@ const GroupChatPage = ({ groupId }) => {
 
   const sendSeenEvent = (messageId) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        action: "seen",
-        message_id: messageId
-      }));
+      wsRef.current.send(
+        JSON.stringify({
+          action: "seen",
+          message_id: messageId,
+        })
+      );
     }
   };
 
@@ -174,11 +176,10 @@ const GroupChatPage = ({ groupId }) => {
   };
 
   useEffect(() => {
-    requestAnimationFrame(() => {
-      autoScrollToBottom();
-      markVisibleMessagesAsSeen();
-    });
+    const handle = requestAnimationFrame(() => autoScrollToBottom());
+    return () => cancelAnimationFrame(handle);
   }, [messages]);
+
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -230,15 +231,22 @@ const GroupChatPage = ({ groupId }) => {
   };
 
   useEffect(() => {
-    if (!groupId) return;
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
+    const onScroll = () => markVisibleMessagesAsSeen();
+    container.addEventListener("scroll", onScroll);
+
+    markVisibleMessagesAsSeen();
+
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [messages, seenMessages]);
+
+
+
+  useEffect(() => {
     fetchGroupData();
     setupWebSocket();
-
-    return () => {
-      if (wsRef.current) wsRef.current.close();
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-    };
   }, [groupId]);
 
   const fetchGroupData = async () => {
@@ -254,6 +262,8 @@ const GroupChatPage = ({ groupId }) => {
       const membersData = results[1].status === 'fulfilled' ? results[1].value : [];
       const groupData = results[2].status === 'fulfilled' ? results[2].value : { id: groupId, name: `Group ${groupId}` };
 
+      messagesData.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
       setMessages(messagesData);
       setMembers(membersData);
       setGroup({
@@ -268,106 +278,90 @@ const GroupChatPage = ({ groupId }) => {
     }
   };
 
+
   const markVisibleMessagesAsSeen = () => {
-    if (!messagesContainerRef.current) return;
     const container = messagesContainerRef.current;
+    if (!container) return;
 
-    const messageElements = container.querySelectorAll("[data-message-id]");
-
-    messageElements.forEach((el) => {
+    container.querySelectorAll("[data-message-id]").forEach((el) => {
       const rect = el.getBoundingClientRect();
-
       if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
         const id = Number(el.dataset.messageId);
-        const msg = messages.find((m) => m.id === id);
-
+        const msg = messages.find(m => m.id === id);
         if (msg && msg.sender?.id !== user?.id && !seenMessages.has(id)) {
-          setSeenMessages((prev) => new Set(prev).add(id));
+          setSeenMessages(prev => new Set(prev).add(id));
           sendSeenEvent(id);
         }
       }
     });
   };
 
-  const setupWebSocket = () => {
-    try {
-      const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+  const handleWSMessage = (event) => {
+    const data = JSON.parse(event.data);
+    console.log('WS received:', data);
 
-      ws.onopen = () => {
-        console.log('Connected to group chat');
-      };
+    switch (data.action) {
+      case "seen":
+        setMessages(prev =>
+          prev.map(msg => {
+            if (msg.id !== data.message_id) return msg;
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('WS received:', data);
+            const seenBy = new Set(msg.seen_by || []);
+            seenBy.add(data.user_id);
 
-        switch (data.action) {
-          case "seen":
-            setMessages(prev =>
-              prev.map(msg =>
-                msg.id === data.message_id
-                  ? { ...msg, seen_by: [...(msg.seen_by || []), data.user_id] }
-                  : msg
-              )
-            );
-            break;
+            return { ...msg, seen_by: Array.from(seenBy) };
+          })
+        );
+        break;
 
-          case "forwarded":
-            console.log(`Message ${data.message_id} forwarded to`, data.forwarded_to);
-            break;
 
-          default:
-            setMessages(prev => {
-              const updated = [...prev];
+      case "forwarded":
+        console.log(`Message ${data.message_id} forwarded to`, data.forwarded_to);
+        break;
 
-              if (data.temp_id) {
-                const tempIndex = messagesRef.current.findIndex(msg => msg.id === data.temp_id);
-                if (tempIndex !== -1) {
-                  updated[tempIndex] = { ...data, is_temp: false };
-                  return updated;
-                }
-              }
+      default:
+        setMessages((prev) => {
+          const updated = [...prev];
 
-              updated.push(data);
+          if (data.temp_id) {
+            const tempIndex = updated.findIndex(msg => msg.id === data.temp_id);
+            if (tempIndex !== -1) {
+              updated[tempIndex] = { ...updated[tempIndex], ...data, is_temp: false };
               return updated;
-            });
-            break;
-        }
+            }
+          }
 
-        markVisibleMessagesAsSeen();
-        autoScrollToBottom();
-      };
+          if (updated.some(msg => msg.id === data.id)) {
+            return updated;
+          }
 
-      ws.onclose = (event) => {
-        console.log('Disconnected from group chat:', event.reason);
-      };
+          updated.push(data);
+          return updated;
+        });
 
-      ws.onerror = (error) => {
-        console.log('WebSocket connection failed, using fallback polling', error);
-        setupPolling();
-      };
-    } catch (error) {
-      console.log('WebSocket setup failed, using fallback polling', error);
-      setupPolling();
+        break;
     }
+
+    autoScrollToBottom();
+    markVisibleMessagesAsSeen();
   };
 
-  const setupPolling = () => {
-    const pollMessages = async () => {
-      try {
-        const messagesData = await getGroupMessage(groupId);
-        setMessages(messagesData);
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
+  const setupWebSocket = () => {
+    const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => console.log('Connected to group chat');
+
+    ws.onmessage = handleWSMessage;
+
+    ws.onclose = (event) => {
+      console.log('Disconnected from group chat:', event.reason);
     };
 
-    pollMessages();
-    const pollInterval = setInterval(pollMessages, 5000);
-
-    pollingIntervalRef.current = pollInterval;
+    ws.onerror = (error) => {
+      console.log('WebSocket error', error);
+    };
   };
 
   const handleSendMessage = () => {
@@ -375,11 +369,11 @@ const GroupChatPage = ({ groupId }) => {
     if (!trimmedMessage) return;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket not connected');
+      console.warn("WebSocket not connected yet!");
       return;
     }
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = generateTempId();
     const tempMessage = {
       id: tempId,
       sender: user,
@@ -389,27 +383,32 @@ const GroupChatPage = ({ groupId }) => {
       reply_to_message: replyTo || null,
     };
 
-    setMessages(prev => [...prev, tempMessage]);
+    setMessages((prev) => [...prev, tempMessage]);
 
-    const messageData = {
+    const payload = {
       type: "message",
       content: trimmedMessage,
+      temp_id: tempId,
       reply_to: replyTo?.id || null,
-      temp_id: tempId
     };
 
     try {
-      wsRef.current.send(JSON.stringify(messageData));
-    } catch (error) {
-      console.error('WebSocket send failed', error);
-      setMessages(prev =>
-        prev.map(msg => msg.id === tempId ? { ...msg, failed: true } : msg)
+      wsRef.current.send(JSON.stringify(payload));
+    } catch (err) {
+      console.error("Failed to send message via WS:", err);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === tempId ? { ...msg, is_temp: false, failed: true } : msg
+        )
       );
     }
 
-    setNewMessage('');
+    setNewMessage("");
     setReplyTo(null);
-    autoScrollToBottom();
+
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 100);
   };
 
   const handleKeyPress = (e) => {
@@ -432,7 +431,7 @@ const GroupChatPage = ({ groupId }) => {
   const handleUploadFileMessage = async (groupId, file) => {
     if (!file) return;
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = generateTempId();
     const tempMessage = {
       id: tempId,
       file_url: URL.createObjectURL(file),
@@ -475,7 +474,7 @@ const GroupChatPage = ({ groupId }) => {
   const updateFileMessage = async (messageId, newFile) => {
     if (!newFile) return;
 
-    const tempId = `updating-${Date.now()}`;
+    const tempId = generateTempId();
     const tempPreviewUrl = URL.createObjectURL(newFile);
 
     setMessages((prev) =>
@@ -618,7 +617,6 @@ const GroupChatPage = ({ groupId }) => {
           }}
         >
 
-
           <Box
             sx={{
               flex: 1,
@@ -652,12 +650,11 @@ const GroupChatPage = ({ groupId }) => {
             ) : (
               messages
                 .slice()
-                .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                .sort((a, b) => new Date(a.created_at || a.temp_created_at) - new Date(b.created_at || b.temp_created_at))
                 .map((message) => {
                   const isEditing = editingMessageId === message.id;
-                  const messageId = message.id ?? `temp-${message.created_at}`;
+                  const messageKey = message.id || message.temp_id || `temp-${Math.random()}`;
 
-                  const isSeen = message.seen_by?.length > 0;
                   const isForwarded = !!message?.forwarded_by;
 
                   const isOwn = isForwarded
@@ -666,8 +663,8 @@ const GroupChatPage = ({ groupId }) => {
 
                   return (
                     <Box
-                      key={messageId}
-                      data-message-id={messageId}
+                      key={messageKey}
+                      data-message-id={messageKey}
                       sx={{
                         display: 'flex',
                         justifyContent: isOwn ? 'flex-end' : 'flex-start',
@@ -675,20 +672,20 @@ const GroupChatPage = ({ groupId }) => {
                         mb: 1,
                       }}
                     >
-                      {!isOwn && (
+                      {!isOwn && message.sender?.username && (
                         <Avatar
-                          src={message.sender?.avatar_url}
-                          alt={message.sender?.username || 'User'}
+                          src={message.sender.avatar_url}
+                          alt={message.sender.username || 'User'}
                           sx={{ width: 32, height: 32, mr: 1 }}
                         >
-                          {message.sender?.username?.charAt(0) || 'U'}
+                          {message.sender.username?.charAt(0) || 'U'}
                         </Avatar>
                       )}
 
                       <Box sx={{ maxWidth: '70%', position: 'relative' }}>
                         {!isOwn && (
                           <Typography variant="caption" sx={{ fontWeight: 600, ml: 1 }}>
-                            {message.sender?.username || 'Unknown User'}
+                            {message.sender?.username}
                           </Typography>
                         )}
 
@@ -883,41 +880,39 @@ const GroupChatPage = ({ groupId }) => {
                           )}
                         </Box>
 
-                        <Box sx={{
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
-                          >
-                            {formatCambodiaTime(message.created_at)}
-                            {message.is_temp && ' • Sending...'}
-                          </Typography>
-                          <Box sx={{
-                            mt: 0.5
-                          }}>
-                            {isSeen ?
-                              <DoneAllIcon fontSize='12' color='green'
-                                sx={{
-                                  color: 'green',
-                                  transition: 'transform 0.2s',
-                                  '&:hover': {
-                                    transform: 'scale(1.3)'
-                                  }
-                                }}
-                                onClick={() => {
-                                  setSelectedMessageId(message.id);
-                                  setOpenSeenMessage(true);
-                                }}
-                              />
-                              :
-                              <CheckIcon
-                                fontSize='12'
-                              />}
+                        {(isOwn || message.sender?.username) && (
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
+                            >
+                              {formatCambodiaTime(message.created_at)}
+                              {message.is_temp && ' • Sending...'}
+                            </Typography>
+                            <Box sx={{ mt: 0.5 }}>
+                              {message.seen_by?.length > 0 ? (
+                                <DoneAllIcon
+                                  fontSize="12"
+                                  color="green"
+                                  sx={{
+                                    color: 'green',
+                                    transition: 'transform 0.2s',
+                                    '&:hover': { transform: 'scale(1.3)' }
+                                  }}
+                                  onClick={() => {
+                                    setSelectedMessageId(message.id);
+                                    setOpenSeenMessage(true);
+                                  }}
+                                />
+                              ) : (
+                                <CheckIcon fontSize="12" />
+                              )}
+                            </Box>
                           </Box>
-                        </Box>
+
+                        )}
+
                       </Box>
 
                       <Menu
