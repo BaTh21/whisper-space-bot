@@ -483,19 +483,20 @@ async def ws_group_chat(
                 if action == "edit":
                     message_id = int(data.get("message_id"))
                     new_content = data.get("new_content")
+                    now = datetime.utcnow()
 
                     updated = update_message(
                         db=db,
                         message_id=message_id,
                         message_data=GroupMessageUpdate(content=new_content),
-                        current_user_id=current_user.id
+                        current_user_id=current_user.id,
                     )
 
                     await manager.broadcast(chat_id, {
                         "action": "edit",
                         "message_id": message_id,
                         "new_content": new_content,
-                        "updated_at": updated.updated_at.isoformat()
+                        "updated_at": to_local_iso(now, tz_offset_hours=7)
                     })
                     continue
                 

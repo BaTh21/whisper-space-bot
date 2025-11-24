@@ -15,8 +15,7 @@ import {
   Typography,
   Drawer
 } from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
 import GroupSideComponent from '../components/group/GroupSideComponent';
 import Layout from '../components/Layout';
@@ -43,7 +42,6 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 
 const GroupChatPage = ({ groupId }) => {
 
-  const navigate = useNavigate();
   const { auth } = useAuth();
   const user = auth?.user;
   const [messages, setMessages] = useState([]);
@@ -242,11 +240,13 @@ const GroupChatPage = ({ groupId }) => {
     return () => container.removeEventListener("scroll", onScroll);
   }, [messages, seenMessages]);
 
-
-
   useEffect(() => {
     fetchGroupData();
     setupWebSocket();
+
+    return () => {
+      wsRef.current?.close();
+    };
   }, [groupId]);
 
   const fetchGroupData = async () => {
@@ -279,7 +279,7 @@ const GroupChatPage = ({ groupId }) => {
   };
 
 
-  const markVisibleMessagesAsSeen = () => {
+  const markVisibleMessagesAsSeen = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
@@ -287,14 +287,18 @@ const GroupChatPage = ({ groupId }) => {
       const rect = el.getBoundingClientRect();
       if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
         const id = Number(el.dataset.messageId);
-        const msg = messages.find(m => m.id === id);
-        if (msg && msg.sender?.id !== user?.id && !seenMessages.has(id)) {
-          setSeenMessages(prev => new Set(prev).add(id));
-          sendSeenEvent(id);
-        }
+        setMessages(prev => {
+          const msg = prev.find(m => m.id === id);
+          if (msg && msg.sender?.id !== user?.id && !seenMessages.has(id)) {
+            setSeenMessages(prevSet => new Set(prevSet).add(id));
+            sendSeenEvent(id);
+          }
+          return prev;
+        });
       }
     });
-  };
+  }, [seenMessages, user]);
+
 
   const handleWSMessage = (event) => {
     const data = JSON.parse(event.data);
@@ -311,6 +315,16 @@ const GroupChatPage = ({ groupId }) => {
 
             return { ...msg, seen_by: Array.from(seenBy) };
           })
+        );
+        break;
+
+      case "edit":
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === data.message_id
+              ? { ...msg, content: data.new_content, updated_at: data.updated_at }
+              : msg
+          )
         );
         break;
 
@@ -653,7 +667,7 @@ const GroupChatPage = ({ groupId }) => {
                 .sort((a, b) => new Date(a.created_at || a.temp_created_at) - new Date(b.created_at || b.temp_created_at))
                 .map((message) => {
                   const isEditing = editingMessageId === message.id;
-                  const messageKey = message.id || message.temp_id || `temp-${Math.random()}`;
+                  const messageKey = message.id ?? message.temp_id;
 
                   const isForwarded = !!message?.forwarded_by;
 
@@ -872,7 +886,7 @@ const GroupChatPage = ({ groupId }) => {
                                   }}
                                   onClick={(e) => openSecondMenu(e, message.id)}
                                 >
-                                  {message.content}
+                                  {message.content} - {formatCambodiaTime(message.updated_at)}
                                 </Typography>
                               )}
 
