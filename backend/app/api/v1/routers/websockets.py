@@ -15,7 +15,7 @@ from app.models.group_message import MessageType, GroupMessage
 from app.schemas.chat import MessageCreate, AuthorResponse
 import json
 from app.models.group_message_reply import GroupMessageReply
-from app.crud.message import handle_seen_message, handle_forward_message, update_message, delete_message, update_file_message
+from app.crud.message import handle_seen_message, handle_forward_message, update_message, delete_message, update_file_message, upload_file_message
 import traceback
 from app.models.group_message_seen import GroupMessageSeen
 
@@ -463,21 +463,32 @@ async def ws_group_chat(
                 if action == "forward_to_groups":
                     message_id = data.get("message_id")
                     target_group_ids = [int(g) for g in data.get("group_ids", [])]
+
+                    target_group_ids = [gid for gid in target_group_ids if gid != group_id]
+
                     forwarded_msgs = await handle_forward_message(
                         db,
                         current_user_id=current_user.id,
                         message_id=message_id,
                         target_group_ids=target_group_ids
                     )
-                    for fmsg in forwarded_msgs:
-                        chat_id_target = f"group_{fmsg.group_id}"
-                        await manager.broadcast(chat_id_target, fmsg)
 
                     await websocket.send_json({
                         "action": "forwarded",
                         "message_id": message_id,
-                        "forwarded_to": [m.group_id for m in forwarded_msgs]
+                        "forwarded_to": target_group_ids,
+                        "forwarded_by": {
+                            "id": current_user.id,
+                            "username": current_user.username,
+                            "avatar_url": current_user.avatar_url
+                        },
+                        "sender": {
+                            "id": current_user.id,
+                            "username": current_user.username,
+                            "avatar_url": current_user.avatar_url
+                        }
                     })
+
                     continue
                 
                 if action == "edit":
@@ -488,7 +499,7 @@ async def ws_group_chat(
                     updated = update_message(
                         db=db,
                         message_id=message_id,
-                        message_data=GroupMessageUpdate(content=new_content),
+                        content=new_content,
                         current_user_id=current_user.id,
                     )
 
@@ -496,7 +507,7 @@ async def ws_group_chat(
                         "action": "edit",
                         "message_id": message_id,
                         "new_content": new_content,
-                        "updated_at": to_local_iso(now, tz_offset_hours=7)
+                        "updated_at": to_local_iso(updated.updated_at, tz_offset_hours=7)
                     })
                     continue
                 
@@ -513,54 +524,40 @@ async def ws_group_chat(
                 
                 if action == "file_upload":
                     file_url = data.get("file_url")
-                    temp_id = data.get("temp_id")
-
-                    msg = GroupMessage(
-                        group_id=group_id,
-                        sender_id=current_user.id,
-                        message_type=MessageType.image,
-                        created_at=datetime.utcnow(),
-                        file_url=file_url,
-                        content=None
-                    )
-
-                    db.add(msg)
-                    db.commit()
-                    db.refresh(msg)
-
-                    msg_out = GroupMessageOut(
-                        id=msg.id,
-                        temp_id=temp_id,
-                        sender=AuthorResponse(
-                            id=current_user.id,
-                            username=current_user.username,
-                            avatar_url=current_user.avatar_url
-                        ),
-                        group_id=group_id,
-                        content=None,
-                        file_url=file_url,
-                        created_at=msg.created_at.isoformat()
-                    )
-
-                    await manager.broadcast(chat_id, msg_out)
+                    message_id = data.get("message_id")
+                    
+                    msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+                    if not msg:
+                        continue
+                    
+                    await manager.broadcast(chat_id, {
+                        "action": "file_upload",
+                        "id": msg.id,
+                        "sender": {
+                            "id": msg.sender.id,
+                            "username": msg.sender.username,
+                            "avatar_url": msg.sender.avatar_url
+                        },
+                        "file_url": msg.file_url,
+                        "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
+                        "temp_id": incoming_temp_id
+                        })
                     continue
 
                 if action == "file_update":
                     message_id = data.get("message_id")
                     file_url = data.get("file_url")
-
-                    updated = await update_file_message(
-                        db=db,
-                        message_id=message_id,
-                        file=file_upload_object,
-                        current_user_id=current_user.id
-                    )
+                    
+                    msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+                    if not msg:
+                        continue
 
                     await manager.broadcast(chat_id, {
                         "action": "file_update",
-                        "message_id": message_id,
-                        "file_url": updated.file_url,
-                        "updated_at": updated.updated_at.isoformat()
+                        "message_id": msg.id,
+                        "file_url": file_url,
+                        "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7),
+                        "temp_id": incoming_temp_id
                     })
                     continue
 
@@ -609,7 +606,7 @@ async def ws_group_chat(
                     "group_id": msg.group_id,
                     "content": msg.content,
                     "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
-                    "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7),
+                    # "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7),
                     "file_url": msg.file_url,
                     "parent_message": parent_msg_data
                 }

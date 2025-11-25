@@ -25,7 +25,7 @@ class GroupMessage(Base):
     forwarded_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     content = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
-    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=utcnow)
     message_type = Column(Enum(MessageType), default=MessageType.text)
     file_url = Column(String(255), nullable=True)
     public_id = Column(String(255), nullable=True)

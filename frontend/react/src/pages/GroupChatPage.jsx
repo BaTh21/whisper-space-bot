@@ -154,7 +154,6 @@ const GroupChatPage = ({ groupId }) => {
     });
   };
 
-
   const scrollToBottom = () => {
     const container = messagesEndRef.current;
     if (container) {
@@ -202,29 +201,33 @@ const GroupChatPage = ({ groupId }) => {
     setEditingMessageId(null);
   };
 
-  const onEdit = async (messageId, content) => {
-    try {
-      await updateMessageById(messageId, { content });
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === messageId ? { ...msg, content } : msg))
-      );
-    } catch (err) {
-      console.error(err);
-    }
+  const onEdit = (messageId, content) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    const editPayload = {
+      action: "edit",
+      message_id: messageId,
+      new_content: content,
+    };
+
+    wsRef.current.send(JSON.stringify(editPayload));
+    setEditingMessageId(null);
   };
 
   const onDelete = async (message) => {
-    const messageId = message.id;
-    const isForwarded = !!message?.forwarded_by;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    const payload = {
+      action: "delete",
+      message_id: message.id
+    };
 
     try {
-      await deleteMessageById(messageId, {
-        forwarder_id: isForwarded ? user.id : undefined
-      });
+      wsRef.current.send(JSON.stringify(payload));
 
-      setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      setMessages(prev => prev.filter(msg => msg.id !== message.id));
     } catch (err) {
-      console.error(err);
+      console.error("Failed to send delete via WS:", err);
     }
   };
 
@@ -278,7 +281,6 @@ const GroupChatPage = ({ groupId }) => {
     }
   };
 
-
   const markVisibleMessagesAsSeen = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -328,9 +330,60 @@ const GroupChatPage = ({ groupId }) => {
         );
         break;
 
+      case "delete":
+        setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
+        break;
 
-      case "forwarded":
-        console.log(`Message ${data.message_id} forwarded to`, data.forwarded_to);
+      case "forward_to_groups":
+        setMessages(prev => {
+          if (prev.some(msg => msg.id === data.id)) return prev;
+          return [...prev, data];
+        });
+        break;
+
+      case "file_upload":
+        setMessages(prev => {
+          const updated = [...prev];
+
+          if (data.temp_id) {
+            const tempIndex = updated.findIndex(msg => msg.id === data.temp_id);
+            if (tempIndex !== -1) {
+              updated[tempIndex] = {
+                ...updated[tempIndex],
+                id: data.id,
+                file_url: data.file_url,
+                created_at: data.created_at,
+                is_temp: false,
+                uploading: false,
+                progress: 100
+              };
+              return updated;
+            }
+          }
+
+          if (updated.some(msg => msg.id === data.id)) {
+            return updated;
+          }
+
+          updated.push({
+            ...data,
+            is_temp: false,
+            uploading: false,
+            progress: 100
+          });
+
+          return updated;
+        });
+        break;
+
+      case "file_update":
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === data.message_id
+              ? { ...msg, file_url: data.file_url, updated_at: data.updated_at, uploading: false, progress: 100 }
+              : msg
+          )
+        );
         break;
 
       default:
@@ -400,7 +453,7 @@ const GroupChatPage = ({ groupId }) => {
     setMessages((prev) => [...prev, tempMessage]);
 
     const payload = {
-      type: "message",
+      action: "message",
       content: trimmedMessage,
       temp_id: tempId,
       reply_to: replyTo?.id || null,
@@ -459,29 +512,23 @@ const GroupChatPage = ({ groupId }) => {
     setMessages((prev) => [...prev, tempMessage]);
 
     try {
-      const uploadedMessage = await uploadFileMessage(groupId, file, (progressEvent) => {
-        if (progressEvent.total) {
-          const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === tempId ? { ...msg, progress: percent } : msg
-            )
-          );
-        }
-      });
+      const data = await uploadFileMessage(groupId, file);
 
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === tempId ? uploadedMessage : msg))
-      );
-    } catch (error) {
-      console.error("Upload error", error);
-      setMessages((prev) =>
-        prev.map((msg) =>
+      const uploadFilePayload = {
+        action: "file_upload",
+        file_url: data.file_url,
+        temp_id: tempId,
+        message_id: data.id
+      }
+
+      wsRef.current.send(JSON.stringify(uploadFilePayload));
+    } catch (err) {
+      console.error("Failed to send file_upload via WS:", err);
+      setMessages(prev =>
+        prev.map(msg =>
           msg.id === tempId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
-    } finally {
-      setFile(null);
     }
   };
 
@@ -507,23 +554,18 @@ const GroupChatPage = ({ groupId }) => {
     );
 
     try {
-      const updatedMessage = await editGroupFileMessage(messageId, newFile);
+      const data = await editGroupFileMessage(messageId, newFile);
 
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-              ...updatedMessage,
-              uploading: false,
-              progress: 100,
-            }
-            : msg
-        )
-      );
-    } catch (error) {
-      console.error("Update file error:", error);
-      setMessages((prev) =>
-        prev.map((msg) =>
+      wsRef.current.send(JSON.stringify({
+        action: "file_update",
+        message_id: messageId,
+        file_url: data.file_url,
+        temp_id: tempId
+      }));
+    } catch (err) {
+      console.error("Failed to send file_update via WS:", err);
+      setMessages(prev =>
+        prev.map(msg =>
           msg.id === messageId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
@@ -886,7 +928,7 @@ const GroupChatPage = ({ groupId }) => {
                                   }}
                                   onClick={(e) => openSecondMenu(e, message.id)}
                                 >
-                                  {message.content} - {formatCambodiaTime(message.updated_at)}
+                                  {message.content}
                                 </Typography>
                               )}
 
@@ -901,7 +943,10 @@ const GroupChatPage = ({ groupId }) => {
                               color="text.secondary"
                               sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
                             >
-                              {formatCambodiaTime(message.created_at)}
+                              {message.updated_at
+                                ? `edited at: ${formatCambodiaTime(message.updated_at)}`
+                                : formatCambodiaTime(message.created_at)
+                              }
                               {message.is_temp && ' • Sending...'}
                             </Typography>
                             <Box sx={{ mt: 0.5 }}>
