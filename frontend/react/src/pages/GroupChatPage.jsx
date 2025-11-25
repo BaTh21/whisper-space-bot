@@ -20,7 +20,7 @@ import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
 import GroupSideComponent from '../components/group/GroupSideComponent';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getGroupMembers, getGroupMessage, getGroupById, updateMessageById, deleteMessageById, uploadFileMessage, editGroupFileMessage } from '../services/api';
+import { getGroupMembers, getGroupMessage, getGroupById, uploadFileMessage, editGroupFileMessage } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -302,8 +302,9 @@ const GroupChatPage = ({ groupId }) => {
   }, [seenMessages, user]);
 
 
-  const handleWSMessage = (event) => {
+  const handleWSMessage = (event, groupId) => {
     const data = JSON.parse(event.data);
+    data.group_id = groupId;
     console.log('WS received:', data);
 
     switch (data.action) {
@@ -332,13 +333,6 @@ const GroupChatPage = ({ groupId }) => {
 
       case "delete":
         setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
-        break;
-
-      case "forward_to_groups":
-        setMessages(prev => {
-          if (prev.some(msg => msg.id === data.id)) return prev;
-          return [...prev, data];
-        });
         break;
 
       case "file_upload":
@@ -384,6 +378,33 @@ const GroupChatPage = ({ groupId }) => {
               : msg
           )
         );
+        break;
+
+      case "new_message":
+        setMessages(prev => {
+          const updated = [...prev];
+
+          if (data.temp_id) {
+            const idx = updated.findIndex(msg => msg.id === data.temp_id);
+            if (idx !== -1) {
+              updated[idx] = {
+                ...updated[idx],
+                ...data,
+                is_temp: false
+              };
+              return updated;
+            }
+          }
+          if (!updated.some(msg => msg.id === data.id)) {
+            updated.push(data);
+          }
+
+          return updated;
+        });
+        break;
+
+      case "forwarded":
+        console.log(`Message ${data.message_id} forwarded to groups:`, data.forwarded_to);
         break;
 
       default:
@@ -717,6 +738,7 @@ const GroupChatPage = ({ groupId }) => {
                     ? message?.forwarded_by?.id === user?.id
                     : message.sender?.id === user?.id;
 
+                  
                   return (
                     <Box
                       key={messageKey}

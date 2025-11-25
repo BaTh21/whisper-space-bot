@@ -463,7 +463,6 @@ async def ws_group_chat(
                 if action == "forward_to_groups":
                     message_id = data.get("message_id")
                     target_group_ids = [int(g) for g in data.get("group_ids", [])]
-
                     target_group_ids = [gid for gid in target_group_ids if gid != group_id]
 
                     forwarded_msgs = await handle_forward_message(
@@ -489,8 +488,13 @@ async def ws_group_chat(
                         }
                     })
 
-                    continue
-                
+                    for gid, fwd_msg in zip(target_group_ids, forwarded_msgs):
+                        target_chat_id = f"group_{gid}"
+                        await manager.broadcast(target_chat_id, {
+                            "action": "new_message",
+                            **fwd_msg
+                        })
+
                 if action == "edit":
                     message_id = int(data.get("message_id"))
                     new_content = data.get("new_content")
