@@ -123,143 +123,173 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /*                         WebSocket Handlers                           */
   /* --------------------------------------------------------------------- */
-const handleWebSocketMessage = useCallback(
-  (data) => {
-    const { type } = data;
+  const handleWebSocketMessage = useCallback(
+    (data) => {
+      const { type } = data;
 
-    // ————————————————————————————————
-    // 1. NEW MESSAGE (from anyone, including your own confirmed message)
-    // ————————————————————————————————
-    if (type === 'message') {
-      const detectMessageType = (msgData) => {
-        if (msgData.message_type === 'image') return 'image';
-        if (msgData.message_type === 'voice') return 'voice';
+      // ————————————————————————————————
+      // 1. NEW MESSAGE (incoming OR your confirmed message)
+      // ————————————————————————————————
+      if (type === "message") {
+        const detectMessageType = (msgData) => {
+          if (msgData.message_type === "image") return "image";
+          if (msgData.message_type === "voice") return "voice";
 
-        const content = msgData.content || '';
-        const isVoiceUrl =
-          content.match(/\.mp3$/i) ||
-          (content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm')));
+          const content = msgData.content || "";
+          const isVoiceUrl =
+            content.match(/\.mp3$/i) ||
+            (content.includes("/voice_messages/") &&
+              (content.match(/\.mp3$/i) || content.includes(".webm")));
 
-        if (isVoiceUrl) return 'voice';
+          if (isVoiceUrl) return "voice";
 
-        const isImageUrl =
-          content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-          (content.includes('cloudinary.com') && !content.includes('/voice_messages/')) ||
-          content.startsWith('data:image/');
+          const isImageUrl =
+            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+            (content.includes("cloudinary.com") &&
+              !content.includes("/voice_messages/")) ||
+            content.startsWith("data:image/");
 
-        return isImageUrl ? 'image' : 'text';
-      };
+          return isImageUrl ? "image" : "text";
+        };
 
-      const messageType = detectMessageType(data);
-      let content = data.content;
-      if (messageType === 'voice' && content.includes('.webm')) {
-        content = convertWebmToMp3Url(content);
-      }
+        const messageType = detectMessageType(data);
 
-      const realMessage = {
-        ...data,
-        content,
-        is_temp: false,                                 // Real message from server
-        message_type: messageType,
-        sender: {
-          id: data.sender_id,
-          username: data.sender_username,
-          avatar_url: getAvatarUrl(data.avatar_url),
-        },
-        reply_to: data.reply_to
-          ? { ...data.reply_to, sender_username: data.reply_to.sender_username }
-          : null,
-        is_read: data.is_read || false,
-        read_at: data.read_at,
-        // delivered_at: data.delivered_at,
-        seen_by: data.seen_by || [],
-      };
-
-      setMessages((prev) => {
-        // Replace temp message (your own sent message) when server confirms
-        const tempMatch = prev.find(
-          (m) =>
-            m.is_temp &&
-            m.content === realMessage.content &&
-            m.sender_id === realMessage.sender_id &&
-            Math.abs(new Date(m.created_at) - new Date(realMessage.created_at)) < 15000
-        );
-
-        if (tempMatch) {
-          return prev.map((m) => (m.id === tempMatch.id ? realMessage : m));
+        let content = data.content;
+        if (messageType === "voice" && content.includes(".webm")) {
+          content = convertWebmToMp3Url(content);
         }
 
-        // Avoid duplicates for normal incoming messages
-        if (prev.some((m) => m.id === realMessage.id)) return prev;
+        const realMessage = {
+          ...data,
+          content,
+          is_temp: false,
+          message_type: messageType,
+          sender: {
+            id: data.sender_id,
+            username: data.sender_username,
+            avatar_url: getAvatarUrl(data.avatar_url),
+          },
+          reply_to: data.reply_to
+            ? { ...data.reply_to, sender_username: data.reply_to.sender_username }
+            : null,
+          is_read: data.is_read || false,
+          read_at: data.read_at,
+          seen_by: data.seen_by || [],
+        };
 
-        return [...prev, realMessage].sort(
-          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        setMessages((prev) => {
+          // ———————————————————————————————————
+          // STEP 3 — Replace temp messages using temp_id
+          // ———————————————————————————————————
+          const tempMatch = prev.find(
+            (m) => m.is_temp && m.temp_id && m.temp_id === data.temp_id
+          );
+
+          if (tempMatch) {
+            return prev.map((m) =>
+              m.temp_id === data.temp_id ? realMessage : m
+            );
+          }
+
+          // Avoid duplicates
+          if (prev.some((m) => m.id === realMessage.id)) return prev;
+
+          return [...prev, realMessage].sort(
+            (a, b) => new Date(a.created_at) - new Date(b.created_at)
+          );
+        });
+
+        // ————————————————————————————————
+        // 2. READ RECEIPT / MESSAGE UPDATED
+        // ————————————————————————————————
+      } else if (type === "read_receipt" || type === "message_updated") {
+        // STEP 2 — FIX fallback for seen_by / reader info
+        const safeSeenBy =
+          data.seen_by && Array.isArray(data.seen_by)
+            ? data.seen_by
+            : [
+              {
+                user_id: data.reader_id || data.read_by || selectedFriend?.id,
+                username:
+                  data.reader_username || selectedFriend?.username || "Unknown",
+                avatar_url:
+                  data.reader_avatar_url || selectedFriend?.avatar_url || null,
+                seen_at: data.read_at || new Date().toISOString(),
+              },
+            ];
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === data.message_id
+              ? {
+                ...msg,
+                is_temp: false,
+                is_read: true,
+                read_at: data.read_at || new Date().toISOString(),
+                seen_by: safeSeenBy,
+              }
+              : msg
+          )
         );
-      });
 
-      // ————————————————————————————————
-      // 2. READ RECEIPT (friend saw your message)
-      // ————————————————————————————————
-    } else if (type === 'read_receipt' || type === 'message_updated') {
-      console.log('📩 READ RECEIPT RECEIVED:', data); // Debug log
-      
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === data.message_id
-            ? {
+        // ————————————————————————————————
+        // 3. TYPING INDICATOR
+        // ————————————————————————————————
+      } else if (type === "typing") {
+        setFriendTyping(data.is_typing);
+
+        // ————————————————————————————————
+        // 4. STATUS UPDATE
+        // ————————————————————————————————
+      } else if (type === 'message_updated' || type === 'read_receipt') {
+        if (!data.message_id) return; // safety check
+
+        // ✅ Ensure seen_by is always an array
+        const safeSeenBy =
+          Array.isArray(data.seen_by) && data.seen_by.length > 0
+            ? data.seen_by
+            : [
+              {
+                user_id: data.reader_id || selectedFriend?.id,
+                username: data.reader_username || selectedFriend?.username,
+                avatar_url: data.reader_avatar_url || getUserAvatar(selectedFriend),
+                seen_at: data.read_at || new Date().toISOString(),
+              },
+            ];
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id !== data.message_id) return msg;
+
+            // ✅ Merge existing seen_by with new updates to prevent duplicates
+            const existingSeenIds = msg.seen_by?.map((s) => s.user_id) || [];
+            const mergedSeenBy = [
+              ...msg.seen_by?.filter((s) => existingSeenIds.includes(s.user_id)) || [],
+              ...safeSeenBy.filter((s) => !existingSeenIds.includes(s.user_id)),
+            ];
+
+            return {
               ...msg,
               is_temp: false,
               is_read: true,
               read_at: data.read_at || new Date().toISOString(),
-              seen_by: data.seen_by || [ // ✅ Ensure seen_by is populated
-                {
-                  user_id: data.read_by || selectedFriend?.id,
-                  username: selectedFriend?.username,
-                  avatar_url: selectedFriend?.avatar_url,
-                  seen_at: data.read_at || new Date().toISOString()
-                }
-              ],
-            }
-            : msg
-        )
-      );
+              seen_by: mergedSeenBy,
+            };
+          })
+        );
 
-      // ————————————————————————————————
-      // 3. TYPING INDICATOR
-      // ————————————————————————————————
-    } else if (type === 'typing') {
-      setFriendTyping(data.is_typing);
+        // ————————————————————————————————
+        // 5. MESSAGE DELETED
+        // ————————————————————————————————
+      } else if (type === "message_deleted") {
+        setMessages((prev) => prev.filter((msg) => msg.id !== data.message_id));
+        if (pinnedMessage?.id === data.message_id) setPinnedMessage(null);
+        if (replyingTo?.id === data.message_id) setReplyingTo(null);
+      }
+    },
+    [getAvatarUrl, pinnedMessage, replyingTo, selectedFriend]
+  );
 
-      // ————————————————————————————————
-      // 4. STATUS UPDATE (delivered, seen, etc.)
-      // ————————————————————————————————
-    } else if (type === 'message_status_update') {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === data.message_id
-            ? {
-              ...msg,
-              is_temp: false,
-              // delivered_at: data.delivered_at || msg.delivered_at,
-              is_read: data.is_read ?? msg.is_read,
-              read_at: data.read_at || msg.read_at,
-              seen_by: data.seen_by || msg.seen_by || [],
-            }
-            : msg
-        )
-      );
-
-      // ————————————————————————————————
-      // 5. MESSAGE DELETED
-      // ————————————————————————————————
-    } else if (type === 'message_deleted') {
-      setMessages((prev) => prev.filter((msg) => msg.id !== data.message_id));
-      if (pinnedMessage?.id === data.message_id) setPinnedMessage(null);
-      if (replyingTo?.id === data.message_id) setReplyingTo(null);
-    }
-  },
-  [getAvatarUrl, pinnedMessage, replyingTo, selectedFriend] // ✅ Added selectedFriend dependency
-);
 
 
   const handleWebSocketOpen = useCallback(() => {
@@ -302,55 +332,72 @@ const handleWebSocketMessage = useCallback(
     heartbeatInterval: 30000,
     debug: true,
   });
-/* --------------------------------------------------------------------- */
-/*                 Intersection Observer for Auto-Seen                  */
-/* --------------------------------------------------------------------- */
-useEffect(() => {
-  if (!messagesContainerRef.current || !selectedFriend) return;
+  /* --------------------------------------------------------------------- */
+  /*                 Intersection Observer for Auto-Seen                  */
+  /* --------------------------------------------------------------------- */
+  useEffect(() => {
+    if (!messagesContainerRef.current || !selectedFriend) return;
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const messageId = entry.target.getAttribute('data-message-id');
-          const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
-          
-          if (messageId && isUnread && isConnected) {
-            // Mark this specific message as read
-            sendWsMessage({
-              type: 'read',
-              message_id: parseInt(messageId)
-            });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const messageId = parseInt(entry.target.getAttribute('data-message-id'));
+            const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
 
-            setMessages(prev => prev.map(msg =>
-              msg.id === parseInt(messageId)
-                ? { ...msg, is_read: true, read_at: new Date().toISOString() }
-                : msg
-            ));
+            if (messageId && isUnread && isConnected) {
+              // 1️⃣ Send WS read receipt
+              sendWsMessage({
+                type: 'read',
+                message_id: messageId,
+              });
+
+              // 2️⃣ Update local state instantly
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === messageId
+                    ? {
+                      ...msg,
+                      is_read: true,
+                      read_at: new Date().toISOString(),
+                      seen_by: [
+                        ...msg.seen_by.filter((s) => s.user_id !== selectedFriend.id),
+                        {
+                          user_id: selectedFriend.id,
+                          username: selectedFriend.username,
+                          avatar_url: getUserAvatar(selectedFriend),
+                          seen_at: new Date().toISOString(),
+                        },
+                      ],
+                    }
+                    : msg
+                )
+              );
+            }
           }
-        }
-      });
-    },
-    { 
-      root: messagesContainerRef.current,
-      rootMargin: '0px',
-      threshold: 0.8 // 80% of message visible
-    }
-  );
+        });
+      },
+      {
+        root: messagesContainerRef.current,
+        rootMargin: '0px',
+        threshold: 0.8, // 80% visible
+      }
+    );
 
-  // Observe all unread messages from friend
-  const unreadMessageElements = messagesContainerRef.current.querySelectorAll(
-    '[data-message-id][data-is-unread="true"]'
-  );
-  
-  unreadMessageElements.forEach(element => {
-    observer.observe(element);
-  });
+    // Observe all unread messages
+    const unreadMessageElements = messagesContainerRef.current.querySelectorAll(
+      '[data-message-id][data-is-unread="true"]'
+    );
 
-  return () => {
-    observer.disconnect();
-  };
-}, [messages, selectedFriend, isConnected, sendWsMessage]);
+    unreadMessageElements.forEach((el) => observer.observe(el));
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [messages, selectedFriend, isConnected, sendWsMessage]);
+
+
+
   /* --------------------------------------------------------------------- */
   /*                         Voice Recording Logic                        */
   /* --------------------------------------------------------------------- */
@@ -358,159 +405,159 @@ useEffect(() => {
   // Add this ref to track if we're already processing
   const isProcessingRef = useRef(false);
 
-const startRecording = async () => {
-  if (!selectedFriend) {
-    setError('Please select a friend first');
-    return;
-  }
-
-  // Prevent multiple starts but allow new recordings after previous ones
-  if (isRecording) {
-    console.log('⚠️ Already recording, please wait');
-    return;
-  }
-
-  try {
-    // Reset previous recording state - ALLOW NEW RECORDINGS
-    audioBlobRef.current = null;
-    setAudioUrl(null);
-    setAudioBlob(null);
-    setRecordingTime(0);
-    setVoiceSending(false);
-    setIsUploadingVoice(false);
-    
-    // Clear any existing intervals
-    if (recordingIntervalRef.current) {
-      clearInterval(recordingIntervalRef.current);
-      recordingIntervalRef.current = null;
+  const startRecording = async () => {
+    if (!selectedFriend) {
+      setError('Please select a friend first');
+      return;
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        sampleRate: 44100,
-        channelCount: 1,
-      }
-    });
-
-    // Try different MIME types in order of preference
-    const supportedTypes = [
-      'audio/mp4',
-      'audio/webm;codecs=opus',
-      'audio/webm'
-    ];
-
-    let selectedType = 'audio/webm';
-    for (const type of supportedTypes) {
-      if (MediaRecorder.isTypeSupported(type)) {
-        console.log(`✅ Using recording format: ${type}`);
-        selectedType = type;
-        break;
-      }
+    // Prevent multiple starts but allow new recordings after previous ones
+    if (isRecording) {
+      console.log('⚠️ Already recording, please wait');
+      return;
     }
 
-    const options = {
-      mimeType: selectedType,
-      audioBitsPerSecond: 128000
-    };
+    try {
+      // Reset previous recording state - ALLOW NEW RECORDINGS
+      audioBlobRef.current = null;
+      setAudioUrl(null);
+      setAudioBlob(null);
+      setRecordingTime(0);
+      setVoiceSending(false);
+      setIsUploadingVoice(false);
 
-    const mediaRecorder = new MediaRecorder(stream, options);
-    mediaRecorderRef.current = mediaRecorder;
-
-    const audioChunks = [];
-    let isStopped = false; // Track if we've already stopped
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0 && !isStopped) {
-        audioChunks.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      if (isStopped) return; // Prevent multiple executions
-      isStopped = true;
-
-      if (audioChunks.length === 0) {
-        console.log('No audio data recorded');
-        cleanupRecording();
-        return;
+      // Clear any existing intervals
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
       }
 
-      const blob = new Blob(audioChunks, { type: selectedType });
-      console.log('Recording stopped, blob created:', blob.size);
-
-      // Store in ref - READY FOR SENDING
-      audioBlobRef.current = blob;
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
-
-      // Clean up stream but keep recording state
-      cleanupStream();
-      
-      // Reset recording flag but keep the blob for sending
-      setIsRecording(false);
-    };
-
-    mediaRecorder.onerror = (event) => {
-      console.error('MediaRecorder error:', event.error);
-      setError('Recording failed: ' + event.error.name);
-      cleanupRecording();
-    };
-
-    // Start recording
-    mediaRecorder.start(1000); // Collect data every second
-    setIsRecording(true);
-    setRecordingTime(0);
-
-    // Set up recording timer
-    recordingIntervalRef.current = setInterval(() => {
-      setRecordingTime(prev => {
-        if (prev >= 120) {
-          stopRecording();
-          setError('Recording stopped automatically after 2 minutes');
-          return prev;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+          channelCount: 1,
         }
-        return prev + 1;
       });
-    }, 1000);
 
-  } catch (err) {
-    console.error('Error starting recording:', err);
-    // Reset all states on error
-    setIsRecording(false);
-    setRecordingTime(0);
-    audioBlobRef.current = null;
-    setAudioUrl(null);
+      // Try different MIME types in order of preference
+      const supportedTypes = [
+        'audio/mp4',
+        'audio/webm;codecs=opus',
+        'audio/webm'
+      ];
 
-    if (err.name === 'NotAllowedError') {
-      setError('Microphone access denied. Please allow microphone permissions.');
-    } else if (err.name === 'NotFoundError') {
-      setError('No microphone found. Please check your audio device.');
-    } else {
-      setError('Microphone access failed: ' + err.message);
-    }
-  }
-};
+      let selectedType = 'audio/webm';
+      for (const type of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          console.log(`✅ Using recording format: ${type}`);
+          selectedType = type;
+          break;
+        }
+      }
 
-const stopRecording = () => {
-  if (mediaRecorderRef.current && isRecording) {
-    console.log('🛑 Stopping recording...');
-    
-    // Stop media recorder
-    if (mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+      const options = {
+        mimeType: selectedType,
+        audioBitsPerSecond: 128000
+      };
+
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+
+      const audioChunks = [];
+      let isStopped = false; // Track if we've already stopped
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && !isStopped) {
+          audioChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        if (isStopped) return; // Prevent multiple executions
+        isStopped = true;
+
+        if (audioChunks.length === 0) {
+          console.log('No audio data recorded');
+          cleanupRecording();
+          return;
+        }
+
+        const blob = new Blob(audioChunks, { type: selectedType });
+        console.log('Recording stopped, blob created:', blob.size);
+
+        // Store in ref - READY FOR SENDING
+        audioBlobRef.current = blob;
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+
+        // Clean up stream but keep recording state
+        cleanupStream();
+
+        // Reset recording flag but keep the blob for sending
+        setIsRecording(false);
+      };
+
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event.error);
+        setError('Recording failed: ' + event.error.name);
+        cleanupRecording();
+      };
+
+      // Start recording
+      mediaRecorder.start(1000); // Collect data every second
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      // Set up recording timer
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev >= 120) {
+            stopRecording();
+            setError('Recording stopped automatically after 2 minutes');
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+
+    } catch (err) {
+      console.error('Error starting recording:', err);
+      // Reset all states on error
+      setIsRecording(false);
+      setRecordingTime(0);
+      audioBlobRef.current = null;
+      setAudioUrl(null);
+
+      if (err.name === 'NotAllowedError') {
+        setError('Microphone access denied. Please allow microphone permissions.');
+      } else if (err.name === 'NotFoundError') {
+        setError('No microphone found. Please check your audio device.');
+      } else {
+        setError('Microphone access failed: ' + err.message);
+      }
     }
-    
-    // Clear interval immediately
-    if (recordingIntervalRef.current) {
-      clearInterval(recordingIntervalRef.current);
-      recordingIntervalRef.current = null;
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      console.log('🛑 Stopping recording...');
+
+      // Stop media recorder
+      if (mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+
+      // Clear interval immediately
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+
+      console.log('✅ Recording stopped');
     }
-    
-    console.log('✅ Recording stopped');
-  }
-};
+  };
 
   const cleanupStream = () => {
     if (mediaRecorderRef.current?.stream) {
@@ -520,25 +567,25 @@ const stopRecording = () => {
     }
   };
 
-const cleanupRecording = () => {
-  console.log('🧹 Cleaning up recording...');
-  
-  // Stop recording if active
-  if (isRecording) {
-    setIsRecording(false);
-  }
-  
-  // Clear interval
-  if (recordingIntervalRef.current) {
-    clearInterval(recordingIntervalRef.current);
-    recordingIntervalRef.current = null;
-  }
-  
-  // Clean up stream
-  cleanupStream();
-  
-  console.log('✅ Recording cleanup complete');
-};
+  const cleanupRecording = () => {
+    console.log('🧹 Cleaning up recording...');
+
+    // Stop recording if active
+    if (isRecording) {
+      setIsRecording(false);
+    }
+
+    // Clear interval
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+
+    // Clean up stream
+    cleanupStream();
+
+    console.log('✅ Recording cleanup complete');
+  };
 
   const cancelRecording = () => {
     console.log('❌ Canceling current recording...');
@@ -562,190 +609,190 @@ const cleanupRecording = () => {
   };
 
   // FIXED: Quick send function
-const quickSendVoice = () => {
-  if (!isRecording || voiceSending) {
-    console.log('🚫 Quick send blocked');
-    return;
-  }
-  
-  console.log('⚡ Quick send triggered');
-  stopRecording();
+  const quickSendVoice = () => {
+    if (!isRecording || voiceSending) {
+      console.log('🚫 Quick send blocked');
+      return;
+    }
 
-  // Use a more reliable approach with timeout
-  let attempts = 0;
-  const maxAttempts = 40; // 2 seconds max
-  
-  const checkBlob = setInterval(() => {
-    attempts++;
-    
-    if (audioBlobRef.current && !voiceSending) {
-      clearInterval(checkBlob);
-      console.log('✅ Blob ready, sending voice message');
-      sendVoiceMessage();
-    }
-    
-    // Safety timeout - prevent multiple calls
-    if (attempts >= maxAttempts || !audioBlobRef.current) {
-      clearInterval(checkBlob);
-      console.log('❌ Quick send timeout');
-    }
-  }, 50);
-};
+    console.log('⚡ Quick send triggered');
+    stopRecording();
+
+    // Use a more reliable approach with timeout
+    let attempts = 0;
+    const maxAttempts = 40; // 2 seconds max
+
+    const checkBlob = setInterval(() => {
+      attempts++;
+
+      if (audioBlobRef.current && !voiceSending) {
+        clearInterval(checkBlob);
+        console.log('✅ Blob ready, sending voice message');
+        sendVoiceMessage();
+      }
+
+      // Safety timeout - prevent multiple calls
+      if (attempts >= maxAttempts || !audioBlobRef.current) {
+        clearInterval(checkBlob);
+        console.log('❌ Quick send timeout');
+      }
+    }, 50);
+  };
   // FIXED: Send voice message function
-const sendVoiceMessage = async () => {
-  console.log('🔊 sendVoiceMessage called');
-  
-  // Prevent multiple sends
-  if (voiceSending || isUploadingVoice || !audioBlobRef.current || !selectedFriend) {
-    console.log('🚫 Send blocked');
-    return;
-  }
+  const sendVoiceMessage = async () => {
+    console.log('🔊 sendVoiceMessage called');
 
-  const blobToSend = audioBlobRef.current;
-  
-  // **CLEAR IMMEDIATELY** - Prevent duplicate sends
-  audioBlobRef.current = null;
-  setAudioUrl(null);
-  setAudioBlob(null);
-  
-  // **LOCK UI**
-  setVoiceSending(true);
-  setIsUploadingVoice(true);
+    // Prevent multiple sends
+    if (voiceSending || isUploadingVoice || !audioBlobRef.current || !selectedFriend) {
+      console.log('🚫 Send blocked');
+      return;
+    }
 
-  const tempId = `temp-voice-${Date.now()}`;
-  console.log('🆔 Temporary message ID:', tempId);
+    const blobToSend = audioBlobRef.current;
 
-  // **ADD TEMP MESSAGE - ONLY ONCE**
-  const tempMsg = {
-    id: tempId,
-    content: 'Voice message...',
-    message_type: 'voice',
-    is_temp: true,
-    created_at: new Date().toISOString(),
-    voice_duration: recordingTime,
-    sender_id: profile.id,
-    // Add unique identifier to prevent duplicates
-    _uniqueId: Date.now() + Math.random()
-  };
+    // **CLEAR IMMEDIATELY** - Prevent duplicate sends
+    audioBlobRef.current = null;
+    setAudioUrl(null);
+    setAudioBlob(null);
 
-  // **USE FUNCTIONAL UPDATE TO PREVENT DUPLICATES**
-  setMessages(prev => {
-    // Remove any existing temp messages first
-    const withoutTemp = prev.filter(msg => !msg.is_temp);
-    // Then add the new temp message
-    return [...withoutTemp, tempMsg];
-  });
+    // **LOCK UI**
+    setVoiceSending(true);
+    setIsUploadingVoice(true);
 
-  try {
-    const formData = new FormData();
-    formData.append('voice_file', blobToSend, 'voice-message.mp3');
-    formData.append('duration', recordingTime.toString());
-    if (replyingTo?.id) formData.append('reply_to_id', replyingTo.id);
+    const tempId = `temp-voice-${Date.now()}`;
+    console.log('🆔 Temporary message ID:', tempId);
 
-    console.log('📤 Uploading voice file...');
-    const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
-    console.log('✅ Voice sent successfully');
+    // **ADD TEMP MESSAGE - ONLY ONCE**
+    const tempMsg = {
+      id: tempId,
+      content: 'Voice message...',
+      message_type: 'voice',
+      is_temp: true,
+      created_at: new Date().toISOString(),
+      voice_duration: recordingTime,
+      sender_id: profile.id,
+      // Add unique identifier to prevent duplicates
+      _uniqueId: Date.now() + Math.random()
+    };
 
-    // **REPLACE TEMP MESSAGE - ENSURES ONLY ONE MESSAGE**
-setMessages(prev => {
-  // Remove ALL temp messages (in case multiple exist)
-  const withoutAnyTemp = prev.filter(msg => !msg.is_temp);
-  // Add the real message
-  return [...withoutAnyTemp, { ...sentMessage, is_temp: false }];
-});
-
-setSuccess('Voice message sent!');
-
-// Clear success message after 2 seconds
-setTimeout(() => {
-  setSuccess('');
-}, 2000);
-
-  } catch (err) {
-    console.error('❌ Send failed:', err);
-    setError('Failed to send voice message');
-    
-    // **REMOVE THE SPECIFIC TEMP MESSAGE ON ERROR**
-    setMessages(prev => prev.filter(msg => msg.id !== tempId));
-    
-  } finally {
-    // Cleanup
-    setIsUploadingVoice(false);
-    setVoiceSending(false);
-    setRecordingTime(0);
-    
-    console.log('✅ Send process completed');
-  }
-};
-
-useEffect(() => {
-  // Function to remove duplicate messages
-  const removeDuplicateMessages = () => {
+    // **USE FUNCTIONAL UPDATE TO PREVENT DUPLICATES**
     setMessages(prev => {
-      const seenIds = new Set();
-      const uniqueMessages = [];
-      
-      for (const message of prev) {
-        if (!seenIds.has(message.id)) {
-          seenIds.add(message.id);
-          uniqueMessages.push(message);
-        } else {
-          console.log('🔄 Removing duplicate message:', message.id);
-        }
-      }
-      
-      // Only update if duplicates were found
-      if (uniqueMessages.length !== prev.length) {
-        console.log(`🔧 Removed ${prev.length - uniqueMessages.length} duplicates`);
-        return uniqueMessages;
-      }
-      
-      return prev;
+      // Remove any existing temp messages first
+      const withoutTemp = prev.filter(msg => !msg.is_temp);
+      // Then add the new temp message
+      return [...withoutTemp, tempMsg];
     });
-  };
 
-  // Run deduplication when messages change
-  removeDuplicateMessages();
-}, [messages]);
+    try {
+      const formData = new FormData();
+      formData.append('voice_file', blobToSend, 'voice-message.mp3');
+      formData.append('duration', recordingTime.toString());
+      if (replyingTo?.id) formData.append('reply_to_id', replyingTo.id);
 
-/* --------------------------------------------------------------------- */
-/*                         Auto-Seen Messages Logic                     */
-/* --------------------------------------------------------------------- */
-useEffect(() => {
-  const markMessagesAsSeen = () => {
-    if (!selectedFriend || !messages.length || !isConnected) return;
+      console.log('📤 Uploading voice file...');
+      const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
+      console.log('✅ Voice sent successfully');
 
-    const unreadMessages = messages.filter(
-      msg => 
-        msg.sender_id === selectedFriend.id && 
-        !msg.is_read &&
-        !msg.is_temp
-    );
-
-    if (unreadMessages.length === 0) return;
-
-    // Mark messages as read via WebSocket
-    unreadMessages.forEach(message => {
-      sendWsMessage({
-        type: 'read',
-        message_id: message.id
+      // **REPLACE TEMP MESSAGE - ENSURES ONLY ONE MESSAGE**
+      setMessages(prev => {
+        // Remove ALL temp messages (in case multiple exist)
+        const withoutAnyTemp = prev.filter(msg => !msg.is_temp);
+        // Add the real message
+        return [...withoutAnyTemp, { ...sentMessage, is_temp: false }];
       });
-    });
 
-    // Update local state immediately
-    setMessages(prev => prev.map(msg =>
-      unreadMessages.some(unread => unread.id === msg.id)
-        ? { ...msg, is_read: true, read_at: new Date().toISOString() }
-        : msg
-    ));
+      setSuccess('Voice message sent!');
+
+      // Clear success message after 2 seconds
+      setTimeout(() => {
+        setSuccess('');
+      }, 2000);
+
+    } catch (err) {
+      console.error('❌ Send failed:', err);
+      setError('Failed to send voice message');
+
+      // **REMOVE THE SPECIFIC TEMP MESSAGE ON ERROR**
+      setMessages(prev => prev.filter(msg => msg.id !== tempId));
+
+    } finally {
+      // Cleanup
+      setIsUploadingVoice(false);
+      setVoiceSending(false);
+      setRecordingTime(0);
+
+      console.log('✅ Send process completed');
+    }
   };
 
-  // Mark as seen when:
-  // 1. Chat is opened
-  // 2. New messages arrive from friend
-  // 3. User scrolls to bottom
-  markMessagesAsSeen();
-}, [messages, selectedFriend, isConnected, sendWsMessage]);
+  useEffect(() => {
+    // Function to remove duplicate messages
+    const removeDuplicateMessages = () => {
+      setMessages(prev => {
+        const seenIds = new Set();
+        const uniqueMessages = [];
+
+        for (const message of prev) {
+          if (!seenIds.has(message.id)) {
+            seenIds.add(message.id);
+            uniqueMessages.push(message);
+          } else {
+            console.log('🔄 Removing duplicate message:', message.id);
+          }
+        }
+
+        // Only update if duplicates were found
+        if (uniqueMessages.length !== prev.length) {
+          console.log(`🔧 Removed ${prev.length - uniqueMessages.length} duplicates`);
+          return uniqueMessages;
+        }
+
+        return prev;
+      });
+    };
+
+    // Run deduplication when messages change
+    removeDuplicateMessages();
+  }, [messages]);
+
+  /* --------------------------------------------------------------------- */
+  /*                         Auto-Seen Messages Logic                     */
+  /* --------------------------------------------------------------------- */
+  useEffect(() => {
+    const markMessagesAsSeen = () => {
+      if (!selectedFriend || !messages.length || !isConnected) return;
+
+      const unreadMessages = messages.filter(
+        msg =>
+          msg.sender_id === selectedFriend.id &&
+          !msg.is_read &&
+          !msg.is_temp
+      );
+
+      if (unreadMessages.length === 0) return;
+
+      // Mark messages as read via WebSocket
+      unreadMessages.forEach(message => {
+        sendWsMessage({
+          type: 'read',
+          message_id: message.id
+        });
+      });
+
+      // Update local state immediately
+      setMessages(prev => prev.map(msg =>
+        unreadMessages.some(unread => unread.id === msg.id)
+          ? { ...msg, is_read: true, read_at: new Date().toISOString() }
+          : msg
+      ));
+    };
+
+    // Mark as seen when:
+    // 1. Chat is opened
+    // 2. New messages arrive from friend
+    // 3. User scrolls to bottom
+    markMessagesAsSeen();
+  }, [messages, selectedFriend, isConnected, sendWsMessage]);
 
   /* --------------------------------------------------------------------- */
   /*                         Image Upload & Deletion                      */
@@ -926,37 +973,37 @@ useEffect(() => {
     }
   }, [messages, selectedFriend, isConnected, sendReadReceipt]);
 
-const handleScroll = useCallback(() => {
-  if (!messagesContainerRef.current || !selectedFriend) return;
+  const handleScroll = useCallback(() => {
+    if (!messagesContainerRef.current || !selectedFriend) return;
 
-  const container = messagesContainerRef.current;
-  const scrollTop = container.scrollTop;
-  const scrollHeight = container.scrollHeight;
-  const clientHeight = container.clientHeight;
+    const container = messagesContainerRef.current;
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
 
-  const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
 
-  if (isNearBottom) {
-    const unreadMessages = messages.filter(
-      msg => msg.sender_id === selectedFriend.id && !msg.is_read && !msg.is_temp
-    );
+    if (isNearBottom) {
+      const unreadMessages = messages.filter(
+        msg => msg.sender_id === selectedFriend.id && !msg.is_read && !msg.is_temp
+      );
 
-    if (unreadMessages.length > 0 && isConnected) {
-      unreadMessages.forEach(message => {
-        sendWsMessage({
-          type: 'read',
-          message_id: message.id
+      if (unreadMessages.length > 0 && isConnected) {
+        unreadMessages.forEach(message => {
+          sendWsMessage({
+            type: 'read',
+            message_id: message.id
+          });
         });
-      });
 
-      setMessages(prev => prev.map(msg =>
-        unreadMessages.some(unread => unread.id === msg.id)
-          ? { ...msg, is_read: true, read_at: new Date().toISOString() }
-          : msg
-      ));
+        setMessages(prev => prev.map(msg =>
+          unreadMessages.some(unread => unread.id === msg.id)
+            ? { ...msg, is_read: true, read_at: new Date().toISOString() }
+            : msg
+        ));
+      }
     }
-  }
-}, [messages, selectedFriend, isConnected, sendWsMessage]);
+  }, [messages, selectedFriend, isConnected, sendWsMessage]);
 
   useEffect(() => {
     if (selectedFriend && isConnected) {
@@ -1000,72 +1047,112 @@ const handleScroll = useCallback(() => {
   /* --------------------------------------------------------------------- */
   /*                         Load Initial Messages                         */
   /* --------------------------------------------------------------------- */
-  const loadInitialMessages = async () => {
-    if (!selectedFriend || messages.length > 0) return;
+const loadInitialMessages = async () => {
+  if (!selectedFriend || messages.length > 0) return;
 
-    try {
-      const chatMessages = await getPrivateChat(selectedFriend.id);
+  try {
+    const chatMessages = await getPrivateChat(selectedFriend.id);
 
-      const enhanced = chatMessages.map((msg) => {
-        const detectMessageType = (message) => {
-          if (message.message_type === 'image') return 'image';
-          if (message.message_type === 'voice') return 'voice';
+    const enhanced = chatMessages.map((msg) => {
+      // ————————————————————————————
+      // 1. Detect message type
+      // ————————————————————————————
+      const detectMessageType = (message) => {
+        if (message.message_type === 'image') return 'image';
+        if (message.message_type === 'voice') return 'voice';
 
-          const content = message.content || '';
+        const content = message.content || '';
 
-          const isVoiceUrl =
-            content.match(/\.mp3$/i) ||
-            content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm'));
+        const isVoiceUrl =
+          content.match(/\.mp3$/i) ||
+          (content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm')));
 
-          if (isVoiceUrl) return 'voice';
+        if (isVoiceUrl) return 'voice';
 
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            content.includes('cloudinary.com') && !content.includes('/voice_messages/') ||
-            content.startsWith('data:image/');
+        const isImageUrl =
+          content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+          (content.includes('cloudinary.com') && !content.includes('/voice_messages/')) ||
+          content.startsWith('data:image/');
 
-          return isImageUrl ? 'image' : 'text';
-        };
+        return isImageUrl ? 'image' : 'text';
+      };
 
-        const messageType = detectMessageType(msg);
+      const messageType = detectMessageType(msg);
 
-        let content = msg.content;
-        if (messageType === 'voice') {
-          content = ensureMp3VoiceUrl({ ...msg, message_type: messageType });
-        }
+      // ————————————————————————————
+      // 2. Convert WebM voice URLs to MP3
+      // ————————————————————————————
+      let content = msg.content;
+      if (messageType === 'voice') {
+        content = ensureMp3VoiceUrl({ ...msg, message_type: messageType });
+      }
 
-        return {
-          ...msg,
-          content: content,
-          is_temp: false,
-          message_type: messageType,
-          sender: {
-            id: msg.sender_id,
-            username:
-              msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
-            avatar_url: getUserAvatar(
-              msg.sender_id === profile?.id ? profile : selectedFriend
-            ),
-          },
-          reply_to: msg.reply_to
-            ? {
-              ...msg.reply_to,
-              sender_username:
-                msg.reply_to.sender_id === profile?.id
-                  ? profile.username
-                  : selectedFriend.username,
-            }
-            : null,
-        };
-      });
+      // ————————————————————————————
+      // 3. Prepare sender info
+      // ————————————————————————————
+      const sender = {
+        id: msg.sender_id,
+        username: msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
+        avatar_url: getUserAvatar(msg.sender_id === profile?.id ? profile : selectedFriend),
+      };
 
-      console.log('Loaded messages with MP3 conversion:', enhanced);
-      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
-    } catch (err) {
-      setError('Failed to load messages');
-      console.error(err);
-    }
-  };
+      // ————————————————————————————
+      // 4. Prepare reply_to info
+      // ————————————————————————————
+      const reply_to = msg.reply_to
+        ? {
+            ...msg.reply_to,
+            sender_username:
+              msg.reply_to.sender_id === profile?.id ? profile.username : selectedFriend.username,
+          }
+        : null;
+
+      // ————————————————————————————
+      // 5. Ensure seen_by is always populated
+      // ————————————————————————————
+      const seen_by =
+        msg.seen_by && Array.isArray(msg.seen_by)
+          ? msg.seen_by
+          : msg.is_read
+          ? [
+              {
+                user_id: msg.receiver_id === profile?.id ? selectedFriend.id : profile.id,
+                username: msg.receiver_id === profile?.id ? selectedFriend.username : profile.username,
+                avatar_url:
+                  msg.receiver_id === profile?.id
+                    ? getUserAvatar(selectedFriend)
+                    : getUserAvatar(profile),
+                seen_at: msg.read_at || new Date().toISOString(),
+              },
+            ]
+          : [];
+
+      return {
+        ...msg,
+        content,
+        is_temp: false,
+        message_type: messageType,
+        sender,
+        reply_to,
+        is_read: msg.is_read || false,
+        read_at: msg.read_at || null,
+        seen_by,
+      };
+    });
+
+    // ————————————————————————————
+    // 6. Sort messages by creation time
+    // ————————————————————————————
+    setMessages(
+      enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    );
+    console.log('Loaded messages with seen_by and MP3 conversion:', enhanced);
+  } catch (err) {
+    setError('Failed to load messages');
+    console.error(err);
+  }
+};
+
 
   /* --------------------------------------------------------------------- */
   /*                           Friend Selection                            */
@@ -1955,7 +2042,7 @@ const handleScroll = useCallback(() => {
                         getAvatarUrl={getAvatarUrl}
                         getUserInitials={getUserInitials}
                         isPinned={pinnedMessage?.id === message.id}
-                        showSeenStatus={message.sender_id === profile?.id} 
+                        showSeenStatus={message.sender_id === profile?.id}
                       />
                     );
                   })

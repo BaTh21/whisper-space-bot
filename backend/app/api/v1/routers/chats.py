@@ -169,6 +169,7 @@ async def get_private_chat(
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
         
+        
         # Query messages with all necessary relationships
         messages = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
