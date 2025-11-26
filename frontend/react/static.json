@@ -1,7 +1,8 @@
 {
-  "root": "dist/",
-  "clean_urls": false,
-  "routes": {
-    "/**": "index.html"
+ "rewrite": [
+  {
+   "source": "/(.*)",
+   "destination": "/index.html"
   }
+ ]
 }
