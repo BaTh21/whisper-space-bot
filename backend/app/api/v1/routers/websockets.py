@@ -681,7 +681,7 @@ async def websocket_group_chat(
                         group_id=group_id,
                         sender_id=current_user.id,
                         content=content,
-                        message_type=MessageType(message_type),
+                        message_type=message_type,
                         parent_message_id=parent_message_id
                     )
                     db.add(msg)
