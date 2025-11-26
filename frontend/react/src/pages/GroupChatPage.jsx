@@ -518,6 +518,8 @@ const GroupChatPage = ({ groupId }) => {
           msg.id === tempId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
+    } finally {
+      setFile(null);
     }
   };
 
@@ -558,6 +560,8 @@ const GroupChatPage = ({ groupId }) => {
           msg.id === messageId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
+    } finally{
+      setFile(null);
     }
   };
 
