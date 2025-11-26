@@ -9,22 +9,21 @@ from datetime import datetime, timezone
 from fastapi import HTTPException,status
 from app.models.user_message_status import UserMessageStatus
 from sqlalchemy.orm import joinedload
-
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException
 from app.schemas.chat import MessageCreate
 
 from app.models.user_message_status import UserMessageStatus
 from app.models.message_seen_status import MessageSeenStatus
+from app.utils.chat_helpers import validate_reply_message
 
-def is_group_member(db: Session, group_id: int, user_id: int) -> bool:
-    return db.query(GroupMember).filter_by(group_id=group_id, user_id=user_id).first() is not None
 
 def create_private_message(
     db: Session,
     sender_id: int,
     receiver_id: int,
     content: str,
-    message_type: str = "text",  # CORRECTED: consistent parameter name
+    message_type: str = "text",
     reply_to_id: Optional[int] = None,
     is_forwarded: bool = False,
     original_sender: Optional[str] = None,
@@ -32,20 +31,25 @@ def create_private_message(
     file_size: Optional[int] = None
 ) -> PrivateMessage:
     """
-    Create a private message with proper type handling
+    Create a private message with proper type handling and reply validation
     """
     try:
+        # Validate reply message if provided
+        replied_message = None
+        if reply_to_id:
+            replied_message = validate_reply_message(db, reply_to_id, sender_id, receiver_id)
+        
         # Validate message type
         try:
             msg_type_enum = MessageType(message_type)
         except ValueError:
-            msg_type_enum = MessageType.text  # Default to text if invalid
+            msg_type_enum = MessageType.text
 
         msg = PrivateMessage(
             sender_id=sender_id,
             receiver_id=receiver_id,
             content=content,
-            message_type=msg_type_enum,  # Use the enum
+            message_type=msg_type_enum,
             reply_to_id=reply_to_id,
             is_forwarded=is_forwarded,
             original_sender=original_sender,
@@ -53,12 +57,23 @@ def create_private_message(
             file_size=file_size,
             created_at=datetime.now(timezone.utc),
             delivered_at=datetime.now(timezone.utc),
-            is_read=False  # Default to unread
+            is_read=False
         )
         db.add(msg)
         db.commit()
         db.refresh(msg)
+        
+        # FIXED: Eager load relationships including reply_to sender
+        msg = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)  # Load sender of replied message
+        ).filter(PrivateMessage.id == msg.id).first()
+        
         return msg
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -135,13 +150,12 @@ def get_message_seen_status(db: Session, message_id: int):
     """
     Get who has seen a message and when
     """
-    from app.models.message_seen_status import MessageSeenStatus
-    
     seen_statuses = db.query(MessageSeenStatus).filter(
         MessageSeenStatus.message_id == message_id
     ).options(joinedload(MessageSeenStatus.user)).all()
     
     return seen_statuses
+
 
 def create_group_message(
     db: Session, 
@@ -185,25 +199,53 @@ def get_group_messages(db: Session, group_id: int, limit=50, offset=0):
         
 def edit_private_message(db: Session, message_id: int, user_id: int, new_content: str) -> PrivateMessage:
     """Edit a private message"""
-    if not new_content or not new_content.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message content cannot be empty.")
+    try:
+        if not new_content or not new_content.strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message content cannot be empty.")
 
-    msg = db.query(PrivateMessage).filter(
-        PrivateMessage.id == message_id,
-        PrivateMessage.sender_id == user_id
-    ).first()
+        # Use options to load relationships for WebSocket broadcast
+        msg = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+        ).filter(
+            PrivateMessage.id == message_id,
+            PrivateMessage.sender_id == user_id
+        ).first()
 
-    if not msg:
+        if not msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Message not found or you don't have permission to edit it."
+            )
+
+        # Store old content for potential rollback
+        old_content = msg.content
+        
+        # Update message
+        msg.content = new_content.strip()
+        msg.updated_at = datetime.now(timezone.utc)
+        
+        db.commit()
+        db.refresh(msg)
+        
+        return msg
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except SQLAlchemyError as e:
+        # Rollback on database errors
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Message not found or you don't have permission to edit it."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error while editing message: {str(e)}"
         )
-
-    msg.content = new_content.strip()
-    msg.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(msg)
-    return msg
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error while editing message: {str(e)}"
+        )
 
 
 def delete_message_for_user(db: Session, message_id: int, user_id: int):
@@ -274,3 +316,8 @@ def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
         print(f"[DB] Error marking message as read: {e}")
         db.rollback()
         return False
+
+
+
+# Add these functions to your crud/chat.py
+

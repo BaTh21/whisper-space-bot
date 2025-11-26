@@ -19,8 +19,8 @@ class PrivateMessage(Base):
     content = Column(Text, nullable=False)
     message_type = Column(Enum(MessageType), default=MessageType.text)
     is_read = Column(Boolean, default=False)
-    read_at = Column(DateTime(timezone=True), nullable=True)  # ADD THIS
-    delivered_at = Column(DateTime(timezone=True), nullable=True)  # ADD THIS
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
@@ -28,24 +28,31 @@ class PrivateMessage(Base):
     original_sender = Column(String(255), nullable=True)
     voice_duration = Column(Float, nullable=True)
     file_size = Column(Integer, nullable=True)  
-    
-    reply_to = relationship("PrivateMessage", remote_side=[id], uselist=False)
-    sender = relationship("User", foreign_keys=[sender_id])
-    receiver = relationship("User", foreign_keys=[receiver_id])
-    
-    seen_by_users = relationship("User", secondary="message_seen_status", back_populates="seen_messages")
-    
-    # Relationship to seen statuses
-    seen_statuses = relationship(
-        "MessageSeenStatus",
-        back_populates="message",
-        cascade="all, delete-orphan"
+
+    # FIXED: Self-referencing relationship for replies
+    reply_to = relationship(
+        "PrivateMessage",
+        remote_side=[id],
+        backref="replies",
+        foreign_keys=[reply_to_id],
+        post_update=True
     )
-    
-    # Many-to-many relationship to users who saw the message (read-only)
+
+    # Sender and receiver relationships
+    sender = relationship("User", foreign_keys=[sender_id], backref="sent_messages")
+    receiver = relationship("User", foreign_keys=[receiver_id], backref="received_messages")
+
+    # Many-to-many relationship for seen users (read-only)
     seen_by_users = relationship(
         "User",
         secondary="message_seen_status",
         back_populates="seen_messages",
-        viewonly=True  # This is read-only
+        viewonly=True
+    )
+
+    # Relationship to seen statuses (for creating/updating)
+    seen_statuses = relationship(
+        "MessageSeenStatus",
+        back_populates="message",
+        cascade="all, delete-orphan"
     )

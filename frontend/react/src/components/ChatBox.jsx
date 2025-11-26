@@ -313,7 +313,6 @@ export default function ChatBox({ selectedFriend, profile, friends }) {
         reply_to_id: message.reply_to_id || null,
       });
 
-      console.log(`Message forwarded to ${friend.username}`);
       setForwardDialogOpen(false);
       setForwardingMessage(null);
       

@@ -1,25 +1,24 @@
 import os
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Form
-from sqlalchemy.orm import Session
-from typing import List, Optional
-from app.core.database import get_db
-from app.core.security import get_current_user
-from app.crud.friend import is_friend
-from app.models.user import User
-from app.schemas.chat import MarkMessagesAsReadRequest, MarkMessagesAsReadResponse, MessageCreate, MessageOut, MessageSeenByUser
-from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, mark_messages_as_read
-from app.services.websocket_manager import manager
+import uuid
 from datetime import datetime, timezone
-from sqlalchemy.orm import joinedload
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
 
-from app.api.v1.routers.websockets import _chat_id
-from app.models.private_message import PrivateMessage
 import cloudinary
 import cloudinary.uploader
-import uuid
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session, joinedload
 
+from app.core.database import get_db
+from app.core.security import get_current_user
+from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, mark_messages_as_read
+from app.crud.friend import is_friend
 from app.models.message_seen_status import MessageSeenStatus
+from app.models.private_message import MessageType, PrivateMessage
+from app.models.user import User
+from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadResponse,
+                             MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
+from app.services.websocket_manager import manager
+from app.utils.chat_helpers import _chat_id, extract_public_id_from_url
 
 router = APIRouter()
 
@@ -29,46 +28,6 @@ cloudinary.config(
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
 )
-
-def _chat_id(a, b):
-    return f"private_{min(a, b)}_{max(a, b)}"
-
-def extract_public_id_from_url(url: str) -> str:
-    """
-    Extract public_id from Cloudinary URL
-    Example: https://res.cloudinary.com/demo/image/upload/v1234567/chat_images/abc123.jpg
-    -> chat_images/abc123
-    """
-    try:
-        # Split URL and get the path after /upload/
-        parts = url.split('/upload/')
-        if len(parts) < 2:
-            return None
-        
-        # Get the part after /upload/ and remove version and file extension
-        path_parts = parts[1].split('/')
-        if not path_parts:
-            return None
-        
-        # The last part is the filename with version
-        filename = path_parts[-1]
-        
-        # Remove version prefix (v1234567_) and file extension
-        if '_' in filename:
-            filename = filename.split('_', 1)[1]
-        
-        # Remove file extension
-        filename = filename.rsplit('.', 1)[0]
-        
-        # Reconstruct public_id with folder
-        if len(path_parts) > 1:
-            folder = '/'.join(path_parts[:-1])
-            return f"{folder}/{filename}"
-        else:
-            return filename
-            
-    except Exception:
-        return None
 
 # Mark messages as read endpoint
 @router.post("/messages/read")
@@ -162,39 +121,87 @@ async def get_private_chat(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get private chat messages between current user and friend
+    Get private chat messages between current user and friend with Telegram-style replies
     """
     try:
         # Verify friendship
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
-        
-        
-        # Query messages with all necessary relationships
+
+        # FIXED: Query with proper relationship loading for replies
         messages = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),  # Load sender of replied message
             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)
         ).filter(
             ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
             ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
         ).order_by(PrivateMessage.created_at.asc()).all()
-        
-        # Convert to MessageOut with all data
+
         result = []
         for msg in messages:
-            # Build seen_by information
-            seen_by = []
-            for status in msg.seen_statuses:
-                seen_by.append(MessageSeenByUser(
+            # Seen by users for main message
+            seen_by = [
+                MessageSeenByUser(
                     user_id=status.user.id,
                     username=status.user.username,
                     avatar_url=status.user.avatar_url,
                     seen_at=status.seen_at.isoformat() if status.seen_at else None
-                ))
+                )
+                for status in getattr(msg, "seen_statuses", [])
+            ]
+
+            # FIXED: Reply handling with proper null checks
+            reply_to_out = None
+            reply_preview = None
             
-            # Build main message
+            if msg.reply_to:  # This should now work with the fixed relationship
+                reply = msg.reply_to
+
+                # Build reply_to message (simplified to avoid recursion)
+                reply_to_out = MessageOut(
+                    id=reply.id,
+                    sender_id=reply.sender_id,
+                    receiver_id=reply.receiver_id,
+                    content=reply.content,
+                    message_type=reply.message_type.value,
+                    is_read=reply.is_read,
+                    read_at=reply.read_at.isoformat() if reply.read_at else None,
+                    delivered_at=reply.delivered_at.isoformat() if reply.delivered_at else None,
+                    reply_to=None,  # avoid infinite recursion
+                    reply_to_id=reply.reply_to_id,  # Add this
+                    is_forwarded=reply.is_forwarded,
+                    original_sender=reply.original_sender,
+                    created_at=reply.created_at.isoformat(),
+                    sender_username=getattr(reply.sender, "username", None),
+                    receiver_username=getattr(reply.receiver, "username", None),
+                    voice_duration=reply.voice_duration,
+                    file_size=reply.file_size,
+                    seen_by=[]  # Simplified to avoid complex nested queries
+                )
+
+                # Build reply preview
+                content_preview = reply.content or ""
+                if reply.message_type == MessageType.voice:
+                    content_preview = "🎤 Voice message"
+                elif reply.message_type == MessageType.image:
+                    content_preview = "🖼️ Photo"
+                elif reply.message_type == MessageType.file:
+                    content_preview = "📎 File"
+                elif len(content_preview) > 100:
+                    content_preview = content_preview[:100] + "..."
+
+                reply_preview = ReplyPreview(
+                    id=reply.id,
+                    sender_username=getattr(reply.sender, "username", "Unknown"),
+                    content=content_preview,
+                    message_type=reply.message_type.value,
+                    voice_duration=reply.voice_duration,
+                    file_size=reply.file_size
+                )
+
+            # Build main message output
             msg_out = MessageOut(
                 id=msg.id,
                 sender_id=msg.sender_id,
@@ -204,58 +211,31 @@ async def get_private_chat(
                 is_read=msg.is_read,
                 read_at=msg.read_at.isoformat() if msg.read_at else None,
                 delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,
-                reply_to_id=msg.reply_to_id,
+                reply_to_id=msg.reply_to_id,  # Make sure this is included
+                reply_to=reply_to_out,
+                reply_preview=reply_preview,
                 is_forwarded=msg.is_forwarded,
                 original_sender=msg.original_sender,
                 created_at=msg.created_at.isoformat(),
-                sender_username=msg.sender.username,
-                receiver_username=msg.receiver.username,
+                sender_username=getattr(msg.sender, "username", None),
+                receiver_username=getattr(msg.receiver, "username", None),
                 voice_duration=msg.voice_duration,
                 file_size=msg.file_size,
                 seen_by=seen_by
             )
-            
-            # Add reply_to data if exists
-            if msg.reply_to:
-                # Build seen information for replied message
-                reply_seen_by = []
-                if hasattr(msg.reply_to, 'seen_statuses'):
-                    for status in msg.reply_to.seen_statuses:
-                        reply_seen_by.append(MessageSeenByUser(
-                            user_id=status.user.id,
-                            username=status.user.username,
-                            avatar_url=status.user.avatar_url,
-                            seen_at=status.seen_at.isoformat() if status.seen_at else None
-                        ))
-                
-                msg_out.reply_to = MessageOut(
-                    id=msg.reply_to.id,
-                    sender_id=msg.reply_to.sender_id,
-                    receiver_id=msg.reply_to.receiver_id,
-                    content=msg.reply_to.content,
-                    message_type=msg.reply_to.message_type.value,
-                    is_read=msg.reply_to.is_read,
-                    read_at=msg.reply_to.read_at.isoformat() if msg.reply_to.read_at else None,
-                    delivered_at=msg.reply_to.delivered_at.isoformat() if msg.reply_to.delivered_at else None,
-                    reply_to_id=msg.reply_to.reply_to_id,
-                    is_forwarded=msg.reply_to.is_forwarded,
-                    original_sender=msg.reply_to.original_sender,
-                    created_at=msg.reply_to.created_at.isoformat(),
-                    sender_username=msg.reply_to.sender.username,
-                    receiver_username=msg.reply_to.receiver.username if msg.reply_to.receiver else None,
-                    voice_duration=msg.reply_to.voice_duration,
-                    file_size=msg.reply_to.file_size,
-                    seen_by=reply_seen_by
-                )
-            
+
             result.append(msg_out)
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get chat messages: {str(e)}")
+
+
+
+
 # Send text message
 @router.post("/private/{friend_id}", response_model=MessageOut)
 async def send_private_message(
@@ -265,7 +245,7 @@ async def send_private_message(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Send a private message to a friend
+    Send a private message to a friend with Telegram-style reply handling
     """
     try:
         if not is_friend(db, current_user.id, friend_id):
@@ -284,15 +264,16 @@ async def send_private_message(
             voice_duration=msg_in.voice_duration,
             file_size=msg_in.file_size
         )
-        
+
         # Get the full message with all relationships
         full_msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
         ).filter(PrivateMessage.id == msg.id).first()
-        
+
         if not full_msg:
             raise HTTPException(status_code=500, detail="Failed to retrieve created message")
         
@@ -330,10 +311,32 @@ async def send_private_message(
             "seen_by": seen_by
         }
         
-        # Add reply_to data if exists
+        # Add Telegram-style reply data if exists
         if full_msg.reply_to:
+            # Create compact reply preview (like Telegram)
+            reply_content = full_msg.reply_to.content or ""
+            if full_msg.reply_to.message_type == MessageType.voice:
+                reply_content = "🎤 Voice message"
+            elif full_msg.reply_to.message_type == MessageType.image:
+                reply_content = "🖼️ Photo" 
+            elif full_msg.reply_to.message_type == MessageType.file:
+                reply_content = "📎 File"
+            elif len(reply_content) > 100:
+                reply_content = reply_content[:100] + "..."
+            
+            # Add compact reply preview to broadcast
+            broadcast_data["reply_preview"] = {
+                "id": full_msg.reply_to.id,
+                "sender_username": full_msg.reply_to.sender.username,
+                "content": reply_content,
+                "message_type": full_msg.reply_to.message_type.value,
+                "voice_duration": full_msg.reply_to.voice_duration,
+                "file_size": full_msg.reply_to.file_size
+            }
+            
+            # Also include full reply data for detailed view
             reply_seen_by = []
-            if hasattr(full_msg.reply_to, 'seen_statuses'):
+            if full_msg.reply_to.seen_statuses:
                 for status in full_msg.reply_to.seen_statuses:
                     reply_seen_by.append({
                         "user_id": status.user.id,
@@ -342,17 +345,22 @@ async def send_private_message(
                         "seen_at": status.seen_at.isoformat() if status.seen_at else None
                     })
             
+            # Include complete replied message information
             broadcast_data["reply_to"] = {
                 "id": full_msg.reply_to.id,
                 "sender_id": full_msg.reply_to.sender_id,
+                "receiver_id": full_msg.reply_to.receiver_id,
                 "content": full_msg.reply_to.content,
-                "is_forwarded": full_msg.reply_to.is_forwarded,
-                "original_sender": full_msg.reply_to.original_sender,
-                "created_at": full_msg.reply_to.created_at.isoformat(),
+                "message_type": full_msg.reply_to.message_type.value,
                 "is_read": full_msg.reply_to.is_read,
                 "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
                 "delivered_at": full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
+                "reply_to_id": full_msg.reply_to.reply_to_id,
+                "is_forwarded": full_msg.reply_to.is_forwarded,
+                "original_sender": full_msg.reply_to.original_sender,
+                "created_at": full_msg.reply_to.created_at.isoformat(),
                 "sender_username": full_msg.reply_to.sender.username,
+                "receiver_username": full_msg.reply_to.receiver.username if full_msg.reply_to.receiver else None,
                 "voice_duration": full_msg.reply_to.voice_duration,
                 "file_size": full_msg.reply_to.file_size,
                 "seen_by": reply_seen_by
@@ -361,7 +369,7 @@ async def send_private_message(
         # Broadcast via WebSocket
         await manager.broadcast(chat_id, broadcast_data)
         
-        # Build response
+        # Build response with Telegram-style reply preview
         response = MessageOut(
             id=full_msg.id,
             sender_id=full_msg.sender_id,
@@ -382,8 +390,40 @@ async def send_private_message(
             created_at=full_msg.created_at.isoformat()
         )
         
-        # Add reply_to to response if exists
+        # Add Telegram-style reply preview to response if exists
         if full_msg.reply_to:
+            # Create compact preview for the response
+            reply_content = full_msg.reply_to.content or ""
+            if full_msg.reply_to.message_type == MessageType.voice:
+                reply_content = "🎤 Voice message"
+            elif full_msg.reply_to.message_type == MessageType.image:
+                reply_content = "🖼️ Photo"
+            elif full_msg.reply_to.message_type == MessageType.file:
+                reply_content = "📎 File"
+            elif len(reply_content) > 100:
+                reply_content = reply_content[:100] + "..."
+            
+            # Add reply_preview to response
+            response.reply_preview = ReplyPreview(
+                id=full_msg.reply_to.id,
+                sender_username=full_msg.reply_to.sender.username,
+                content=reply_content,
+                message_type=full_msg.reply_to.message_type.value,
+                voice_duration=full_msg.reply_to.voice_duration,
+                file_size=full_msg.reply_to.file_size
+            )
+            
+            # Also include full reply object for detailed view
+            reply_seen_by = []
+            if full_msg.reply_to.seen_statuses:
+                for status in full_msg.reply_to.seen_statuses:
+                    reply_seen_by.append(MessageSeenByUser(
+                        user_id=status.user.id,
+                        username=status.user.username,
+                        avatar_url=status.user.avatar_url,
+                        seen_at=status.seen_at.isoformat() if status.seen_at else None
+                    ))
+            
             response.reply_to = MessageOut(
                 id=full_msg.reply_to.id,
                 sender_id=full_msg.reply_to.sender_id,
@@ -401,7 +441,7 @@ async def send_private_message(
                 receiver_username=full_msg.reply_to.receiver.username if full_msg.reply_to.receiver else None,
                 voice_duration=full_msg.reply_to.voice_duration,
                 file_size=full_msg.reply_to.file_size,
-                seen_by=[MessageSeenByUser(**item) for item in reply_seen_by]
+                seen_by=reply_seen_by
             )
         
         return response
@@ -410,19 +450,78 @@ async def send_private_message(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
-# Send voice message (NEW ENDPOINT)
+    
+@router.get("/private/message/{message_id}/reply-context")
+async def get_reply_context(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get full context of a replied message (for when user clicks on reply preview)
+    """
+    try:
+        message = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+        ).filter(PrivateMessage.id == message_id).first()
+        
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        
+        # Check if user has access to this message
+        if current_user.id not in [message.sender_id, message.receiver_id]:
+            raise HTTPException(status_code=403, detail="No access to this message")
+        
+        # Build seen_by information
+        seen_by = []
+        for status in message.seen_statuses:
+            seen_by.append(MessageSeenByUser(
+                user_id=status.user.id,
+                username=status.user.username,
+                avatar_url=status.user.avatar_url,
+                seen_at=status.seen_at.isoformat() if status.seen_at else None
+            ))
+        
+        return MessageOut(
+            id=message.id,
+            sender_id=message.sender_id,
+            receiver_id=message.receiver_id,
+            content=message.content,
+            message_type=message.message_type.value,
+            is_read=message.is_read,
+            read_at=message.read_at.isoformat() if message.read_at else None,
+            delivered_at=message.delivered_at.isoformat() if message.delivered_at else None,
+            reply_to_id=message.reply_to_id,
+            is_forwarded=message.is_forwarded,
+            original_sender=message.original_sender,
+            created_at=message.created_at.isoformat(),
+            sender_username=message.sender.username,
+            receiver_username=message.receiver.username,
+            voice_duration=message.voice_duration,
+            file_size=message.file_size,
+            seen_by=seen_by
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get reply context: {str(e)}")    
 
+# Send voice message
 @router.post("/private/{friend_id}/voice", response_model=MessageOut)
 async def send_voice_message(
     friend_id: int,
     voice_file: UploadFile = File(...),
     duration: float = Form(...),
     reply_to_id: Optional[int] = Form(None),
+    temp_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Upload voice message to Cloudinary and send to friend
+    Upload voice message to Cloudinary and send to friend with Telegram-style replies
     """
     try:
         if not is_friend(db, current_user.id, friend_id):
@@ -458,13 +557,13 @@ async def send_voice_message(
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Could not upload voice message to cloud storage: {str(e)}")
 
-        # Create message in database - CORRECTED parameter name
+        # Create message in database
         msg = create_private_message(
             db=db,
             sender_id=current_user.id,
             receiver_id=friend_id,
             content=voice_url,
-            message_type="voice",  # CORRECTED: using message_type instead of msg_type
+            message_type="voice",
             reply_to_id=reply_to_id,
             voice_duration=duration,
             file_size=file_size
@@ -474,7 +573,9 @@ async def send_voice_message(
         full_msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
         ).filter(PrivateMessage.id == msg.id).first()
 
         if not full_msg:
@@ -490,10 +591,11 @@ async def send_voice_message(
                 "seen_at": status.seen_at.isoformat() if status.seen_at else None
             })
 
-        # Prepare broadcast data for WebSocket
+        # Prepare broadcast data for WebSocket with Telegram-style replies
         broadcast_data = {
             "type": "message",
             "id": full_msg.id,
+            "temp_id": temp_id,
             "sender_id": full_msg.sender_id,
             "receiver_id": full_msg.receiver_id,
             "content": voice_url,
@@ -509,15 +611,41 @@ async def send_voice_message(
             "receiver_username": full_msg.receiver.username,
             "voice_duration": full_msg.voice_duration,
             "file_size": full_msg.file_size,
-            "seen_by": seen_by
+            "seen_by": seen_by,
+            "avatar_url": full_msg.sender.avatar_url or "",
         }
+
+        # Add Telegram-style reply data if exists
+        if full_msg.reply_to:
+            # Create compact reply preview (like Telegram)
+            reply_content = full_msg.reply_to.content or ""
+            if full_msg.reply_to.message_type == MessageType.voice:
+                reply_content = "🎤 Voice message"
+            elif full_msg.reply_to.message_type == MessageType.image:
+                reply_content = "🖼️ Photo" 
+            elif full_msg.reply_to.message_type == MessageType.file:
+                reply_content = "📎 File"
+            elif len(reply_content) > 100:
+                reply_content = reply_content[:100] + "..."
+            
+            # Add compact reply preview to broadcast
+            broadcast_data["reply_preview"] = {
+                "id": full_msg.reply_to.id,
+                "sender_username": full_msg.reply_to.sender.username,
+                "content": reply_content,
+                "message_type": full_msg.reply_to.message_type.value,
+                "voice_duration": full_msg.reply_to.voice_duration,
+                "file_size": full_msg.reply_to.file_size
+            }
 
         # Broadcast via WebSocket
         chat_id = _chat_id(current_user.id, friend_id)
         await manager.broadcast(chat_id, broadcast_data)
 
-        return MessageOut(
+        # Build response with Telegram-style reply preview
+        response = MessageOut(
             id=full_msg.id,
+            temp_id=temp_id,
             sender_id=full_msg.sender_id,
             receiver_id=full_msg.receiver_id,
             content=voice_url,
@@ -535,6 +663,31 @@ async def send_voice_message(
             file_size=full_msg.file_size,
             seen_by=[MessageSeenByUser(**item) for item in seen_by]
         )
+
+        # Add Telegram-style reply preview to response if exists
+        if full_msg.reply_to:
+            # Create compact preview for the response
+            reply_content = full_msg.reply_to.content or ""
+            if full_msg.reply_to.message_type == MessageType.voice:
+                reply_content = "🎤 Voice message"
+            elif full_msg.reply_to.message_type == MessageType.image:
+                reply_content = "🖼️ Photo"
+            elif full_msg.reply_to.message_type == MessageType.file:
+                reply_content = "📎 File"
+            elif len(reply_content) > 100:
+                reply_content = reply_content[:100] + "..."
+            
+            # Add reply_preview to response
+            response.reply_preview = ReplyPreview(
+                id=full_msg.reply_to.id,
+                sender_username=full_msg.reply_to.sender.username,
+                content=reply_content,
+                message_type=full_msg.reply_to.message_type.value,
+                voice_duration=full_msg.reply_to.voice_duration,
+                file_size=full_msg.reply_to.file_size
+            )
+        
+        return response
         
     except HTTPException:
         raise
@@ -848,6 +1001,7 @@ async def get_message_info(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get message info: {str(e)}")
+
 # Edit message endpoint
 @router.patch("/private/{message_id}")
 async def edit_message(
@@ -860,26 +1014,72 @@ async def edit_message(
     Edit a message
     """
     try:
+        # Edit the message
         msg = edit_private_message(db, message_id, current_user.id, data.content.strip())
 
-        chat_id = _chat_id(msg.sender_id, msg.receiver_id)
+        # Get complete message data with all relationships for WebSocket
+        full_msg = db.query(PrivateMessage).options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
+        ).filter(PrivateMessage.id == msg.id).first()
+
+        if not full_msg:
+            raise HTTPException(status_code=404, detail="Message not found after edit")
+
+        chat_id = _chat_id(full_msg.sender_id, full_msg.receiver_id)
+        
+        # Prepare seen_by data
+        seen_by = []
+        for status in full_msg.seen_statuses:
+            seen_by.append({
+                "user_id": status.user.id,
+                "username": status.user.username,
+                "avatar_url": status.user.avatar_url,
+                "seen_at": status.seen_at.isoformat() if status.seen_at else None
+            })
+
+        # Complete WebSocket payload
         payload = {
-            "type": "edit",
-            "id": msg.id,
-            "content": msg.content,
-            "updated_at": msg.updated_at.isoformat(),
-            "sender_id": msg.sender_id,
-            "receiver_id": msg.receiver_id,
-            "sender_username": msg.sender.username if msg.sender else None,
-            "receiver_username": msg.receiver.username if msg.receiver else None,
+            "type": "message_updated", 
+            "id": full_msg.id,
+            "message_id": full_msg.id,  # Both id and message_id for compatibility
+            "content": full_msg.content,
+            "message_type": full_msg.message_type.value,
+            "updated_at": full_msg.updated_at.isoformat(),
+            "created_at": full_msg.created_at.isoformat(),
+            "sender_id": full_msg.sender_id,
+            "receiver_id": full_msg.receiver_id,
+            "sender_username": full_msg.sender.username,
+            "receiver_username": full_msg.receiver.username if full_msg.receiver else None,
+            "avatar_url": full_msg.sender.avatar_url,
+            "is_read": full_msg.is_read,
+            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
+            "seen_by": seen_by,
+            "voice_duration": full_msg.voice_duration,
+            "file_size": full_msg.file_size,
+            "is_forwarded": full_msg.is_forwarded,
+            "original_sender": full_msg.original_sender,
         }
 
+        # Broadcast to all connected clients in the chat
         await manager.broadcast(chat_id, payload)
-        return payload
+        print(f"✅ Broadcast message edit: {full_msg.id} to chat {chat_id}")
+        
+        # HTTP response
+        return {
+            "id": full_msg.id,
+            "content": full_msg.content,
+            "updated_at": full_msg.updated_at.isoformat(),
+            "message_type": full_msg.message_type.value,
+            "edited": True,
+            "sender_username": full_msg.sender.username,
+        }
         
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ Error editing message: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to edit message: {str(e)}")
 
 # Delete image from Cloudinary only

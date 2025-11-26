@@ -9,8 +9,6 @@ import {
   Image as ImageIcon,
   MoreVert as MoreVertIcon,
   PlayArrow as PlayArrowIcon,
-  PushPin as PushPinIcon,
-  Reply as ReplyIcon,
   Stop as StopIcon,
   ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
@@ -32,14 +30,11 @@ const ChatMessage = ({
   isMine,
   onUpdate,
   onDelete,
-  onReply,
   onForward,
-  onPin,
   profile,
   currentFriend,
   getAvatarUrl,
   getUserInitials,
-  isPinned = false,
   showSeenStatus = false,
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
@@ -58,33 +53,29 @@ const ChatMessage = ({
   /*                     MESSAGE TYPE DETECTION                */
   /* ---------------------------------------------------------- */
   const detectMessageType = (msg) => {
-    // First check explicit message_type from server
     if (msg.message_type === 'image') return 'image';
     if (msg.message_type === 'voice') return 'voice';
 
     const content = msg.content || '';
 
-    // Voice detection - ONLY MP3 files
     const isVoiceUrl =
-      content.match(/\.mp3$/i) || // Only .mp3 extension
+      content.match(/\.mp3$/i) ||
       content.startsWith('data:audio/mp3') ||
       content.startsWith('data:audio/mpeg') ||
       (content.startsWith('blob:') && content.includes('audio/mp3'));
 
     if (isVoiceUrl) return 'voice';
 
-    // Image detection - everything else that looks like media
     const isImageUrl =
-      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|webm)$/i) || // Added webm to images
+      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|webm)$/i) ||
       content.includes('cloudinary.com') ||
       content.includes('res.cloudinary.com') ||
       content.startsWith('data:image/') ||
-      content.startsWith('data:video/') || // Video data URLs
+      content.startsWith('data:video/') ||
       content.startsWith('blob:');
 
     if (isImageUrl) return 'image';
 
-    // Default to text
     return 'text';
   };
 
@@ -103,13 +94,23 @@ const ChatMessage = ({
   const handleEdit = async () => {
     if (editText.trim() && editText !== message.content && onUpdate) {
       try {
+        // Pass both the message ID and whether it's temporary
         await onUpdate(message.id, editText, message.is_temp);
+        setEditing(false);
+        handleClose();
       } catch (err) {
         console.error('Edit error:', err);
+        // Don't close editing mode on error - let user retry
       }
+    } else {
+      setEditing(false);
+      handleClose();
     }
+  };
+
+  const handleCancelEdit = () => {
+    setEditText(message.content); // Reset to original
     setEditing(false);
-    handleClose();
   };
 
   const handleDelete = async () => {
@@ -120,18 +121,6 @@ const ChatMessage = ({
         console.error('Delete error:', err);
       }
     }
-    handleClose();
-  };
-
-  const handleReplyClick = () => {
-    if (onReply) {
-      onReply(message);
-    }
-    handleClose();
-  };
-
-  const handlePinClick = () => {
-    onPin?.(message);
     handleClose();
   };
 
@@ -196,10 +185,8 @@ const ChatMessage = ({
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-
       const filename = `chat-image-${message.id}-${Date.now()}.jpg`;
       a.download = filename;
-
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -275,17 +262,11 @@ const ChatMessage = ({
   /*                     STATUS LOGIC                           */
   /* ---------------------------------------------------------- */
   const getMessageStatus = () => {
-    if (!isMine) return 'sent'; // Others' messages never show tick
-    if (message.is_temp) return 'sending'; // still sending
-
-    // Seen takes priority
+    if (!isMine) return 'sent';
+    if (message.is_temp) return 'sending';
     if (message.is_read === true) return 'seen';
     if (message.seen_by && message.seen_by.length > 0) return 'seen';
-
-    // Delivered next
     if (message.delivered_at) return 'delivered';
-
-    // Fallback to sent
     return 'sent';
   };
 
@@ -300,33 +281,87 @@ const ChatMessage = ({
       case 'delivered':
         return <DoneAllIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
       case 'seen':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: '#34B7F1' }} />; // ✅ BLUE TICKS
+        return <DoneAllIcon sx={{ fontSize: '1rem', color: '#34B7F1' }} />;
       default:
         return null;
     }
   };
 
-  const renderSeenAvatar = () => {
-    if (!isMine || !message.is_read || !message.seen_by || message.seen_by.length === 0) return null;
+const renderSeenAvatar = () => {
+  // Only show for MY messages that have been seen
+  if (!isMine) return null;
 
-    const seenUser = message.seen_by[0]; // Only 1 friend
+  // Get the reader (should be the friend for 1-on-1 chat)
+  const reader = currentFriend;
+  if (!reader) return null;
 
+  // Check if this specific friend has seen the message
+  const hasSeen = Array.isArray(message.seen_by) && 
+                  message.seen_by.some(s => s.user_id === reader.id);
+
+  if (hasSeen) {
+    const seenInfo = message.seen_by.find(s => s.user_id === reader.id);
+    
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 0.5, gap: 0.5 }}>
-        <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.7, color: 'text.secondary' }}>
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'flex-end', 
+        mt: 0.5, 
+        gap: 0.5,
+        minHeight: 20 // Prevent layout shift
+      }}>
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            fontSize: '0.7rem', 
+            color: 'text.secondary', 
+            fontWeight: 500 
+          }}
+        >
           Seen
         </Typography>
         <Avatar
-          src={seenUser.avatar_url}
-          sx={{ width: 16, height: 16, fontSize: '0.5rem', bgcolor: 'primary.main' }}
+          src={getAvatarUrl(reader.avatar_url)}
+          sx={{ 
+            width: 16, 
+            height: 16,
+            border: '1px solid',
+            borderColor: 'background.paper'
+          }}
+          onError={() => setSeenAvatarError(true)}
         >
-          {seenUser.username?.charAt(0).toUpperCase()}
+          {getUserInitials(reader.username)}
         </Avatar>
       </Box>
     );
-  };
+  }
 
+  // Show "Delivered" status for messages that are delivered but not seen
+  if (message.is_read && !hasSeen) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'flex-end', 
+        mt: 0.5 
+      }}>
+        <Typography 
+          variant="caption" 
+          sx={{ 
+            fontSize: '0.7rem', 
+            color: 'text.secondary',
+            fontWeight: 500
+          }}
+        >
+          Delivered
+        </Typography>
+      </Box>
+    );
+  }
 
+  return null;
+};
 
   /* ---------------------------------------------------------- */
   /*                     RENDER VOICE                           */
@@ -421,7 +456,6 @@ const ChatMessage = ({
   /* ---------------------------------------------------------- */
   const renderImageContent = () => (
     <Box sx={{ mb: 1, position: 'relative' }}>
-      {/* Error state */}
       {imageError && (
         <Box
           sx={{
@@ -442,17 +476,12 @@ const ChatMessage = ({
           <Typography variant="body2" color="text.secondary" align="center">
             Failed to load image
           </Typography>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={retryImageLoad}
-          >
+          <Button size="small" variant="outlined" onClick={retryImageLoad}>
             Retry
           </Button>
         </Box>
       )}
 
-      {/* Image */}
       {!imageError && (
         <>
           <img
@@ -469,7 +498,6 @@ const ChatMessage = ({
             onClick={handleViewFullImage}
           />
 
-          {/* Image actions overlay */}
           <Box
             sx={{
               position: 'absolute',
@@ -524,6 +552,8 @@ const ChatMessage = ({
       }}
       data-message-id={message.id}
       data-is-unread={!isMine && !message.is_read && !message.is_temp ? "true" : "false"}
+      data-is-friend={!isMine ? "true" : "false"} // Add this for auto-seen
+      data-sender-id={message.sender_id}
     >
       {/* Image Modal */}
       {imageModalOpen && (
@@ -575,7 +605,6 @@ const ChatMessage = ({
               }}
             />
 
-            {/* Modal actions */}
             <Box sx={{ position: 'absolute', bottom: -40, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 1 }}>
               <IconButton
                 onClick={handleDownloadImage}
@@ -601,32 +630,6 @@ const ChatMessage = ({
               )}
             </Box>
           </Box>
-        </Box>
-      )}
-
-      {/* Pin badge */}
-      {isPinned && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: -8,
-            left: isMine ? 'auto' : 40,
-            right: isMine ? 40 : 'auto',
-            bgcolor: 'warning.main',
-            color: 'white',
-            px: 1,
-            py: 0.5,
-            borderRadius: '12px',
-            fontSize: '0.7rem',
-            fontWeight: 'bold',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.5,
-            zIndex: 1,
-          }}
-        >
-          <PushPinIcon fontSize="small" sx={{ fontSize: '0.8rem' }} />
-          Pinned
         </Box>
       )}
 
@@ -669,59 +672,29 @@ const ChatMessage = ({
               multiline
               maxRows={4}
               autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                  handleEdit();
+                } else if (e.key === 'Escape') {
+                  handleCancelEdit();
+                }
+              }}
               sx={{ borderRadius: '12px' }}
             />
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-              <Button size="small" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button size="small" variant="contained" onClick={handleEdit}>Save</Button>
+              <Button size="small" onClick={handleCancelEdit}>Cancel</Button>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={handleEdit}
+                disabled={!editText.trim() || editText === message.content}
+              >
+                Save
+              </Button>
             </Box>
           </Box>
         ) : (
           <Box sx={{ position: 'relative' }} className="message-bubble">
-            {/* Reply preview */}
-            {message.reply_to && (
-              <Box
-                sx={{
-                  mb: 1,
-                  p: 1.5,
-                  bgcolor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                  borderRadius: '8px',
-                  borderLeft: '3px solid',
-                  borderColor: isMine ? 'rgba(255,255,255,0.5)' : 'primary.main',
-                  cursor: 'pointer',
-                  '&:hover': { bgcolor: isMine ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' },
-                }}
-                onClick={() => onReply?.(message.reply_to)}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    opacity: 0.7,
-                    display: 'block',
-                    fontWeight: 500,
-                    color: isMine ? 'white' : 'text.primary'
-                  }}
-                >
-                  Replying to{' '}
-                  {message.reply_to.sender_id === profile?.id
-                    ? 'yourself'
-                    : message.reply_to.sender_username ?? senderInfo.username}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    mt: 0.5,
-                    opacity: 0.8,
-                    fontStyle: 'italic',
-                    lineHeight: 1.3,
-                    color: isMine ? 'white' : 'text.primary'
-                  }}
-                >
-                  {message.reply_to.content}
-                </Typography>
-              </Box>
-            )}
-
             {/* Message bubble */}
             <Box
               sx={{
@@ -730,9 +703,7 @@ const ChatMessage = ({
                 p: 2,
                 borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                 position: 'relative',
-                boxShadow: isPinned ? '0 2px 8px rgba(255,152,0,0.3)' : '0 1px 2px rgba(0,0,0,0.1)',
-                border: isPinned ? '2px solid' : 'none',
-                borderColor: isPinned ? 'warning.main' : 'transparent',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                 transition: 'all 0.2s ease',
                 '&:hover': {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -775,11 +746,10 @@ const ChatMessage = ({
                   {formatCambodiaTime(message.created_at)}
                   {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
                 </Typography>
-
                 {isMine && renderTick()}
               </Box>
 
-              {/* ALWAYS VISIBLE menu button */}
+              {/* Menu button */}
               {showMenu && (
                 <IconButton
                   size="small"
@@ -811,7 +781,7 @@ const ChatMessage = ({
           </Box>
         )}
 
-        {/* Seen: Friend's avatar + "Seen" */}
+        {/* Seen status */}
         {renderSeenAvatar()}
 
         {/* Context menu */}
@@ -829,7 +799,7 @@ const ChatMessage = ({
               }
             }}
           >
-            {/* Image message specific options */}
+            {/* Image-specific options */}
             {actualMessageType === 'image' && [
               <MenuItem key="view-full" onClick={handleViewFullImage}>
                 <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
@@ -841,7 +811,7 @@ const ChatMessage = ({
               </MenuItem>
             ]}
 
-            {/* For MY messages - Show ALL menu items */}
+            {/* My messages */}
             {isMine && [
               actualMessageType === 'text' && (
                 <MenuItem key="edit" onClick={() => { setEditing(true); setEditText(message.content); handleClose(); }}>
@@ -849,14 +819,6 @@ const ChatMessage = ({
                   Edit
                 </MenuItem>
               ),
-              <MenuItem key="reply" onClick={handleReplyClick}>
-                <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Reply
-              </MenuItem>,
-              <MenuItem key="pin" onClick={handlePinClick}>
-                <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
-                {isPinned ? 'Unpin Message' : 'Pin Message'}
-              </MenuItem>,
               <MenuItem key="forward" onClick={handleForwardClick}>
                 <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
                 Forward
@@ -867,21 +829,13 @@ const ChatMessage = ({
               </MenuItem>
             ].filter(Boolean)}
 
-            {/* For FRIEND'S messages - Show Reply, Pin, Forward */}
-            {!isMine && [
-              <MenuItem key="reply" onClick={handleReplyClick}>
-                <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Reply
-              </MenuItem>,
-              <MenuItem key="pin" onClick={handlePinClick}>
-                <PushPinIcon fontSize="small" sx={{ mr: 1.5 }} />
-                {isPinned ? 'Unpin Message' : 'Pin Message'}
-              </MenuItem>,
+            {/* Friend's messages */}
+            {!isMine && (
               <MenuItem key="forward" onClick={handleForwardClick}>
                 <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
                 Forward
               </MenuItem>
-            ]}
+            )}
           </Menu>
         )}
       </Box>
