@@ -24,9 +24,9 @@ dist-ssr
 *.sw?
 
 # Environment files (ignore secrets)
-.env
-.env.local
-.env.*.local
-.env.*
-*.env
-frontend/react/.env
+# .env
+# .env.local
+# .env.*.local
+# .env.*
+# *.env
+# frontend/react/.env
