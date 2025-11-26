@@ -26,6 +26,7 @@ app.add_middleware(
         "http://localhost:5173", 
         "http://localhost:5174", 
         "https://whisper-space-bot-reactjs.onrender.com"  # Your React frontend
+        "https://whisper-space-bot.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
