@@ -4,6 +4,8 @@ from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
 
+from app.models.private_message import MessageType
+
 MessageTypeInput = Literal["text", "image", "file", "voice"]
 
 class MessageCreate(BaseModel):
@@ -21,15 +23,26 @@ class MessageSeenByUser(BaseModel):
     username: str
     avatar_url: Optional[str] = None
     seen_at: str
+    
+class ReplyPreview(BaseModel):
+    """Compact reply preview like Telegram"""
+    id: int
+    sender_username: str
+    content: str
+    message_type: str
+    voice_duration: Optional[float] = None
+    file_size: Optional[int] = None
 
 class MessageOut(TimestampMixin):
     id: int
+    temp_id: Optional[str] = None
     sender_id: int
     receiver_id: int
     content: str
     message_type: str
     is_read: bool = False
     reply_to_id: Optional[int] = None
+    reply_preview: Optional[ReplyPreview] = None  # NEW: Compact reply preview
     reply_to: Optional["MessageOut"] = None
     read_at: Optional[str] = None  
     delivered_at: Optional[str] = None
@@ -66,6 +79,24 @@ class MessageOut(TimestampMixin):
                 for status in obj.seen_statuses
             ]
         return data
+    
+    @staticmethod
+    def _truncate_reply_content(replied_message) -> str:
+        """Truncate reply content like Telegram does"""
+        content = replied_message.content or ""
+        
+        # Handle different message types
+        if replied_message.message_type == MessageType.voice:
+            return "🎤 Voice message"
+        elif replied_message.message_type == MessageType.image:
+            return "🖼️ Photo"
+        elif replied_message.message_type == MessageType.file:
+            return "📎 File"
+        
+        # Truncate text content
+        if len(content) > 100:
+            return content[:100] + "..."
+        return content
 
     model_config = ConfigDict(
         from_attributes=True,

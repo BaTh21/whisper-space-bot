@@ -1,20 +1,34 @@
 import asyncio
+import json
+import traceback
 from datetime import datetime
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session, joinedload
+
+from app.core.database import get_db
+from app.core.security import get_current_user_ws
+
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect,Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db, SessionLocal, get_session
 from app.core.security import get_current_user, get_current_user_ws
+
 from app.crud.friend import is_friend
-from app.crud.chat import create_private_message, is_group_member, create_group_message, mark_message_as_read
+from app.crud.chat import create_private_message, mark_message_as_read
+from app.crud.message import handle_seen_message, handle_forward_message
 from app.models.user import User
-from app.schemas.chat import MessageOut, GroupMessageOut
-from sqlalchemy.orm import Session, joinedload 
-from app.schemas.chat import MessageOut, GroupMessageOut, ParentMessageResponse
-from app.services.websocket_manager import manager
-from app.models.group_message import MessageType, GroupMessage
-from app.schemas.chat import MessageCreate, AuthorResponse
-import json
+from app.models.message_seen_status import MessageSeenStatus
+from app.models.private_message import PrivateMessage, MessageType
+from app.models.group_message import GroupMessage
 from app.models.group_message_reply import GroupMessageReply
+from app.models.group_member import GroupMember
+from app.schemas.chat import GroupMessageOut, ParentMessageResponse, AuthorResponse
+from app.services.websocket_manager import manager
+from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
+
 from app.crud.message import handle_seen_message, handle_forward_message, update_message, delete_message, update_file_message, upload_file_message
 import traceback
 from app.models.group_message_seen import GroupMessageSeen
@@ -26,12 +40,8 @@ from app.helpers.to_utc_iso import to_local_iso
 
 router = APIRouter()
 
-def _chat_id(user_a: int, user_b: int) -> str:
-    a, b = sorted([user_a, user_b])
-    return f"private_{a}_{b}"
-
 @router.websocket("/private/{friend_id}")
-async def ws_private_chat(
+async def handle_websocket_private(
     websocket: WebSocket,
     friend_id: int,
     db: Session = Depends(get_db)
@@ -202,6 +212,23 @@ async def ws_private_chat(
                             "error": "Message content cannot be empty"
                         })
                         continue
+                    
+                    # ✅ VALIDATE REPLY MESSAGE
+                    if reply_to_id:
+                        try:
+                            replied_message = validate_reply_message(db, reply_to_id, current_user.id, friend_id)
+                            if not replied_message:
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "error": "Replied message not found"
+                                })
+                                continue
+                        except HTTPException as e:
+                            await websocket.send_json({
+                                "type": "error", 
+                                "error": e.detail
+                            })
+                            continue
 
                     try:
                         # Create message in DB
@@ -221,7 +248,8 @@ async def ws_private_chat(
                             joinedload(PrivateMessage.sender),
                             joinedload(PrivateMessage.receiver),
                             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-                            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)
+                            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
+                            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
                         ).filter(PrivateMessage.id == msg.id).first()
 
                         if not full_msg:
@@ -263,6 +291,26 @@ async def ws_private_chat(
 
                         # ✅ ADD REPLY_TO DATA IF EXISTS
                         if full_msg.reply_to:
+                            # Create compact reply preview (like Telegram)
+                            reply_content = full_msg.reply_to.content or ""
+                            if full_msg.reply_to.message_type == MessageType.voice:
+                                reply_content = "🎤 Voice message"
+                            elif full_msg.reply_to.message_type == MessageType.image:
+                                reply_content = "🖼️ Photo"
+                            elif full_msg.reply_to.message_type == MessageType.file:
+                                reply_content = "📎 File"
+                            elif len(reply_content) > 100:
+                                reply_content = reply_content[:100] + "..."
+                            
+                            # Add compact reply preview
+                            message_data["reply_preview"] = {
+                                "id": full_msg.reply_to.id,
+                                "sender_username": full_msg.reply_to.sender.username,
+                                "content": reply_content,
+                                "message_type": full_msg.reply_to.message_type.value,
+                                "voice_duration": full_msg.reply_to.voice_duration,
+                                "file_size": full_msg.reply_to.file_size
+                            }
                             reply_seen_by = []
                             if hasattr(full_msg.reply_to, 'seen_statuses') and full_msg.reply_to.seen_statuses:
                                 for status in full_msg.reply_to.seen_statuses:
@@ -277,15 +325,19 @@ async def ws_private_chat(
                                 "id": full_msg.reply_to.id,
                                 "sender_id": full_msg.reply_to.sender_id,
                                 "content": full_msg.reply_to.content,
+                                "message_type": full_msg.reply_to.message_type.value,
                                 "sender_username": full_msg.reply_to.sender.username,
                                 "voice_duration": full_msg.reply_to.voice_duration,
+                                "created_at": full_msg.reply_to.created_at.isoformat(),
                                 "file_size": full_msg.reply_to.file_size,
+                                "is_read": full_msg.reply_to.is_read,
+                                "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
                                 "seen_by": reply_seen_by
                             }
 
                         # ✅ BROADCAST TO BOTH USERS
                         await manager.broadcast(chat_id, message_data)
-                        print(f"📢 Broadcast new message {full_msg.id}")
+                        print(f"📢 Broadcast new message {full_msg.id} with reply: {full_msg.reply_to_id}")
 
                     except Exception as e:
                         print(f"Error sending message: {e}")
@@ -327,12 +379,11 @@ async def ws_private_chat(
 
                                 # ✅ BROADCAST REAL-TIME SEEN STATUS
                                 await manager.broadcast(chat_id, {
-                                    "type": "message_updated",
+                                    "type": "read_receipt",  # Changed from "message_updated"
                                     "message_id": message_id,
-                                    "is_read": True,
+                                    "reader_id": current_user.id,
                                     "read_at": datetime.utcnow().isoformat(),
-                                    "seen_by": seen_by,
-                                    "reader_id": current_user.id
+                                    "seen_by": seen_by
                                 })
                                 print(f"📢 Broadcast REAL-TIME seen status for message {message_id} by user {current_user.id}")
                                 
@@ -454,20 +505,32 @@ async def ws_private_chat(
         if current_user:
             chat_id = _chat_id(current_user.id, friend_id)
             manager.disconnect(chat_id, websocket)
+
+
 @router.websocket("/group/{group_id}")
-async def ws_group_chat(
+async def websocket_group_chat(
     websocket: WebSocket,
     group_id: int,
     # db: Session = Depends(get_db)
 ):
+
+    """
+    WebSocket endpoint for group chat
+    """
     await websocket.accept()
     
     with get_session() as db:
 
+
+    current_user = await get_current_user_ws(websocket, db)
+    if not current_user:
+        await websocket.close(code=4001, reason="Please login to use chat")
+        return
         current_user = await get_current_user_ws(websocket, db)
         if not current_user:
             await websocket.close(code=4001, reason="Please login to use chat")
             return
+
 
         if not is_group_member(db, group_id, current_user.id):
             await websocket.close(code=4003, reason="Not a member of this group")
@@ -588,6 +651,35 @@ async def ws_group_chat(
 
                     await delete_message(db, message_id, current_user.id)
 
+
+            try:
+                msg = GroupMessage(
+                    group_id=group_id,
+                    sender_id=current_user.id,
+                    content=content,
+                    message_type=MessageType(message_type),
+                    parent_message_id=parent_message_id
+                )
+                db.add(msg)
+                db.commit()
+                db.refresh(msg)
+            except Exception as e:
+                db.rollback()
+                print(f"[DB Error] {e}")
+                await websocket.send_json({"error": "Failed to save message"})  # ✅ FIXED: Added missing quote
+                continue
+            
+            # Build parent message if it exists
+            if msg.parent_message:
+                parent_msg_data = ParentMessageResponse(
+                    id=msg.parent_message.id,
+                    content=msg.parent_message.content,
+                    file_url=msg.parent_message.file_url,
+                    sender=AuthorResponse(
+                        id=msg.parent_message.sender.id,
+                        username=msg.parent_message.sender.username,
+                        avatar_url=msg.parent_message.sender.avatar_url
+
                     await manager.broadcast(chat_id, {
                         "action": "delete",
                         "message_id": message_id
@@ -640,6 +732,7 @@ async def ws_group_chat(
                         content=content,
                         message_type=MessageType(message_type),
                         parent_message_id=parent_message_id
+
                     )
                     db.add(msg)
                     db.commit()
@@ -701,6 +794,14 @@ async def ws_group_chat(
             await websocket.close(code=1011, reason="Server error")
 
 
+    except WebSocketDisconnect:
+        manager.disconnect(chat_id, websocket)
+    except Exception as e:
+        traceback.print_exc()
+        print(f"[WS Error] {e}")
+        await websocket.close(code=1011, reason="Server error")
+
+
 @router.websocket("/private/{friend_id}")
 async def websocket_private_chat(
     websocket: WebSocket,
@@ -711,3 +812,4 @@ async def websocket_private_chat(
     WebSocket endpoint for private chat with a friend
     """
     await handle_websocket_private(websocket, friend_id, token)
+
