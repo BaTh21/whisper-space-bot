@@ -287,81 +287,81 @@ const ChatMessage = ({
     }
   };
 
-const renderSeenAvatar = () => {
-  // Only show for MY messages that have been seen
-  if (!isMine) return null;
+  const renderSeenAvatar = () => {
+    // Only show for MY messages that have been seen
+    if (!isMine) return null;
 
-  // Get the reader (should be the friend for 1-on-1 chat)
-  const reader = currentFriend;
-  if (!reader) return null;
+    // Get the reader (should be the friend for 1-on-1 chat)
+    const reader = currentFriend;
+    if (!reader) return null;
 
-  // Check if this specific friend has seen the message
-  const hasSeen = Array.isArray(message.seen_by) && 
-                  message.seen_by.some(s => s.user_id === reader.id);
+    // Check if this specific friend has seen the message
+    const hasSeen = Array.isArray(message.seen_by) && 
+                    message.seen_by.some(s => s.user_id === reader.id);
 
-  if (hasSeen) {
-    const seenInfo = message.seen_by.find(s => s.user_id === reader.id);
-    
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'flex-end', 
-        mt: 0.5, 
-        gap: 0.5,
-        minHeight: 20 // Prevent layout shift
-      }}>
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            fontSize: '0.7rem', 
-            color: 'text.secondary', 
-            fontWeight: 500 
-          }}
-        >
-          Seen
-        </Typography>
-        <Avatar
-          src={getAvatarUrl(reader.avatar_url)}
-          sx={{ 
-            width: 16, 
-            height: 16,
-            border: '1px solid',
-            borderColor: 'background.paper'
-          }}
-          onError={() => setSeenAvatarError(true)}
-        >
-          {getUserInitials(reader.username)}
-        </Avatar>
-      </Box>
-    );
-  }
+    if (hasSeen) {
+      const seenInfo = message.seen_by.find(s => s.user_id === reader.id);
+      
+      return (
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'flex-end', 
+          mt: 0.5, 
+          gap: 0.5,
+          minHeight: 20 // Prevent layout shift
+        }}>
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              fontSize: '0.7rem', 
+              color: 'text.secondary', 
+              fontWeight: 500 
+            }}
+          >
+            Seen
+          </Typography>
+          <Avatar
+            src={getAvatarUrl(reader.avatar_url)}
+            sx={{ 
+              width: 16, 
+              height: 16,
+              border: '1px solid',
+              borderColor: 'background.paper'
+            }}
+            onError={() => setSeenAvatarError(true)}
+          >
+            {getUserInitials(reader.username)}
+          </Avatar>
+        </Box>
+      );
+    }
 
-  // Show "Delivered" status for messages that are delivered but not seen
-  if (message.is_read && !hasSeen) {
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'flex-end', 
-        mt: 0.5 
-      }}>
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            fontSize: '0.7rem', 
-            color: 'text.secondary',
-            fontWeight: 500
-          }}
-        >
-          Delivered
-        </Typography>
-      </Box>
-    );
-  }
+    // Show "Delivered" status for messages that are delivered but not seen
+    if (message.is_read && !hasSeen) {
+      return (
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'flex-end', 
+          mt: 0.5 
+        }}>
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              fontSize: '0.7rem', 
+              color: 'text.secondary',
+              fontWeight: 500
+            }}
+          >
+            Delivered
+          </Typography>
+        </Box>
+      );
+    }
 
-  return null;
-};
+    return null;
+  };
 
   /* ---------------------------------------------------------- */
   /*                     RENDER VOICE                           */
