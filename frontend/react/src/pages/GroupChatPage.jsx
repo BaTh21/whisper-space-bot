@@ -115,15 +115,18 @@ const GroupChatPage = ({ groupId }) => {
   const handleForwardMessage = (message, targetGroupIds) => {
     if (!wsRef.current || !targetGroupIds?.length) return;
 
-    const forwardPayload = {
+    wsRef.current.send(JSON.stringify({
       action: 'forward_to_groups',
       message_id: message.id,
       group_ids: targetGroupIds
-    };
+    }));
 
-    wsRef.current.send(JSON.stringify(forwardPayload));
+    setMessages(prev => {
+      if (prev.some(m => m.id === message.id)) return prev;
+      return [...prev, message];
+    });
+
   };
-
 
   const handleScroll = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
@@ -277,9 +280,8 @@ const GroupChatPage = ({ groupId }) => {
     });
   }, [seenMessages, user]);
 
-  const handleWSMessage = (event, groupId) => {
+  const handleWSMessage = (event) => {
     const data = JSON.parse(event.data);
-    data.group_id = groupId;
     console.log('WS received:', data);
 
     switch (data.action) {
@@ -356,30 +358,18 @@ const GroupChatPage = ({ groupId }) => {
         break;
 
       case "new_message":
-        setMessages(prev => {
-          const updated = [...prev];
-
-          if (data.temp_id) {
-            const idx = updated.findIndex(msg => msg.id === data.temp_id);
-            if (idx !== -1) {
-              updated[idx] = {
-                ...updated[idx],
-                ...data,
-                is_temp: false
-              };
-              return updated;
-            }
-          }
-          if (!updated.some(msg => msg.id === data.id)) {
-            updated.push(data);
-          }
-
-          return updated;
-        });
+        setMessages(prev => [...prev, data]);
         break;
 
-      case "forwarded":
+      case "forward_to_groups":
         console.log(`Message ${data.message_id} forwarded to groups:`, data.forwarded_to);
+
+        setMessages(prev => {
+          if (!prev.some(msg => msg.id === data.id)) {
+            return [...prev, data];
+          }
+          return prev;
+        });
         break;
 
       default:
@@ -414,9 +404,10 @@ const GroupChatPage = ({ groupId }) => {
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () => console.log('Connected to group chat');
-
-    markVisibleMessagesAsSeen();
+    ws.onopen = () => {
+      console.log('Connected to group chat');
+      markVisibleMessagesAsSeen();
+    }
 
     ws.onmessage = handleWSMessage;
 
@@ -717,7 +708,7 @@ const GroupChatPage = ({ groupId }) => {
 
                   const isOwn = message.sender?.id === user?.id;
 
-                  
+
                   return (
                     <Box
                       key={messageKey}

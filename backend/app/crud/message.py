@@ -200,7 +200,9 @@ async def handle_forward_message(
         
     user = db.query(User).filter(User.id == current_user_id).first()
     if not user:
-        return None
+        return []
+    
+    forwarded_messages = []
     
     for group_id in target_group_ids:
         chat_id = f"group_{group_id}"
@@ -221,42 +223,36 @@ async def handle_forward_message(
         db.commit()
         db.refresh(new_msg)
 
-        parent_msg_data = ParentMessageResponse(
-            id=original.id,
-            content=original.content,
-            file_url=original.file_url,
-            sender=AuthorResponse(
-                id=original.sender.id,
-                username=original.sender.username,
-                avatar_url=original.sender.avatar_url
-            )
-        )
-
-        msg_out = GroupMessageOut(
-            id=new_msg.id,
-            sender=AuthorResponse(
-                id=current_user_id,
-                username=user.username,
-                avatar_url=user.avatar_url
-            ),
-            forwarded_by=AuthorResponse(
-                id=original.sender.id,
-                username=original.sender.username,
-                avatar_url=original.sender.avatar_url
-            ),
-            group_id=group_id,
-            content=new_msg.content,
-            created_at=new_msg.created_at,
-            updated_at=new_msg.updated_at,
-            file_url=new_msg.file_url,
-            parent_message=parent_msg_data,
-        )
-
-        fmsg_out = {
-            "action": "new_message",
-            **msg_out.dict()
+        msg_out = {
+            "action": "forward_to_groups",
+            "id": new_msg.id,
+            "group_id": group_id,
+            "content": new_msg.content,
+            "sender": {
+                "id": user.id,
+                "username": user.username,
+                "avatar_url": user.avatar_url
+            },
+            "forwarded_by": {
+                "id": original.sender.id,
+                "username": original.sender.username,
+                "avatar_url": original.sender.avatar_url
+            },
+            "parent_message": {
+                "id": original.id,
+                "content": original.content,
+                "file_url": original.file_url,
+                "sender": {
+                    "id": original.sender.id,
+                    "username": original.sender.username,
+                    "avatar_url": original.sender.avatar_url
+                }
+            } if original.parent_message_id else None,
+            "file_url": new_msg.file_url,
+            "created_at": to_local_iso(new_msg.created_at, tz_offset_hours=7)
         }
-        await manager.broadcast(chat_id, fmsg_out)
+
+        await manager.broadcast(chat_id, msg_out)
         forwarded_messages.append(msg_out)
 
     return forwarded_messages

@@ -571,36 +571,16 @@ async def websocket_group_chat(
                     message_id = data.get("message_id")
                     target_group_ids = [int(g) for g in data.get("group_ids", [])]
                     target_group_ids = [gid for gid in target_group_ids if gid != group_id]
-
-                    forwarded_msgs = await handle_forward_message(
+                    
+                    if not target_group_ids:
+                        continue
+                    
+                    await handle_forward_message(
                         db,
                         current_user_id=current_user.id,
                         message_id=message_id,
                         target_group_ids=target_group_ids
                     )
-
-                    await manager.broadcast(chat_id, {
-                        "action": "forwarded",
-                        "message_id": message_id,
-                        "forwarded_to": target_group_ids,
-                        "forwarded_by": {
-                            "id": current_user.id,
-                            "username": current_user.username,
-                            "avatar_url": current_user.avatar_url
-                        },
-                        "sender": {
-                            "id": current_user.id,
-                            "username": current_user.username,
-                            "avatar_url": current_user.avatar_url
-                        }
-                    })
-
-                    for gid, fwd_msg in zip(target_group_ids, forwarded_msgs):
-                        target_chat_id = f"group_{gid}"
-                        await manager.broadcast(target_chat_id, {
-                            "action": "new_message",
-                            **fwd_msg
-                        })
                     continue
 
                 if action == "edit":
