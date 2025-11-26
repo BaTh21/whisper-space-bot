@@ -500,9 +500,6 @@ async def websocket_group_chat(
     websocket: WebSocket,
     group_id: int,
 ):
-    """
-    WebSocket endpoint for group chat
-    """
     await websocket.accept()
     
     db = next(get_db())
@@ -582,7 +579,7 @@ async def websocket_group_chat(
                         target_group_ids=target_group_ids
                     )
 
-                    await websocket.send_json({
+                    await manager.broadcast(chat_id, {
                         "action": "forwarded",
                         "message_id": message_id,
                         "forwarded_to": target_group_ids,
@@ -674,14 +671,13 @@ async def websocket_group_chat(
                         "temp_id": incoming_temp_id
                     })
                     continue
-
-                # Handle regular message sending
+                
                 try:
                     msg = GroupMessage(
                         group_id=group_id,
                         sender_id=current_user.id,
                         content=content,
-                        message_type=MessageType(message_type),
+                        message_type=message_type,
                         parent_message_id=parent_message_id
                     )
                     db.add(msg)
@@ -696,7 +692,6 @@ async def websocket_group_chat(
                     })
                     continue
 
-                # Build parent message if it exists
                 parent_msg_data = None
                 if msg.parent_message:
                     parent = msg.parent_message
