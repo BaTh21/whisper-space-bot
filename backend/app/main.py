@@ -29,8 +29,8 @@ app.add_middleware(
         "https://whisper-space-bot.vercel.app",
     ],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"], 
+    allow_headers=["*"], 
 )
 
 # Include API routers
