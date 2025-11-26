@@ -89,7 +89,6 @@ const GroupChatPage = ({ groupId }) => {
         width: 350
       }}
       role="presentation"
-    // onClick={() => setOpenDrawer(false)}
     >
       <GroupListComponent
         onClose={() => setOpenDrawer(false)}
@@ -129,29 +128,6 @@ const GroupChatPage = ({ groupId }) => {
   const handleScroll = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
     setShowScrollButton(scrollTop + clientHeight < scrollHeight - 50);
-
-    if (!messagesContainerRef.current) return;
-
-    const container = messagesContainerRef.current;
-    const messageElements = container.querySelectorAll("[data-message-id]");
-
-    messageElements.forEach((el) => {
-      const rect = el.getBoundingClientRect();
-
-      if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-        const id = Number(el.dataset.messageId);
-
-        const msg = messages.find((m) => m.id === id);
-        if (!msg) return;
-
-        if (msg.sender?.id === user?.id) return;
-
-        if (!seenMessages.has(id)) {
-          setSeenMessages((prev) => new Set(prev).add(id));
-          sendSeenEvent(id);
-        }
-      }
-    });
   };
 
   const scrollToBottom = () => {
@@ -301,7 +277,6 @@ const GroupChatPage = ({ groupId }) => {
     });
   }, [seenMessages, user]);
 
-
   const handleWSMessage = (event, groupId) => {
     const data = JSON.parse(event.data);
     data.group_id = groupId;
@@ -440,6 +415,8 @@ const GroupChatPage = ({ groupId }) => {
     wsRef.current = ws;
 
     ws.onopen = () => console.log('Connected to group chat');
+
+    markVisibleMessagesAsSeen();
 
     ws.onmessage = handleWSMessage;
 
