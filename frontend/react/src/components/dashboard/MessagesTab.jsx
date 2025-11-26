@@ -81,7 +81,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
 
-
   // VOICE STATES
   const [isRecording, setIsRecording] = useState(false);
   const [voiceSending, setVoiceSending] = useState(false);
@@ -115,181 +114,181 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /* WebSocket Handlers */
   /* --------------------------------------------------------------------- */
-const handleWebSocketMessage = useCallback(
-  (data) => {
-    const { type } = data;
-    console.log("📡 WebSocket received:", data);
+  const handleWebSocketMessage = useCallback(
+    (data) => {
+      const { type } = data;
+      console.log("📡 WebSocket received:", data);
 
-    // 1. New real message from server
-    if (type === "message") {
-      const detectMessageType = (msgData) => {
-        if (msgData.message_type === "image") return "image";
-        if (msgData.message_type === "voice") return "voice";
-        const content = msgData.content || "";
-        const isVoiceUrl =
-          content.match(/\.mp3$/i) ||
-          content.includes("/voice_messages/") ||
-          content.includes(".webm");
-        if (isVoiceUrl) return "voice";
-        const isImageUrl =
-          content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-          content.includes("cloudinary.com") ||
-          content.startsWith("data:image/");
-        return isImageUrl ? "image" : "text";
-      };
+      // 1. New real message from server
+      if (type === "message") {
+        const detectMessageType = (msgData) => {
+          if (msgData.message_type === "image") return "image";
+          if (msgData.message_type === "voice") return "voice";
+          const content = msgData.content || "";
+          const isVoiceUrl =
+            content.match(/\.mp3$/i) ||
+            content.includes("/voice_messages/") ||
+            content.includes(".webm");
+          if (isVoiceUrl) return "voice";
+          const isImageUrl =
+            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+            content.includes("cloudinary.com") ||
+            content.startsWith("data:image/");
+          return isImageUrl ? "image" : "text";
+        };
 
-      const messageType = detectMessageType(data);
-      let content = data.content;
-      if (messageType === "voice" && content.includes(".webm")) {
-        content = convertWebmToMp3Url(content);
-      }
-
-      const realMessage = {
-        ...data,
-        id: data.id,
-        temp_id: data.temp_id || null,
-        content,
-        is_temp: false,
-        message_type: messageType,
-        sender: {
-          id: data.sender_id,
-          username: data.sender_username,
-          avatar_url: getAvatarUrl(data.avatar_url),
-        },
-        is_read: data.is_read || false,
-        read_at: data.read_at || null,
-        seen_by: data.seen_by || [],
-        created_at: data.created_at,
-        updated_at: data.updated_at || data.created_at,
-        edited: !!data.updated_at && data.updated_at !== data.created_at,
-        voice_duration: data.voice_duration || data.duration || 0,
-      };
-
-      setMessages((prev) => {
-        let updated = [...prev];
-
-        // Replace temporary message if temp_id matches
-        if (data.temp_id) {
-          const tempIndex = updated.findIndex(
-            (m) =>
-              m.is_temp &&
-              (m.temp_id === data.temp_id || m.id === data.temp_id)
-          );
-
-          if (tempIndex !== -1) {
-            tempToRealIdMap.current[data.temp_id] = data.id;
-            updated[tempIndex] = realMessage;
-            return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-          }
+        const messageType = detectMessageType(data);
+        let content = data.content;
+        if (messageType === "voice" && content.includes(".webm")) {
+          content = convertWebmToMp3Url(content);
         }
 
-        // Fallback: if no temp_id, avoid duplicates by real ID
-        const exists = updated.some((m) => m.id === data.id);
-        if (!exists) {
-          updated.push(realMessage);
-        }
+        const realMessage = {
+          ...data,
+          id: data.id,
+          temp_id: data.temp_id || null,
+          content,
+          is_temp: false,
+          message_type: messageType,
+          sender: {
+            id: data.sender_id,
+            username: data.sender_username,
+            avatar_url: getAvatarUrl(data.avatar_url),
+          },
+          is_read: data.is_read || false,
+          read_at: data.read_at || null,
+          seen_by: data.seen_by || [],
+          created_at: data.created_at,
+          updated_at: data.updated_at || data.created_at,
+          edited: !!data.updated_at && data.updated_at !== data.created_at,
+          voice_duration: data.voice_duration || data.duration || 0,
+        };
 
-        return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      });
+        setMessages((prev) => {
+          let updated = [...prev];
 
-    // 2. REAL-TIME SEEN STATUS UPDATES - FIXED
-    } else if (type === "read_receipt") {
-      console.log("👀 REAL-TIME: Read receipt received", data);
-      
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === data.message_id) {
-            const currentSeenBy = msg.seen_by || [];
-            const readerId = data.reader_id || data.user_id;
-            
-            // Check if this user already marked as seen
-            const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
-            
-            if (!alreadySeen && readerId) {
-              console.log(`✅ REAL-TIME: Marking message ${data.message_id} as seen by user ${readerId}`);
-              
-              // Get reader info - IMPORTANT: Use friends list or selectedFriend
-              const reader = friends.find(f => f.id === readerId) || selectedFriend;
-              
-              return {
-                ...msg,
-                is_read: true,
-                read_at: data.read_at || new Date().toISOString(),
-                seen_by: [
-                  ...currentSeenBy,
-                  {
-                    user_id: readerId,
-                    username: reader?.username || 'Friend',
-                    avatar_url: getUserAvatar(reader),
-                    seen_at: data.read_at || new Date().toISOString(),
-                  },
-                ],
-              };
+          // Replace temporary message if temp_id matches
+          if (data.temp_id) {
+            const tempIndex = updated.findIndex(
+              (m) =>
+                m.is_temp &&
+                (m.temp_id === data.temp_id || m.id === data.temp_id)
+            );
+
+            if (tempIndex !== -1) {
+              tempToRealIdMap.current[data.temp_id] = data.id;
+              updated[tempIndex] = realMessage;
+              return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
             }
           }
-          return msg;
-        })
-      );
 
-    // 3. Message updated with seen_by information
-    } else if (type === "message_updated") {
-      console.log("🔄 Message updated with seen info:", data);
-      
-      setMessages((prev) =>
-        prev.map((msg) => {
-          const messageIdsToCheck = [
-            msg.id,
-            msg.temp_id,
-            tempToRealIdMap.current[msg.id],
-            tempToRealIdMap.current[msg.temp_id]
-          ].filter(Boolean);
+          // Fallback: if no temp_id, avoid duplicates by real ID
+          const exists = updated.some((m) => m.id === data.id);
+          if (!exists) {
+            updated.push(realMessage);
+          }
 
-          const matches =
-            messageIdsToCheck.includes(data.message_id) ||
-            messageIdsToCheck.includes(data.id) ||
-            msg.id === data.message_id ||
-            msg.id === data.id;
+          return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        });
 
-          if (matches) {
-            // If seen_by is provided, update it
-            if (data.seen_by) {
-              console.log("👀 Updating seen_by for message:", msg.id);
+      // 2. REAL-TIME SEEN STATUS UPDATES - FIXED
+      } else if (type === "read_receipt") {
+        console.log("👀 REAL-TIME: Read receipt received", data);
+        
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === data.message_id) {
+              const currentSeenBy = msg.seen_by || [];
+              const readerId = data.reader_id || data.user_id;
+              
+              // Check if this user already marked as seen
+              const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
+              
+              if (!alreadySeen && readerId) {
+                console.log(`✅ REAL-TIME: Marking message ${data.message_id} as seen by user ${readerId}`);
+                
+                // Get reader info - IMPORTANT: Use friends list or selectedFriend
+                const reader = friends.find(f => f.id === readerId) || selectedFriend;
+                
+                return {
+                  ...msg,
+                  is_read: true,
+                  read_at: data.read_at || new Date().toISOString(),
+                  seen_by: [
+                    ...currentSeenBy,
+                    {
+                      user_id: readerId,
+                      username: reader?.username || 'Friend',
+                      avatar_url: getUserAvatar(reader),
+                      seen_at: data.read_at || new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
+            }
+            return msg;
+          })
+        );
+
+      // 3. Message updated with seen_by information
+      } else if (type === "message_updated") {
+        console.log("🔄 Message updated with seen info:", data);
+        
+        setMessages((prev) =>
+          prev.map((msg) => {
+            const messageIdsToCheck = [
+              msg.id,
+              msg.temp_id,
+              tempToRealIdMap.current[msg.id],
+              tempToRealIdMap.current[msg.temp_id]
+            ].filter(Boolean);
+
+            const matches =
+              messageIdsToCheck.includes(data.message_id) ||
+              messageIdsToCheck.includes(data.id) ||
+              msg.id === data.message_id ||
+              msg.id === data.id;
+
+            if (matches) {
+              // If seen_by is provided, update it
+              if (data.seen_by) {
+                console.log("👀 Updating seen_by for message:", msg.id);
+                return {
+                  ...msg,
+                  content: data.content || msg.content,
+                  message_type: data.message_type || msg.message_type,
+                  updated_at: data.updated_at,
+                  edited: true,
+                  is_read: data.is_read !== undefined ? data.is_read : msg.is_read,
+                  read_at: data.read_at || msg.read_at,
+                  seen_by: Array.isArray(data.seen_by) ? data.seen_by : msg.seen_by,
+                };
+              }
+              
+              // Regular message update
               return {
                 ...msg,
                 content: data.content || msg.content,
                 message_type: data.message_type || msg.message_type,
                 updated_at: data.updated_at,
                 edited: true,
-                is_read: data.is_read !== undefined ? data.is_read : msg.is_read,
-                read_at: data.read_at || msg.read_at,
-                seen_by: Array.isArray(data.seen_by) ? data.seen_by : msg.seen_by,
               };
             }
-            
-            // Regular message update
-            return {
-              ...msg,
-              content: data.content || msg.content,
-              message_type: data.message_type || msg.message_type,
-              updated_at: data.updated_at,
-              edited: true,
-            };
-          }
-          return msg;
-        })
-      );
+            return msg;
+          })
+        );
 
-    // 4. Typing indicator
-    } else if (type === "typing") {
-      setFriendTyping(!!data.is_typing);
+      // 4. Typing indicator
+      } else if (type === "typing") {
+        setFriendTyping(!!data.is_typing);
 
-    // 5. Message deleted
-    } else if (type === "message_deleted") {
-      setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
-    }
-  },
-  [getAvatarUrl, friends, selectedFriend] // ADD friends and selectedFriend to dependencies
-);
+      // 5. Message deleted
+      } else if (type === "message_deleted") {
+        setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
+      }
+    },
+    [getAvatarUrl, friends, selectedFriend, getUserAvatar]
+  );
 
   const handleWebSocketOpen = useCallback(() => {
     console.log('[WS] Connected');
@@ -332,167 +331,167 @@ const handleWebSocketMessage = useCallback(
     debug: true,
   });
 
-/* --------------------------------------------------------------------- */
-/* Enhanced Auto-Seen Observer */
-/* --------------------------------------------------------------------- */
-useEffect(() => {
-  if (!messagesContainerRef.current || !selectedFriend || !isConnected) return;
+  /* --------------------------------------------------------------------- */
+  /* Enhanced Auto-Seen Observer */
+  /* --------------------------------------------------------------------- */
+  useEffect(() => {
+    if (!messagesContainerRef.current || !selectedFriend || !isConnected) return;
 
-  const container = messagesContainerRef.current;
-  let observedMessages = new Set();
+    const container = messagesContainerRef.current;
+    let observedMessages = new Set();
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      const messagesToMarkAsRead = [];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const messagesToMarkAsRead = [];
 
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const messageId = parseInt(entry.target.getAttribute('data-message-id'));
-          const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
-          const isFriendMessage = entry.target.getAttribute('data-is-friend') === 'true';
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const messageId = parseInt(entry.target.getAttribute('data-message-id'));
+            const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
+            const isFriendMessage = entry.target.getAttribute('data-is-friend') === 'true';
 
-          if (messageId && isUnread && isFriendMessage && !observedMessages.has(messageId)) {
-            messagesToMarkAsRead.push(messageId);
-            observedMessages.add(messageId);
-          }
-        }
-      });
-
-      // Process messages to mark as read
-      if (messagesToMarkAsRead.length > 0) {
-        console.log(`👁️ Auto-marking ${messagesToMarkAsRead.length} messages as read:`, messagesToMarkAsRead);
-        messagesToMarkAsRead.forEach((messageId) => {
-          markMessageAsRead(messageId);
-        });
-      }
-    },
-    {
-      root: container,
-      rootMargin: '0px 0px -100px 0px', // Trigger when 100px from bottom
-      threshold: 0.8, // 80% visible
-    }
-  );
-
-  const markMessageAsRead = async (messageId) => {
-    try {
-      console.log(`📨 SENDING read receipt for message ${messageId}`);
-      
-      // Send read receipt via WebSocket
-      const success = sendWsMessage({
-        type: 'read',
-        message_id: messageId,
-      });
-
-      if (!success) {
-        console.warn('❌ Failed to send WebSocket read receipt');
-        observedMessages.delete(messageId);
-        return;
-      }
-
-      // OPTIMISTIC UPDATE - Update UI immediately
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === messageId) {
-            const currentSeenBy = msg.seen_by || [];
-            const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-            
-            if (!alreadySeen) {
-              console.log(`✅ OPTIMISTIC: Marking message ${messageId} as read`);
-              return {
-                ...msg,
-                is_read: true,
-                read_at: new Date().toISOString(),
-                seen_by: [
-                  ...currentSeenBy,
-                  {
-                    user_id: selectedFriend.id,
-                    username: selectedFriend.username,
-                    avatar_url: getUserAvatar(selectedFriend),
-                    seen_at: new Date().toISOString(),
-                  },
-                ],
-              };
+            if (messageId && isUnread && isFriendMessage && !observedMessages.has(messageId)) {
+              messagesToMarkAsRead.push(messageId);
+              observedMessages.add(messageId);
             }
           }
-          return msg;
-        })
-      );
-    } catch (error) {
-      console.error('❌ Failed to mark message as read:', error);
-      // Remove from observed so it can be retried
-      observedMessages.delete(messageId);
-    }
-  };
+        });
 
-  // Observe all unread friend messages
-  const unreadFriendMessages = container.querySelectorAll(
-    `[data-message-id][data-is-unread="true"][data-is-friend="true"]`
-  );
-
-  console.log(`👀 Observing ${unreadFriendMessages.length} unread messages`);
-  unreadFriendMessages.forEach((el) => {
-    observer.observe(el);
-  });
-
-  return () => {
-    observer.disconnect();
-    observedMessages.clear();
-  };
-}, [messages, selectedFriend, isConnected, sendWsMessage, getUserAvatar]);
-
-/* --------------------------------------------------------------------- */
-/* Mark All Messages as Read on Chat Open */
-/* --------------------------------------------------------------------- */
-useEffect(() => {
-  if (selectedFriend && isConnected && messages.length > 0) {
-    // Find unread messages from friend
-    const unreadMessages = messages.filter(
-      msg => !msg.is_temp && 
-             !msg.is_read && 
-             msg.sender_id === selectedFriend.id
+        // Process messages to mark as read
+        if (messagesToMarkAsRead.length > 0) {
+          console.log(`👁️ Auto-marking ${messagesToMarkAsRead.length} messages as read:`, messagesToMarkAsRead);
+          messagesToMarkAsRead.forEach((messageId) => {
+            markMessageAsRead(messageId);
+          });
+        }
+      },
+      {
+        root: container,
+        rootMargin: '0px 0px -100px 0px', // Trigger when 100px from bottom
+        threshold: 0.8, // 80% visible
+      }
     );
 
-    // Mark all as read
-    if (unreadMessages.length > 0) {
-      console.log(`📚 Marking ${unreadMessages.length} messages as read on chat open`);
-      
-      unreadMessages.forEach(msg => {
-        sendWsMessage({
+    const markMessageAsRead = async (messageId) => {
+      try {
+        console.log(`📨 SENDING read receipt for message ${messageId}`);
+        
+        // Send read receipt via WebSocket
+        const success = sendWsMessage({
           type: 'read',
-          message_id: msg.id,
+          message_id: messageId,
         });
-      });
 
-      // Optimistic update for all messages
-      setMessages(prev =>
-        prev.map(msg => {
-          if (!msg.is_temp && !msg.is_read && msg.sender_id === selectedFriend.id) {
-            const currentSeenBy = msg.seen_by || [];
-            const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-            
-            if (!alreadySeen) {
-              return {
-                ...msg,
-                is_read: true,
-                read_at: new Date().toISOString(),
-                seen_by: [
-                  ...currentSeenBy,
-                  {
-                    user_id: selectedFriend.id,
-                    username: selectedFriend.username,
-                    avatar_url: getUserAvatar(selectedFriend),
-                    seen_at: new Date().toISOString(),
-                  },
-                ],
-              };
+        if (!success) {
+          console.warn('❌ Failed to send WebSocket read receipt');
+          observedMessages.delete(messageId);
+          return;
+        }
+
+        // OPTIMISTIC UPDATE - Update UI immediately
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === messageId) {
+              const currentSeenBy = msg.seen_by || [];
+              const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
+              
+              if (!alreadySeen) {
+                console.log(`✅ OPTIMISTIC: Marking message ${messageId} as read`);
+                return {
+                  ...msg,
+                  is_read: true,
+                  read_at: new Date().toISOString(),
+                  seen_by: [
+                    ...currentSeenBy,
+                    {
+                      user_id: selectedFriend.id,
+                      username: selectedFriend.username,
+                      avatar_url: getUserAvatar(selectedFriend),
+                      seen_at: new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
             }
-          }
-          return msg;
-        })
+            return msg;
+          })
+        );
+      } catch (error) {
+        console.error('❌ Failed to mark message as read:', error);
+        // Remove from observed so it can be retried
+        observedMessages.delete(messageId);
+      }
+    };
+
+    // Observe all unread friend messages
+    const unreadFriendMessages = container.querySelectorAll(
+      `[data-message-id][data-is-unread="true"][data-is-friend="true"]`
+    );
+
+    console.log(`👀 Observing ${unreadFriendMessages.length} unread messages`);
+    unreadFriendMessages.forEach((el) => {
+      observer.observe(el);
+    });
+
+    return () => {
+      observer.disconnect();
+      observedMessages.clear();
+    };
+  }, [messages, selectedFriend, isConnected, sendWsMessage, getUserAvatar]);
+
+  /* --------------------------------------------------------------------- */
+  /* Mark All Messages as Read on Chat Open */
+  /* --------------------------------------------------------------------- */
+  useEffect(() => {
+    if (selectedFriend && isConnected && messages.length > 0) {
+      // Find unread messages from friend
+      const unreadMessages = messages.filter(
+        msg => !msg.is_temp && 
+               !msg.is_read && 
+               msg.sender_id === selectedFriend.id
       );
+
+      // Mark all as read
+      if (unreadMessages.length > 0) {
+        console.log(`📚 Marking ${unreadMessages.length} messages as read on chat open`);
+        
+        unreadMessages.forEach(msg => {
+          sendWsMessage({
+            type: 'read',
+            message_id: msg.id,
+          });
+        });
+
+        // Optimistic update for all messages
+        setMessages(prev =>
+          prev.map(msg => {
+            if (!msg.is_temp && !msg.is_read && msg.sender_id === selectedFriend.id) {
+              const currentSeenBy = msg.seen_by || [];
+              const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
+              
+              if (!alreadySeen) {
+                return {
+                  ...msg,
+                  is_read: true,
+                  read_at: new Date().toISOString(),
+                  seen_by: [
+                    ...currentSeenBy,
+                    {
+                      user_id: selectedFriend.id,
+                      username: selectedFriend.username,
+                      avatar_url: getUserAvatar(selectedFriend),
+                      seen_at: new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
+            }
+            return msg;
+          })
+        );
+      }
     }
-  }
-}, [selectedFriend, messages.length, isConnected, sendWsMessage, getUserAvatar]);
+  }, [selectedFriend, messages.length, isConnected, sendWsMessage, getUserAvatar]);
 
   /* --------------------------------------------------------------------- */
   /* Voice Recording Logic */
@@ -1181,12 +1180,13 @@ useEffect(() => {
       setTimeout(() => setError(null), 3000);
     }
   };
+
   useEffect(() => {
-  const editedMessages = messages.filter(m => m.edited);
-  if (editedMessages.length > 0) {
-    console.log("📝 Currently edited messages:", editedMessages);
-  }
-}, [messages]);
+    const editedMessages = messages.filter(m => m.edited);
+    if (editedMessages.length > 0) {
+      console.log("📝 Currently edited messages:", editedMessages);
+    }
+  }, [messages]);
 
   /* --------------------------------------------------------------------- */
   /* Render */
