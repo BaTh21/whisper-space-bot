@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
 import { useAuth } from '../context/AuthContext';
 import { login as loginApi } from '../services/api';
-import LogoImg from '@/assets/Login1.gif';
+// import LogoImg from '@/assets/Login1.gif';
 import {toast} from 'react-toastify';
 
 const LoginForm = () => {
@@ -63,7 +63,7 @@ const LoginForm = () => {
       }}
     >
       {/* LEFT SIDE IMAGE */}
-      <Box
+      {/* <Box
         sx={{
           width: { xs: "100%", md: "40%" },
           display: 'flex',
@@ -81,7 +81,7 @@ const LoginForm = () => {
             height: "auto",
           }}
         />
-      </Box>
+      </Box> */}
 
       {/* RIGHT SIDE FORM */}
       <Box
