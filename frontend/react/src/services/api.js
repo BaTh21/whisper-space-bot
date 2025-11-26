@@ -1355,4 +1355,17 @@ export const sendVoiceMessage = async (friendId, formData) => {
     throw new Error(errorMessage);
   }
 };
+
+export const transcribe = async (formData) => {
+  try {
+    const response = await api.post("/api/v1/messages/transcribe", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error transcribing audio:", error.response?.data || error.message);
+  }
+};
 export default api;

@@ -11,11 +11,16 @@ import {
   MenuItem,
   Checkbox,
   ListItemText,
-  Box
+  Box,
+  IconButton, InputAdornment, CircularProgress
 } from '@mui/material';
+import {
+  Mic
+} from '@mui/icons-material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { createDiary } from '../../services/api';
+import { createDiary, transcribe } from '../../services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
   const formik = useFormik({
@@ -60,6 +65,64 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
     onClose();
   };
 
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const [recording, setRecording] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
+
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      console.error("Microphone access denied:", err);
+    }
+  };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+
+    recorder.onstop = async () => {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+
+      // Play recorded audio (optional)
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audio.play();
+
+      // Optional: play void sound
+      new Audio("/sounds/void.mp3").play();
+
+      // Optional: send to backend
+     const formData = new FormData();
+      formData.append("file", blob, "voice.webm");
+
+      try {
+        setLoading(true);
+        const result = await transcribe(formData);
+        const currentContent = formik.values.content || "";
+        const newText = result.text || "";
+        formik.setFieldValue("content", currentContent + " " + newText);
+      } catch (error) {
+        console.error("Transcription error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    recorder.stop(); // call stop AFTER onstop is set
+    setRecording(false);
+  };
+
   return (
     <Dialog 
       open={open} 
@@ -99,6 +162,19 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
             fullWidth
             margin="normal"
             required
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onMouseDown={startRecording}
+                    onMouseUp={stopRecording}
+                    color={recording ? "error" : "primary"}
+                  >
+                    {loading ? (<CircularProgress size={24} />) : (<Mic />)}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
 
           <FormControl fullWidth margin="normal">
