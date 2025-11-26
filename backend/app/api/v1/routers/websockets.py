@@ -494,8 +494,7 @@ async def handle_websocket_private(
         if current_user:
             chat_id = _chat_id(current_user.id, friend_id)
             manager.disconnect(chat_id, websocket)
-
-
+            
 @router.websocket("/group/{group_id}")
 async def websocket_group_chat(
     websocket: WebSocket,

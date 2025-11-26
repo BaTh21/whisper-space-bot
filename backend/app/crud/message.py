@@ -235,14 +235,14 @@ async def handle_forward_message(
         msg_out = GroupMessageOut(
             id=new_msg.id,
             sender=AuthorResponse(
-                id=original.sender.id,
-                username=original.sender.username,
-                avatar_url=original.sender.avatar_url
-            ),
-            forwarded_by=AuthorResponse(
                 id=current_user_id,
                 username=user.username,
                 avatar_url=user.avatar_url
+            ),
+            forwarded_by=AuthorResponse(
+                id=original.sender.id,
+                username=original.sender.username,
+                avatar_url=original.sender.avatar_url
             ),
             group_id=group_id,
             content=new_msg.content,

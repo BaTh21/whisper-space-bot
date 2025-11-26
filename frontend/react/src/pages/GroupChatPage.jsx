@@ -734,9 +734,11 @@ const GroupChatPage = ({ groupId }) => {
 
                   const isForwarded = !!message?.forwarded_by;
 
-                  const isOwn = isForwarded
-                    ? message?.forwarded_by?.id === user?.id
-                    : message.sender?.id === user?.id;
+                  // const isOwn = isForwarded
+                  //   ? message?.forwarded_by?.id === user?.id
+                  //   : message.sender?.id === user?.id;
+
+                  const isOwn = message.sender?.id === user?.id;
 
                   
                   return (
