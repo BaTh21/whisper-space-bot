@@ -25,7 +25,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173", 
         "http://localhost:5174", 
-        "https://whisper-space-bot-reactjs.onrender.com"
+        # "https://whisper-space-bot-reactjs.onrender.com"
         "https://whisper-space-bot.vercel.app",
     ],
     allow_credentials=True,
