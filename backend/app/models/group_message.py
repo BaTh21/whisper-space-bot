@@ -2,11 +2,14 @@
 from sqlalchemy import Column, Enum, Boolean, DateTime, ForeignKey, Text, Integer, String
 from sqlalchemy.orm import relationship
 from app.models.base import Base
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 import enum
 from sqlalchemy import Enum
 from app.models.group_message_seen import GroupMessageSeen
+
+def utcnow():
+    return datetime.now(timezone.utc)
 
 class MessageType(enum.Enum):
     text = "text"
@@ -21,8 +24,8 @@ class GroupMessage(Base):
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     forwarded_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     content = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime())
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=utcnow)
     message_type = Column(Enum(MessageType), default=MessageType.text)
     file_url = Column(String(255), nullable=True)
     public_id = Column(String(255), nullable=True)

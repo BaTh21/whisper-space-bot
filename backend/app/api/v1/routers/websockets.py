@@ -2,6 +2,7 @@ import asyncio
 import json
 import traceback
 from datetime import datetime
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -9,6 +10,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user_ws
+
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect,Query
+from sqlalchemy.orm import Session
+from app.core.database import get_db, SessionLocal, get_session
+from app.core.security import get_current_user, get_current_user_ws
+
 from app.crud.friend import is_friend
 from app.crud.chat import create_private_message, mark_message_as_read
 from app.crud.message import handle_seen_message, handle_forward_message
@@ -21,6 +28,15 @@ from app.models.group_member import GroupMember
 from app.schemas.chat import GroupMessageOut, ParentMessageResponse, AuthorResponse
 from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
+
+from app.crud.message import handle_seen_message, handle_forward_message, update_message, delete_message, update_file_message, upload_file_message
+import traceback
+from app.models.group_message_seen import GroupMessageSeen
+
+from app.api.v1.routers.websocket_server import handle_websocket_private
+from app.models.message_seen_status import MessageSeenStatus
+from app.models.private_message import PrivateMessage
+from app.helpers.to_utc_iso import to_local_iso
 
 router = APIRouter()
 
@@ -495,61 +511,146 @@ async def handle_websocket_private(
 async def websocket_group_chat(
     websocket: WebSocket,
     group_id: int,
-    db: Session = Depends(get_db)
+    # db: Session = Depends(get_db)
 ):
+
     """
     WebSocket endpoint for group chat
     """
     await websocket.accept()
+    
+    with get_session() as db:
+
 
     current_user = await get_current_user_ws(websocket, db)
     if not current_user:
         await websocket.close(code=4001, reason="Please login to use chat")
         return
+        current_user = await get_current_user_ws(websocket, db)
+        if not current_user:
+            await websocket.close(code=4001, reason="Please login to use chat")
+            return
 
-    if not is_group_member(db, group_id, current_user.id):
-        await websocket.close(code=4003, reason="Not a member of this group")
-        return
 
-    chat_id = f"group_{group_id}"
-    manager.active_connections.setdefault(chat_id, set()).add(websocket)
+        if not is_group_member(db, group_id, current_user.id):
+            await websocket.close(code=4003, reason="Not a member of this group")
+            return
 
-    try:
-        while True:
-            data = await websocket.receive_json()
-            message_type = data.get("message_type", "text")
-            content = data.get("content")
-            parent_message_id = data.get("reply_to")  # Optional
-            action = data.get("action")
-            incoming_temp_id = data.get("temp_id")
-            
-            if action == "seen":
-                message_id = data.get("message_id")
-                await handle_seen_message(db, current_user.id, group_id, message_id, chat_id)
-                continue
-            
-            if action == "forward_to_groups":
-                message_id = data.get("message_id")
-                target_group_ids = data.get("group_ids") or data.get("target_group_ids") or []
-                target_group_ids = [int(g) for g in target_group_ids]
+        chat_id = f"group_{group_id}"
+        manager.active_connections.setdefault(chat_id, set()).add(websocket)
 
-                forwarded_msgs = await handle_forward_message(
-                    db,
-                    current_user_id=current_user.id,
-                    message_id=message_id,
-                    target_group_ids=target_group_ids
-                )
+        try:
+            while True:
+                data = await websocket.receive_json()
+                message_type = data.get("message_type", "text")
+                content = data.get("content")
+                parent_message_id = data.get("reply_to")  # Optional
+                action = data.get("action")
+                incoming_temp_id = data.get("temp_id")
+
+                if action == "seen":
+                    message_id = int(data.get("message_id"))
+
+                    msg = db.query(GroupMessage).filter(
+                        GroupMessage.id == message_id,
+                        GroupMessage.group_id == group_id
+                    ).first()
+                    if not msg:
+                        continue
+
+                    seen_record = db.query(GroupMessageSeen).filter_by(
+                        message_id=message_id,
+                        user_id=current_user.id
+                    ).first()
+
+                    now = datetime.utcnow()
+
+                    if not seen_record:
+                        seen_record = GroupMessageSeen(
+                            message_id=message_id,
+                            user_id=current_user.id,
+                            seen=True,
+                            seen_at=to_local_iso(now, tz_offset_hours=7),
+                        )
+                        db.add(seen_record)
+                        db.commit()
+                    else:
+                        if seen_record.seen:
+                            continue
+
+                        seen_record.seen = True
+                        seen_record.seen_at = to_local_iso(now, tz_offset_hours=7)
+                        db.commit()
+
+                    await manager.broadcast(chat_id, {
+                        "action": "seen",
+                        "message_id": message_id,
+                        "user_id": current_user.id,
+                        "seen_at": to_local_iso(now, tz_offset_hours=7)
+                    })
+
+                    continue
+
+                if action == "forward_to_groups":
+                    message_id = data.get("message_id")
+                    target_group_ids = [int(g) for g in data.get("group_ids", [])]
+                    target_group_ids = [gid for gid in target_group_ids if gid != group_id]
+
+                    forwarded_msgs = await handle_forward_message(
+                        db,
+                        current_user_id=current_user.id,
+                        message_id=message_id,
+                        target_group_ids=target_group_ids
+                    )
+
+                    await websocket.send_json({
+                        "action": "forwarded",
+                        "message_id": message_id,
+                        "forwarded_to": target_group_ids,
+                        "forwarded_by": {
+                            "id": current_user.id,
+                            "username": current_user.username,
+                            "avatar_url": current_user.avatar_url
+                        },
+                        "sender": {
+                            "id": current_user.id,
+                            "username": current_user.username,
+                            "avatar_url": current_user.avatar_url
+                        }
+                    })
+
+                    for gid, fwd_msg in zip(target_group_ids, forwarded_msgs):
+                        target_chat_id = f"group_{gid}"
+                        await manager.broadcast(target_chat_id, {
+                            "action": "new_message",
+                            **fwd_msg
+                        })
+
+                if action == "edit":
+                    message_id = int(data.get("message_id"))
+                    new_content = data.get("new_content")
+                    now = datetime.utcnow()
+
+                    updated = update_message(
+                        db=db,
+                        message_id=message_id,
+                        content=new_content,
+                        current_user_id=current_user.id,
+                    )
+
+                    await manager.broadcast(chat_id, {
+                        "action": "edit",
+                        "message_id": message_id,
+                        "new_content": new_content,
+                        "updated_at": to_local_iso(updated.updated_at, tz_offset_hours=7)
+                    })
+                    continue
                 
-                for fmsg in forwarded_msgs:
-                    chat_id_target = f"group_{fmsg.group_id}"
-                    await manager.broadcast(chat_id_target, fmsg)
+                if action == "delete":
+                    message_id = int(data.get("message_id"))
 
-                await websocket.send_json({
-                    "action": "forwarded",
-                    "message_id": message_id,
-                    "forwarded_to": [m.group_id for m in forwarded_msgs]
-                })
-                continue
+                    await delete_message(db, message_id, current_user.id)
+
 
             try:
                 msg = GroupMessage(
@@ -578,33 +679,120 @@ async def websocket_group_chat(
                         id=msg.parent_message.sender.id,
                         username=msg.parent_message.sender.username,
                         avatar_url=msg.parent_message.sender.avatar_url
+
+                    await manager.broadcast(chat_id, {
+                        "action": "delete",
+                        "message_id": message_id
+                    })
+                    continue
+                
+                if action == "file_upload":
+                    file_url = data.get("file_url")
+                    message_id = data.get("message_id")
+                    
+                    msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+                    if not msg:
+                        continue
+                    
+                    await manager.broadcast(chat_id, {
+                        "action": "file_upload",
+                        "id": msg.id,
+                        "sender": {
+                            "id": msg.sender.id,
+                            "username": msg.sender.username,
+                            "avatar_url": msg.sender.avatar_url
+                        },
+                        "file_url": msg.file_url,
+                        "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
+                        "temp_id": incoming_temp_id
+                        })
+                    continue
+
+                if action == "file_update":
+                    message_id = data.get("message_id")
+                    file_url = data.get("file_url")
+                    
+                    msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+                    if not msg:
+                        continue
+
+                    await manager.broadcast(chat_id, {
+                        "action": "file_update",
+                        "message_id": msg.id,
+                        "file_url": file_url,
+                        "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7),
+                        "temp_id": incoming_temp_id
+                    })
+                    continue
+
+                try:
+                    msg = GroupMessage(
+                        group_id=group_id,
+                        sender_id=current_user.id,
+                        content=content,
+                        message_type=MessageType(message_type),
+                        parent_message_id=parent_message_id
+
                     )
-                )
-            else:
+                    db.add(msg)
+                    db.commit()
+                    db.refresh(msg)
+                except Exception as e:
+                    db.rollback()
+                    print(f"[DB Error] {e}")
+                    await websocket.send_json({
+                        "error": "Failed to save message",
+                        "temp_id": incoming_temp_id
+                    })
+                    continue
+
                 parent_msg_data = None
+                if msg.parent_message:
+                    parent = msg.parent_message
+                    parent_msg_data = {
+                        "id": parent.id,
+                        "content": parent.content,
+                        "file_url": parent.file_url,
+                        "sender": {
+                            "id": parent.sender.id,
+                            "username": parent.sender.username,
+                            "avatar_url": parent.sender.avatar_url
+                        }
+                    }
 
-            # Build main message output
-            msg_out = GroupMessageOut(
-                id=msg.id,
-                temp_id=incoming_temp_id,
-                sender=AuthorResponse(
-                    id=msg.sender.id,
-                    username=msg.sender.username,
-                    avatar_url=msg.sender.avatar_url
-                ),
-                group_id=msg.group_id,
-                content=msg.content,
-                created_at=msg.created_at,
-                updated_at=msg.updated_at,
-                file_url=msg.file_url,
-                parent_message=parent_msg_data
-            )
+                msg_out = {
+                    "id": msg.id,
+                    "temp_id": incoming_temp_id,
+                    "sender": {
+                        "id": msg.sender.id,
+                        "username": msg.sender.username,
+                        "avatar_url": msg.sender.avatar_url
+                    },
+                    "group_id": msg.group_id,
+                    "content": msg.content,
+                    "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
+                    # "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7),
+                    "file_url": msg.file_url,
+                    "parent_message": parent_msg_data
+                }
 
-            try:
-                await manager.broadcast(chat_id, msg_out)
-            except Exception as e:
-                print(f"[Broadcast Error] Group {group_id}: {e}")
-                continue
+                try:
+                    await manager.broadcast(chat_id, msg_out)
+                except Exception as e:
+                    print(f"[Broadcast Error] Group {group_id}: {e}")
+                    await websocket.send_json({
+                        "error": "Failed to broadcast message",
+                        "temp_id": incoming_temp_id
+                    })
+                    continue
+
+        except WebSocketDisconnect:
+            manager.disconnect(chat_id, websocket)
+        except Exception as e:
+            traceback.print_exc()
+            print(f"[WS Error] {e}")
+            await websocket.close(code=1011, reason="Server error")
+
 
     except WebSocketDisconnect:
         manager.disconnect(chat_id, websocket)
@@ -612,3 +800,16 @@ async def websocket_group_chat(
         traceback.print_exc()
         print(f"[WS Error] {e}")
         await websocket.close(code=1011, reason="Server error")
+
+
+@router.websocket("/private/{friend_id}")
+async def websocket_private_chat(
+    websocket: WebSocket,
+    friend_id: int,
+    token: str = Query(..., description="JWT token")
+):
+    """
+    WebSocket endpoint for private chat with a friend
+    """
+    await handle_websocket_private(websocket, friend_id, token)
+

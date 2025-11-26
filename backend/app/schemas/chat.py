@@ -161,6 +161,7 @@ class GroupMessageOut(BaseModel):
     updated_at: Optional[datetime] = None
     file_url: Optional[str] = None
     seen_by: Optional[List[GroupMessageSeen]] = []
+    temp_id: Optional[str] = None
     
     parent_message: Optional[ParentMessageResponse] = None
 

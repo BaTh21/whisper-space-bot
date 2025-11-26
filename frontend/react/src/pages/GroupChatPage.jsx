@@ -15,13 +15,12 @@ import {
   Typography,
   Drawer
 } from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
 import GroupSideComponent from '../components/group/GroupSideComponent';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getGroupMembers, getGroupMessage, getGroupById, updateMessageById, deleteMessageById, uploadFileMessage, editGroupFileMessage } from '../services/api';
+import { getGroupMembers, getGroupMessage, getGroupById, uploadFileMessage, editGroupFileMessage } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -43,7 +42,6 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 
 const GroupChatPage = ({ groupId }) => {
 
-  const navigate = useNavigate();
   const { auth } = useAuth();
   const user = auth?.user;
   const [messages, setMessages] = useState([]);
@@ -53,7 +51,6 @@ const GroupChatPage = ({ groupId }) => {
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
-  const pollingIntervalRef = useRef(null);
   const WS_BASE_URI = import.meta.env.VITE_WS_URL;
   const token = localStorage.getItem('accessToken');
   const [open, setOpen] = useState(false);
@@ -75,6 +72,7 @@ const GroupChatPage = ({ groupId }) => {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const messagesRef = useRef([]);
   const [openListMember, setOpenListMember] = useState(false);
+  const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
   const toggleListMember = () => {
     console.log("toggle open")
@@ -106,10 +104,12 @@ const GroupChatPage = ({ groupId }) => {
 
   const sendSeenEvent = (messageId) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        action: "seen",
-        message_id: messageId
-      }));
+      wsRef.current.send(
+        JSON.stringify({
+          action: "seen",
+          message_id: messageId,
+        })
+      );
     }
   };
 
@@ -154,7 +154,6 @@ const GroupChatPage = ({ groupId }) => {
     });
   };
 
-
   const scrollToBottom = () => {
     const container = messagesEndRef.current;
     if (container) {
@@ -174,11 +173,10 @@ const GroupChatPage = ({ groupId }) => {
   };
 
   useEffect(() => {
-    requestAnimationFrame(() => {
-      autoScrollToBottom();
-      markVisibleMessagesAsSeen();
-    });
+    const handle = requestAnimationFrame(() => autoScrollToBottom());
+    return () => cancelAnimationFrame(handle);
   }, [messages]);
+
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -203,41 +201,54 @@ const GroupChatPage = ({ groupId }) => {
     setEditingMessageId(null);
   };
 
-  const onEdit = async (messageId, content) => {
-    try {
-      await updateMessageById(messageId, { content });
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === messageId ? { ...msg, content } : msg))
-      );
-    } catch (err) {
-      console.error(err);
-    }
+  const onEdit = (messageId, content) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    const editPayload = {
+      action: "edit",
+      message_id: messageId,
+      new_content: content,
+    };
+
+    wsRef.current.send(JSON.stringify(editPayload));
+    setEditingMessageId(null);
   };
 
   const onDelete = async (message) => {
-    const messageId = message.id;
-    const isForwarded = !!message?.forwarded_by;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    const payload = {
+      action: "delete",
+      message_id: message.id
+    };
 
     try {
-      await deleteMessageById(messageId, {
-        forwarder_id: isForwarded ? user.id : undefined
-      });
+      wsRef.current.send(JSON.stringify(payload));
 
-      setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      setMessages(prev => prev.filter(msg => msg.id !== message.id));
     } catch (err) {
-      console.error(err);
+      console.error("Failed to send delete via WS:", err);
     }
   };
 
   useEffect(() => {
-    if (!groupId) return;
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
+    const onScroll = () => markVisibleMessagesAsSeen();
+    container.addEventListener("scroll", onScroll);
+
+    markVisibleMessagesAsSeen();
+
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [messages, seenMessages]);
+
+  useEffect(() => {
     fetchGroupData();
     setupWebSocket();
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+      wsRef.current?.close();
     };
   }, [groupId]);
 
@@ -254,6 +265,8 @@ const GroupChatPage = ({ groupId }) => {
       const membersData = results[1].status === 'fulfilled' ? results[1].value : [];
       const groupData = results[2].status === 'fulfilled' ? results[2].value : { id: groupId, name: `Group ${groupId}` };
 
+      messagesData.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
       setMessages(messagesData);
       setMembers(membersData);
       setGroup({
@@ -268,106 +281,175 @@ const GroupChatPage = ({ groupId }) => {
     }
   };
 
-  const markVisibleMessagesAsSeen = () => {
-    if (!messagesContainerRef.current) return;
+  const markVisibleMessagesAsSeen = useCallback(() => {
     const container = messagesContainerRef.current;
+    if (!container) return;
 
-    const messageElements = container.querySelectorAll("[data-message-id]");
-
-    messageElements.forEach((el) => {
+    container.querySelectorAll("[data-message-id]").forEach((el) => {
       const rect = el.getBoundingClientRect();
-
       if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
         const id = Number(el.dataset.messageId);
-        const msg = messages.find((m) => m.id === id);
-
-        if (msg && msg.sender?.id !== user?.id && !seenMessages.has(id)) {
-          setSeenMessages((prev) => new Set(prev).add(id));
-          sendSeenEvent(id);
-        }
+        setMessages(prev => {
+          const msg = prev.find(m => m.id === id);
+          if (msg && msg.sender?.id !== user?.id && !seenMessages.has(id)) {
+            setSeenMessages(prevSet => new Set(prevSet).add(id));
+            sendSeenEvent(id);
+          }
+          return prev;
+        });
       }
     });
+  }, [seenMessages, user]);
+
+
+  const handleWSMessage = (event, groupId) => {
+    const data = JSON.parse(event.data);
+    data.group_id = groupId;
+    console.log('WS received:', data);
+
+    switch (data.action) {
+      case "seen":
+        setMessages(prev =>
+          prev.map(msg => {
+            if (msg.id !== data.message_id) return msg;
+
+            const seenBy = new Set(msg.seen_by || []);
+            seenBy.add(data.user_id);
+
+            return { ...msg, seen_by: Array.from(seenBy) };
+          })
+        );
+        break;
+
+      case "edit":
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === data.message_id
+              ? { ...msg, content: data.new_content, updated_at: data.updated_at }
+              : msg
+          )
+        );
+        break;
+
+      case "delete":
+        setMessages(prev => prev.filter(msg => msg.id !== data.message_id));
+        break;
+
+      case "file_upload":
+        setMessages(prev => {
+          const updated = [...prev];
+
+          if (data.temp_id) {
+            const tempIndex = updated.findIndex(msg => msg.id === data.temp_id);
+            if (tempIndex !== -1) {
+              updated[tempIndex] = {
+                ...updated[tempIndex],
+                id: data.id,
+                file_url: data.file_url,
+                created_at: data.created_at,
+                is_temp: false,
+                uploading: false,
+                progress: 100
+              };
+              return updated;
+            }
+          }
+
+          if (updated.some(msg => msg.id === data.id)) {
+            return updated;
+          }
+
+          updated.push({
+            ...data,
+            is_temp: false,
+            uploading: false,
+            progress: 100
+          });
+
+          return updated;
+        });
+        break;
+
+      case "file_update":
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === data.message_id
+              ? { ...msg, file_url: data.file_url, updated_at: data.updated_at, uploading: false, progress: 100 }
+              : msg
+          )
+        );
+        break;
+
+      case "new_message":
+        setMessages(prev => {
+          const updated = [...prev];
+
+          if (data.temp_id) {
+            const idx = updated.findIndex(msg => msg.id === data.temp_id);
+            if (idx !== -1) {
+              updated[idx] = {
+                ...updated[idx],
+                ...data,
+                is_temp: false
+              };
+              return updated;
+            }
+          }
+          if (!updated.some(msg => msg.id === data.id)) {
+            updated.push(data);
+          }
+
+          return updated;
+        });
+        break;
+
+      case "forwarded":
+        console.log(`Message ${data.message_id} forwarded to groups:`, data.forwarded_to);
+        break;
+
+      default:
+        setMessages((prev) => {
+          const updated = [...prev];
+
+          if (data.temp_id) {
+            const tempIndex = updated.findIndex(msg => msg.id === data.temp_id);
+            if (tempIndex !== -1) {
+              updated[tempIndex] = { ...updated[tempIndex], ...data, is_temp: false };
+              return updated;
+            }
+          }
+
+          if (updated.some(msg => msg.id === data.id)) {
+            return updated;
+          }
+
+          updated.push(data);
+          return updated;
+        });
+
+        break;
+    }
+
+    autoScrollToBottom();
+    markVisibleMessagesAsSeen();
   };
 
   const setupWebSocket = () => {
-    try {
-      const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
-      ws.onopen = () => {
-        console.log('Connected to group chat');
-      };
+    ws.onopen = () => console.log('Connected to group chat');
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('WS received:', data);
+    ws.onmessage = handleWSMessage;
 
-        switch (data.action) {
-          case "seen":
-            setMessages(prev =>
-              prev.map(msg =>
-                msg.id === data.message_id
-                  ? { ...msg, seen_by: [...(msg.seen_by || []), data.user_id] }
-                  : msg
-              )
-            );
-            break;
-
-          case "forwarded":
-            console.log(`Message ${data.message_id} forwarded to`, data.forwarded_to);
-            break;
-
-          default:
-            setMessages(prev => {
-              const updated = [...prev];
-
-              if (data.temp_id) {
-                const tempIndex = messagesRef.current.findIndex(msg => msg.id === data.temp_id);
-                if (tempIndex !== -1) {
-                  updated[tempIndex] = { ...data, is_temp: false };
-                  return updated;
-                }
-              }
-
-              updated.push(data);
-              return updated;
-            });
-            break;
-        }
-
-        markVisibleMessagesAsSeen();
-        autoScrollToBottom();
-      };
-
-      ws.onclose = (event) => {
-        console.log('Disconnected from group chat:', event.reason);
-      };
-
-      ws.onerror = (error) => {
-        console.log('WebSocket connection failed, using fallback polling', error);
-        setupPolling();
-      };
-    } catch (error) {
-      console.log('WebSocket setup failed, using fallback polling', error);
-      setupPolling();
-    }
-  };
-
-  const setupPolling = () => {
-    const pollMessages = async () => {
-      try {
-        const messagesData = await getGroupMessage(groupId);
-        setMessages(messagesData);
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
+    ws.onclose = (event) => {
+      console.log('Disconnected from group chat:', event.reason);
     };
 
-    pollMessages();
-    const pollInterval = setInterval(pollMessages, 5000);
-
-    pollingIntervalRef.current = pollInterval;
+    ws.onerror = (error) => {
+      console.log('WebSocket error', error);
+    };
   };
 
   const handleSendMessage = () => {
@@ -375,11 +457,11 @@ const GroupChatPage = ({ groupId }) => {
     if (!trimmedMessage) return;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket not connected');
+      console.warn("WebSocket not connected yet!");
       return;
     }
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = generateTempId();
     const tempMessage = {
       id: tempId,
       sender: user,
@@ -389,27 +471,32 @@ const GroupChatPage = ({ groupId }) => {
       reply_to_message: replyTo || null,
     };
 
-    setMessages(prev => [...prev, tempMessage]);
+    setMessages((prev) => [...prev, tempMessage]);
 
-    const messageData = {
-      type: "message",
+    const payload = {
+      action: "message",
       content: trimmedMessage,
+      temp_id: tempId,
       reply_to: replyTo?.id || null,
-      temp_id: tempId
     };
 
     try {
-      wsRef.current.send(JSON.stringify(messageData));
-    } catch (error) {
-      console.error('WebSocket send failed', error);
-      setMessages(prev =>
-        prev.map(msg => msg.id === tempId ? { ...msg, failed: true } : msg)
+      wsRef.current.send(JSON.stringify(payload));
+    } catch (err) {
+      console.error("Failed to send message via WS:", err);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === tempId ? { ...msg, is_temp: false, failed: true } : msg
+        )
       );
     }
 
-    setNewMessage('');
+    setNewMessage("");
     setReplyTo(null);
-    autoScrollToBottom();
+
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 100);
   };
 
   const handleKeyPress = (e) => {
@@ -432,7 +519,7 @@ const GroupChatPage = ({ groupId }) => {
   const handleUploadFileMessage = async (groupId, file) => {
     if (!file) return;
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = generateTempId();
     const tempMessage = {
       id: tempId,
       file_url: URL.createObjectURL(file),
@@ -446,36 +533,30 @@ const GroupChatPage = ({ groupId }) => {
     setMessages((prev) => [...prev, tempMessage]);
 
     try {
-      const uploadedMessage = await uploadFileMessage(groupId, file, (progressEvent) => {
-        if (progressEvent.total) {
-          const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === tempId ? { ...msg, progress: percent } : msg
-            )
-          );
-        }
-      });
+      const data = await uploadFileMessage(groupId, file);
 
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === tempId ? uploadedMessage : msg))
-      );
-    } catch (error) {
-      console.error("Upload error", error);
-      setMessages((prev) =>
-        prev.map((msg) =>
+      const uploadFilePayload = {
+        action: "file_upload",
+        file_url: data.file_url,
+        temp_id: tempId,
+        message_id: data.id
+      }
+
+      wsRef.current.send(JSON.stringify(uploadFilePayload));
+    } catch (err) {
+      console.error("Failed to send file_upload via WS:", err);
+      setMessages(prev =>
+        prev.map(msg =>
           msg.id === tempId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
-    } finally {
-      setFile(null);
     }
   };
 
   const updateFileMessage = async (messageId, newFile) => {
     if (!newFile) return;
 
-    const tempId = `updating-${Date.now()}`;
+    const tempId = generateTempId();
     const tempPreviewUrl = URL.createObjectURL(newFile);
 
     setMessages((prev) =>
@@ -494,23 +575,18 @@ const GroupChatPage = ({ groupId }) => {
     );
 
     try {
-      const updatedMessage = await editGroupFileMessage(messageId, newFile);
+      const data = await editGroupFileMessage(messageId, newFile);
 
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-              ...updatedMessage,
-              uploading: false,
-              progress: 100,
-            }
-            : msg
-        )
-      );
-    } catch (error) {
-      console.error("Update file error:", error);
-      setMessages((prev) =>
-        prev.map((msg) =>
+      wsRef.current.send(JSON.stringify({
+        action: "file_update",
+        message_id: messageId,
+        file_url: data.file_url,
+        temp_id: tempId
+      }));
+    } catch (err) {
+      console.error("Failed to send file_update via WS:", err);
+      setMessages(prev =>
+        prev.map(msg =>
           msg.id === messageId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
@@ -618,7 +694,6 @@ const GroupChatPage = ({ groupId }) => {
           }}
         >
 
-
           <Box
             sx={{
               flex: 1,
@@ -652,22 +727,22 @@ const GroupChatPage = ({ groupId }) => {
             ) : (
               messages
                 .slice()
-                .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                .sort((a, b) => new Date(a.created_at || a.temp_created_at) - new Date(b.created_at || b.temp_created_at))
                 .map((message) => {
                   const isEditing = editingMessageId === message.id;
-                  const messageId = message.id ?? `temp-${message.created_at}`;
+                  const messageKey = message.id ?? message.temp_id;
 
-                  const isSeen = message.seen_by?.length > 0;
                   const isForwarded = !!message?.forwarded_by;
 
                   const isOwn = isForwarded
                     ? message?.forwarded_by?.id === user?.id
                     : message.sender?.id === user?.id;
 
+                  
                   return (
                     <Box
-                      key={messageId}
-                      data-message-id={messageId}
+                      key={messageKey}
+                      data-message-id={messageKey}
                       sx={{
                         display: 'flex',
                         justifyContent: isOwn ? 'flex-end' : 'flex-start',
@@ -675,20 +750,20 @@ const GroupChatPage = ({ groupId }) => {
                         mb: 1,
                       }}
                     >
-                      {!isOwn && (
+                      {!isOwn && message.sender?.username && (
                         <Avatar
-                          src={message.sender?.avatar_url}
-                          alt={message.sender?.username || 'User'}
+                          src={message.sender.avatar_url}
+                          alt={message.sender.username || 'User'}
                           sx={{ width: 32, height: 32, mr: 1 }}
                         >
-                          {message.sender?.username?.charAt(0) || 'U'}
+                          {message.sender.username?.charAt(0) || 'U'}
                         </Avatar>
                       )}
 
                       <Box sx={{ maxWidth: '70%', position: 'relative' }}>
                         {!isOwn && (
                           <Typography variant="caption" sx={{ fontWeight: 600, ml: 1 }}>
-                            {message.sender?.username || 'Unknown User'}
+                            {message.sender?.username}
                           </Typography>
                         )}
 
@@ -883,41 +958,42 @@ const GroupChatPage = ({ groupId }) => {
                           )}
                         </Box>
 
-                        <Box sx={{
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
-                          >
-                            {formatCambodiaTime(message.created_at)}
-                            {message.is_temp && ' • Sending...'}
-                          </Typography>
-                          <Box sx={{
-                            mt: 0.5
-                          }}>
-                            {isSeen ?
-                              <DoneAllIcon fontSize='12' color='green'
-                                sx={{
-                                  color: 'green',
-                                  transition: 'transform 0.2s',
-                                  '&:hover': {
-                                    transform: 'scale(1.3)'
-                                  }
-                                }}
-                                onClick={() => {
-                                  setSelectedMessageId(message.id);
-                                  setOpenSeenMessage(true);
-                                }}
-                              />
-                              :
-                              <CheckIcon
-                                fontSize='12'
-                              />}
+                        {(isOwn || message.sender?.username) && (
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
+                            >
+                              {message.updated_at
+                                ? `edited at: ${formatCambodiaTime(message.updated_at)}`
+                                : formatCambodiaTime(message.created_at)
+                              }
+                              {message.is_temp && ' • Sending...'}
+                            </Typography>
+                            <Box sx={{ mt: 0.5 }}>
+                              {message.seen_by?.length > 0 ? (
+                                <DoneAllIcon
+                                  fontSize="12"
+                                  color="green"
+                                  sx={{
+                                    color: 'green',
+                                    transition: 'transform 0.2s',
+                                    '&:hover': { transform: 'scale(1.3)' }
+                                  }}
+                                  onClick={() => {
+                                    setSelectedMessageId(message.id);
+                                    setOpenSeenMessage(true);
+                                  }}
+                                />
+                              ) : (
+                                <CheckIcon fontSize="12" />
+                              )}
+                            </Box>
                           </Box>
-                        </Box>
+
+                        )}
+
                       </Box>
 
                       <Menu
