@@ -22,11 +22,12 @@ app = FastAPI(
 # CORS middleware - UPDATED with your React domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", 
-        "http://localhost:5174", 
-        "https://whisper-space-bot-reactjs.onrender.com"  # Your React frontend
-    ],
+    # allow_origins=[
+    #     "http://localhost:5173", 
+    #     "http://localhost:5174", 
+    #     "https://whisper-space-bot-reactjs.onrender.com"  # Your React frontend
+    # ],
+    allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],  # Allows all headers
