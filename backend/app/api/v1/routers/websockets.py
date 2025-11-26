@@ -2,7 +2,6 @@ import asyncio
 import json
 import traceback
 from datetime import datetime
-
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -10,32 +9,17 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user_ws
-
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect,Query
-from sqlalchemy.orm import Session
-from app.core.database import get_db, SessionLocal, get_session
-from app.core.security import get_current_user, get_current_user_ws
-
 from app.crud.friend import is_friend
 from app.crud.chat import create_private_message, mark_message_as_read
-from app.crud.message import handle_seen_message, handle_forward_message
 from app.models.user import User
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import PrivateMessage, MessageType
 from app.models.group_message import GroupMessage
-from app.models.group_message_reply import GroupMessageReply
-from app.models.group_member import GroupMember
+from app.models.group_message_seen import GroupMessageSeen
 from app.schemas.chat import GroupMessageOut, ParentMessageResponse, AuthorResponse
 from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
-
-from app.crud.message import handle_seen_message, handle_forward_message, update_message, delete_message, update_file_message, upload_file_message
-import traceback
-from app.models.group_message_seen import GroupMessageSeen
-
-from app.api.v1.routers.websocket_server import handle_websocket_private
-from app.models.message_seen_status import MessageSeenStatus
-from app.models.private_message import PrivateMessage
+from app.crud.message import handle_forward_message, update_message, delete_message
 from app.helpers.to_utc_iso import to_local_iso
 
 router = APIRouter()
@@ -115,12 +99,13 @@ async def handle_websocket_private(
                             "seen_at": status.seen_at.isoformat() if status.seen_at else None
                         })
 
-                    # Broadcast individual update for each message
+                    # ✅ FIX: Use consistent message_updated type for seen status
                     await manager.broadcast(
                         chat_id,
                         {
                             "type": "message_updated",
                             "message_id": msg_id,
+                            "id": msg_id,
                             "is_read": True,
                             "read_at": datetime.utcnow().isoformat(),
                             "seen_by": seen_by,
@@ -346,7 +331,7 @@ async def handle_websocket_private(
                             "error": "Failed to send message"
                         })
 
-                # ✅ READ RECEIPTS (REAL-TIME)
+                # ✅ READ RECEIPTS (REAL-TIME) - FIXED: Use message_updated for consistency
                 elif msg_type == "read":
                     message_id = data.get("message_id")
                     if not message_id:
@@ -377,15 +362,19 @@ async def handle_websocket_private(
                                         "seen_at": status.seen_at.isoformat() if status.seen_at else None
                                     })
 
-                                # ✅ BROADCAST REAL-TIME SEEN STATUS
-                                await manager.broadcast(chat_id, {
-                                    "type": "read_receipt",  # Changed from "message_updated"
+                                # ✅ FIX: Use message_updated type for consistency with frontend
+                                broadcast_data = {
+                                    "type": "message_updated",  # Changed from "read_receipt"
                                     "message_id": message_id,
-                                    "reader_id": current_user.id,
+                                    "id": message_id,
+                                    "is_read": True,
                                     "read_at": datetime.utcnow().isoformat(),
-                                    "seen_by": seen_by
-                                })
-                                print(f"📢 Broadcast REAL-TIME seen status for message {message_id} by user {current_user.id}")
+                                    "seen_by": seen_by,
+                                    "reader_id": current_user.id
+                                }
+                                
+                                await manager.broadcast(chat_id, broadcast_data)
+                                print(f"📢 REAL-TIME SEEN: Broadcast seen status for message {message_id} by user {current_user.id}")
                                 
                         else:
                             await websocket.send_json({
@@ -511,26 +500,18 @@ async def handle_websocket_private(
 async def websocket_group_chat(
     websocket: WebSocket,
     group_id: int,
-    # db: Session = Depends(get_db)
 ):
-
     """
     WebSocket endpoint for group chat
     """
     await websocket.accept()
     
-    with get_session() as db:
-
-
-    current_user = await get_current_user_ws(websocket, db)
-    if not current_user:
-        await websocket.close(code=4001, reason="Please login to use chat")
-        return
+    db = next(get_db())
+    try:
         current_user = await get_current_user_ws(websocket, db)
         if not current_user:
             await websocket.close(code=4001, reason="Please login to use chat")
             return
-
 
         if not is_group_member(db, group_id, current_user.id):
             await websocket.close(code=4003, reason="Not a member of this group")
@@ -588,7 +569,6 @@ async def websocket_group_chat(
                         "user_id": current_user.id,
                         "seen_at": to_local_iso(now, tz_offset_hours=7)
                     })
-
                     continue
 
                 if action == "forward_to_groups":
@@ -625,6 +605,7 @@ async def websocket_group_chat(
                             "action": "new_message",
                             **fwd_msg
                         })
+                    continue
 
                 if action == "edit":
                     message_id = int(data.get("message_id"))
@@ -648,38 +629,8 @@ async def websocket_group_chat(
                 
                 if action == "delete":
                     message_id = int(data.get("message_id"))
-
                     await delete_message(db, message_id, current_user.id)
-
-
-            try:
-                msg = GroupMessage(
-                    group_id=group_id,
-                    sender_id=current_user.id,
-                    content=content,
-                    message_type=MessageType(message_type),
-                    parent_message_id=parent_message_id
-                )
-                db.add(msg)
-                db.commit()
-                db.refresh(msg)
-            except Exception as e:
-                db.rollback()
-                print(f"[DB Error] {e}")
-                await websocket.send_json({"error": "Failed to save message"})  # ✅ FIXED: Added missing quote
-                continue
-            
-            # Build parent message if it exists
-            if msg.parent_message:
-                parent_msg_data = ParentMessageResponse(
-                    id=msg.parent_message.id,
-                    content=msg.parent_message.content,
-                    file_url=msg.parent_message.file_url,
-                    sender=AuthorResponse(
-                        id=msg.parent_message.sender.id,
-                        username=msg.parent_message.sender.username,
-                        avatar_url=msg.parent_message.sender.avatar_url
-
+                    
                     await manager.broadcast(chat_id, {
                         "action": "delete",
                         "message_id": message_id
@@ -705,7 +656,7 @@ async def websocket_group_chat(
                         "file_url": msg.file_url,
                         "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
                         "temp_id": incoming_temp_id
-                        })
+                    })
                     continue
 
                 if action == "file_update":
@@ -725,6 +676,7 @@ async def websocket_group_chat(
                     })
                     continue
 
+                # Handle regular message sending
                 try:
                     msg = GroupMessage(
                         group_id=group_id,
@@ -732,7 +684,6 @@ async def websocket_group_chat(
                         content=content,
                         message_type=MessageType(message_type),
                         parent_message_id=parent_message_id
-
                     )
                     db.add(msg)
                     db.commit()
@@ -746,6 +697,7 @@ async def websocket_group_chat(
                     })
                     continue
 
+                # Build parent message if it exists
                 parent_msg_data = None
                 if msg.parent_message:
                     parent = msg.parent_message
@@ -760,6 +712,7 @@ async def websocket_group_chat(
                         }
                     }
 
+                # Build message output
                 msg_out = {
                     "id": msg.id,
                     "temp_id": incoming_temp_id,
@@ -771,7 +724,6 @@ async def websocket_group_chat(
                     "group_id": msg.group_id,
                     "content": msg.content,
                     "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
-                    # "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7),
                     "file_url": msg.file_url,
                     "parent_message": parent_msg_data
                 }
@@ -793,23 +745,9 @@ async def websocket_group_chat(
             print(f"[WS Error] {e}")
             await websocket.close(code=1011, reason="Server error")
 
-
-    except WebSocketDisconnect:
-        manager.disconnect(chat_id, websocket)
     except Exception as e:
         traceback.print_exc()
         print(f"[WS Error] {e}")
         await websocket.close(code=1011, reason="Server error")
-
-
-@router.websocket("/private/{friend_id}")
-async def websocket_private_chat(
-    websocket: WebSocket,
-    friend_id: int,
-    token: str = Query(..., description="JWT token")
-):
-    """
-    WebSocket endpoint for private chat with a friend
-    """
-    await handle_websocket_private(websocket, friend_id, token)
-
+    finally:
+        db.close()
