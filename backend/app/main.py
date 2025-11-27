@@ -28,7 +28,6 @@ app.add_middleware(
         "https://whisper-space-bot-reactjs.onrender.com",
         "https://whisper-space-two.vercel.app",
     ],
-    # allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"], 
