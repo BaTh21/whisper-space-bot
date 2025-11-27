@@ -15,6 +15,7 @@ class MessageType(enum.Enum):
     text = "text"
     image = "image"
     file = "file"
+    voice = "voice"
 
 class GroupMessage(Base):
     __tablename__ = "group_messages"
@@ -28,7 +29,9 @@ class GroupMessage(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=utcnow)
     message_type = Column(Enum(MessageType), default=MessageType.text)
     file_url = Column(String(255), nullable=True)
+    voice_url = Column(String(255), nullable=True)
     public_id = Column(String(255), nullable=True)
+    voice_public_id = Column(String(255), nullable=True)
     parent_message_id = Column(Integer, ForeignKey("group_messages.id", ondelete="SET NULL"), nullable=True)
     forwarded_at = Column(DateTime(timezone=True), nullable=True)
 

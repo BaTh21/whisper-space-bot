@@ -80,6 +80,7 @@ class GroupMessageResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     file_url: Optional[str] = None
+    voice_url: Optional[str] = None
     # public_id: Optional[str] = None
     
     class Config:

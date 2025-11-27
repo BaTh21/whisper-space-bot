@@ -891,6 +891,22 @@ export const uploadFileMessage = async (groupId, file) => {
   return response.data;
 };
 
+export const uploadVoiceMessage = async (groupId, file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await api.post(
+    `/api/v1/messages/groups/${groupId}/voice`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    }
+  );
+  return response.data;
+}
+
 export const getGroupMembers = async (groupId, search = "") => {
   try {
     const params = search ? { search } : {};

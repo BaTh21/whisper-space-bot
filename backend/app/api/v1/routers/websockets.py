@@ -652,6 +652,30 @@ async def websocket_group_chat(
                     })
                     continue
                 
+                if action == "voice_upload":
+                    voice_url = data.get("voice_url")
+                    message_id = data.get("message_id")
+                    message_type = data.get("message_type", "voice")
+                    
+                    msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+                    if not msg:
+                        continue
+                    
+                    await manager.broadcast(chat_id, {
+                        "action": "voice_upload",
+                        "id": msg.id,
+                        "sender": {
+                            "id": msg.sender.id,
+                            "username": msg.sender.username,
+                            "avatar_url": msg.sender.avatar_url
+                        },
+                        "voice_url": voice_url,
+                        "message_type": message_type,
+                        "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
+                        "temp_id": incoming_temp_id
+                    })
+                    continue
+                
                 try:
                     msg = GroupMessage(
                         group_id=group_id,
@@ -679,6 +703,7 @@ async def websocket_group_chat(
                         "id": parent.id,
                         "content": parent.content,
                         "file_url": parent.file_url,
+                        "voice_url": parent.voice_url,
                         "sender": {
                             "id": parent.sender.id,
                             "username": parent.sender.username,
@@ -699,6 +724,7 @@ async def websocket_group_chat(
                     "content": msg.content,
                     "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
                     "file_url": msg.file_url,
+                    "voice_url": msg.voice_url,
                     "parent_message": parent_msg_data
                 }
 

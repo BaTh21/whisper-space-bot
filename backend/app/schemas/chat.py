@@ -127,6 +127,7 @@ class ParentMessageResponse(BaseModel):
     sender: AuthorResponse
     content: Optional[str] = None
     file_url: Optional[str] = None
+    voice_url: Optional[str] = None
     
 class MarkMessagesAsReadRequest(BaseModel):
     message_ids: List[int]
@@ -160,6 +161,7 @@ class GroupMessageOut(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     file_url: Optional[str] = None
+    voice_url: Optional[str] = None
     seen_by: Optional[List[GroupMessageSeen]] = []
     temp_id: Optional[str] = None
     

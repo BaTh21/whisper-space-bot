@@ -20,7 +20,7 @@ import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
 import GroupSideComponent from '../components/group/GroupSideComponent';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getGroupMembers, getGroupMessage, getGroupById, uploadFileMessage, editGroupFileMessage } from '../services/api';
+import { getGroupMembers, getGroupMessage, getGroupById, uploadFileMessage, editGroupFileMessage, uploadVoiceMessage } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -36,9 +36,10 @@ import CheckIcon from '@mui/icons-material/Check';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import SeenMessageListDialog from '../components/dialogs/SeenMessageListDialog';
 import GroupListComponent from '../components/chat/GroupListComponent';
-import KeyboardVoiceIcon from '@mui/icons-material/KeyboardVoice';
 import CallIcon from '@mui/icons-material/Call';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import VoiceRecordDialog from '../components/dialogs/VoiceRecordDialog';
+import { VoiceMessagePlayer } from '../components/group/VoiceMessagePlayer';
 
 const GroupChatPage = ({ groupId }) => {
 
@@ -73,6 +74,7 @@ const GroupChatPage = ({ groupId }) => {
   const messagesRef = useRef([]);
   const [openListMember, setOpenListMember] = useState(false);
   const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
 
   const toggleListMember = () => {
     console.log("toggle open")
@@ -130,7 +132,7 @@ const GroupChatPage = ({ groupId }) => {
 
   const handleScroll = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
-    setShowScrollButton(scrollTop + clientHeight < scrollHeight - 50);
+    setShowScrollButton(scrollTop + clientHeight < scrollHeight - 100);
   };
 
   const scrollToBottom = () => {
@@ -357,6 +359,27 @@ const GroupChatPage = ({ groupId }) => {
         );
         break;
 
+      case "voice_upload":
+        setMessages(prev => {
+          const updated = [...prev];
+          if (data.temp_id) {
+            const tempIndex = updated.findIndex(msg => msg.id === data.temp_id);
+            if (tempIndex !== -1) {
+              updated[tempIndex] = {
+                ...updated[tempIndex],
+                ...data,
+                is_temp: false,
+                uploading: false,
+                progress: 100
+              };
+              return updated;
+            }
+          }
+          updated.push({ ...data, is_temp: false, uploading: false, progress: 100 });
+          return updated;
+        });
+        break;
+
       case "new_message":
         setMessages(prev => [...prev, data]);
         break;
@@ -560,11 +583,47 @@ const GroupChatPage = ({ groupId }) => {
           msg.id === messageId ? { ...msg, uploading: false, failed: true } : msg
         )
       );
-    } finally{
+    } finally {
       setFile(null);
     }
   };
 
+  const handleUploadVoiceMessage = async (voiceFile) => {
+    if (!voiceFile) return;
+
+    const tempId = generateTempId();
+
+    const tempMessage = {
+      id: tempId,
+      voice_url: URL.createObjectURL(voiceFile),
+      sender: user,
+      created_at: new Date().toISOString(),
+      is_temp: true,
+      uploading: true,
+      progress: 0
+    };
+
+    setMessages((prev) => [...prev, tempMessage]);
+
+    try {
+      const data = await uploadVoiceMessage(groupId, voiceFile);
+
+      wsRef.current.send(JSON.stringify({
+        action: "voice_upload",
+        message_type: "voice",
+        voice_url: data.voice_url,
+        temp_id: tempId,
+        message_id: data.id
+      }))
+    } catch (err) {
+      console.error("Failed to upload voice message:", err);
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === tempId ? { ...msg, uploading: false, failed: true } : msg
+        )
+      )
+    }
+  };
 
   if (loading) {
     return (
@@ -856,6 +915,20 @@ const GroupChatPage = ({ groupId }) => {
                                       {message.parent_message.content}
                                     </Typography>
 
+                                    {message.parent_message.voice_url && (
+                                      <Box
+                                        sx={{
+                                          display: "flex",
+                                          justifyContent: isOwn ? "flex-end" : "flex-start",
+                                          width: {xs: 150},
+                                          mb: 1,
+                                        }}
+                                        onClick={(e) => openSecondMenu(e, message.id)}
+                                      >
+                                        <VoiceMessagePlayer url={message.parent_message.voice_url} isOwn={isOwn} />
+                                      </Box>
+                                    )}
+
                                     {message.parent_message.file_url && (
                                       <Box
                                         sx={{
@@ -882,6 +955,20 @@ const GroupChatPage = ({ groupId }) => {
                                     )}
 
                                   </Box>
+                                </Box>
+                              )}
+
+                              {message.voice_url && (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    justifyContent: isOwn ? "flex-end" : "flex-start",
+                                    width: {md: 300, xs: 150},
+                                    mb: 1,
+                                  }}
+                                  onClick={(e) => openSecondMenu(e, message.id)}
+                                >
+                                  <VoiceMessagePlayer url={message.voice_url} isOwn={isOwn} />
                                 </Box>
                               )}
 
@@ -1179,18 +1266,9 @@ const GroupChatPage = ({ groupId }) => {
                       <AttachFileIcon />
                     </IconButton>
                   </label>
-                  <IconButton
-                    sx={{
-                      bgcolor: 'primary.main',
-                      color: 'white',
-                      borderRadius: 2,
-                      '&:hover': {
-                        bgcolor: '#1E90FF'
-                      }
-                    }}
-                    component="span">
-                    <KeyboardVoiceIcon />
-                  </IconButton>
+                  <VoiceRecordDialog
+                    onConfirm={handleUploadVoiceMessage}
+                  />
                   <TextField
                     fullWidth
                     size="small"
@@ -1248,6 +1326,7 @@ const GroupChatPage = ({ groupId }) => {
         onClose={() => setOpenSeenMessage(false)}
         messageId={selectedMessageId}
       />
+
     </Box >
 
   );
