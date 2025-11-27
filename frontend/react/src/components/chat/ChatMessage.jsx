@@ -53,27 +53,22 @@ const ChatMessage = ({
   /*                     MESSAGE TYPE DETECTION                */
   /* ---------------------------------------------------------- */
 const detectMessageType = (msg) => {
-  // First check the message_type from backend
   if (msg.message_type === 'image') return 'image';
   if (msg.message_type === 'voice') return 'voice';
-  if (msg.message_type === 'file') return 'file';
-  if (msg.message_type === 'text') return 'text';
+  if (msg.message_type === 'file')  return 'file';
+  if (msg.message_type === 'text')  return 'text';
 
-  const content = msg.content || '';
+  const content = (msg.content || '').trim();
 
-  // ✅ UPDATED: Better voice message detection for Cloudinary URLs
   const isVoiceUrl =
     content.includes('/voice_messages/') ||
-    content.includes('/video/upload/') || // Cloudinary video folder for audio
-    content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp|mp4)$/i) || // Added mp4
-    (content.includes('cloudinary.com') && 
-     (content.includes('/video/upload/') || content.includes('voice_messages')));
+    content.includes('/video/upload/') ||
+    /\.(mp3|m4a|wav|ogg|aac|opus|flac|webm|mp4)$/i.test(content);
 
   if (isVoiceUrl) return 'voice';
 
-  // Image detection
   const isImageUrl =
-    content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+    /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(content) ||
     (content.includes('cloudinary.com') && content.includes('/image/upload/')) ||
     content.startsWith('data:image/');
 
@@ -368,90 +363,135 @@ const detectMessageType = (msg) => {
   /* ---------------------------------------------------------- */
   /*                     RENDER VOICE                           */
   /* ---------------------------------------------------------- */
-  const renderVoiceContent = () => {
-    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+const renderVoiceContent = () => {
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-    return (
-      <Box sx={{ mb: 1 }}>
-        <audio
-          ref={audioRef}
-          src={message.content}
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={handleEnded}
-          onLoadedMetadata={handleLoadedMetadata}
-          preload="metadata"
-        />
-        <Box
+  return (
+    <Box sx={{ mb: 1 }}>
+      {/* Hidden audio element — plays real MP3 from backend */}
+      <audio
+        ref={audioRef}
+        src={message.content}               // Direct MP3 URL
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
+        onLoadedMetadata={handleLoadedMetadata}
+        preload="metadata"
+      />
+
+      {/* Beautiful voice message bubble */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          p: 2,
+          bgcolor: isMine ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)',
+          borderRadius: '16px',
+          border: '1px solid',
+          borderColor: isMine ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          maxWidth: '320px',
+          '&:hover': {
+            bgcolor: isMine ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.09)',
+            transform: 'translateY(-1px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          },
+        }}
+        onClick={handlePlayVoice}
+      >
+        {/* Play/Stop Button */}
+        <IconButton
+          size="small"
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            p: 2,
-            bgcolor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-            borderRadius: '12px',
-            border: '1px solid',
-            borderColor: isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
-            cursor: 'pointer',
+            bgcolor: isMine ? 'white' : 'primary.main',
+            color: isMine ? 'primary.main' : 'white',
+            width: 40,
+            height: 40,
             '&:hover': {
-              bgcolor: isMine ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
+              bgcolor: isMine ? 'grey.100' : 'primary.dark',
             },
-            maxWidth: '300px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
           }}
-          onClick={handlePlayVoice}
         >
-          <IconButton
-            size="small"
+          {isPlaying ? <StopIcon /> : <PlayArrowIcon />}
+        </IconButton>
+
+        {/* Text + Progress */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            variant="body2"
             sx={{
-              bgcolor: isMine ? 'white' : 'primary.main',
-              color: isMine ? 'primary.main' : 'white',
-              '&:hover': {
-                bgcolor: isMine ? 'grey.100' : 'primary.dark',
-              },
+              fontWeight: 600,
+              mb: 0.5,
+              color: isMine ? 'white' : 'text.primary',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
             }}
           >
-            {isPlaying ? <StopIcon /> : <PlayArrowIcon />}
-          </IconButton>
+            Voice message
+            <Box
+              component="span"
+              sx={{
+                fontSize: '0.65rem',
+                fontWeight: 'bold',
+                bgcolor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                px: 0.8,
+                py: 0.2,
+                borderRadius: 1,
+                letterSpacing: '0.5px',
+              }}
+            >
+              MP3
+            </Box>
+          </Typography>
 
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5, color: isMine ? 'white' : 'text.primary' }}>
-              Voice message
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            {/* Progress Bar */}
+            <Box
+              sx={{
+                flex: 1,
+                height: 6,
+                bgcolor: isMine ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.12)',
+                borderRadius: 3,
+                overflow: 'hidden',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)',
+              }}
+            >
               <Box
                 sx={{
-                  flex: 1,
-                  height: 4,
-                  bgcolor: isMine ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
-                  borderRadius: 2,
-                  overflow: 'hidden'
+                  height: '100%',
+                  width: `${progress}%`,
+                  bgcolor: isMine ? 'white' : 'primary.main',
+                  borderRadius: 3,
+                  transition: 'width 0.15s ease-out',
+                  boxShadow: '0 0 8px rgba(255,255,255,0.4)',
                 }}
-              >
-                <Box
-                  sx={{
-                    height: '100%',
-                    bgcolor: isMine ? 'white' : 'primary.main',
-                    width: `${progress}%`,
-                    borderRadius: 2,
-                    transition: 'width 0.1s ease'
-                  }}
-                />
-              </Box>
-              <Typography
-                variant="caption"
-                sx={{
-                  opacity: 0.7,
-                  minWidth: 40,
-                  color: isMine ? 'white' : 'text.primary'
-                }}
-              >
-                {Math.floor(message.voice_duration || duration || 0)}s
-              </Typography>
+              />
             </Box>
+
+            {/* Duration */}
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 'bold',
+                minWidth: 48,
+                textAlign: 'right',
+                color: isMine ? 'white' : 'text.primary',
+                opacity: 0.9,
+                fontSize: '0.85rem',
+              }}
+            >
+              {Math.floor(message.voice_duration || duration || 0)}s
+            </Typography>
           </Box>
         </Box>
       </Box>
-    );
-  };
+    </Box>
+  );
+};
 
   /* ---------------------------------------------------------- */
   /*                     RENDER IMAGE CONTENT                  */
