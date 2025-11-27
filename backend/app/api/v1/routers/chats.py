@@ -24,13 +24,6 @@ from app.core.config import settings
 
 router = APIRouter()
 
-# Cloudinary configuration
-cloudinary.config(
-    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
-)
-
 # Mark messages as read endpoint
 @router.post("/messages/read")
 async def mark_messages_as_read_batch(
@@ -526,6 +519,8 @@ async def send_voice_message(
     Upload voice message to Cloudinary and send to friend with Telegram-style replies
     """
     try:
+        print(f"🎤 Starting voice message upload for user {current_user.id} to friend {friend_id}")
+        
         # Check friendship
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
@@ -537,15 +532,13 @@ async def send_voice_message(
             'audio/opus', 'audio/flac', 'audio/x-wav', 'audio/3gpp'
         ]
         
-        # File type validation
+        # File validation
         if not voice_file.content_type:
             filename = voice_file.filename.lower()
-            if any(filename.endswith(ext) for ext in ['.mp3', '.wav', '.ogg', '.webm', '.m4a', '.aac', '.opus', '.flac', '.3gp']):
-                pass
-            else:
-                raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A, OPUS, FLAC, 3GP")
+            if not any(filename.endswith(ext) for ext in ['.mp3', '.wav', '.ogg', '.webm', '.m4a', '.aac', '.opus', '.flac', '.3gp']):
+                raise HTTPException(status_code=400, detail="Invalid file type")
         elif voice_file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A, OPUS, FLAC, 3GP")
+            raise HTTPException(status_code=400, detail="Invalid file type")
 
         # Validate file size (10MB limit)
         MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -556,50 +549,38 @@ async def send_voice_message(
             if file_size > MAX_FILE_SIZE:
                 raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
                 
+            if file_size == 0:
+                raise HTTPException(status_code=400, detail="File is empty")
+                
             await voice_file.seek(0)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Could not read voice message: {str(e)}")
 
-        # UPLOAD TO CLOUDINARY - FIXED FOR PRODUCTION
+        print(f"📁 File validated - Size: {file_size} bytes, Duration: {duration}s")
+
+        # UPLOAD TO CLOUDINARY
+        voice_url = None
         try:
-            print(f"🎤 Starting voice upload - Size: {file_size} bytes, Duration: {duration}s")
+            print("🔄 Uploading to Cloudinary...")
             
-            # METHOD 1: Try specialized voice upload first
-            try:
-                upload_result = upload_voice_message(
-                    contents,
-                    public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
-                    folder="whisper_space/voice_messages"
-                )
-                voice_url = upload_result["secure_url"]
-                print(f"✅ Voice uploaded via specialized function: {voice_url}")
-                
-            except Exception as voice_error:
-                print(f"🔄 Specialized upload failed, trying auto detection: {str(voice_error)}")
-                
-                # METHOD 2: Fallback to auto detection
-                upload_result = cloudinary.uploader.upload(
-                    contents,
-                    resource_type="auto",
-                    folder="whisper_space/voice_messages",
-                    public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
-                    overwrite=False,
-                    use_filename=True,
-                    unique_filename=True,
-                    timeout=30
-                )
-                voice_url = upload_result["secure_url"]
-                print(f"✅ Voice uploaded via auto detection: {voice_url}")
-                
-        except Exception as e:
-            print(f"❌ All Cloudinary upload methods failed: {str(e)}")
+            # Use the updated upload_voice_message function
+            upload_result = upload_voice_message(
+                contents,
+                public_id=f"voice_{current_user.id}_{uuid.uuid4().hex}",
+                folder="voice_messages"
+            )
+            voice_url = upload_result["secure_url"]
+            print(f"✅ Voice uploaded successfully: {voice_url}")
+            
+        except Exception as upload_error:
+            print(f"❌ Cloudinary upload failed: {str(upload_error)}")
             
             # Check Cloudinary configuration
             is_healthy, health_msg = check_cloudinary_health()
             if not is_healthy:
                 raise HTTPException(status_code=500, detail=f"Cloudinary configuration error: {health_msg}")
             else:
-                raise HTTPException(status_code=500, detail=f"Cloudinary upload failed: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Cloudinary upload failed: {str(upload_error)}")
 
         # Create message in database
         msg = create_private_message(
@@ -734,6 +715,8 @@ async def send_voice_message(
         raise
     except Exception as e:
         print(f"❌ Voice message error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to send voice message: {str(e)}")
     
 @router.get("/cloudinary-health")
@@ -747,32 +730,33 @@ async def cloudinary_health_check():
             try:
                 # Test with a small file
                 test_content = b"test voice message content"
-                test_result = cloudinary.uploader.upload(
+                test_result = upload_voice_message(
                     test_content,
                     public_id=f"health_check_{uuid.uuid4().hex}",
-                    resource_type="auto",
-                    folder="whisper_space/health_checks",
-                    overwrite=True
+                    folder="health_checks"
                 )
                 return {
                     "status": "healthy",
                     "message": "Cloudinary is fully operational",
                     "upload_test": "success",
-                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME
+                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
+                    "base_folder": settings.CLOUDINARY_UPLOAD_FOLDER
                 }
             except Exception as upload_error:
                 return {
                     "status": "unhealthy", 
                     "message": f"Configuration OK but upload failed: {str(upload_error)}",
                     "upload_test": "failed",
-                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME
+                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
+                    "base_folder": settings.CLOUDINARY_UPLOAD_FOLDER
                 }
         else:
             return {
                 "status": "unhealthy",
                 "message": message,
                 "upload_test": "not_attempted",
-                "cloud_name": settings.CLOUDINARY_CLOUD_NAME if hasattr(settings, 'CLOUDINARY_CLOUD_NAME') else "not_set"
+                "cloud_name": settings.CLOUDINARY_CLOUD_NAME if hasattr(settings, 'CLOUDINARY_CLOUD_NAME') else "not_set",
+                "base_folder": settings.CLOUDINARY_UPLOAD_FOLDER if hasattr(settings, 'CLOUDINARY_UPLOUD_FOLDER') else "not_set"
             }
             
     except Exception as e:

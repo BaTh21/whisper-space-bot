@@ -46,23 +46,43 @@ def upload_to_cloudinary(file_content, public_id=None, folder=None, resource_typ
         return upload_result
     except Exception as e:
         raise Exception(f"Cloudinary upload failed: {str(e)}")
-
-def upload_voice_message(file_content, public_id=None, folder="whisper_space/voice_messages"):
+    
+def upload_voice_message(file_content, public_id=None, folder="voice_messages"):
     """
     Specialized function for uploading voice messages to Cloudinary
     """
     try:
-        upload_result = cloudinary.uploader.upload(
-            file_content,
-            public_id=public_id,
-            folder=folder,
-            overwrite=False,
-            resource_type="video",  # Cloudinary uses "video" for audio files
-            use_filename=True,
-            unique_filename=True,
-            timeout=30
-        )
-        return upload_result
+        # Use the base folder from settings and append voice_messages
+        base_folder = getattr(settings, 'CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')
+        full_folder = f"{base_folder}/{folder}" if base_folder else folder
+        
+        print(f"📁 Uploading to folder: {full_folder}")
+        
+        # Try multiple resource types for better compatibility
+        resource_types_to_try = ["auto", "video", "raw"]
+        
+        for resource_type in resource_types_to_try:
+            try:
+                print(f"🔄 Trying resource_type: {resource_type}")
+                upload_result = cloudinary.uploader.upload(
+                    file_content,
+                    public_id=public_id,
+                    folder=full_folder,
+                    overwrite=False,
+                    resource_type=resource_type,
+                    use_filename=True,
+                    unique_filename=True,
+                    timeout=60
+                )
+                print(f"✅ Success with resource_type: {resource_type}")
+                return upload_result
+            except Exception as type_error:
+                print(f"❌ Failed with {resource_type}: {str(type_error)}")
+                continue
+        
+        # If all resource types fail
+        raise Exception(f"All resource types failed: {resource_types_to_try}")
+            
     except Exception as e:
         raise Exception(f"Voice message upload failed: {str(e)}")
 
@@ -99,6 +119,9 @@ def check_cloudinary_health():
         if not all([config_data.cloud_name, config_data.api_key, config_data.api_secret]):
             return False, "Missing Cloudinary configuration"
         
-        return True, "Cloudinary is properly configured"
+        # Test with a simple API call
+        cloudinary.api.ping()
+        
+        return True, "Cloudinary is properly configured and responsive"
     except Exception as e:
         return False, f"Cloudinary configuration error: {str(e)}"
