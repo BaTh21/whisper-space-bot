@@ -516,12 +516,10 @@ async def send_voice_message(
     current_user: User = Depends(get_current_user)
 ):
     """
-    PERFECTLY WORKING VOICE MESSAGE ENDPOINT (2025)
-    Records from any device → uploads → converts to MP3 → sends instantly
-    Works on iOS Safari, Android, Web — zero issues
+    FIXED VERSION: Better error handling and validation
     """
     try:
-        print(f"Starting voice message from user {current_user.id} → friend {friend_id}")
+        print(f"🎤 Starting voice message from user {current_user.id} → friend {friend_id}")
 
         # Check friendship
         if not is_friend(db, current_user.id, friend_id):
@@ -536,38 +534,44 @@ async def send_voice_message(
         if file_size > 15 * 1024 * 1024:  # 15MB max
             raise HTTPException(status_code=400, detail="Voice message too large (max 15MB)")
 
-        # Optional: validate duration
+        # Validate duration
         if duration <= 0 or duration > 600:  # max 10 minutes
             raise HTTPException(status_code=400, detail="Invalid voice duration")
 
-        print(f"File received: {file_size} bytes, {duration:.1f}s")
+        print(f"📁 File received: {file_size} bytes, {duration:.1f}s")
 
-        # UPLOAD + AUTO CONVERT TO MP3 (THIS IS THE MAGIC)
+        # FIX: Better error handling for upload
         try:
             upload_result = upload_voice_message(
                 file_content=contents,
-                public_id=f"voice_{current_user.id}_{uuid.uuid4().hex[:16]}",  # shorter = cleaner
+                public_id=f"voice_{current_user.id}_{uuid.uuid4().hex[:8]}",  # shorter ID
                 folder="voice_messages"
             )
-
-            # FINAL FIX: Use the MP3 URL from eager transformation
             voice_url = upload_result["secure_url"]
-
+            
         except Exception as upload_error:
-            print(f"Cloudinary upload failed: {upload_error}")
-            raise HTTPException(status_code=500, detail="Failed to upload voice message")
+            print(f"❌ Cloudinary upload failed: {upload_error}")
+            # FIX: More specific error message
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to upload voice message: {str(upload_error)}"
+            )
 
-        # Save to database
-        msg = create_private_message(
-            db=db,
-            sender_id=current_user.id,
-            receiver_id=friend_id,
-            content=voice_url,
-            message_type="voice",
-            reply_to_id=reply_to_id,
-            voice_duration=round(duration, 2),
-            file_size=file_size
-        )
+        # FIX: Wrap database operations in try-catch
+        try:
+            msg = create_private_message(
+                db=db,
+                sender_id=current_user.id,
+                receiver_id=friend_id,
+                content=voice_url,
+                message_type="voice",
+                reply_to_id=reply_to_id,
+                voice_duration=round(duration, 2),
+                file_size=file_size
+            )
+        except Exception as db_error:
+            print(f"❌ Database error: {db_error}")
+            raise HTTPException(status_code=500, detail="Failed to save message to database")
 
         # Load full message with all relations
         full_msg = db.query(PrivateMessage).options(

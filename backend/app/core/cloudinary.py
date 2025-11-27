@@ -1,7 +1,9 @@
 # cloudinary_config.py
+import traceback
 import cloudinary
-import cloudinary.uploader
-import cloudinary.api
+# import cloudinary.uploader
+# import cloudinary.api
+from cloudinary import uploader, api
 from cloudinary.utils import cloudinary_url
 from app.core.config import settings
 import uuid
@@ -50,54 +52,44 @@ def upload_to_cloudinary(file_content, public_id=None, folder=None, resource_typ
     
 def upload_voice_message(file_content: bytes, public_id: str = None, folder: str = "voice_messages"):
     """
-    100% WORKING ON RENDER.COM – AUGUST–DECEMBER 2025
-    Tested on 50+ Render deploys → ZERO 500 errors
+    FIXED VERSION: More robust error handling
     """
     try:
-        # FINAL FIX: Hardcode the full path — Render sometimes loses env vars during cold start
-        # Your .env is correct, but Render can return empty string for 1–2 seconds on first request
-        full_folder = "whisper_space/voice_messages"
+        # FIX: Use environment variables directly
+        import os
+        full_folder = f"{os.getenv('CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')}/voice_messages"
 
         if not public_id:
             public_id = f"voice_{uuid.uuid4().hex[:12]}"
 
-        print(f"Uploading voice → {full_folder}/{public_id}")
+        print(f"📤 Uploading voice → {full_folder}/{public_id}")
 
-        upload_result = cloudinary.uploader.upload(
+        # FIX: Simplified upload without complex transformations
+        upload_result = uploader.upload(
             file_content,
-            folder=full_folder,
+            resource_type="video",  # Use "video" for audio files
             public_id=public_id,
-            resource_type="video",
+            folder=full_folder,
             overwrite=True,
-            use_filename=False,
-            unique_filename=False,
-            # DIRECT MP3 UPLOAD — NO EAGER, NO TRANSFORMATION, NO TIMEOUT
             format="mp3",
-            audio_codec="mp3",
-            bit_rate="128k",
-            quality="auto",
-            timeout=180,
+            timeout=30
         )
 
-        # This URL is already a real .mp3 file — plays instantly on iOS/Android/Web
         mp3_url = upload_result["secure_url"]
-
-        print(f"VOICE UPLOAD SUCCESS → {mp3_url}")
+        print(f"✅ VOICE UPLOAD SUCCESS → {mp3_url}")
 
         return {
             "secure_url": mp3_url,
             "public_id": upload_result["public_id"],
-            "format": "mp3",
+            "format": upload_result.get("format", "mp3"),
             "duration": upload_result.get("duration"),
             "bytes": upload_result.get("bytes"),
         }
 
     except Exception as e:
-        import traceback
-        print("CRITICAL: Voice upload failed")
+        print(f"❌ CRITICAL: Voice upload failed: {str(e)}")
         traceback.print_exc()
         raise Exception(f"Cloudinary upload failed: {str(e)}")
-
 def delete_from_cloudinary(public_id, resource_type="image"):
     """
     Delete file from Cloudinary with resource type support
@@ -125,14 +117,17 @@ def extract_public_id_from_url(url):
 def check_cloudinary_health():
     """Check if Cloudinary is properly configured and accessible"""
     try:
-        from cloudinary import config
-        config_data = config()
+        # FIX: Use direct environment variable check
+        import os
+        cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME')
+        api_key = os.getenv('CLOUDINARY_API_KEY') 
+        api_secret = os.getenv('CLOUDINARY_API_SECRET')
         
-        if not all([config_data.cloud_name, config_data.api_key, config_data.api_secret]):
-            return False, "Missing Cloudinary configuration"
+        if not all([cloud_name, api_key, api_secret]):
+            return False, "Missing Cloudinary environment variables"
         
         # Test with a simple API call
-        cloudinary.api.ping()
+        api.ping()
         
         return True, "Cloudinary is properly configured and responsive"
     except Exception as e:
