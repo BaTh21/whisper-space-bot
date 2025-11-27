@@ -38,18 +38,14 @@ export const AuthProvider = ({ children }) => {
       
     } catch (error) {
       console.error('Auth check failed:', error);
-      // // Clear invalid tokens
-      // localStorage.removeItem('accessToken');
-      // localStorage.removeItem('refreshToken');
-      // setAuth({
-      //   accessToken: null,
-      //   refreshToken: null,
-      //   user: null
-      // });
-      setAuth(prev => ({
-        ...prev,
+      // Clear invalid tokens
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      setAuth({
+        accessToken: null,
+        refreshToken: null,
         user: null
-      }));
+      });
     } finally {
       setLoading(false);
     }
@@ -67,17 +63,16 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem('refreshToken', tokens.refresh_token);
         }
 
-        // let user = userData;
+        let user = userData;
         
-        // // Always fetch fresh user data to ensure it's valid
-        // if (!user) {
-        //   user = await getMe();
-        // }
-        const user = await getMe();
+        // Always fetch fresh user data to ensure it's valid
+        if (!user) {
+          user = await getMe();
+        }
 
         setAuth({
           accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
+          refreshToken: tokens.refresh_token || null,
           user: user
         });
         return true;
