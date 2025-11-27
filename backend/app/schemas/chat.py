@@ -59,19 +59,19 @@ class MessageOut(TimestampMixin):
     content: str
     message_type: str
     is_read: bool = False
-    read_at: Optional[str] = None
-    delivered_at: Optional[str] = None
-    created_at: str
     reply_to_id: Optional[int] = None
-    is_forwarded: bool = False
+    reply_to: Optional["MessageOut"] = None
+    read_at: Optional[str] = None  
+    delivered_at: Optional[str] = None
+    created_at: str 
+    is_forwarded: Optional[bool] = False
     original_sender: Optional[str] = None
-
-    voice_duration: Optional[float] = None
-    file_size: Optional[int] = None
-
+    # ADD THESE TWO FIELDS
     sender_username: Optional[str] = None
     receiver_username: Optional[str] = None
-    seen_by: List[dict] = []
+    voice_duration: Optional[float] = None  # ADDED
+    file_size: Optional[int] = None  # ADDED
+    seen_by: List[MessageSeenByUser] = []
 
     @classmethod
     def from_orm(cls, obj):
