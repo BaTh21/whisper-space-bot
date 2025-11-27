@@ -20,20 +20,19 @@ class MessageCreate(BaseModel):
     
     @field_validator('voice_duration')
     @classmethod
-    def validate_voice_duration(cls, v, values):
-        if 'message_type' in values and values['message_type'] == 'voice' and v is None:
+    def voice_duration_required(cls, v, values):
+        if values.get('message_type') == 'voice' and v is None:
             raise ValueError('voice_duration is required for voice messages')
         return v
-    
+
     @field_validator('content')
     @classmethod
-    def validate_content(cls, v, values):
-        if 'message_type' in values and values['message_type'] == 'voice':
-            # For voice messages, content should be a URL
+    def content_must_be_url_for_voice(cls, v, values):
+        if values.get('message_type') == 'voice':
             if not v.startswith(('http://', 'https://')):
-                raise ValueError('Voice messages must contain a valid URL')
+                raise ValueError('Voice message content must be a valid URL')
         elif not v or not v.strip():
-            raise ValueError('Message content cannot be empty')
+            raise ValueError('Text message cannot be empty')
         return v
     
 
@@ -60,20 +59,19 @@ class MessageOut(TimestampMixin):
     content: str
     message_type: str
     is_read: bool = False
-    reply_to_id: Optional[int] = None
-    reply_preview: Optional[ReplyPreview] = None  # NEW: Compact reply preview
-    reply_to: Optional["MessageOut"] = None
-    read_at: Optional[str] = None  
+    read_at: Optional[str] = None
     delivered_at: Optional[str] = None
-    created_at: str 
-    is_forwarded: Optional[bool] = False
+    created_at: str
+    reply_to_id: Optional[int] = None
+    is_forwarded: bool = False
     original_sender: Optional[str] = None
-    # ADD THESE TWO FIELDS
+
+    voice_duration: Optional[float] = None
+    file_size: Optional[int] = None
+
     sender_username: Optional[str] = None
     receiver_username: Optional[str] = None
-    voice_duration: Optional[float] = None  # ADDED
-    file_size: Optional[int] = None  # ADDED
-    seen_by: List[MessageSeenByUser] = []
+    seen_by: List[dict] = []
 
     @classmethod
     def from_orm(cls, obj):

@@ -1,7 +1,10 @@
+import contextlib
+import io
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
+import wave
 
 import cloudinary
 import cloudinary.uploader
@@ -508,183 +511,52 @@ async def get_reply_context(
 @router.post("/private/{friend_id}/voice", response_model=MessageOut)
 async def send_voice_message(
     friend_id: int,
-    voice_file: UploadFile = File(...),
-    duration: float = Form(...),
-    reply_to_id: Optional[int] = Form(None),
-    temp_id: Optional[str] = Form(None),
+    file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
-    """
-    FIXED VERSION: Better error handling and validation
-    """
-    try:
-        print(f"🎤 Starting voice message from user {current_user.id} → friend {friend_id}")
+    # 1. Read and validate audio file
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(400, "Empty audio file")
 
-        # Check friendship
-        if not is_friend(db, current_user.id, friend_id):
-            raise HTTPException(status_code=403, detail="Not friends")
+    # 2. Extract duration
+    with io.BytesIO(contents) as audio_io:
+        with contextlib.closing(wave.open(audio_io, 'rb')) as wav_file:
+            frames = wav_file.getnframes()
+            rate = wav_file.getframerate()
+            duration = frames / float(rate)
 
-        # Read and validate file
-        contents = await voice_file.read()
-        file_size = len(contents)
+    # 3. Upload to Cloudinary with best settings
+    result = cloudinary.uploader.upload(
+        io.BytesIO(contents),
+        resource_type="video",          # Cloudinary treats audio as video
+        folder="whisper_space/voice_messages",
+        public_id=f"voice_{current_user.id}_{int(datetime.utcnow().timestamp())}",
+        format="webm",                  # or "ogg", "mp3" — webm/opus is smallest
+        quality="auto:best",
+        fetch_format="auto",
+        flags="attachment"
+    )
 
-        if file_size == 0:
-            raise HTTPException(status_code=400, detail="Empty audio file")
-        if file_size > 15 * 1024 * 1024:  # 15MB max
-            raise HTTPException(status_code=400, detail="Voice message too large (max 15MB)")
+    voice_url = result["secure_url"]  # This will be f_auto,q_auto
 
-        # Validate duration
-        if duration <= 0 or duration > 600:  # max 10 minutes
-            raise HTTPException(status_code=400, detail="Invalid voice duration")
+    # 4. Create message
+    msg_in = MessageCreate(
+        content=voice_url,
+        message_type="voice",
+        voice_duration=round(duration, 2),
+        file_size=len(contents)
+    )
 
-        print(f"📁 File received: {file_size} bytes, {duration:.1f}s")
+    message = create_private_message(
+        db=db,
+        sender_id=current_user.id,
+        receiver_id=friend_id,
+        message_in=msg_in
+    )
 
-        # FIX: Better error handling for upload
-        try:
-            upload_result = upload_voice_message(
-                file_content=contents,
-                public_id=f"voice_{current_user.id}_{uuid.uuid4().hex[:8]}",  # shorter ID
-                folder="voice_messages"
-            )
-            voice_url = upload_result["secure_url"]
-            
-        except Exception as upload_error:
-            print(f"❌ Cloudinary upload failed: {upload_error}")
-            # FIX: More specific error message
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to upload voice message: {str(upload_error)}"
-            )
-
-        # FIX: Wrap database operations in try-catch
-        try:
-            msg = create_private_message(
-                db=db,
-                sender_id=current_user.id,
-                receiver_id=friend_id,
-                content=voice_url,
-                message_type="voice",
-                reply_to_id=reply_to_id,
-                voice_duration=round(duration, 2),
-                file_size=file_size
-            )
-        except Exception as db_error:
-            print(f"❌ Database error: {db_error}")
-            raise HTTPException(status_code=500, detail="Failed to save message to database")
-
-        # Load full message with all relations
-        full_msg = db.query(PrivateMessage).options(
-            joinedload(PrivateMessage.sender),
-            joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
-        ).filter(PrivateMessage.id == msg.id).first()
-
-        if not full_msg:
-            raise HTTPException(status_code=500, detail="Failed to load sent message")
-
-        chat_id = _chat_id(current_user.id, friend_id)
-
-        # Prepare WebSocket broadcast
-        seen_by = [
-            {
-                "user_id": s.user.id,
-                "username": s.user.username,
-                "avatar_url": s.user.avatar_url,
-                "seen_at": s.seen_at.isoformat() if s.seen_at else None
-            }
-            for s in full_msg.seen_statuses
-        ]
-
-        broadcast_data = {
-            "type": "message",
-            "id": full_msg.id,
-            "temp_id": temp_id,
-            "sender_id": full_msg.sender_id,
-            "receiver_id": full_msg.receiver_id,
-            "content": voice_url,
-            "message_type": "voice",
-            "voice_duration": round(duration, 2),
-            "file_size": file_size,
-            "is_read": False,
-            "created_at": full_msg.created_at.isoformat(),
-            "sender_username": full_msg.sender.username,
-            "avatar_url": full_msg.sender.avatar_url or "",
-            "seen_by": seen_by,
-        }
-
-        # Add reply preview (Telegram style)
-        if full_msg.reply_to:
-            reply = full_msg.reply_to
-            reply_text = "Voice message"
-            if reply.message_type == MessageType.text:
-                reply_text = reply.content or "Message"
-                if len(reply_text) > 80:
-                    reply_text = reply_text[:80] + "..."
-            elif reply.message_type == MessageType.image:
-                reply_text = "Photo"
-            elif reply.message_type == MessageType.file:
-                reply_text = "File"
-
-            broadcast_data["reply_preview"] = {
-                "id": reply.id,
-                "sender_username": reply.sender.username,
-                "content": reply_text,
-                "message_type": reply.message_type.value,
-                "voice_duration": reply.voice_duration,
-                "file_size": reply.file_size
-            }
-
-        # Send via WebSocket
-        await manager.broadcast(chat_id, broadcast_data)
-
-        # Build HTTP response
-        response = MessageOut(
-            id=full_msg.id,
-            temp_id=temp_id,
-            sender_id=full_msg.sender_id,
-            receiver_id=full_msg.receiver_id,
-            content=voice_url,
-            message_type="voice",
-            voice_duration=round(duration, 2),
-            file_size=file_size,
-            is_read=False,
-            created_at=full_msg.created_at.isoformat(),
-            sender_username=full_msg.sender.username,
-            receiver_username=full_msg.receiver.username,
-            seen_by=[MessageSeenByUser(**s) for s in seen_by],
-        )
-
-        # Add reply preview to response too
-        if full_msg.reply_to:
-            reply = full_msg.reply_to
-            reply_text = "Voice message"
-            if reply.message_type == MessageType.text:
-                reply_text = (reply.content or "")[:100] + ("..." if len(reply.content or "") > 100 else "")
-            elif reply.message_type == MessageType.image:
-                reply_text = "Photo"
-            elif reply.message_type == MessageType.file:
-                reply_text = "File"
-
-            response.reply_preview = ReplyPreview(
-                id=reply.id,
-                sender_username=reply.sender.username,
-                content=reply_text,
-                message_type=reply.message_type.value,
-                voice_duration=reply.voice_duration,
-                file_size=reply.file_size
-            )
-
-        print(f"VOICE MESSAGE SENT #{full_msg.id} | {duration}s | {file_size/1024:.1f}KB")
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Voice message failed: {str(e)}")
+    return MessageOut.from_orm(message)
     
 @router.get("/cloudinary-health")
 async def cloudinary_health_check():
