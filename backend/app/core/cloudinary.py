@@ -51,43 +51,42 @@ def upload_to_cloudinary(file_content, public_id=None, folder=None, resource_typ
         raise Exception(f"Cloudinary upload failed: {str(e)}")
     
 def upload_voice_message(file_content: bytes, public_id: str = None, folder: str = "voice_messages"):
-    """
-    FIXED VERSION: More robust error handling
-    """
     try:
-        # FIX: Use environment variables directly
         import os
-        full_folder = f"{os.getenv('CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')}/voice_messages"
+        from cloudinary.utils import cloudinary_url
 
+        full_folder = f"{os.getenv('CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')}/{folder}"
         if not public_id:
             public_id = f"voice_{uuid.uuid4().hex[:12]}"
 
-        print(f"📤 Uploading voice → {full_folder}/{public_id}")
-
-        # FIX: Simplified upload without complex transformations
         upload_result = uploader.upload(
             file_content,
-            resource_type="video",  # Use "video" for audio files
-            public_id=public_id,
+            resource_type="video",
             folder=full_folder,
+            public_id=public_id,
             overwrite=True,
-            format="mp3",
-            timeout=30
+            timeout=60
         )
 
-        mp3_url = upload_result["secure_url"]
-        print(f"✅ VOICE UPLOAD SUCCESS → {mp3_url}")
+        # Generate auto-format, auto-quality URL
+        auto_url, _ = cloudinary_url(
+            upload_result["public_id"],
+            resource_type="video",
+            format="auto",
+            quality="auto",
+            secure=True
+        )
 
+        print(f"VOICE UPLOAD SUCCESS → {auto_url}")
         return {
-            "secure_url": mp3_url,
+            "secure_url": auto_url,
             "public_id": upload_result["public_id"],
-            "format": upload_result.get("format", "mp3"),
             "duration": upload_result.get("duration"),
             "bytes": upload_result.get("bytes"),
         }
 
     except Exception as e:
-        print(f"❌ CRITICAL: Voice upload failed: {str(e)}")
+        print(f"Voice upload failed: {str(e)}")
         traceback.print_exc()
         raise Exception(f"Cloudinary upload failed: {str(e)}")
 def delete_from_cloudinary(public_id, resource_type="image"):
