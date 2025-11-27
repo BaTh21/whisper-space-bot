@@ -19,6 +19,8 @@ from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadRespo
                              MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
 from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, extract_public_id_from_url
+from app.core.cloudinary import check_cloudinary_health, upload_voice_message
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -524,29 +526,29 @@ async def send_voice_message(
     Upload voice message to Cloudinary and send to friend with Telegram-style replies
     """
     try:
+        # Check friendship
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 
-        # Validate file type - FIXED: Added more audio types
+        # Validate file type
         allowed_types = [
             'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 
             'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/mp3',
             'audio/opus', 'audio/flac', 'audio/x-wav', 'audio/3gpp'
         ]
         
-        # FIXED: Better file type validation
+        # File type validation
         if not voice_file.content_type:
-            # Try to detect from filename
             filename = voice_file.filename.lower()
             if any(filename.endswith(ext) for ext in ['.mp3', '.wav', '.ogg', '.webm', '.m4a', '.aac', '.opus', '.flac', '.3gp']):
-                pass  # Accept based on extension
+                pass
             else:
                 raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A, OPUS, FLAC, 3GP")
         elif voice_file.content_type not in allowed_types:
             raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A, OPUS, FLAC, 3GP")
 
         # Validate file size (10MB limit)
-        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        MAX_FILE_SIZE = 10 * 1024 * 1024
         try:
             contents = await voice_file.read()
             file_size = len(contents)
@@ -554,27 +556,50 @@ async def send_voice_message(
             if file_size > MAX_FILE_SIZE:
                 raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
                 
-            # FIXED: Reset file pointer for Cloudinary upload
             await voice_file.seek(0)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Could not read voice message: {str(e)}")
 
-        # FIXED: Upload to Cloudinary with proper parameters (NO DUPLICATE resource_type)
+        # UPLOAD TO CLOUDINARY - FIXED FOR PRODUCTION
         try:
-            upload_result = cloudinary.uploader.upload(
-                contents,
-                resource_type="auto",  # Let Cloudinary auto-detect file type
-                folder="whisper_space/voice_messages",
-                public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
-                overwrite=False,
-                use_filename=True,
-                unique_filename=True
-            )
-            voice_url = upload_result["secure_url"]
-            print(f"✅ Voice message uploaded to: {voice_url}")
+            print(f"🎤 Starting voice upload - Size: {file_size} bytes, Duration: {duration}s")
+            
+            # METHOD 1: Try specialized voice upload first
+            try:
+                upload_result = upload_voice_message(
+                    contents,
+                    public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
+                    folder="whisper_space/voice_messages"
+                )
+                voice_url = upload_result["secure_url"]
+                print(f"✅ Voice uploaded via specialized function: {voice_url}")
+                
+            except Exception as voice_error:
+                print(f"🔄 Specialized upload failed, trying auto detection: {str(voice_error)}")
+                
+                # METHOD 2: Fallback to auto detection
+                upload_result = cloudinary.uploader.upload(
+                    contents,
+                    resource_type="auto",
+                    folder="whisper_space/voice_messages",
+                    public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
+                    overwrite=False,
+                    use_filename=True,
+                    unique_filename=True,
+                    timeout=30
+                )
+                voice_url = upload_result["secure_url"]
+                print(f"✅ Voice uploaded via auto detection: {voice_url}")
+                
         except Exception as e:
-            print(f"❌ Cloudinary upload error: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Could not upload voice message to cloud storage: {str(e)}")
+            print(f"❌ All Cloudinary upload methods failed: {str(e)}")
+            
+            # Check Cloudinary configuration
+            is_healthy, health_msg = check_cloudinary_health()
+            if not is_healthy:
+                raise HTTPException(status_code=500, detail=f"Cloudinary configuration error: {health_msg}")
+            else:
+                raise HTTPException(status_code=500, detail=f"Cloudinary upload failed: {str(e)}")
 
         # Create message in database
         msg = create_private_message(
@@ -610,7 +635,7 @@ async def send_voice_message(
                 "seen_at": status.seen_at.isoformat() if status.seen_at else None
             })
 
-        # Prepare broadcast data for WebSocket with Telegram-style replies
+        # Prepare broadcast data for WebSocket
         broadcast_data = {
             "type": "message",
             "id": full_msg.id,
@@ -634,9 +659,8 @@ async def send_voice_message(
             "avatar_url": full_msg.sender.avatar_url or "",
         }
 
-        # Add Telegram-style reply data if exists
+        # Add reply preview if exists
         if full_msg.reply_to:
-            # Create compact reply preview (like Telegram)
             reply_content = full_msg.reply_to.content or ""
             if full_msg.reply_to.message_type == MessageType.voice:
                 reply_content = "🎤 Voice message"
@@ -647,7 +671,6 @@ async def send_voice_message(
             elif len(reply_content) > 100:
                 reply_content = reply_content[:100] + "..."
             
-            # Add compact reply preview to broadcast
             broadcast_data["reply_preview"] = {
                 "id": full_msg.reply_to.id,
                 "sender_username": full_msg.reply_to.sender.username,
@@ -660,9 +683,9 @@ async def send_voice_message(
         # Broadcast via WebSocket
         chat_id = _chat_id(current_user.id, friend_id)
         await manager.broadcast(chat_id, broadcast_data)
-        print(f"✅ Voice message broadcasted via WebSocket to chat {chat_id}")
+        print(f"✅ Voice message broadcasted to chat {chat_id}")
 
-        # Build response with Telegram-style reply preview
+        # Build response
         response = MessageOut(
             id=full_msg.id,
             temp_id=temp_id,
@@ -684,9 +707,8 @@ async def send_voice_message(
             seen_by=[MessageSeenByUser(**item) for item in seen_by]
         )
 
-        # Add Telegram-style reply preview to response if exists
+        # Add reply preview to response if exists
         if full_msg.reply_to:
-            # Create compact preview for the response
             reply_content = full_msg.reply_to.content or ""
             if full_msg.reply_to.message_type == MessageType.voice:
                 reply_content = "🎤 Voice message"
@@ -697,7 +719,6 @@ async def send_voice_message(
             elif len(reply_content) > 100:
                 reply_content = reply_content[:100] + "..."
             
-            # Add reply_preview to response
             response.reply_preview = ReplyPreview(
                 id=full_msg.reply_to.id,
                 sender_username=full_msg.reply_to.sender.username,
@@ -714,6 +735,52 @@ async def send_voice_message(
     except Exception as e:
         print(f"❌ Voice message error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send voice message: {str(e)}")
+    
+@router.get("/cloudinary-health")
+async def cloudinary_health_check():
+    """Check Cloudinary connectivity and configuration"""
+    try:
+        is_healthy, message = check_cloudinary_health()
+        
+        # Test actual upload if configuration is OK
+        if is_healthy:
+            try:
+                # Test with a small file
+                test_content = b"test voice message content"
+                test_result = cloudinary.uploader.upload(
+                    test_content,
+                    public_id=f"health_check_{uuid.uuid4().hex}",
+                    resource_type="auto",
+                    folder="whisper_space/health_checks",
+                    overwrite=True
+                )
+                return {
+                    "status": "healthy",
+                    "message": "Cloudinary is fully operational",
+                    "upload_test": "success",
+                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME
+                }
+            except Exception as upload_error:
+                return {
+                    "status": "unhealthy", 
+                    "message": f"Configuration OK but upload failed: {str(upload_error)}",
+                    "upload_test": "failed",
+                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME
+                }
+        else:
+            return {
+                "status": "unhealthy",
+                "message": message,
+                "upload_test": "not_attempted",
+                "cloud_name": settings.CLOUDINARY_CLOUD_NAME if hasattr(settings, 'CLOUDINARY_CLOUD_NAME') else "not_set"
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Health check failed: {str(e)}",
+            "upload_test": "error"
+        }
     
 @router.post("/private/{friend_id}/image")
 async def send_image_message(

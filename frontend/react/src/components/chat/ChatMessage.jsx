@@ -52,37 +52,35 @@ const ChatMessage = ({
   /* ---------------------------------------------------------- */
   /*                     MESSAGE TYPE DETECTION                */
   /* ---------------------------------------------------------- */
-  const detectMessageType = (msg) => {
-    // First check the message_type from backend
-    if (msg.message_type === 'image') return 'image';
-    if (msg.message_type === 'voice') return 'voice';
-    if (msg.message_type === 'file') return 'file';
-    if (msg.message_type === 'text') return 'text';
+const detectMessageType = (msg) => {
+  // First check the message_type from backend
+  if (msg.message_type === 'image') return 'image';
+  if (msg.message_type === 'voice') return 'voice';
+  if (msg.message_type === 'file') return 'file';
+  if (msg.message_type === 'text') return 'text';
 
-    const content = msg.content || '';
+  const content = msg.content || '';
 
-    // Voice message detection - Cloudinary URLs
-    const isVoiceUrl =
-      content.includes('/voice_messages/') ||
-      content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-      content.includes('cloudinary.com') && (
-        content.includes('/video/upload/') ||
-        content.includes('/video/upload/') && content.match(/\.(mp3|wav|ogg|webm|m4a)$/i)
-      );
+  // ✅ UPDATED: Better voice message detection for Cloudinary URLs
+  const isVoiceUrl =
+    content.includes('/voice_messages/') ||
+    content.includes('/video/upload/') || // Cloudinary video folder for audio
+    content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp|mp4)$/i) || // Added mp4
+    (content.includes('cloudinary.com') && 
+     (content.includes('/video/upload/') || content.includes('voice_messages')));
 
-    if (isVoiceUrl) return 'voice';
+  if (isVoiceUrl) return 'voice';
 
-    // Image detection
-    const isImageUrl =
-      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-      (content.includes('cloudinary.com') && content.includes('/image/upload/')) ||
-      content.startsWith('data:image/');
+  // Image detection
+  const isImageUrl =
+    content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+    (content.includes('cloudinary.com') && content.includes('/image/upload/')) ||
+    content.startsWith('data:image/');
 
-    if (isImageUrl) return 'image';
+  if (isImageUrl) return 'image';
 
-    return 'text';
-  };
-
+  return 'text';
+};
   const actualMessageType = detectMessageType(message);
 
   /* ---------------------------------------------------------- */

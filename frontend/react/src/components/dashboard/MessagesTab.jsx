@@ -114,65 +114,59 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /* WebSocket Handlers */
   /* --------------------------------------------------------------------- */
-  const handleWebSocketMessage = useCallback(
-    (data) => {
-      const { type } = data;
-      console.log("📡 WebSocket received:", data);
+const handleWebSocketMessage = useCallback(
+  (data) => {
+    const { type } = data;
+    console.log("📡 WebSocket received:", data);
 
-      // 1. New real message from server
-      if (type === "message") {
-        const detectMessageType = (msgData) => {
-          // Use backend message_type first
-          if (msgData.message_type === "image") return "image";
-          if (msgData.message_type === "voice") return "voice";
-          if (msgData.message_type === "file") return "file";
-          if (msgData.message_type === "text") return "text";
+    if (type === "message") {
+      const detectMessageType = (msgData) => {
+        if (msgData.message_type === "image") return "image";
+        if (msgData.message_type === "voice") return "voice";
+        if (msgData.message_type === "file") return "file";
+        if (msgData.message_type === "text") return "text";
 
-          const content = msgData.content || "";
+        const content = msgData.content || "";
+        
+        // ✅ UPDATED: Same voice detection logic as ChatMessage
+        const isVoiceUrl =
+          content.includes('/voice_messages/') ||
+          content.includes('/video/upload/') ||
+          content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp|mp4)$/i);
 
-          // Voice message detection for Cloudinary
-          const isVoiceUrl =
-            content.includes('/voice_messages/') ||
-            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
+        if (isVoiceUrl) return "voice";
 
-          if (isVoiceUrl) return "voice";
+        const isImageUrl =
+          content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+          (content.includes('cloudinary.com') && content.includes('/image/upload/'));
 
-          // Image detection
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
+        return isImageUrl ? "image" : "text";
+      };
 
-          return isImageUrl ? "image" : "text";
-        };
+      const messageType = detectMessageType(data);
+      const content = data.content; // ✅ Use content directly - no conversion needed
 
-        const messageType = detectMessageType(data);
-
-        // For voice messages, use the URL directly (no conversion needed)
-        // Backend already provides proper Cloudinary URL
-        const content = data.content;
-
-        const realMessage = {
-          ...data,
-          id: data.id,
-          temp_id: data.temp_id || null,
-          content: content,
-          is_temp: false,
-          message_type: messageType,
-          sender: {
-            id: data.sender_id,
-            username: data.sender_username,
-            avatar_url: getAvatarUrl(data.avatar_url),
-          },
-          is_read: data.is_read || false,
-          read_at: data.read_at || null,
-          seen_by: data.seen_by || [],
-          created_at: data.created_at,
-          updated_at: data.updated_at || data.created_at,
-          edited: !!data.updated_at && data.updated_at !== data.created_at,
-          voice_duration: data.voice_duration || 0,
-          file_size: data.file_size || 0,
-        };
+      const realMessage = {
+        ...data,
+        id: data.id,
+        temp_id: data.temp_id || null,
+        content: content,
+        is_temp: false,
+        message_type: messageType,
+        sender: {
+          id: data.sender_id,
+          username: data.sender_username,
+          avatar_url: getAvatarUrl(data.avatar_url),
+        },
+        is_read: data.is_read || false,
+        read_at: data.read_at || null,
+        seen_by: data.seen_by || [],
+        created_at: data.created_at,
+        updated_at: data.updated_at || data.created_at,
+        edited: !!data.updated_at && data.updated_at !== data.created_at,
+        voice_duration: data.voice_duration || 0,
+        file_size: data.file_size || 0,
+      };
 
         setMessages((prev) => {
           let updated = [...prev];
@@ -673,74 +667,68 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }, 50);
   };
 
-  const sendVoiceMessage = async () => {
-    if (voiceSending || isUploadingVoice || !audioBlobRef.current || !selectedFriend) return;
+const sendVoiceMessage = async () => {
+  if (voiceSending || isUploadingVoice || !audioBlobRef.current || !selectedFriend) return;
 
-    const blobToSend = audioBlobRef.current;
-    audioBlobRef.current = null;
-    setAudioUrl(null);
-    setAudioBlob(null);
+  const blobToSend = audioBlobRef.current;
+  audioBlobRef.current = null;
+  setAudioUrl(null);
 
-    setVoiceSending(true);
-    setIsUploadingVoice(true);
+  setVoiceSending(true);
+  setIsUploadingVoice(true);
 
-    // Define tempId FIRST
-    const tempId = `temp-voice-${Date.now()}-${Math.random()}`;
+  const tempId = `temp-voice-${Date.now()}-${Math.random()}`;
 
-    // Create temp message with FULL sender info
-    const tempMsg = {
-      id: tempId,
-      temp_id: tempId,
-      content: 'Voice message...',
-      message_type: 'voice',
-      is_temp: true,
-      is_read: false,
-      created_at: new Date().toISOString(),
-      voice_duration: recordingTime,
-      file_size: blobToSend.size,
-      sender_id: profile.id,
-      sender: {
-        id: profile.id,
-        username: profile.username,
-        avatar_url: getUserAvatar(profile),
-      },
-      seen_by: [],
-      _uniqueId: Date.now() + Math.random(),
-    };
+  const tempMsg = {
+    id: tempId,
+    temp_id: tempId,
+    content: 'Voice message...',
+    message_type: 'voice',
+    is_temp: true,
+    is_read: false,
+    created_at: new Date().toISOString(),
+    voice_duration: recordingTime,
+    file_size: blobToSend.size,
+    sender_id: profile.id,
+    sender: {
+      id: profile.id,
+      username: profile.username,
+      avatar_url: getUserAvatar(profile),
+    },
+    seen_by: [],
+  };
 
-    // Add optimistic temp message
-    setMessages(prev => {
-      const withoutTemp = prev.filter(msg => !msg.is_temp);
-      return [...withoutTemp, tempMsg];
+  setMessages(prev => {
+    const withoutTemp = prev.filter(msg => !msg.is_temp);
+    return [...withoutTemp, tempMsg];
+  });
+
+  try {
+    const formData = new FormData();
+    
+    // ✅ UPDATED: Better file extension detection for server compatibility
+    let fileExtension = 'webm';
+    if (blobToSend.type.includes('mp4')) fileExtension = 'm4a';
+    if (blobToSend.type.includes('mpeg')) fileExtension = 'mp3';
+    
+    formData.append('voice_file', blobToSend, `voice-${Date.now()}.${fileExtension}`);
+    formData.append('duration', recordingTime.toString());
+    formData.append('temp_id', tempId); // ✅ Send temp_id for WebSocket replacement
+
+    console.log('🎤 Sending voice message:', {
+      duration: recordingTime,
+      fileSize: (blobToSend.size / 1024 / 1024).toFixed(2) + ' MB',
+      fileType: blobToSend.type
     });
 
-    try {
-      const formData = new FormData();
+    const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
 
-      // Use the blob directly - backend will handle format conversion
-      formData.append('voice_file', blobToSend, `voice-${Date.now()}.webm`);
-      formData.append('duration', recordingTime.toString());
+    console.log('✅ Voice message sent successfully:', sentMessage);
 
-      // Optional: send temp_id to backend for WebSocket replacement
-      if (tempId) {
-        formData.append('temp_id', tempId);
-      }
-
-      console.log('🎤 Sending voice message:', {
-        duration: recordingTime,
-        fileSize: blobToSend.size,
-        fileType: blobToSend.type
-      });
-
-      const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
-
-      console.log('✅ Voice message sent successfully:', sentMessage);
-
-      // Replace temp message with real one
-      setMessages(prev => {
-        return prev.map(msg =>
-          msg.id === tempId || msg.temp_id === tempId
-            ? {
+    setMessages(prev => {
+      return prev.map(msg =>
+        msg.id === tempId || msg.temp_id === tempId
+          ? {
               ...sentMessage,
               is_temp: false,
               sender: {
@@ -748,24 +736,37 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 avatar_url: getAvatarUrl(sentMessage.sender?.avatar_url)
               }
             }
-            : msg
-        );
-      });
+          : msg
+      );
+    });
 
-      setSuccess('Voice message sent!');
-      setTimeout(() => setSuccess(''), 2000);
-    } catch (err) {
-      console.error('❌ Voice message send failed:', err);
-      setError(err.message || 'Failed to send voice message');
-
-      // Remove temp message on error
-      setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.temp_id !== tempId));
-    } finally {
-      setIsUploadingVoice(false);
-      setVoiceSending(false);
-      setRecordingTime(0);
+    setSuccess('Voice message sent!');
+    setTimeout(() => setSuccess(''), 2000);
+  } catch (err) {
+    console.error('❌ Voice message send failed:', err);
+    
+    // ✅ UPDATED: Better error messages for server issues
+    let userErrorMessage = err.message || 'Failed to send voice message';
+    
+    if (userErrorMessage.includes('File too large')) {
+      userErrorMessage = 'Voice message too large. Please keep under 10MB.';
+    } else if (userErrorMessage.includes('Invalid file type')) {
+      userErrorMessage = 'Voice format not supported. Please try recording again.';
+    } else if (userErrorMessage.includes('timeout')) {
+      userErrorMessage = 'Upload taking too long. Please check your connection and try again.';
+    } else if (userErrorMessage.includes('Cloudinary')) {
+      userErrorMessage = 'Storage service temporarily unavailable. Please try again.';
     }
-  };
+    
+    setError(userErrorMessage);
+
+    setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.temp_id !== tempId));
+  } finally {
+    setIsUploadingVoice(false);
+    setVoiceSending(false);
+    setRecordingTime(0);
+  }
+};
 
   /* --------------------------------------------------------------------- */
   /* Image Upload & Deletion */
@@ -896,40 +897,36 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /* Load Initial Messages */
   /* --------------------------------------------------------------------- */
-  const loadInitialMessages = async () => {
-    if (!selectedFriend || messages.length > 0) return;
-    try {
-      const chatMessages = await getPrivateChat(selectedFriend.id);
-      const enhanced = chatMessages.map((msg) => {
-        const detectMessageType = (message) => {
-          // Use backend message_type first
-          if (message.message_type === 'image') return 'image';
-          if (message.message_type === 'voice') return 'voice';
-          if (message.message_type === 'file') return 'file';
-          if (message.message_type === 'text') return 'text';
+const loadInitialMessages = async () => {
+  if (!selectedFriend || messages.length > 0) return;
+  try {
+    const chatMessages = await getPrivateChat(selectedFriend.id);
+    const enhanced = chatMessages.map((msg) => {
+      const detectMessageType = (message) => {
+        if (message.message_type === 'image') return 'image';
+        if (message.message_type === 'voice') return 'voice';
+        if (message.message_type === 'file') return 'file';
+        if (message.message_type === 'text') return 'text';
 
-          const content = message.content || '';
+        const content = message.content || '';
+        
+        // ✅ UPDATED: Same voice detection logic
+        const isVoiceUrl =
+          content.includes('/voice_messages/') ||
+          content.includes('/video/upload/') ||
+          content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp|mp4)$/i);
 
-          // Voice message detection
-          const isVoiceUrl =
-            content.includes('/voice_messages/') ||
-            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
+        if (isVoiceUrl) return "voice";
 
-          if (isVoiceUrl) return "voice";
+        const isImageUrl =
+          content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+          (content.includes('cloudinary.com') && content.includes('/image/upload/'));
 
-          // Image detection
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
+        return isImageUrl ? "image" : "text";
+      };
 
-          return isImageUrl ? "image" : "text";
-        };
-
-        const messageType = detectMessageType(msg);
-
-        // Use content directly - backend provides proper Cloudinary URL
-        const content = msg.content;
+      const messageType = detectMessageType(msg);
+      const content = msg.content; 
 
         const sender = {
           id: msg.sender_id,
