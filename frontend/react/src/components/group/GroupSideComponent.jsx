@@ -20,12 +20,11 @@ import {
     MenuItem,
     IconButton,
     InputAdornment,
-    ListItemIcon
+    ListItemIcon,
 } from '@mui/material';
 import {
     Favorite as FavoriteIcon,
     Comment as CommentIcon,
-    Share
 } from '@mui/icons-material';
 import ReplyIcon from '@mui/icons-material/Reply';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -279,7 +278,7 @@ const GroupSideComponent = ({groupId}) => {
 
     return (
         <Box
-            sx={{ width: '30%', marginTop: 0.5 }}
+            sx={{ marginTop: 0.5, width: '30%' }}
         >
             <Tabs
                 value={tab}

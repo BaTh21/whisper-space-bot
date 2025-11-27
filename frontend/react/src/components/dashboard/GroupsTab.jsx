@@ -20,10 +20,11 @@ import SearchIcon from '@mui/icons-material/Search';
 
 const GroupsTab = ({ groups }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [openCreateGroup, setOpenCreateGroup] = useState(false);
   const [friends, setFriends] = useState([]);
+  const [showGroupList, setShowGroupList] = useState(true);
 
   const fetchFriends = async () => {
     const res = await getFriends();
@@ -54,147 +55,146 @@ const GroupsTab = ({ groups }) => {
     setOpenCreateGroup(false);
   }
 
+  const toggleGroupList = () => setShowGroupList((prev) => !prev);
+
   return (
-    <Box sx={{
-      maxWidth: '100%',
-      overflow: 'hidden',
-      display: 'flex',
-      height: '100vh'
-    }}>
-      <Box
-        sx={{
-          width: '25%',
-        }}
-      >
-        <Box sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', sm: 'row' },
-          justifyContent: 'space-between',
-          alignItems: { xs: 'stretch', sm: 'center' },
-          gap: { xs: 2, sm: 0 },
-          mb: 3,
-        }}>
-          <Typography variant="h5" fontWeight="600" sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
-            Groups
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddBoxIcon />}
-            sx={{
-              borderRadius: '8px',
-              minWidth: { xs: '100%', sm: 'auto' }
-            }}
-            size={isMobile ? 'small' : 'medium'}
-            onClick={() => setOpenCreateGroup(true)}
-          >
-            {isMobile ? 'Create' : 'Create Group'}
-          </Button>
-        </Box>
-
-        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 4}}>
-          <TextField
-            sx={{ width: "100%" }}
-            id="outlined-member-search"
-            label="Search group"
-            variant="outlined"
-            size="small"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                  >
-                    <SearchIcon />
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-
-        </Box>
-
-        {groups.length === 0 ? (
-          <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-            No groups yet. Create one to get started!
-          </Typography>
-        ) : (
-          groups.map((group) => (
-            <Card
-              key={group.id}
-              onClick={() => {
-                setSelectedGroupId(group.id);
-              }}
-              sx={{
-                p: 1,
-                mb: 1,
-                borderRadius: '12px',
-                boxShadow: 0,
-                backgroundColor: 'white',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  transform: { xs: 'none', sm: 'translateY(-2px)' },
-                  boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
-                }
-              }}
-            >
-              <Box sx={{
-                display: 'flex',
-                flexDirection: { xs: 'column', sm: 'row' },
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                gap: { xs: 1, sm: 2 },
-                alignItems: 'center'
-              }}>
-                <Avatar
-                  src={getLatestCover(group)}
-                >
-                  {!group.images || group.images.length === 0 ? group.name[0] : null}
-                </Avatar>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' }, }}>
-                    {group.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 12 }, }}>
-                    Created {formatCambodiaDate(group.created_at)}
-                  </Typography>
-                </Box>
-              </Box>
-            </Card>
-          ))
-        )}
-      </Box>
-      <Box
-        sx={{
-          width: '100%',
-        }}
-      >
-        {!selectedGroupId ? (
+    <Box
+      sx={{ display: 'flex', height: '100vh', overflow: 'hidden', width: '100%', mt: {xs: 1, md: 0} }}
+    >
+      {showGroupList && (
+        <Box
+          sx={{
+            width: { xs: '100%', md: '25%' },
+          }}
+        >
           <Box
-            sx={{
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              height: '100vh'
-            }}
+            sx={{ display: 'flex', flexDirection: { sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: { xs: 2, sm: 0 }, mb: 3 }}
           >
-            <Typography
-              align="center"
-              color="text.secondary"
-              sx={{ fontSize: 18, mb: 10 }}
-            >
-              Select a group to view chat
+            <Typography variant="h5" fontWeight="600" sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
+              Groups
             </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddBoxIcon />}
+              sx={{
+                borderRadius: '8px',
+                minWidth: { xs: 10, sm: 'auto' }
+              }}
+              size={isMobile ? 'small' : 'medium'}
+              onClick={() => setOpenCreateGroup(true)}
+            >
+              {isMobile ? 'Create' : 'Create Group'}
+            </Button>
           </Box>
-        ) : (
-          <Box
-            sx={{
-              pl: 3,
-            }}
-          >
-            <GroupChatPage key={selectedGroupId} groupId={selectedGroupId} />
+
+          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: {xs: 2, md: 4} }}>
+            <TextField
+              sx={{ width: "100%" }}
+              id="outlined-member-search"
+              label="Search group"
+              variant="outlined"
+              size="small"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                    >
+                      <SearchIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+
           </Box>
-        )}
-      </Box>
+
+          {groups.length === 0 ? (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              No groups yet. Create one to get started!
+            </Typography>
+          ) : (
+            groups.map((group) => (
+              <Card
+                key={group.id}
+                onClick={() => {
+                  setSelectedGroupId(group.id);
+                  if (isMobile) setShowGroupList(false);
+                }}
+                sx={{
+                  p: 1,
+                  mb: 1,
+                  borderRadius: '12px',
+                  boxShadow: 0,
+                  backgroundColor: 'white',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    transform: { xs: 'none', sm: 'translateY(-2px)' },
+                    boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
+                  }
+                }}
+              >
+                <Box sx={{
+                  display: 'flex',
+                  flexDirection: { sm: 'row' },
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: { xs: 1, sm: 2 },
+                  alignItems: 'center'
+                }}>
+                  <Avatar
+                    src={getLatestCover(group)}
+                  >
+                    {!group.images || group.images.length === 0 ? group.name[0] : null}
+                  </Avatar>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' }, }}>
+                      {group.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 12 }, }}>
+                      Created {formatCambodiaDate(group.created_at)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Card>
+            ))
+          )}
+        </Box>
+      )}
+      {(!isMobile || !showGroupList) && (
+        <Box
+          sx={{
+            width: '100%',
+          }}
+        >
+          {!selectedGroupId ? (
+            <Box
+              sx={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: '100vh'
+              }}
+            >
+              <Typography
+                align="center"
+                color="text.secondary"
+                sx={{ fontSize: 18, mb: 10 }}
+              >
+                Select a group to view chat
+              </Typography>
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                pl: {xs: 0, md: 3},
+              }}
+            >
+              <GroupChatPage key={selectedGroupId} groupId={selectedGroupId} toggleGroupList={toggleGroupList} />
+            </Box>
+          )}
+        </Box>
+      )}
 
       <CreateGroupDialog
         open={openCreateGroup}

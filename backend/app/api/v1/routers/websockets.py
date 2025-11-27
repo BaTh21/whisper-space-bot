@@ -113,9 +113,11 @@ async def handle_websocket_private(
                         }
                     )
                     print(f"📢 Broadcast initial seen status for message {msg_id}")
+                    
+        await websocket.accept()
         
         # ✅ CONNECT TO MANAGER (This calls websocket.accept() internally)
-        await manager.connect(chat_id, websocket)
+        await manager.connect(chat_id, websocket, user_id=current_user.id)
         
         # ✅ HEARTBEAT FUNCTION
         async def send_heartbeat():
@@ -493,7 +495,7 @@ async def handle_websocket_private(
         # ✅ DISCONNECT FROM MANAGER
         if current_user:
             chat_id = _chat_id(current_user.id, friend_id)
-            manager.disconnect(chat_id, websocket)
+            manager.disconnect(chat_id, websocket, user_id=current_user.id)
             
 @router.websocket("/group/{group_id}")
 async def websocket_group_chat(
@@ -514,7 +516,7 @@ async def websocket_group_chat(
             return
 
         chat_id = f"group_{group_id}"
-        manager.active_connections.setdefault(chat_id, set()).add(websocket)
+        await manager.connect(chat_id, websocket, user_id=current_user.id)
 
         try:
             while True:
@@ -524,6 +526,13 @@ async def websocket_group_chat(
                 parent_message_id = data.get("reply_to")  # Optional
                 action = data.get("action")
                 incoming_temp_id = data.get("temp_id")
+                
+                if action == "online_users":
+                    online_user_ids = list(manager.get_online_users(chat_id))
+                    await websocket.send_json({
+                        "action": "online_users",
+                        "user_ids": online_user_ids
+                    })
 
                 if action == "seen":
                     message_id = int(data.get("message_id"))
@@ -739,7 +748,7 @@ async def websocket_group_chat(
                     continue
 
         except WebSocketDisconnect:
-            manager.disconnect(chat_id, websocket)
+            manager.disconnect(chat_id, websocket, user_id=current_user.id)
         except Exception as e:
             traceback.print_exc()
             print(f"[WS Error] {e}")

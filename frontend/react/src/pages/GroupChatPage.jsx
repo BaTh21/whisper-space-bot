@@ -13,7 +13,9 @@ import {
   TextField,
   Toolbar,
   Typography,
-  Drawer
+  Drawer,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
@@ -40,8 +42,9 @@ import CallIcon from '@mui/icons-material/Call';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import VoiceRecordDialog from '../components/dialogs/VoiceRecordDialog';
 import { VoiceMessagePlayer } from '../components/group/VoiceMessagePlayer';
+import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 
-const GroupChatPage = ({ groupId }) => {
+const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
   const { auth } = useAuth();
   const user = auth?.user;
@@ -72,13 +75,14 @@ const GroupChatPage = ({ groupId }) => {
   const [openDrawer, setOpenDrawer] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const messagesRef = useRef([]);
-  const [openListMember, setOpenListMember] = useState(false);
   const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [showDiaries, setShowDiaries] = useState(false);
 
-
-  const toggleListMember = () => {
-    console.log("toggle open")
-    setOpenListMember(prev => !prev);
+  const toggleDiary = () => {
+    setShowDiaries(prev => !prev);
   }
 
   const toggleDrawer = () => {
@@ -287,6 +291,26 @@ const GroupChatPage = ({ groupId }) => {
     console.log('WS received:', data);
 
     switch (data.action) {
+      case "online_users":
+        setOnlineUsers(new Set(data.user_ids));
+        break;
+
+      case "user_online":
+        setOnlineUsers(prev => {
+          const updated = new Set(prev);
+          updated.add(data.user_id);
+          return updated;
+        });
+        break;
+
+      case "user_offline":
+        setOnlineUsers(prev => {
+          const updated = new Set(prev);
+          updated.delete(data.user_id);
+          return updated;
+        });
+        break;
+
       case "seen":
         setMessages(prev =>
           prev.map(msg => {
@@ -647,56 +671,118 @@ const GroupChatPage = ({ groupId }) => {
         color="default"
         elevation={2}
         sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alightItems: 'center',
           '&:hover': { bgcolor: 'grey.200' },
         }}
       >
-        <Toolbar>
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={toggleListMember}
+        <Toolbar
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: { xs: 1, sm: 2 },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={toggleGroupList}
+              sx={{
+                '&:hover': { bgcolor: 'grey.200' },
+              }}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+
+            <Avatar
+              sx={{
+                bgcolor: 'primary.main',
+                width: { xs: 38, md: 44 },
+                height: { xs: 38, md: 44 },
+              }}
+              src={
+                group?.images?.length
+                  ? group.images.reduce((latest, img) =>
+                    new Date(img.created_at) > new Date(latest.created_at) ? img : latest
+                  ).url
+                  : undefined
+              }
+              onClick={() => setOpen(true)}
+            >
+              {group?.name?.charAt(0) || 'G'}
+            </Avatar>
+
+            <Box sx={{ flexGrow: 1, overflow: 'hidden', display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant="h6" fontWeight={600} noWrap>
+                {group?.name || 'Group Chat'}
+              </Typography>
+
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {members.length} members
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box
             sx={{
-              mr: 2,
-              '&:hover': { bgcolor: 'grey.200' },
+              display: 'flex',
+              gap: { xs: 1, sm: 2 },
+              alignItems: 'center',
             }}
           >
-            <ArrowBackIcon />
-          </IconButton>
-
-          <Avatar
-            sx={{ mr: 2, bgcolor: 'primary.main', width: 40, height: 40 }}
-            src={
-              group?.images?.length
-                ? group.images.reduce((latest, img) =>
-                  new Date(img.created_at) > new Date(latest.created_at) ? img : latest
-                ).url
-                : undefined
-            }
-            onClick={() => setOpen(true)}
-          >
-            {group?.name?.charAt(0) || 'G'}
-          </Avatar>
-
-          <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-            <Typography variant="h6" fontWeight={600} noWrap>
-              {group?.name || 'Group Chat'}
-            </Typography>
-
-            <Typography variant="caption" color="text.secondary" noWrap>
-              {members.length} members
-            </Typography>
-          </Box>
-          <Box sx={{
-            display: 'flex',
-            gap: 2,
-            alightItems: 'center'
-          }}>
-            <CallIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                backgroundColor: 'green',
+                borderRadius: 1,
+                px: { xs: 0.75, md: 1.5 },
+                py: { xs: 0, md: 0.5 },
+                mr: { xs: 0, md: 1 },
+                gap: { xs: 0, md: 1 }
+              }}
+            >
+              <Typography sx={{ color: 'white', fontSize: { xs: 12, md: 14 } }}>
+                {Array.from(onlineUsers).length}
+              </Typography>
+              <Typography
+                sx={{
+                  color: 'white',
+                  fontSize: { xs: 12, md: 14 },
+                  display: { xs: 'none', md: 'block' }
+                }}
+              >
+                Online
+              </Typography>
+            </Box>
+            <CallIcon sx={{
+              fontSize: { xs: 22, md: 26 },
+              color: 'primary.main',
+              transition: 'transform 1s',
+              '&:hover': {
+                scale: 1.1
+              }
+            }} />
             <VideocamIcon
-              sx={{ fontSize: 26, color: 'primary.main' }}
+              sx={{
+                fontSize: { xs: 24, md: 30 },
+                color: 'primary.main',
+                transition: 'transform 1s',
+                '&:hover': {
+                  scale: 1.1
+                }
+              }}
+            />
+            <AutoStoriesIcon
+              sx={{
+                fontSize: { xs: 22, md: 26 },
+                color: 'primary.main',
+                transition: 'transform 1s',
+                '&:hover': {
+                  scale: 1.1
+                }
+              }}
+              onClick={toggleDiary}
             />
           </Box>
         </Toolbar>
@@ -704,27 +790,27 @@ const GroupChatPage = ({ groupId }) => {
 
 
       <Box sx={{ display: 'flex', height: '80vh' }}>
-        <GroupSideComponent
-          groupId={groupId}
-        />
+        {(isMobile || !showDiaries && (
+          <GroupSideComponent
+            groupId={groupId}
+          />
+        ))}
+
         <Drawer
           anchor='right'
           open={openDrawer}
           onClose={toggleDrawer}>
           {DrawerBox}
         </Drawer>
-
         <Box
           sx={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            // ml: 3,
             overflow: 'hidden',
             borderLeft: '1px solid #dcdcdcff',
           }}
         >
-
           <Box
             sx={{
               flex: 1,
@@ -920,7 +1006,7 @@ const GroupChatPage = ({ groupId }) => {
                                         sx={{
                                           display: "flex",
                                           justifyContent: isOwn ? "flex-end" : "flex-start",
-                                          width: {xs: 150},
+                                          width: { xs: 150 },
                                           mb: 1,
                                         }}
                                         onClick={(e) => openSecondMenu(e, message.id)}
@@ -963,7 +1049,7 @@ const GroupChatPage = ({ groupId }) => {
                                   sx={{
                                     display: "flex",
                                     justifyContent: isOwn ? "flex-end" : "flex-start",
-                                    width: {md: 300, xs: 150},
+                                    width: { md: 300, xs: 150 },
                                     mb: 1,
                                   }}
                                   onClick={(e) => openSecondMenu(e, message.id)}
@@ -1306,7 +1392,6 @@ const GroupChatPage = ({ groupId }) => {
             </Box>
           </Box>
         </Box>
-
       </Box >
       <GroupMenuDialog
         open={open}

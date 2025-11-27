@@ -29,7 +29,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 function GroupMenuDialog({ open, onClose, group, onSuccess }) {
-  const [selectedIndex, setSelectedIndex] = useState(null);
   const [updatePopup, setUpdatePopup] = useState(false);
   const [invitePopup, setInvitePopup] = useState(false);
   const [covers, setCovers] = useState([]);
@@ -65,7 +64,6 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
   };
 
   const handleListItemClick = (event, index, action) => {
-    setSelectedIndex(index);
     action?.();
     onClose();
   };
@@ -147,7 +145,7 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: 380,
+            width: {xs: '90%', md: 380},
             bgcolor: 'background.paper',
             borderRadius: 3,
             boxShadow: 24,
