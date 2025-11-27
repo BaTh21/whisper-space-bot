@@ -1,20 +1,22 @@
 # cloudinary_config.py
 import traceback
 import cloudinary
-# import cloudinary.uploader
-# import cloudinary.api
 from cloudinary import uploader, api
 from cloudinary.utils import cloudinary_url
-from app.core.config import settings
 import uuid
+import os
+
+# Remove the direct settings import to avoid circular imports
+# from app.core.config import settings  # ← Remove this
 
 def configure_cloudinary():
     """Configure Cloudinary with all necessary settings"""
     try:
+        # Use environment variables directly to avoid circular imports
         cloudinary.config(
-            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-            api_key=settings.CLOUDINARY_API_KEY,
-            api_secret=settings.CLOUDINARY_API_SECRET,
+            cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
+            api_key=os.getenv('CLOUDINARY_API_KEY'),
+            api_secret=os.getenv('CLOUDINARY_API_SECRET'),
             secure=True
         )
         print("✅ Cloudinary configured successfully")
@@ -22,6 +24,7 @@ def configure_cloudinary():
         print(f"❌ Cloudinary configuration failed: {str(e)}")
         raise
 
+# Call configuration
 configure_cloudinary()
 
 def upload_to_cloudinary(file_content, public_id=None, folder=None, resource_type="image"):
@@ -29,10 +32,13 @@ def upload_to_cloudinary(file_content, public_id=None, folder=None, resource_typ
     Upload file to Cloudinary with support for different resource types
     """
     try:
+        # Use consistent folder handling
+        base_folder = os.getenv('CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')
+        
         upload_kwargs = {
             "file": file_content,
             "public_id": public_id,
-            "folder": folder or settings.CLOUDINARY_UPLOAD_FOLDER,
+            "folder": f"{base_folder}/{folder}" if folder else base_folder,
             "overwrite": True,
             "resource_type": resource_type,
         }
@@ -45,26 +51,24 @@ def upload_to_cloudinary(file_content, public_id=None, folder=None, resource_typ
                 {"format": "auto"}
             ]
         
-        upload_result = cloudinary.uploader.upload(**upload_kwargs)
+        upload_result = uploader.upload(**upload_kwargs)
         return upload_result
     except Exception as e:
         raise Exception(f"Cloudinary upload failed: {str(e)}")
     
 def upload_voice_message(file_content: bytes, public_id: str = None, folder: str = "voice_messages"):
     """
-    FIXED VERSION: More robust error handling
+    FIXED: Consistent folder handling
     """
     try:
-        # FIX: Use environment variables directly
-        import os
-        full_folder = f"{os.getenv('CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')}/voice_messages"
+        base_folder = os.getenv('CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')
+        full_folder = f"{base_folder}/{folder}"
 
         if not public_id:
             public_id = f"voice_{uuid.uuid4().hex[:12]}"
 
         print(f"📤 Uploading voice → {full_folder}/{public_id}")
 
-        # FIX: Simplified upload without complex transformations
         upload_result = uploader.upload(
             file_content,
             resource_type="video",  # Use "video" for audio files
@@ -90,12 +94,13 @@ def upload_voice_message(file_content: bytes, public_id: str = None, folder: str
         print(f"❌ CRITICAL: Voice upload failed: {str(e)}")
         traceback.print_exc()
         raise Exception(f"Cloudinary upload failed: {str(e)}")
+
 def delete_from_cloudinary(public_id, resource_type="image"):
     """
     Delete file from Cloudinary with resource type support
     """
     try:
-        result = cloudinary.uploader.destroy(public_id, resource_type=resource_type)
+        result = uploader.destroy(public_id, resource_type=resource_type)
         return result.get('result') == 'ok'
     except Exception as e:
         print(f"Failed to delete from Cloudinary: {str(e)}")
@@ -117,8 +122,6 @@ def extract_public_id_from_url(url):
 def check_cloudinary_health():
     """Check if Cloudinary is properly configured and accessible"""
     try:
-        # FIX: Use direct environment variable check
-        import os
         cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME')
         api_key = os.getenv('CLOUDINARY_API_KEY') 
         api_secret = os.getenv('CLOUDINARY_API_SECRET')
@@ -126,7 +129,7 @@ def check_cloudinary_health():
         if not all([cloud_name, api_key, api_secret]):
             return False, "Missing Cloudinary environment variables"
         
-        # Test with a simple API call
+        # Test the configuration
         api.ping()
         
         return True, "Cloudinary is properly configured and responsive"

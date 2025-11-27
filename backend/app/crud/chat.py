@@ -54,8 +54,8 @@ def create_private_message(
             reply_to_id=reply_to_id,
             is_forwarded=is_forwarded,
             original_sender=original_sender,
-            voice_duration=voice_duration if message_type == "voice" else None,
-            file_size=file_size if message_type in ["voice", "file"] else None,
+            voice_duration=voice_duration if msg_type_enum == MessageType.voice else None,
+            file_size=file_size if msg_type_enum in [MessageType.voice, MessageType.file] else None,
             created_at=datetime.now(timezone.utc),
             delivered_at=datetime.now(timezone.utc),
             is_read=False
