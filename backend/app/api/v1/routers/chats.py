@@ -527,10 +527,23 @@ async def send_voice_message(
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 
-        # Validate file type
-        allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4']
-        if not voice_file.content_type or voice_file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A")
+        # Validate file type - FIXED: Added more audio types
+        allowed_types = [
+            'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 
+            'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/mp3',
+            'audio/opus', 'audio/flac', 'audio/x-wav', 'audio/3gpp'
+        ]
+        
+        # FIXED: Better file type validation
+        if not voice_file.content_type:
+            # Try to detect from filename
+            filename = voice_file.filename.lower()
+            if any(filename.endswith(ext) for ext in ['.mp3', '.wav', '.ogg', '.webm', '.m4a', '.aac', '.opus', '.flac', '.3gp']):
+                pass  # Accept based on extension
+            else:
+                raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A, OPUS, FLAC, 3GP")
+        elif voice_file.content_type not in allowed_types:
+            raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A, OPUS, FLAC, 3GP")
 
         # Validate file size (10MB limit)
         MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -541,20 +554,26 @@ async def send_voice_message(
             if file_size > MAX_FILE_SIZE:
                 raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
                 
+            # FIXED: Reset file pointer for Cloudinary upload
+            await voice_file.seek(0)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Could not read voice message: {str(e)}")
 
-        # Upload to Cloudinary
+        # FIXED: Upload to Cloudinary with proper parameters (NO DUPLICATE resource_type)
         try:
             upload_result = cloudinary.uploader.upload(
                 contents,
-                resource_type="video",
+                resource_type="auto",  # Let Cloudinary auto-detect file type
                 folder="whisper_space/voice_messages",
                 public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
-                overwrite=False
+                overwrite=False,
+                use_filename=True,
+                unique_filename=True
             )
             voice_url = upload_result["secure_url"]
+            print(f"✅ Voice message uploaded to: {voice_url}")
         except Exception as e:
+            print(f"❌ Cloudinary upload error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Could not upload voice message to cloud storage: {str(e)}")
 
         # Create message in database
@@ -641,6 +660,7 @@ async def send_voice_message(
         # Broadcast via WebSocket
         chat_id = _chat_id(current_user.id, friend_id)
         await manager.broadcast(chat_id, broadcast_data)
+        print(f"✅ Voice message broadcasted via WebSocket to chat {chat_id}")
 
         # Build response with Telegram-style reply preview
         response = MessageOut(
@@ -692,6 +712,7 @@ async def send_voice_message(
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ Voice message error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send voice message: {str(e)}")
     
 @router.post("/private/{friend_id}/image")

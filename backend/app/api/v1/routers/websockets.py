@@ -191,12 +191,23 @@ async def handle_websocket_private(
 
                 # ✅ TEXT/VOICE/FILE MESSAGE
                 if msg_type == "message":
-                    if not content or not content.strip():
-                        await websocket.send_json({
-                            "type": "error",
-                            "error": "Message content cannot be empty"
-                        })
-                        continue
+                    # FIXED: Allow voice messages with Cloudinary URLs
+                    if message_type == "voice":
+                        # For voice messages, content should be a Cloudinary URL
+                        if not content or not content.startswith(('http://', 'https://')):
+                            await websocket.send_json({
+                                "type": "error",
+                                "error": "Voice messages require a valid URL"
+                            })
+                            continue
+                    else:
+                        # For text messages, validate content
+                        if not content or not content.strip():
+                            await websocket.send_json({
+                                "type": "error",
+                                "error": "Message content cannot be empty"
+                            })
+                            continue
                     
                     # ✅ VALIDATE REPLY MESSAGE
                     if reply_to_id:
@@ -221,7 +232,7 @@ async def handle_websocket_private(
                             db=db,
                             sender_id=current_user.id,
                             receiver_id=friend_id,
-                            content=content.strip(),
+                            content=content.strip() if message_type == "text" else content,
                             reply_to_id=reply_to_id,
                             message_type=message_type,
                             voice_duration=voice_duration,

@@ -50,21 +50,21 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const convertWebmToMp3Url = (webmUrl) => {
-  if (webmUrl.includes('cloudinary.com') && webmUrl.includes('.webm')) {
-    return webmUrl
-      .replace('/upload/', '/upload/f_mp3,fl_attachment/')
-      .replace('.webm', '.mp3');
-  }
-  return webmUrl;
-};
+// const convertWebmToMp3Url = (webmUrl) => {
+//   if (webmUrl.includes('cloudinary.com') && webmUrl.includes('.webm')) {
+//     return webmUrl
+//       .replace('/upload/', '/upload/f_mp3,fl_attachment/')
+//       .replace('.webm', '.mp3');
+//   }
+//   return webmUrl;
+// };
 
-const ensureMp3VoiceUrl = (message) => {
-  if (message.message_type === 'voice' && message.content.includes('.webm')) {
-    return convertWebmToMp3Url(message.content);
-  }
-  return message.content;
-};
+// const ensureMp3VoiceUrl = (message) => {
+//   if (message.message_type === 'voice' && message.content.includes('.webm')) {
+//     return convertWebmToMp3Url(message.content);
+//   }
+//   return message.content;
+// };
 
 const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -122,32 +122,41 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       // 1. New real message from server
       if (type === "message") {
         const detectMessageType = (msgData) => {
+          // Use backend message_type first
           if (msgData.message_type === "image") return "image";
           if (msgData.message_type === "voice") return "voice";
+          if (msgData.message_type === "file") return "file";
+          if (msgData.message_type === "text") return "text";
+
           const content = msgData.content || "";
+
+          // Voice message detection for Cloudinary
           const isVoiceUrl =
-            content.match(/\.mp3$/i) ||
-            content.includes("/voice_messages/") ||
-            content.includes(".webm");
+            content.includes('/voice_messages/') ||
+            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
+            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
+
           if (isVoiceUrl) return "voice";
+
+          // Image detection
           const isImageUrl =
             content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            content.includes("cloudinary.com") ||
-            content.startsWith("data:image/");
+            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
+
           return isImageUrl ? "image" : "text";
         };
 
         const messageType = detectMessageType(data);
-        let content = data.content;
-        if (messageType === "voice" && content.includes(".webm")) {
-          content = convertWebmToMp3Url(content);
-        }
+
+        // For voice messages, use the URL directly (no conversion needed)
+        // Backend already provides proper Cloudinary URL
+        const content = data.content;
 
         const realMessage = {
           ...data,
           id: data.id,
           temp_id: data.temp_id || null,
-          content,
+          content: content,
           is_temp: false,
           message_type: messageType,
           sender: {
@@ -161,7 +170,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           created_at: data.created_at,
           updated_at: data.updated_at || data.created_at,
           edited: !!data.updated_at && data.updated_at !== data.created_at,
-          voice_duration: data.voice_duration || data.duration || 0,
+          voice_duration: data.voice_duration || 0,
+          file_size: data.file_size || 0,
         };
 
         setMessages((prev) => {
@@ -191,25 +201,25 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         });
 
-      // 2. REAL-TIME SEEN STATUS UPDATES - FIXED
+        // 2. REAL-TIME SEEN STATUS UPDATES - FIXED
       } else if (type === "read_receipt") {
         console.log("👀 REAL-TIME: Read receipt received", data);
-        
+
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id === data.message_id) {
               const currentSeenBy = msg.seen_by || [];
               const readerId = data.reader_id || data.user_id;
-              
+
               // Check if this user already marked as seen
               const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
-              
+
               if (!alreadySeen && readerId) {
                 console.log(`✅ REAL-TIME: Marking message ${data.message_id} as seen by user ${readerId}`);
-                
+
                 // Get reader info - IMPORTANT: Use friends list or selectedFriend
                 const reader = friends.find(f => f.id === readerId) || selectedFriend;
-                
+
                 return {
                   ...msg,
                   is_read: true,
@@ -230,10 +240,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           })
         );
 
-      // 3. Message updated with seen_by information
+        // 3. Message updated with seen_by information
       } else if (type === "message_updated") {
         console.log("🔄 Message updated with seen info:", data);
-        
+
         setMessages((prev) =>
           prev.map((msg) => {
             const messageIdsToCheck = [
@@ -264,7 +274,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   seen_by: Array.isArray(data.seen_by) ? data.seen_by : msg.seen_by,
                 };
               }
-              
+
               // Regular message update
               return {
                 ...msg,
@@ -278,11 +288,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           })
         );
 
-      // 4. Typing indicator
+        // 4. Typing indicator
       } else if (type === "typing") {
         setFriendTyping(!!data.is_typing);
 
-      // 5. Message deleted
+        // 5. Message deleted
       } else if (type === "message_deleted") {
         setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
       }
@@ -375,7 +385,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     const markMessageAsRead = async (messageId) => {
       try {
         console.log(`📨 SENDING read receipt for message ${messageId}`);
-        
+
         // Send read receipt via WebSocket
         const success = sendWsMessage({
           type: 'read',
@@ -394,7 +404,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             if (msg.id === messageId) {
               const currentSeenBy = msg.seen_by || [];
               const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-              
+
               if (!alreadySeen) {
                 console.log(`✅ OPTIMISTIC: Marking message ${messageId} as read`);
                 return {
@@ -446,15 +456,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     if (selectedFriend && isConnected && messages.length > 0) {
       // Find unread messages from friend
       const unreadMessages = messages.filter(
-        msg => !msg.is_temp && 
-               !msg.is_read && 
-               msg.sender_id === selectedFriend.id
+        msg => !msg.is_temp &&
+          !msg.is_read &&
+          msg.sender_id === selectedFriend.id
       );
 
       // Mark all as read
       if (unreadMessages.length > 0) {
         console.log(`📚 Marking ${unreadMessages.length} messages as read on chat open`);
-        
+
         unreadMessages.forEach(msg => {
           sendWsMessage({
             type: 'read',
@@ -468,7 +478,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             if (!msg.is_temp && !msg.is_read && msg.sender_id === selectedFriend.id) {
               const currentSeenBy = msg.seen_by || [];
               const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-              
+
               if (!alreadySeen) {
                 return {
                   ...msg,
@@ -677,21 +687,22 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     // Define tempId FIRST
     const tempId = `temp-voice-${Date.now()}-${Math.random()}`;
 
-    // Now create temp message with FULL sender info (this fixes the avatar!)
+    // Create temp message with FULL sender info
     const tempMsg = {
       id: tempId,
-      temp_id: tempId, // Important for WebSocket replacement
+      temp_id: tempId,
       content: 'Voice message...',
       message_type: 'voice',
       is_temp: true,
       is_read: false,
       created_at: new Date().toISOString(),
       voice_duration: recordingTime,
+      file_size: blobToSend.size,
       sender_id: profile.id,
       sender: {
         id: profile.id,
         username: profile.username,
-        avatar_url: getUserAvatar(profile), // This was missing → avatar not showing!
+        avatar_url: getUserAvatar(profile),
       },
       seen_by: [],
       _uniqueId: Date.now() + Math.random(),
@@ -705,19 +716,38 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     try {
       const formData = new FormData();
-      formData.append('voice_file', blobToSend, 'voice-message.webm'); // or .mp3
+
+      // Use the blob directly - backend will handle format conversion
+      formData.append('voice_file', blobToSend, `voice-${Date.now()}.webm`);
       formData.append('duration', recordingTime.toString());
 
-      // Optional: send tempId to backend so it can echo it back
-      // formData.append('temp_id', tempId);
+      // Optional: send temp_id to backend for WebSocket replacement
+      if (tempId) {
+        formData.append('temp_id', tempId);
+      }
+
+      console.log('🎤 Sending voice message:', {
+        duration: recordingTime,
+        fileSize: blobToSend.size,
+        fileType: blobToSend.type
+      });
 
       const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
+
+      console.log('✅ Voice message sent successfully:', sentMessage);
 
       // Replace temp message with real one
       setMessages(prev => {
         return prev.map(msg =>
           msg.id === tempId || msg.temp_id === tempId
-            ? { ...sentMessage, is_temp: false, sender: { ...sentMessage.sender, avatar_url: getAvatarUrl(sentMessage.sender?.avatar_url) } }
+            ? {
+              ...sentMessage,
+              is_temp: false,
+              sender: {
+                ...sentMessage.sender,
+                avatar_url: getAvatarUrl(sentMessage.sender?.avatar_url)
+              }
+            }
             : msg
         );
       });
@@ -725,8 +755,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       setSuccess('Voice message sent!');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
-      console.error('Send failed:', err);
-      setError('Failed to send voice message');
+      console.error('❌ Voice message send failed:', err);
+      setError(err.message || 'Failed to send voice message');
+
+      // Remove temp message on error
       setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.temp_id !== tempId));
     } finally {
       setIsUploadingVoice(false);
@@ -870,25 +902,34 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       const chatMessages = await getPrivateChat(selectedFriend.id);
       const enhanced = chatMessages.map((msg) => {
         const detectMessageType = (message) => {
+          // Use backend message_type first
           if (message.message_type === 'image') return 'image';
           if (message.message_type === 'voice') return 'voice';
+          if (message.message_type === 'file') return 'file';
+          if (message.message_type === 'text') return 'text';
+
           const content = message.content || '';
+
+          // Voice message detection
           const isVoiceUrl =
-            content.match(/\.mp3$/i) ||
-            (content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm')));
+            content.includes('/voice_messages/') ||
+            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
+            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
+
           if (isVoiceUrl) return "voice";
+
+          // Image detection
           const isImageUrl =
             content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && !content.includes('/voice_messages/')) ||
-            content.startsWith('data:image/');
+            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
+
           return isImageUrl ? "image" : "text";
         };
 
         const messageType = detectMessageType(msg);
-        let content = msg.content;
-        if (messageType === 'voice') {
-          content = ensureMp3VoiceUrl({ ...msg, message_type: messageType });
-        }
+
+        // Use content directly - backend provides proper Cloudinary URL
+        const content = msg.content;
 
         const sender = {
           id: msg.sender_id,
@@ -921,6 +962,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           is_read: msg.is_read || false,
           read_at: msg.read_at || null,
           seen_by,
+          voice_duration: msg.voice_duration || 0,
+          file_size: msg.file_size || 0,
         };
       });
 
@@ -1039,33 +1082,34 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         return;
       }
 
-      const isVoiceMessage = message.message_type === 'voice' ||
-        message.content.includes('voice_messages') ||
-        message.content.match(/\.(mp3|mp4|wav|m4a|ogg|aac|flac)$/i);
+      // Determine message type
+      let messageType = message.message_type;
+      if (!messageType) {
+        // Fallback detection
+        if (message.content.includes('/voice_messages/') ||
+          message.content.match(/\.(mp3|wav|ogg|webm|m4a)$/i)) {
+          messageType = 'voice';
+        } else if (message.content.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+          messageType = 'image';
+        } else {
+          messageType = 'text';
+        }
+      }
 
-      const isImageMessage = !isVoiceMessage && (
-        message.message_type === 'image' ||
-        message.content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)
-      );
-
-      let payload = {
+      const payload = {
         content: message.content,
-        message_type: isVoiceMessage ? 'voice' : (isImageMessage ? 'image' : 'text'),
+        message_type: messageType,
         is_forwarded: true,
         original_sender: message.sender?.username || profile?.username || 'Unknown',
       };
 
-      let sentMessage;
-      if (isVoiceMessage && payload.message_type === 'voice') {
-        try {
-          sentMessage = await sendPrivateMessage(friend.id, payload);
-        } catch (voiceError) {
-          payload.message_type = 'file';
-          sentMessage = await sendPrivateMessage(friend.id, payload);
-        }
-      } else {
-        sentMessage = await sendPrivateMessage(friend.id, payload);
+      // Add voice-specific fields if it's a voice message
+      if (messageType === 'voice') {
+        payload.voice_duration = message.voice_duration;
+        payload.file_size = message.file_size;
       }
+
+      const sentMessage = await sendPrivateMessage(friend.id, payload);
 
       setForwardDialogOpen(false);
       setForwardingMessage(null);

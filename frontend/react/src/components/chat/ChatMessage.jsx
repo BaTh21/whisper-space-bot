@@ -53,26 +53,30 @@ const ChatMessage = ({
   /*                     MESSAGE TYPE DETECTION                */
   /* ---------------------------------------------------------- */
   const detectMessageType = (msg) => {
+    // First check the message_type from backend
     if (msg.message_type === 'image') return 'image';
     if (msg.message_type === 'voice') return 'voice';
+    if (msg.message_type === 'file') return 'file';
+    if (msg.message_type === 'text') return 'text';
 
     const content = msg.content || '';
 
+    // Voice message detection - Cloudinary URLs
     const isVoiceUrl =
-      content.match(/\.mp3$/i) ||
-      content.startsWith('data:audio/mp3') ||
-      content.startsWith('data:audio/mpeg') ||
-      (content.startsWith('blob:') && content.includes('audio/mp3'));
+      content.includes('/voice_messages/') ||
+      content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
+      content.includes('cloudinary.com') && (
+        content.includes('/video/upload/') ||
+        content.includes('/video/upload/') && content.match(/\.(mp3|wav|ogg|webm|m4a)$/i)
+      );
 
     if (isVoiceUrl) return 'voice';
 
+    // Image detection
     const isImageUrl =
-      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|webm)$/i) ||
-      content.includes('cloudinary.com') ||
-      content.includes('res.cloudinary.com') ||
-      content.startsWith('data:image/') ||
-      content.startsWith('data:video/') ||
-      content.startsWith('blob:');
+      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+      (content.includes('cloudinary.com') && content.includes('/image/upload/')) ||
+      content.startsWith('data:image/');
 
     if (isImageUrl) return 'image';
 
@@ -296,35 +300,35 @@ const ChatMessage = ({
     if (!reader) return null;
 
     // Check if this specific friend has seen the message
-    const hasSeen = Array.isArray(message.seen_by) && 
-                    message.seen_by.some(s => s.user_id === reader.id);
+    const hasSeen = Array.isArray(message.seen_by) &&
+      message.seen_by.some(s => s.user_id === reader.id);
 
     if (hasSeen) {
       const seenInfo = message.seen_by.find(s => s.user_id === reader.id);
-      
+
       return (
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'flex-end', 
-          mt: 0.5, 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          mt: 0.5,
           gap: 0.5,
           minHeight: 20 // Prevent layout shift
         }}>
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              fontSize: '0.7rem', 
-              color: 'text.secondary', 
-              fontWeight: 500 
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.7rem',
+              color: 'text.secondary',
+              fontWeight: 500
             }}
           >
             Seen
           </Typography>
           <Avatar
             src={getAvatarUrl(reader.avatar_url)}
-            sx={{ 
-              width: 16, 
+            sx={{
+              width: 16,
               height: 16,
               border: '1px solid',
               borderColor: 'background.paper'
@@ -340,16 +344,16 @@ const ChatMessage = ({
     // Show "Delivered" status for messages that are delivered but not seen
     if (message.is_read && !hasSeen) {
       return (
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'flex-end', 
-          mt: 0.5 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          mt: 0.5
         }}>
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              fontSize: '0.7rem', 
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.7rem',
               color: 'text.secondary',
               fontWeight: 500
             }}

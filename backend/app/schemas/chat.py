@@ -3,6 +3,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
+from pydantic import validator, field_validator
 
 from app.models.private_message import MessageType
 
@@ -16,6 +17,24 @@ class MessageCreate(BaseModel):
     original_sender: Optional[str] = None  
     voice_duration: Optional[float] = None 
     file_size: Optional[int] = None 
+    
+    @field_validator('voice_duration')
+    @classmethod
+    def validate_voice_duration(cls, v, values):
+        if 'message_type' in values and values['message_type'] == 'voice' and v is None:
+            raise ValueError('voice_duration is required for voice messages')
+        return v
+    
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, v, values):
+        if 'message_type' in values and values['message_type'] == 'voice':
+            # For voice messages, content should be a URL
+            if not v.startswith(('http://', 'https://')):
+                raise ValueError('Voice messages must contain a valid URL')
+        elif not v or not v.strip():
+            raise ValueError('Message content cannot be empty')
+        return v
     
 
 class MessageSeenByUser(BaseModel):
