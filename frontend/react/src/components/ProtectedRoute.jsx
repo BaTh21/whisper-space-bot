@@ -23,19 +23,16 @@ const ProtectedRoute = ({ children }) => {
   }, [checkAuthStatus]);
 
   useEffect(() => {
-    if (authChecked && !loading) {
-      if (!isAuthenticated) {
-        // Redirect to login if NOT authenticated
-        navigate('/login', { 
-          replace: true,
-          state: { 
-            from: location.pathname,
-            message: 'Please log in to access this page'
-          }
-        });
-      }
-      // REMOVED the else clause - don't redirect authenticated users!
-      // They should stay on whatever protected route they're trying to access
+    if (authChecked && !loading && !isAuthenticated) {
+      navigate('/login', { 
+        replace: true,
+        state: { 
+          from: location.pathname,
+          message: 'Please log in to access this page'
+        }
+      });
+    }else{
+      navigate("/dashboard");
     }
   }, [authChecked, loading, isAuthenticated, navigate, location]);
 
@@ -64,7 +61,7 @@ const ProtectedRoute = ({ children }) => {
     return children;
   }
 
-  // Show loading while redirecting to login
+  // Show loading while redirecting
   return (
     <Backdrop 
       open={true} 
