@@ -18,44 +18,98 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// FIXED Response interceptor - using api instance for refresh
+// FIXED Response interceptor - with proper error handling
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
+    // If error is not 401 or it's already a retry, reject immediately
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
 
-      try {
-        // Attempt to refresh the token using the same api instance
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (refreshToken) {
-          const response = await api.post("/api/v1/auth/refresh", {
-            refresh_token: refreshToken,
-          });
+    // If we're already refreshing, add to queue
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then(token => {
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return api(originalRequest);
+      }).catch(err => {
+        return Promise.reject(err);
+      });
+    }
 
-          const { access_token, refresh_token } = response.data;
+    originalRequest._retry = true;
+    isRefreshing = true;
 
-          // Store new tokens
-          localStorage.setItem("accessToken", access_token);
-          if (refresh_token) {
-            localStorage.setItem("refreshToken", refresh_token);
-          }
-
-          // Retry the original request with new token
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return api(originalRequest);
-        }
-      } catch (refreshError) {
-        console.error("Token refresh failed:", refreshError);
-        // Continue to redirect if refresh fails
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      
+      // If no refresh token, redirect to login
+      if (!refreshToken) {
+        throw new Error("No refresh token available");
       }
 
-      // If refresh failed or no refresh token, then redirect to login
+      // Use a separate axios instance for refresh to avoid interceptor loops
+      const refreshApi = axios.create({
+        baseURL: BASE_URL,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const response = await refreshApi.post("/api/v1/auth/refresh", {
+        refresh_token: refreshToken,
+      });
+
+      const { access_token, refresh_token } = response.data;
+
+      // Store new tokens
+      localStorage.setItem("accessToken", access_token);
+      if (refresh_token) {
+        localStorage.setItem("refreshToken", refresh_token);
+      }
+
+      // Update the original request header
+      originalRequest.headers.Authorization = `Bearer ${access_token}`;
+
+      // Process queued requests
+      processQueue(null, access_token);
+
+      // Retry the original request
+      return api(originalRequest);
+    } catch (refreshError) {
+      console.error("Token refresh failed:", refreshError);
+      
+      // Process queued requests with error
+      processQueue(refreshError, null);
+      
+      // Clear tokens and redirect to login
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
-      window.location.href = "/login";
+      
+      // Only redirect if we're not already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = "/login";
+      }
+    } finally {
+      isRefreshing = false;
     }
 
     return Promise.reject(error);
