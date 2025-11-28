@@ -50,21 +50,21 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const convertWebmToMp3Url = (webmUrl) => {
-  if (webmUrl.includes('cloudinary.com') && webmUrl.includes('.webm')) {
-    return webmUrl
-      .replace('/upload/', '/upload/f_mp3,fl_attachment/')
-      .replace('.webm', '.mp3');
-  }
-  return webmUrl;
-};
+// const convertWebmToMp3Url = (webmUrl) => {
+//   if (webmUrl.includes('cloudinary.com') && webmUrl.includes('.webm')) {
+//     return webmUrl
+//       .replace('/upload/', '/upload/f_mp3,fl_attachment/')
+//       .replace('.webm', '.mp3');
+//   }
+//   return webmUrl;
+// };
 
-const ensureMp3VoiceUrl = (message) => {
-  if (message.message_type === 'voice' && message.content.includes('.webm')) {
-    return convertWebmToMp3Url(message.content);
-  }
-  return message.content;
-};
+// const ensureMp3VoiceUrl = (message) => {
+//   if (message.message_type === 'voice' && message.content.includes('.webm')) {
+//     return convertWebmToMp3Url(message.content);
+//   }
+//   return message.content;
+// };
 
 const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -81,7 +81,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
 
-
   // VOICE STATES
   const [isRecording, setIsRecording] = useState(false);
   const [voiceSending, setVoiceSending] = useState(false);
@@ -89,6 +88,62 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const mobileStyles = `
+    @media (max-width: 599px) {
+      .chat-container {
+        height: calc(100vh - 80px) !important;
+        min-height: 400px;
+      }
+      
+      .messages-area {
+        min-height: 200px;
+        max-height: calc(100vh - 200px) !important;
+        flex: 1;
+        overflow-y: auto;
+      }
+      
+      .input-area {
+        padding: 8px !important;
+        min-height: 60px;
+        position: sticky;
+        bottom: 0;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+      }
+      
+      /* Ensure input field is visible */
+      .input-area .MuiTextField-root {
+        max-height: 44px;
+      }
+      
+      /* Make sure messages don't overflow */
+      .messages-area .message-bubble {
+        max-width: 85% !important;
+      }
+    }
+    
+    @media (max-width: 400px) {
+      .chat-container {
+        height: calc(100vh - 60px) !important;
+      }
+      
+      .messages-area {
+        max-height: calc(100vh - 180px) !important;
+      }
+    }
+  `;
+
+    const styleElement = document.createElement('style');
+    styleElement.textContent = mobileStyles;
+    document.head.appendChild(styleElement);
+
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   const mediaRecorderRef = useRef(null);
   const recordingIntervalRef = useRef(null);
@@ -115,181 +170,191 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /* WebSocket Handlers */
   /* --------------------------------------------------------------------- */
-const handleWebSocketMessage = useCallback(
-  (data) => {
-    const { type } = data;
-    console.log("📡 WebSocket received:", data);
+  const handleWebSocketMessage = useCallback(
+    (data) => {
+      const { type } = data;
+      console.log("📡 WebSocket received:", data);
 
-    // 1. New real message from server
-    if (type === "message") {
-      const detectMessageType = (msgData) => {
-        if (msgData.message_type === "image") return "image";
-        if (msgData.message_type === "voice") return "voice";
-        const content = msgData.content || "";
-        const isVoiceUrl =
-          content.match(/\.mp3$/i) ||
-          content.includes("/voice_messages/") ||
-          content.includes(".webm");
-        if (isVoiceUrl) return "voice";
-        const isImageUrl =
-          content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-          content.includes("cloudinary.com") ||
-          content.startsWith("data:image/");
-        return isImageUrl ? "image" : "text";
-      };
+      // 1. New real message from server
+      if (type === "message") {
+        const detectMessageType = (msgData) => {
+          // Use backend message_type first
+          if (msgData.message_type === "image") return "image";
+          if (msgData.message_type === "voice") return "voice";
+          if (msgData.message_type === "file") return "file";
+          if (msgData.message_type === "text") return "text";
 
-      const messageType = detectMessageType(data);
-      let content = data.content;
-      if (messageType === "voice" && content.includes(".webm")) {
-        content = convertWebmToMp3Url(content);
-      }
+          const content = msgData.content || "";
 
-      const realMessage = {
-        ...data,
-        id: data.id,
-        temp_id: data.temp_id || null,
-        content,
-        is_temp: false,
-        message_type: messageType,
-        sender: {
-          id: data.sender_id,
-          username: data.sender_username,
-          avatar_url: getAvatarUrl(data.avatar_url),
-        },
-        is_read: data.is_read || false,
-        read_at: data.read_at || null,
-        seen_by: data.seen_by || [],
-        created_at: data.created_at,
-        updated_at: data.updated_at || data.created_at,
-        edited: !!data.updated_at && data.updated_at !== data.created_at,
-        voice_duration: data.voice_duration || data.duration || 0,
-      };
+          // Voice message detection for Cloudinary
+          const isVoiceUrl =
+            content.includes('/voice_messages/') ||
+            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
+            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
 
-      setMessages((prev) => {
-        let updated = [...prev];
+          if (isVoiceUrl) return "voice";
 
-        // Replace temporary message if temp_id matches
-        if (data.temp_id) {
-          const tempIndex = updated.findIndex(
-            (m) =>
-              m.is_temp &&
-              (m.temp_id === data.temp_id || m.id === data.temp_id)
-          );
+          // Image detection
+          const isImageUrl =
+            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
 
-          if (tempIndex !== -1) {
-            tempToRealIdMap.current[data.temp_id] = data.id;
-            updated[tempIndex] = realMessage;
-            return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-          }
-        }
+          return isImageUrl ? "image" : "text";
+        };
 
-        // Fallback: if no temp_id, avoid duplicates by real ID
-        const exists = updated.some((m) => m.id === data.id);
-        if (!exists) {
-          updated.push(realMessage);
-        }
+        const messageType = detectMessageType(data);
 
-        return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      });
+        // For voice messages, use the URL directly (no conversion needed)
+        // Backend already provides proper Cloudinary URL
+        const content = data.content;
 
-    // 2. REAL-TIME SEEN STATUS UPDATES - FIXED
-    } else if (type === "read_receipt") {
-      console.log("👀 REAL-TIME: Read receipt received", data);
-      
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === data.message_id) {
-            const currentSeenBy = msg.seen_by || [];
-            const readerId = data.reader_id || data.user_id;
-            
-            // Check if this user already marked as seen
-            const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
-            
-            if (!alreadySeen && readerId) {
-              console.log(`✅ REAL-TIME: Marking message ${data.message_id} as seen by user ${readerId}`);
-              
-              // Get reader info - IMPORTANT: Use friends list or selectedFriend
-              const reader = friends.find(f => f.id === readerId) || selectedFriend;
-              
-              return {
-                ...msg,
-                is_read: true,
-                read_at: data.read_at || new Date().toISOString(),
-                seen_by: [
-                  ...currentSeenBy,
-                  {
-                    user_id: readerId,
-                    username: reader?.username || 'Friend',
-                    avatar_url: getUserAvatar(reader),
-                    seen_at: data.read_at || new Date().toISOString(),
-                  },
-                ],
-              };
+        const realMessage = {
+          ...data,
+          id: data.id,
+          temp_id: data.temp_id || null,
+          content: content,
+          is_temp: false,
+          message_type: messageType,
+          sender: {
+            id: data.sender_id,
+            username: data.sender_username,
+            avatar_url: getAvatarUrl(data.avatar_url),
+          },
+          is_read: data.is_read || false,
+          read_at: data.read_at || null,
+          seen_by: data.seen_by || [],
+          created_at: data.created_at,
+          updated_at: data.updated_at || data.created_at,
+          edited: !!data.updated_at && data.updated_at !== data.created_at,
+          voice_duration: data.voice_duration || 0,
+          file_size: data.file_size || 0,
+        };
+
+        setMessages((prev) => {
+          let updated = [...prev];
+
+          // Replace temporary message if temp_id matches
+          if (data.temp_id) {
+            const tempIndex = updated.findIndex(
+              (m) =>
+                m.is_temp &&
+                (m.temp_id === data.temp_id || m.id === data.temp_id)
+            );
+
+            if (tempIndex !== -1) {
+              tempToRealIdMap.current[data.temp_id] = data.id;
+              updated[tempIndex] = realMessage;
+              return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
             }
           }
-          return msg;
-        })
-      );
 
-    // 3. Message updated with seen_by information
-    } else if (type === "message_updated") {
-      console.log("🔄 Message updated with seen info:", data);
-      
-      setMessages((prev) =>
-        prev.map((msg) => {
-          const messageIdsToCheck = [
-            msg.id,
-            msg.temp_id,
-            tempToRealIdMap.current[msg.id],
-            tempToRealIdMap.current[msg.temp_id]
-          ].filter(Boolean);
+          // Fallback: if no temp_id, avoid duplicates by real ID
+          const exists = updated.some((m) => m.id === data.id);
+          if (!exists) {
+            updated.push(realMessage);
+          }
 
-          const matches =
-            messageIdsToCheck.includes(data.message_id) ||
-            messageIdsToCheck.includes(data.id) ||
-            msg.id === data.message_id ||
-            msg.id === data.id;
+          return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        });
 
-          if (matches) {
-            // If seen_by is provided, update it
-            if (data.seen_by) {
-              console.log("👀 Updating seen_by for message:", msg.id);
+        // 2. REAL-TIME SEEN STATUS UPDATES - FIXED
+      } else if (type === "read_receipt") {
+        console.log("👀 REAL-TIME: Read receipt received", data);
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === data.message_id) {
+              const currentSeenBy = msg.seen_by || [];
+              const readerId = data.reader_id || data.user_id;
+
+              // Check if this user already marked as seen
+              const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
+
+              if (!alreadySeen && readerId) {
+                console.log(`✅ REAL-TIME: Marking message ${data.message_id} as seen by user ${readerId}`);
+
+                // Get reader info - IMPORTANT: Use friends list or selectedFriend
+                const reader = friends.find(f => f.id === readerId) || selectedFriend;
+
+                return {
+                  ...msg,
+                  is_read: true,
+                  read_at: data.read_at || new Date().toISOString(),
+                  seen_by: [
+                    ...currentSeenBy,
+                    {
+                      user_id: readerId,
+                      username: reader?.username || 'Friend',
+                      avatar_url: getUserAvatar(reader),
+                      seen_at: data.read_at || new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
+            }
+            return msg;
+          })
+        );
+
+        // 3. Message updated with seen_by information
+      } else if (type === "message_updated") {
+        console.log("🔄 Message updated with seen info:", data);
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            const messageIdsToCheck = [
+              msg.id,
+              msg.temp_id,
+              tempToRealIdMap.current[msg.id],
+              tempToRealIdMap.current[msg.temp_id]
+            ].filter(Boolean);
+
+            const matches =
+              messageIdsToCheck.includes(data.message_id) ||
+              messageIdsToCheck.includes(data.id) ||
+              msg.id === data.message_id ||
+              msg.id === data.id;
+
+            if (matches) {
+              // If seen_by is provided, update it
+              if (data.seen_by) {
+                console.log("👀 Updating seen_by for message:", msg.id);
+                return {
+                  ...msg,
+                  content: data.content || msg.content,
+                  message_type: data.message_type || msg.message_type,
+                  updated_at: data.updated_at,
+                  edited: true,
+                  is_read: data.is_read !== undefined ? data.is_read : msg.is_read,
+                  read_at: data.read_at || msg.read_at,
+                  seen_by: Array.isArray(data.seen_by) ? data.seen_by : msg.seen_by,
+                };
+              }
+
+              // Regular message update
               return {
                 ...msg,
                 content: data.content || msg.content,
                 message_type: data.message_type || msg.message_type,
                 updated_at: data.updated_at,
                 edited: true,
-                is_read: data.is_read !== undefined ? data.is_read : msg.is_read,
-                read_at: data.read_at || msg.read_at,
-                seen_by: Array.isArray(data.seen_by) ? data.seen_by : msg.seen_by,
               };
             }
-            
-            // Regular message update
-            return {
-              ...msg,
-              content: data.content || msg.content,
-              message_type: data.message_type || msg.message_type,
-              updated_at: data.updated_at,
-              edited: true,
-            };
-          }
-          return msg;
-        })
-      );
+            return msg;
+          })
+        );
 
-    // 4. Typing indicator
-    } else if (type === "typing") {
-      setFriendTyping(!!data.is_typing);
+        // 4. Typing indicator
+      } else if (type === "typing") {
+        setFriendTyping(!!data.is_typing);
 
-    // 5. Message deleted
-    } else if (type === "message_deleted") {
-      setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
-    }
-  },
-  [getAvatarUrl, friends, selectedFriend] // ADD friends and selectedFriend to dependencies
-);
+        // 5. Message deleted
+      } else if (type === "message_deleted") {
+        setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
+      }
+    },
+    [getAvatarUrl, friends, selectedFriend, getUserAvatar]
+  );
 
   const handleWebSocketOpen = useCallback(() => {
     console.log('[WS] Connected');
@@ -332,167 +397,167 @@ const handleWebSocketMessage = useCallback(
     debug: true,
   });
 
-/* --------------------------------------------------------------------- */
-/* Enhanced Auto-Seen Observer */
-/* --------------------------------------------------------------------- */
-useEffect(() => {
-  if (!messagesContainerRef.current || !selectedFriend || !isConnected) return;
+  /* --------------------------------------------------------------------- */
+  /* Enhanced Auto-Seen Observer */
+  /* --------------------------------------------------------------------- */
+  useEffect(() => {
+    if (!messagesContainerRef.current || !selectedFriend || !isConnected) return;
 
-  const container = messagesContainerRef.current;
-  let observedMessages = new Set();
+    const container = messagesContainerRef.current;
+    let observedMessages = new Set();
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      const messagesToMarkAsRead = [];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const messagesToMarkAsRead = [];
 
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const messageId = parseInt(entry.target.getAttribute('data-message-id'));
-          const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
-          const isFriendMessage = entry.target.getAttribute('data-is-friend') === 'true';
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const messageId = parseInt(entry.target.getAttribute('data-message-id'));
+            const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
+            const isFriendMessage = entry.target.getAttribute('data-is-friend') === 'true';
 
-          if (messageId && isUnread && isFriendMessage && !observedMessages.has(messageId)) {
-            messagesToMarkAsRead.push(messageId);
-            observedMessages.add(messageId);
-          }
-        }
-      });
-
-      // Process messages to mark as read
-      if (messagesToMarkAsRead.length > 0) {
-        console.log(`👁️ Auto-marking ${messagesToMarkAsRead.length} messages as read:`, messagesToMarkAsRead);
-        messagesToMarkAsRead.forEach((messageId) => {
-          markMessageAsRead(messageId);
-        });
-      }
-    },
-    {
-      root: container,
-      rootMargin: '0px 0px -100px 0px', // Trigger when 100px from bottom
-      threshold: 0.8, // 80% visible
-    }
-  );
-
-  const markMessageAsRead = async (messageId) => {
-    try {
-      console.log(`📨 SENDING read receipt for message ${messageId}`);
-      
-      // Send read receipt via WebSocket
-      const success = sendWsMessage({
-        type: 'read',
-        message_id: messageId,
-      });
-
-      if (!success) {
-        console.warn('❌ Failed to send WebSocket read receipt');
-        observedMessages.delete(messageId);
-        return;
-      }
-
-      // OPTIMISTIC UPDATE - Update UI immediately
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === messageId) {
-            const currentSeenBy = msg.seen_by || [];
-            const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-            
-            if (!alreadySeen) {
-              console.log(`✅ OPTIMISTIC: Marking message ${messageId} as read`);
-              return {
-                ...msg,
-                is_read: true,
-                read_at: new Date().toISOString(),
-                seen_by: [
-                  ...currentSeenBy,
-                  {
-                    user_id: selectedFriend.id,
-                    username: selectedFriend.username,
-                    avatar_url: getUserAvatar(selectedFriend),
-                    seen_at: new Date().toISOString(),
-                  },
-                ],
-              };
+            if (messageId && isUnread && isFriendMessage && !observedMessages.has(messageId)) {
+              messagesToMarkAsRead.push(messageId);
+              observedMessages.add(messageId);
             }
           }
-          return msg;
-        })
-      );
-    } catch (error) {
-      console.error('❌ Failed to mark message as read:', error);
-      // Remove from observed so it can be retried
-      observedMessages.delete(messageId);
-    }
-  };
+        });
 
-  // Observe all unread friend messages
-  const unreadFriendMessages = container.querySelectorAll(
-    `[data-message-id][data-is-unread="true"][data-is-friend="true"]`
-  );
-
-  console.log(`👀 Observing ${unreadFriendMessages.length} unread messages`);
-  unreadFriendMessages.forEach((el) => {
-    observer.observe(el);
-  });
-
-  return () => {
-    observer.disconnect();
-    observedMessages.clear();
-  };
-}, [messages, selectedFriend, isConnected, sendWsMessage, getUserAvatar]);
-
-/* --------------------------------------------------------------------- */
-/* Mark All Messages as Read on Chat Open */
-/* --------------------------------------------------------------------- */
-useEffect(() => {
-  if (selectedFriend && isConnected && messages.length > 0) {
-    // Find unread messages from friend
-    const unreadMessages = messages.filter(
-      msg => !msg.is_temp && 
-             !msg.is_read && 
-             msg.sender_id === selectedFriend.id
+        // Process messages to mark as read
+        if (messagesToMarkAsRead.length > 0) {
+          console.log(`👁️ Auto-marking ${messagesToMarkAsRead.length} messages as read:`, messagesToMarkAsRead);
+          messagesToMarkAsRead.forEach((messageId) => {
+            markMessageAsRead(messageId);
+          });
+        }
+      },
+      {
+        root: container,
+        rootMargin: '0px 0px -100px 0px', // Trigger when 100px from bottom
+        threshold: 0.8, // 80% visible
+      }
     );
 
-    // Mark all as read
-    if (unreadMessages.length > 0) {
-      console.log(`📚 Marking ${unreadMessages.length} messages as read on chat open`);
-      
-      unreadMessages.forEach(msg => {
-        sendWsMessage({
-          type: 'read',
-          message_id: msg.id,
-        });
-      });
+    const markMessageAsRead = async (messageId) => {
+      try {
+        console.log(`📨 SENDING read receipt for message ${messageId}`);
 
-      // Optimistic update for all messages
-      setMessages(prev =>
-        prev.map(msg => {
-          if (!msg.is_temp && !msg.is_read && msg.sender_id === selectedFriend.id) {
-            const currentSeenBy = msg.seen_by || [];
-            const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-            
-            if (!alreadySeen) {
-              return {
-                ...msg,
-                is_read: true,
-                read_at: new Date().toISOString(),
-                seen_by: [
-                  ...currentSeenBy,
-                  {
-                    user_id: selectedFriend.id,
-                    username: selectedFriend.username,
-                    avatar_url: getUserAvatar(selectedFriend),
-                    seen_at: new Date().toISOString(),
-                  },
-                ],
-              };
+        // Send read receipt via WebSocket
+        const success = sendWsMessage({
+          type: 'read',
+          message_id: messageId,
+        });
+
+        if (!success) {
+          console.warn('❌ Failed to send WebSocket read receipt');
+          observedMessages.delete(messageId);
+          return;
+        }
+
+        // OPTIMISTIC UPDATE - Update UI immediately
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === messageId) {
+              const currentSeenBy = msg.seen_by || [];
+              const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
+
+              if (!alreadySeen) {
+                console.log(`✅ OPTIMISTIC: Marking message ${messageId} as read`);
+                return {
+                  ...msg,
+                  is_read: true,
+                  read_at: new Date().toISOString(),
+                  seen_by: [
+                    ...currentSeenBy,
+                    {
+                      user_id: selectedFriend.id,
+                      username: selectedFriend.username,
+                      avatar_url: getUserAvatar(selectedFriend),
+                      seen_at: new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
             }
-          }
-          return msg;
-        })
+            return msg;
+          })
+        );
+      } catch (error) {
+        console.error('❌ Failed to mark message as read:', error);
+        // Remove from observed so it can be retried
+        observedMessages.delete(messageId);
+      }
+    };
+
+    // Observe all unread friend messages
+    const unreadFriendMessages = container.querySelectorAll(
+      `[data-message-id][data-is-unread="true"][data-is-friend="true"]`
+    );
+
+    console.log(`👀 Observing ${unreadFriendMessages.length} unread messages`);
+    unreadFriendMessages.forEach((el) => {
+      observer.observe(el);
+    });
+
+    return () => {
+      observer.disconnect();
+      observedMessages.clear();
+    };
+  }, [messages, selectedFriend, isConnected, sendWsMessage, getUserAvatar]);
+
+  /* --------------------------------------------------------------------- */
+  /* Mark All Messages as Read on Chat Open */
+  /* --------------------------------------------------------------------- */
+  useEffect(() => {
+    if (selectedFriend && isConnected && messages.length > 0) {
+      // Find unread messages from friend
+      const unreadMessages = messages.filter(
+        msg => !msg.is_temp &&
+          !msg.is_read &&
+          msg.sender_id === selectedFriend.id
       );
+
+      // Mark all as read
+      if (unreadMessages.length > 0) {
+        console.log(`📚 Marking ${unreadMessages.length} messages as read on chat open`);
+
+        unreadMessages.forEach(msg => {
+          sendWsMessage({
+            type: 'read',
+            message_id: msg.id,
+          });
+        });
+
+        // Optimistic update for all messages
+        setMessages(prev =>
+          prev.map(msg => {
+            if (!msg.is_temp && !msg.is_read && msg.sender_id === selectedFriend.id) {
+              const currentSeenBy = msg.seen_by || [];
+              const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
+
+              if (!alreadySeen) {
+                return {
+                  ...msg,
+                  is_read: true,
+                  read_at: new Date().toISOString(),
+                  seen_by: [
+                    ...currentSeenBy,
+                    {
+                      user_id: selectedFriend.id,
+                      username: selectedFriend.username,
+                      avatar_url: getUserAvatar(selectedFriend),
+                      seen_at: new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
+            }
+            return msg;
+          })
+        );
+      }
     }
-  }
-}, [selectedFriend, messages.length, isConnected, sendWsMessage, getUserAvatar]);
+  }, [selectedFriend, messages.length, isConnected, sendWsMessage, getUserAvatar]);
 
   /* --------------------------------------------------------------------- */
   /* Voice Recording Logic */
@@ -678,21 +743,22 @@ useEffect(() => {
     // Define tempId FIRST
     const tempId = `temp-voice-${Date.now()}-${Math.random()}`;
 
-    // Now create temp message with FULL sender info (this fixes the avatar!)
+    // Create temp message with FULL sender info
     const tempMsg = {
       id: tempId,
-      temp_id: tempId, // Important for WebSocket replacement
+      temp_id: tempId,
       content: 'Voice message...',
       message_type: 'voice',
       is_temp: true,
       is_read: false,
       created_at: new Date().toISOString(),
       voice_duration: recordingTime,
+      file_size: blobToSend.size,
       sender_id: profile.id,
       sender: {
         id: profile.id,
         username: profile.username,
-        avatar_url: getUserAvatar(profile), // This was missing → avatar not showing!
+        avatar_url: getUserAvatar(profile),
       },
       seen_by: [],
       _uniqueId: Date.now() + Math.random(),
@@ -706,19 +772,38 @@ useEffect(() => {
 
     try {
       const formData = new FormData();
-      formData.append('voice_file', blobToSend, 'voice-message.webm'); // or .mp3
+
+      // Use the blob directly - backend will handle format conversion
+      formData.append('voice_file', blobToSend, `voice-${Date.now()}.webm`);
       formData.append('duration', recordingTime.toString());
 
-      // Optional: send tempId to backend so it can echo it back
-      // formData.append('temp_id', tempId);
+      // Optional: send temp_id to backend for WebSocket replacement
+      if (tempId) {
+        formData.append('temp_id', tempId);
+      }
+
+      console.log('🎤 Sending voice message:', {
+        duration: recordingTime,
+        fileSize: blobToSend.size,
+        fileType: blobToSend.type
+      });
 
       const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
+
+      console.log('✅ Voice message sent successfully:', sentMessage);
 
       // Replace temp message with real one
       setMessages(prev => {
         return prev.map(msg =>
           msg.id === tempId || msg.temp_id === tempId
-            ? { ...sentMessage, is_temp: false, sender: { ...sentMessage.sender, avatar_url: getAvatarUrl(sentMessage.sender?.avatar_url) } }
+            ? {
+              ...sentMessage,
+              is_temp: false,
+              sender: {
+                ...sentMessage.sender,
+                avatar_url: getAvatarUrl(sentMessage.sender?.avatar_url)
+              }
+            }
             : msg
         );
       });
@@ -726,8 +811,10 @@ useEffect(() => {
       setSuccess('Voice message sent!');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
-      console.error('Send failed:', err);
-      setError('Failed to send voice message');
+      console.error('❌ Voice message send failed:', err);
+      setError(err.message || 'Failed to send voice message');
+
+      // Remove temp message on error
       setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.temp_id !== tempId));
     } finally {
       setIsUploadingVoice(false);
@@ -827,6 +914,7 @@ useEffect(() => {
 
   const confirmDelete = async () => {
     if (!messageToDelete) return;
+    setIsDeleting(true);
     const { id, isTemp, message } = messageToDelete;
     const isImage = message.message_type === 'image';
 
@@ -846,6 +934,7 @@ useEffect(() => {
         setMessages(prev => [...prev, message]);
       }
     }
+    setIsDeleting(false);
     setDeleteConfirmOpen(false);
     setMessageToDelete(null);
   };
@@ -871,25 +960,34 @@ useEffect(() => {
       const chatMessages = await getPrivateChat(selectedFriend.id);
       const enhanced = chatMessages.map((msg) => {
         const detectMessageType = (message) => {
+          // Use backend message_type first
           if (message.message_type === 'image') return 'image';
           if (message.message_type === 'voice') return 'voice';
+          if (message.message_type === 'file') return 'file';
+          if (message.message_type === 'text') return 'text';
+
           const content = message.content || '';
+
+          // Voice message detection
           const isVoiceUrl =
-            content.match(/\.mp3$/i) ||
-            (content.includes('/voice_messages/') && (content.match(/\.mp3$/i) || content.includes('.webm')));
+            content.includes('/voice_messages/') ||
+            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
+            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
+
           if (isVoiceUrl) return "voice";
+
+          // Image detection
           const isImageUrl =
             content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && !content.includes('/voice_messages/')) ||
-            content.startsWith('data:image/');
+            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
+
           return isImageUrl ? "image" : "text";
         };
 
         const messageType = detectMessageType(msg);
-        let content = msg.content;
-        if (messageType === 'voice') {
-          content = ensureMp3VoiceUrl({ ...msg, message_type: messageType });
-        }
+
+        // Use content directly - backend provides proper Cloudinary URL
+        const content = msg.content;
 
         const sender = {
           id: msg.sender_id,
@@ -922,6 +1020,8 @@ useEffect(() => {
           is_read: msg.is_read || false,
           read_at: msg.read_at || null,
           seen_by,
+          voice_duration: msg.voice_duration || 0,
+          file_size: msg.file_size || 0,
         };
       });
 
@@ -1040,33 +1140,34 @@ useEffect(() => {
         return;
       }
 
-      const isVoiceMessage = message.message_type === 'voice' ||
-        message.content.includes('voice_messages') ||
-        message.content.match(/\.(mp3|mp4|wav|m4a|ogg|aac|flac)$/i);
+      // Determine message type
+      let messageType = message.message_type;
+      if (!messageType) {
+        // Fallback detection
+        if (message.content.includes('/voice_messages/') ||
+          message.content.match(/\.(mp3|wav|ogg|webm|m4a)$/i)) {
+          messageType = 'voice';
+        } else if (message.content.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+          messageType = 'image';
+        } else {
+          messageType = 'text';
+        }
+      }
 
-      const isImageMessage = !isVoiceMessage && (
-        message.message_type === 'image' ||
-        message.content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)
-      );
-
-      let payload = {
+      const payload = {
         content: message.content,
-        message_type: isVoiceMessage ? 'voice' : (isImageMessage ? 'image' : 'text'),
+        message_type: messageType,
         is_forwarded: true,
         original_sender: message.sender?.username || profile?.username || 'Unknown',
       };
 
-      let sentMessage;
-      if (isVoiceMessage && payload.message_type === 'voice') {
-        try {
-          sentMessage = await sendPrivateMessage(friend.id, payload);
-        } catch (voiceError) {
-          payload.message_type = 'file';
-          sentMessage = await sendPrivateMessage(friend.id, payload);
-        }
-      } else {
-        sentMessage = await sendPrivateMessage(friend.id, payload);
+      // Add voice-specific fields if it's a voice message
+      if (messageType === 'voice') {
+        payload.voice_duration = message.voice_duration;
+        payload.file_size = message.file_size;
       }
+
+      const sentMessage = await sendPrivateMessage(friend.id, payload);
 
       setForwardDialogOpen(false);
       setForwardingMessage(null);
@@ -1181,12 +1282,13 @@ useEffect(() => {
       setTimeout(() => setError(null), 3000);
     }
   };
+
   useEffect(() => {
-  const editedMessages = messages.filter(m => m.edited);
-  if (editedMessages.length > 0) {
-    console.log("📝 Currently edited messages:", editedMessages);
-  }
-}, [messages]);
+    const editedMessages = messages.filter(m => m.edited);
+    if (editedMessages.length > 0) {
+      console.log("📝 Currently edited messages:", editedMessages);
+    }
+  }, [messages]);
 
   /* --------------------------------------------------------------------- */
   /* Render */
@@ -1196,16 +1298,27 @@ useEffect(() => {
       sx={{
         display: 'flex',
         flexDirection: { xs: 'column', sm: 'row' },
-        height: { xs: 'calc(100vh - 120px)', sm: '75vh', md: 600 },
+        height: {
+          xs: 'calc(100vh - 50px)', // Better mobile height calculation
+          sm: '75vh',
+          md: 600
+        },
+        minHeight: { sm: 'auto' }, // Ensure minimum height on mobile
+        maxHeight: { sm: '75vh' }, // Prevent overflow
         borderRadius: { xs: '12px', sm: '16px' },
-        margin: { xs: 1, sm: 2, md: 0 },
-        overflow: 'hidden',
+        margin: { xs: -2, sm: 2, md: 0 },
+        overflow: 'auto',
         border: 1,
         borderColor: 'divider',
         bgcolor: 'background.paper',
-        width: { xs: 'calc(100% - 16px)', sm: 'calc(100% - 32px)', md: '100%' },
+        width: {
+          sm: 'calc(100% - 32px)',
+          md: '100%'
+        },
         maxWidth: { sm: '900px', md: 'none' },
         mx: { sm: 'auto', md: 0 },
+        // Ensure proper positioning
+        position: 'relative'
       }}
     >
       {/* Delete Confirmation */}
@@ -1251,11 +1364,19 @@ useEffect(() => {
               </Box>
             )}
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-              <Button onClick={() => setDeleteConfirmOpen(false)} variant="outlined">
+              <Button
+                onClick={() => setDeleteConfirmOpen(false)}
+                variant="outlined"
+              >
                 Cancel
               </Button>
-              <Button onClick={confirmDelete} variant="contained" color="error">
-                Delete
+              <Button
+                onClick={confirmDelete}
+                variant="contained"
+                color="error"
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete"} 
               </Button>
             </Box>
           </Box>
@@ -1338,7 +1459,7 @@ useEffect(() => {
         </Drawer>
 
         {/* Chat Area */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', minHeight: { xs: '300px', sm: 'auto' }, overflow: 'hidden' }}>
           {selectedFriend ? (
             <>
               {(!isMobile) && (
@@ -1354,14 +1475,16 @@ useEffect(() => {
 
               <Box
                 ref={messagesContainerRef}
+                className="messages-area"
                 sx={{
                   flex: 1,
                   overflowY: 'auto',
-                  px: 2,
-                  py: 2,
+                  px: { xs: 1, sm: 2 },
+                  py: { xs: 1, sm: 2 },
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 1,
+                  minHeight: { xs: '200px', sm: 'auto' },
                 }}
               >
                 {messages.length === 0 ? (
@@ -1389,7 +1512,17 @@ useEffect(() => {
               </Box>
 
               {/* Input Area */}
-              <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', gap: 1.5, alignItems: 'flex-end' }}>
+              <Box className="input-area" sx={{
+                p: { xs: 4, sm: 2 }, // Responsive padding
+                borderTop: 1,
+                borderColor: 'divider',
+                bgcolor: 'white',
+                display: 'flex',
+                gap: { xs: 1, sm: 1.5 }, // Responsive gap
+                alignItems: 'flex-end',
+                flexShrink: 0, // Prevent shrinking
+                minHeight: { xs: '60px', sm: 'auto' } // Ensure minimum height
+              }}>
                 {/* Recording UI */}
                 {isRecording && (
                   <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: 'error.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1433,7 +1566,7 @@ useEffect(() => {
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder={!selectedFriend ? 'Select a friend...' : 'Type a message...'}
+                  placeholder={!selectedFriend ? 'Select a friend...' : 'Aa...'}
                   value={newMessage}
                   onChange={handleInputChange}
                   onKeyPress={(e) => {
@@ -1445,7 +1578,16 @@ useEffect(() => {
                   multiline
                   maxRows={3}
                   disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '24px' }, bgcolor: '#f8f9fa' }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '24px',
+                      maxHeight: { xs: '44px', sm: 'none' }
+                    },
+                    bgcolor: '#f8f9fa',
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: '0.875rem', sm: '1rem' }
+                    }
+                  }}
                 />
 
                 {isRecording ? (

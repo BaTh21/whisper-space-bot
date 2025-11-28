@@ -48,6 +48,7 @@ const ChatMessage = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   /* ---------------------------------------------------------- */
   /*                     MESSAGE TYPE DETECTION                */
@@ -55,30 +56,27 @@ const ChatMessage = ({
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
     if (msg.message_type === 'voice') return 'voice';
+    if (msg.message_type === 'file') return 'file';
+    if (msg.message_type === 'text') return 'text';
 
-    const content = msg.content || '';
+    const content = (msg.content || '').trim();
 
     const isVoiceUrl =
-      content.match(/\.mp3$/i) ||
-      content.startsWith('data:audio/mp3') ||
-      content.startsWith('data:audio/mpeg') ||
-      (content.startsWith('blob:') && content.includes('audio/mp3'));
+      content.includes('/voice_messages/') ||
+      content.includes('/video/upload/') ||
+      /\.(mp3|m4a|wav|ogg|aac|opus|flac|webm|mp4)$/i.test(content);
 
     if (isVoiceUrl) return 'voice';
 
     const isImageUrl =
-      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|webm)$/i) ||
-      content.includes('cloudinary.com') ||
-      content.includes('res.cloudinary.com') ||
-      content.startsWith('data:image/') ||
-      content.startsWith('data:video/') ||
-      content.startsWith('blob:');
+      /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(content) ||
+      (content.includes('cloudinary.com') && content.includes('/image/upload/')) ||
+      content.startsWith('data:image/');
 
     if (isImageUrl) return 'image';
 
     return 'text';
   };
-
   const actualMessageType = detectMessageType(message);
 
   /* ---------------------------------------------------------- */
@@ -92,21 +90,26 @@ const ChatMessage = ({
   const handleClose = () => setAnchorEl(null);
 
   const handleEdit = async () => {
-    if (editText.trim() && editText !== message.content && onUpdate) {
-      try {
-        // Pass both the message ID and whether it's temporary
-        await onUpdate(message.id, editText, message.is_temp);
-        setEditing(false);
-        handleClose();
-      } catch (err) {
-        console.error('Edit error:', err);
-        // Don't close editing mode on error - let user retry
-      }
-    } else {
-      setEditing(false);
-      handleClose();
-    }
-  };
+  if (!editText.trim() || editText === message.content || !onUpdate) {
+    setEditing(false);
+    handleClose();
+    return;
+  }
+
+  setIsEditing(true); // start loading BEFORE async call
+
+  try {
+    await onUpdate(message.id, editText, message.is_temp);
+    setEditing(false);
+    handleClose();
+  } catch (err) {
+    console.error('Edit error:', err);
+    // keep editing open for retry
+  }
+
+  setIsEditing(false); // stop loading AFTER async call
+};
+
 
   const handleCancelEdit = () => {
     setEditText(message.content); // Reset to original
@@ -287,81 +290,81 @@ const ChatMessage = ({
     }
   };
 
-const renderSeenAvatar = () => {
-  // Only show for MY messages that have been seen
-  if (!isMine) return null;
+  const renderSeenAvatar = () => {
+    // Only show for MY messages that have been seen
+    if (!isMine) return null;
 
-  // Get the reader (should be the friend for 1-on-1 chat)
-  const reader = currentFriend;
-  if (!reader) return null;
+    // Get the reader (should be the friend for 1-on-1 chat)
+    const reader = currentFriend;
+    if (!reader) return null;
 
-  // Check if this specific friend has seen the message
-  const hasSeen = Array.isArray(message.seen_by) && 
-                  message.seen_by.some(s => s.user_id === reader.id);
+    // Check if this specific friend has seen the message
+    const hasSeen = Array.isArray(message.seen_by) &&
+      message.seen_by.some(s => s.user_id === reader.id);
 
-  if (hasSeen) {
-    const seenInfo = message.seen_by.find(s => s.user_id === reader.id);
-    
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'flex-end', 
-        mt: 0.5, 
-        gap: 0.5,
-        minHeight: 20 // Prevent layout shift
-      }}>
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            fontSize: '0.7rem', 
-            color: 'text.secondary', 
-            fontWeight: 500 
-          }}
-        >
-          Seen
-        </Typography>
-        <Avatar
-          src={getAvatarUrl(reader.avatar_url)}
-          sx={{ 
-            width: 16, 
-            height: 16,
-            border: '1px solid',
-            borderColor: 'background.paper'
-          }}
-          onError={() => setSeenAvatarError(true)}
-        >
-          {getUserInitials(reader.username)}
-        </Avatar>
-      </Box>
-    );
-  }
+    if (hasSeen) {
+      const seenInfo = message.seen_by.find(s => s.user_id === reader.id);
 
-  // Show "Delivered" status for messages that are delivered but not seen
-  if (message.is_read && !hasSeen) {
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'flex-end', 
-        mt: 0.5 
-      }}>
-        <Typography 
-          variant="caption" 
-          sx={{ 
-            fontSize: '0.7rem', 
-            color: 'text.secondary',
-            fontWeight: 500
-          }}
-        >
-          Delivered
-        </Typography>
-      </Box>
-    );
-  }
+      return (
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          mt: 0.5,
+          gap: 0.5,
+          minHeight: 20 // Prevent layout shift
+        }}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.7rem',
+              color: 'text.secondary',
+              fontWeight: 500
+            }}
+          >
+            Seen
+          </Typography>
+          <Avatar
+            src={getAvatarUrl(reader.avatar_url)}
+            sx={{
+              width: 16,
+              height: 16,
+              border: '1px solid',
+              borderColor: 'background.paper'
+            }}
+            onError={() => setSeenAvatarError(true)}
+          >
+            {getUserInitials(reader.username)}
+          </Avatar>
+        </Box>
+      );
+    }
 
-  return null;
-};
+    // Show "Delivered" status for messages that are delivered but not seen
+    if (message.is_read && !hasSeen) {
+      return (
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          mt: 0.5
+        }}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.7rem',
+              color: 'text.secondary',
+              fontWeight: 500
+            }}
+          >
+            Delivered
+          </Typography>
+        </Box>
+      );
+    }
+
+    return null;
+  };
 
   /* ---------------------------------------------------------- */
   /*                     RENDER VOICE                           */
@@ -371,75 +374,121 @@ const renderSeenAvatar = () => {
 
     return (
       <Box sx={{ mb: 1 }}>
+        {/* Hidden audio element — plays real MP3 from backend */}
         <audio
           ref={audioRef}
-          src={message.content}
+          src={message.content}               // Direct MP3 URL
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleEnded}
           onLoadedMetadata={handleLoadedMetadata}
           preload="metadata"
         />
+
+        {/* Beautiful voice message bubble */}
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 2,
-            p: 2,
-            bgcolor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-            borderRadius: '12px',
+            gap: 1.5,
+            p: 1.5,
+            bgcolor: isMine ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)',
+            borderRadius: '16px',
             border: '1px solid',
-            borderColor: isMine ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
+            borderColor: isMine ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
             cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            maxWidth: '280px',
             '&:hover': {
-              bgcolor: isMine ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
+              bgcolor: isMine ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.09)',
+              transform: 'translateY(-1px)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             },
-            maxWidth: '300px',
           }}
           onClick={handlePlayVoice}
         >
+          {/* Play/Stop Button */}
           <IconButton
             size="small"
             sx={{
               bgcolor: isMine ? 'white' : 'primary.main',
               color: isMine ? 'primary.main' : 'white',
+              width: 32,
+              height: 32,
               '&:hover': {
                 bgcolor: isMine ? 'grey.100' : 'primary.dark',
               },
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
             }}
           >
             {isPlaying ? <StopIcon /> : <PlayArrowIcon />}
           </IconButton>
 
+          {/* Text + Progress */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5, color: isMine ? 'white' : 'text.primary' }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                mb: 0.5,
+                color: isMine ? 'white' : 'text.primary',
+                fontSize: '0.8rem',
+                // display: 'flex',
+                // alignItems: 'center',
+                // gap: 0.5,
+              }}
+            >
               Voice message
+              <Box
+                component="span"
+                sx={{
+                  fontSize: '0.65rem',
+                  fontWeight: 'bold',
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  px: 0.8,
+                  py: 0.2,
+                  borderRadius: 1,
+                  letterSpacing: '0.5px',
+                }}
+              >
+                MP3
+              </Box>
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {/* Progress Bar */}
               <Box
                 sx={{
                   flex: 1,
                   height: 4,
-                  bgcolor: isMine ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
-                  borderRadius: 2,
-                  overflow: 'hidden'
+                  bgcolor: isMine ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.12)',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)',
                 }}
               >
                 <Box
                   sx={{
                     height: '100%',
-                    bgcolor: isMine ? 'white' : 'primary.main',
                     width: `${progress}%`,
-                    borderRadius: 2,
-                    transition: 'width 0.1s ease'
+                    bgcolor: isMine ? 'white' : 'primary.main',
+                    borderRadius: 3,
+                    transition: 'width 0.15s ease-out',
+                    boxShadow: '0 0 8px rgba(255,255,255,0.4)',
                   }}
                 />
               </Box>
+
+              {/* Duration */}
               <Typography
                 variant="caption"
                 sx={{
-                  opacity: 0.7,
-                  minWidth: 40,
-                  color: isMine ? 'white' : 'text.primary'
+                  fontWeight: 'bold',
+                  minWidth: 48,
+                  textAlign: 'right',
+                  color: isMine ? 'white' : 'text.primary',
+                  opacity: 0.9,
+                  fontSize: '0.75rem',
                 }}
               >
                 {Math.floor(message.voice_duration || duration || 0)}s
@@ -546,7 +595,7 @@ const renderSeenAvatar = () => {
       sx={{
         display: 'flex',
         justifyContent: isMine ? 'flex-end' : 'flex-start',
-        mb: 2,
+        mb: 1,
         px: 1,
         position: 'relative',
       }}
@@ -664,7 +713,7 @@ const renderSeenAvatar = () => {
         )}
 
         {editing ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 300 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <TextField
               size="small"
               value={editText}
@@ -687,20 +736,20 @@ const renderSeenAvatar = () => {
                 size="small"
                 variant="contained"
                 onClick={handleEdit}
-                disabled={!editText.trim() || editText === message.content}
+                disabled={isEditing}
               >
-                Save
+                {isEditing ? "Saving..." : "Save"}
               </Button>
             </Box>
           </Box>
         ) : (
-          <Box sx={{ position: 'relative' }} className="message-bubble">
+          <Box sx={{ position: 'relative' }}>
             {/* Message bubble */}
             <Box
               sx={{
                 bgcolor: isMine ? '#0088cc' : '#f0f0f0',
                 color: isMine ? 'white' : 'text.primary',
-                p: 2,
+                p: 1.4,
                 borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                 position: 'relative',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
@@ -711,6 +760,7 @@ const renderSeenAvatar = () => {
                     opacity: 1
                   }
                 },
+
               }}
             >
               {/* Forwarded badge */}

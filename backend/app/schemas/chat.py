@@ -3,6 +3,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
+from pydantic import validator, field_validator
 
 from app.models.private_message import MessageType
 
@@ -16,6 +17,31 @@ class MessageCreate(BaseModel):
     original_sender: Optional[str] = None  
     voice_duration: Optional[float] = None 
     file_size: Optional[int] = None 
+    
+    @field_validator('voice_duration')
+    @classmethod
+    def voice_duration_required(cls, v, info):
+        # Get the entire data being validated
+        data = getattr(info, 'data', {})
+        message_type = data.get('message_type')
+        
+        if message_type == 'voice' and v is None:
+            raise ValueError('voice_duration is required for voice messages')
+        return v
+
+    @field_validator('content')
+    @classmethod
+    def content_must_be_url_for_voice(cls, v, info):
+        # Get the entire data being validated
+        data = getattr(info, 'data', {})
+        message_type = data.get('message_type')
+        
+        if message_type == 'voice':
+            if not v.startswith(('http://', 'https://')):
+                raise ValueError('Voice message content must be a valid URL')
+        elif not v or not v.strip():
+            raise ValueError('Text message cannot be empty')
+        return v
     
 
 class MessageSeenByUser(BaseModel):
@@ -42,7 +68,6 @@ class MessageOut(TimestampMixin):
     message_type: str
     is_read: bool = False
     reply_to_id: Optional[int] = None
-    reply_preview: Optional[ReplyPreview] = None  # NEW: Compact reply preview
     reply_to: Optional["MessageOut"] = None
     read_at: Optional[str] = None  
     delivered_at: Optional[str] = None
