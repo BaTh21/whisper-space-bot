@@ -1,28 +1,30 @@
-import { AppBar, Box, Button, Toolbar, Typography, Avatar, Menu, MenuItem, Tabs, Tab, IconButton, Drawer } from '@mui/material';
+//Layout.jsx
+import { AppBar, Avatar, Box, Button, Drawer, IconButton, Menu, MenuItem, Tab, Tabs, Toolbar, Typography } from '@mui/material';
 import Badge from '@mui/material/Badge';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getPendingGroupInvites, getMe } from '../services/api';
-import InboxComponent from './dialogs/InboxComponentDialog';
+import { getMe, getPendingGroupInvites } from '../services/api';
 import DeleteDialog from './dialogs/DeleteDialog';
+import InboxComponent from './dialogs/InboxComponentDialog';
 import LogoImg from '/whisperspace.png';
 
+import BlockIcon from '@mui/icons-material/Block';
+import GroupsIcon from '@mui/icons-material/Groups';
+import HomeIcon from '@mui/icons-material/Home';
+import LogoutIcon from '@mui/icons-material/Logout';
 import MailIcon from '@mui/icons-material/Mail';
 import MenuIcon from '@mui/icons-material/Menu';
-import HomeIcon from '@mui/icons-material/Home';
-import ReviewsIcon from '@mui/icons-material/RateReview';
 import PeopleIcon from '@mui/icons-material/People';
-import GroupsIcon from '@mui/icons-material/Groups';
-import StickyNote2Icon from '@mui/icons-material/StickyNote2';
-import PersonSearchIcon from '@mui/icons-material/PersonSearch';
-import BlockIcon from '@mui/icons-material/Block';
 import PersonIcon from '@mui/icons-material/Person';
-import LogoutIcon from '@mui/icons-material/Logout';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+import ReviewsIcon from '@mui/icons-material/RateReview';
+import StickyNote2Icon from '@mui/icons-material/StickyNote2';
 
 const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [popup, setPopup] = useState(false);
   const [invites, setInvites] = useState([]);
   const [open, setOpen] = useState(false);
@@ -30,7 +32,19 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const [showLabel, setShowLabel] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const [activeTab, setActiveTab] = useState(0);
+  // Map URL paths to tab indices
+  const pathToTabMap = {
+    '/feed': 0,
+    '/messages': 1,
+    '/friends': 2,
+    '/groups': 3,
+    '/notes': 4,
+    '/search': 5,
+    '/blocked': 6,
+    '/profile': 7,
+  };
+
+  const [activeTab, setActiveTab] = useState(pathToTabMap[location.pathname] || 0);
 
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
@@ -48,7 +62,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
     try {
       const res = await getMe();
       setProfile(res);
-      console.log("Profile", res);
     } catch (error) {
       console.log("Failed to get profile", error);
     }
@@ -60,6 +73,12 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
       fetchMe();
     }
   }, [isAuthenticated]);
+
+  // Update active tab when URL changes
+  useEffect(() => {
+    const currentTab = pathToTabMap[location.pathname] || 0;
+    setActiveTab(currentTab);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -80,13 +99,35 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   };
 
   const handleHomePageClick = () => {
-    navigate("/");
+    navigate("/feed");
   }
 
   const totalInvites = invites.length;
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
-  const handleTabChange = (event, newValue) => setActiveTab(newValue);
+  
+  // Map tab indices to URL paths
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+    const tabToPathMap = {
+      0: '/feed',
+      1: '/messages',
+      2: '/friends',
+      3: '/groups',
+      4: '/notes',
+      5: '/search',
+      6: '/blocked',
+      7: '/profile',
+    };
+    
+    const newPath = tabToPathMap[newValue] || '/feed';
+    navigate(newPath);
+    
+    // Call parent callback if provided
+    if (setNewActiveTab) {
+      setNewActiveTab(newValue);
+    }
+  };
 
   const drawer = (
     <Box
@@ -151,46 +192,14 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
           },
         }}
       >
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(0)
-          }}
-          icon={<HomeIcon />} label={showLabel ? "Feed" : null} />
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(1)
-          }}
-          icon={<ReviewsIcon />} label={showLabel ? "Messages" : null} />
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(2)
-          }}
-          icon={<PeopleIcon />} label={showLabel ? "Friends" : null} />
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(3)
-          }}
-          icon={<GroupsIcon />} label={showLabel ? "Groups" : null} />
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(4)
-          }}
-          icon={<StickyNote2Icon />} label={showLabel ? "Notes" : null} />
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(5)
-          }}
-          icon={<PersonSearchIcon />} label={showLabel ? "Search" : null} />
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(6)
-          }}
-          icon={<BlockIcon />} label={showLabel ? "Blocked" : null} />
-        <Tab
-          onClick={() => {
-            if (setNewActiveTab) setNewActiveTab(7)
-          }}
-          icon={<PersonIcon />} label={showLabel ? "Profile" : null} />
+        <Tab icon={<HomeIcon />} label={showLabel ? "Feed" : null} />
+        <Tab icon={<ReviewsIcon />} label={showLabel ? "Messages" : null} />
+        <Tab icon={<PeopleIcon />} label={showLabel ? "Friends" : null} />
+        <Tab icon={<GroupsIcon />} label={showLabel ? "Groups" : null} />
+        <Tab icon={<StickyNote2Icon />} label={showLabel ? "Notes" : null} />
+        <Tab icon={<PersonSearchIcon />} label={showLabel ? "Search" : null} />
+        <Tab icon={<BlockIcon />} label={showLabel ? "Blocked" : null} />
+        <Tab icon={<PersonIcon />} label={showLabel ? "Profile" : null} />
       </Tabs>
     </Box>
   );
@@ -265,7 +274,11 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
 
                   <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
                     <MenuItem
-                      onClick={() => { handleMenuClose(); if (onProfileClick) onProfileClick(7); }}>
+                      onClick={() => { 
+                        handleMenuClose(); 
+                        navigate('/profile');
+                        if (onProfileClick) onProfileClick(7); 
+                      }}>
                       <PersonIcon />
                       Profile
                     </MenuItem>
