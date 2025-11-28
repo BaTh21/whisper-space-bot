@@ -20,15 +20,23 @@ class MessageCreate(BaseModel):
     
     @field_validator('voice_duration')
     @classmethod
-    def voice_duration_required(cls, v, values):
-        if values.get('message_type') == 'voice' and v is None:
+    def voice_duration_required(cls, v, info):
+        # Get the entire data being validated
+        data = getattr(info, 'data', {})
+        message_type = data.get('message_type')
+        
+        if message_type == 'voice' and v is None:
             raise ValueError('voice_duration is required for voice messages')
         return v
 
     @field_validator('content')
     @classmethod
-    def content_must_be_url_for_voice(cls, v, values):
-        if values.get('message_type') == 'voice':
+    def content_must_be_url_for_voice(cls, v, info):
+        # Get the entire data being validated
+        data = getattr(info, 'data', {})
+        message_type = data.get('message_type')
+        
+        if message_type == 'voice':
             if not v.startswith(('http://', 'https://')):
                 raise ValueError('Voice message content must be a valid URL')
         elif not v or not v.strip():

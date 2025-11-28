@@ -88,6 +88,62 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const mobileStyles = `
+    @media (max-width: 599px) {
+      .chat-container {
+        height: calc(100vh - 80px) !important;
+        min-height: 400px;
+      }
+      
+      .messages-area {
+        min-height: 200px;
+        max-height: calc(100vh - 200px) !important;
+        flex: 1;
+        overflow-y: auto;
+      }
+      
+      .input-area {
+        padding: 8px !important;
+        min-height: 60px;
+        position: sticky;
+        bottom: 0;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+      }
+      
+      /* Ensure input field is visible */
+      .input-area .MuiTextField-root {
+        max-height: 44px;
+      }
+      
+      /* Make sure messages don't overflow */
+      .messages-area .message-bubble {
+        max-width: 85% !important;
+      }
+    }
+    
+    @media (max-width: 400px) {
+      .chat-container {
+        height: calc(100vh - 60px) !important;
+      }
+      
+      .messages-area {
+        max-height: calc(100vh - 180px) !important;
+      }
+    }
+  `;
+
+    const styleElement = document.createElement('style');
+    styleElement.textContent = mobileStyles;
+    document.head.appendChild(styleElement);
+
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   const mediaRecorderRef = useRef(null);
   const recordingIntervalRef = useRef(null);
@@ -858,6 +914,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   const confirmDelete = async () => {
     if (!messageToDelete) return;
+    setIsDeleting(true);
     const { id, isTemp, message } = messageToDelete;
     const isImage = message.message_type === 'image';
 
@@ -877,6 +934,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         setMessages(prev => [...prev, message]);
       }
     }
+    setIsDeleting(false);
     setDeleteConfirmOpen(false);
     setMessageToDelete(null);
   };
@@ -1240,16 +1298,27 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       sx={{
         display: 'flex',
         flexDirection: { xs: 'column', sm: 'row' },
-        height: { xs: 'calc(100vh - 120px)', sm: '75vh', md: 600 },
+        height: {
+          xs: 'calc(100vh - 50px)', // Better mobile height calculation
+          sm: '75vh',
+          md: 600
+        },
+        minHeight: { sm: 'auto' }, // Ensure minimum height on mobile
+        maxHeight: { sm: '75vh' }, // Prevent overflow
         borderRadius: { xs: '12px', sm: '16px' },
-        margin: { xs: 1, sm: 2, md: 0 },
-        overflow: 'hidden',
+        margin: { xs: -2, sm: 2, md: 0 },
+        overflow: 'auto',
         border: 1,
         borderColor: 'divider',
         bgcolor: 'background.paper',
-        width: { xs: 'calc(100% - 16px)', sm: 'calc(100% - 32px)', md: '100%' },
+        width: {
+          sm: 'calc(100% - 32px)',
+          md: '100%'
+        },
         maxWidth: { sm: '900px', md: 'none' },
         mx: { sm: 'auto', md: 0 },
+        // Ensure proper positioning
+        position: 'relative'
       }}
     >
       {/* Delete Confirmation */}
@@ -1295,11 +1364,19 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               </Box>
             )}
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-              <Button onClick={() => setDeleteConfirmOpen(false)} variant="outlined">
+              <Button
+                onClick={() => setDeleteConfirmOpen(false)}
+                variant="outlined"
+              >
                 Cancel
               </Button>
-              <Button onClick={confirmDelete} variant="contained" color="error">
-                Delete
+              <Button
+                onClick={confirmDelete}
+                variant="contained"
+                color="error"
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete"} 
               </Button>
             </Box>
           </Box>
@@ -1382,7 +1459,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         </Drawer>
 
         {/* Chat Area */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', minHeight: { xs: '300px', sm: 'auto' }, overflow: 'hidden' }}>
           {selectedFriend ? (
             <>
               {(!isMobile) && (
@@ -1398,14 +1475,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
               <Box
                 ref={messagesContainerRef}
+                className="messages-area"
                 sx={{
                   flex: 1,
                   overflowY: 'auto',
-                  px: 2,
-                  py: 2,
+                  px: { xs: 1, sm: 2 },
+                  py: { xs: 1, sm: 2 },
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 1,
+                  minHeight: { xs: '200px', sm: 'auto' },
                 }}
               >
                 {messages.length === 0 ? (
@@ -1433,7 +1512,17 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               </Box>
 
               {/* Input Area */}
-              <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', gap: 1.5, alignItems: 'flex-end' }}>
+              <Box className="input-area" sx={{
+                p: { xs: 4, sm: 2 }, // Responsive padding
+                borderTop: 1,
+                borderColor: 'divider',
+                bgcolor: 'white',
+                display: 'flex',
+                gap: { xs: 1, sm: 1.5 }, // Responsive gap
+                alignItems: 'flex-end',
+                flexShrink: 0, // Prevent shrinking
+                minHeight: { xs: '60px', sm: 'auto' } // Ensure minimum height
+              }}>
                 {/* Recording UI */}
                 {isRecording && (
                   <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: 'error.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1477,7 +1566,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 <TextField
                   fullWidth
                   size="small"
-                  placeholder={!selectedFriend ? 'Select a friend...' : 'Type a message...'}
+                  placeholder={!selectedFriend ? 'Select a friend...' : 'Aa...'}
                   value={newMessage}
                   onChange={handleInputChange}
                   onKeyPress={(e) => {
@@ -1489,7 +1578,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   multiline
                   maxRows={3}
                   disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '24px' }, bgcolor: '#f8f9fa' }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '24px',
+                      maxHeight: { xs: '44px', sm: 'none' }
+                    },
+                    bgcolor: '#f8f9fa',
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: '0.875rem', sm: '1rem' }
+                    }
+                  }}
                 />
 
                 {isRecording ? (
