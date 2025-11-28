@@ -19,15 +19,10 @@ from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadRespo
                              MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
 from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, extract_public_id_from_url
+from app.core.cloudinary import check_cloudinary_health, upload_voice_message
+from app.core.config import settings
 
 router = APIRouter()
-
-# Cloudinary configuration
-cloudinary.config(
-    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
-)
 
 # Mark messages as read endpoint
 @router.post("/messages/read")
@@ -521,77 +516,87 @@ async def send_voice_message(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Upload voice message to Cloudinary and send to friend with Telegram-style replies
+    FIXED VERSION: Better error handling and validation
     """
     try:
+        print(f"🎤 Starting voice message from user {current_user.id} → friend {friend_id}")
+
+        # Check friendship
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 
-        # Validate file type
-        allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4']
-        if not voice_file.content_type or voice_file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A")
+        # Read and validate file
+        contents = await voice_file.read()
+        file_size = len(contents)
 
-        # Validate file size (10MB limit)
-        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-        try:
-            contents = await voice_file.read()
-            file_size = len(contents)
-            
-            if file_size > MAX_FILE_SIZE:
-                raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
-                
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not read voice message: {str(e)}")
+        if file_size == 0:
+            raise HTTPException(status_code=400, detail="Empty audio file")
+        if file_size > 15 * 1024 * 1024:  # 15MB max
+            raise HTTPException(status_code=400, detail="Voice message too large (max 15MB)")
 
-        # Upload to Cloudinary
+        # Validate duration
+        if duration <= 0 or duration > 600:  # max 10 minutes
+            raise HTTPException(status_code=400, detail="Invalid voice duration")
+
+        print(f"📁 File received: {file_size} bytes, {duration:.1f}s")
+
+        # FIX: Better error handling for upload
         try:
-            upload_result = cloudinary.uploader.upload(
-                contents,
-                resource_type="video",
-                folder="whisper_space/voice_messages",
-                public_id=f"user_{current_user.id}_{uuid.uuid4().hex}",
-                overwrite=False
+            upload_result = upload_voice_message(
+                file_content=contents,
+                public_id=f"voice_{current_user.id}_{uuid.uuid4().hex[:8]}",  # shorter ID
+                folder="voice_messages"
             )
             voice_url = upload_result["secure_url"]
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not upload voice message to cloud storage: {str(e)}")
+            
+        except Exception as upload_error:
+            print(f"❌ Cloudinary upload failed: {upload_error}")
+            # FIX: More specific error message
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to upload voice message: {str(upload_error)}"
+            )
 
-        # Create message in database
-        msg = create_private_message(
-            db=db,
-            sender_id=current_user.id,
-            receiver_id=friend_id,
-            content=voice_url,
-            message_type="voice",
-            reply_to_id=reply_to_id,
-            voice_duration=duration,
-            file_size=file_size
-        )
+        # FIX: Wrap database operations in try-catch
+        try:
+            msg = create_private_message(
+                db=db,
+                sender_id=current_user.id,
+                receiver_id=friend_id,
+                content=voice_url,
+                message_type="voice",
+                reply_to_id=reply_to_id,
+                voice_duration=round(duration, 2),
+                file_size=file_size
+            )
+        except Exception as db_error:
+            print(f"❌ Database error: {db_error}")
+            raise HTTPException(status_code=500, detail="Failed to save message to database")
 
-        # Get full message with relationships
+        # Load full message with all relations
         full_msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
         ).filter(PrivateMessage.id == msg.id).first()
 
         if not full_msg:
-            raise HTTPException(status_code=500, detail="Failed to retrieve created voice message")
+            raise HTTPException(status_code=500, detail="Failed to load sent message")
 
-        # Prepare seen information
-        seen_by = []
-        for status in full_msg.seen_statuses:
-            seen_by.append({
-                "user_id": status.user.id,
-                "username": status.user.username,
-                "avatar_url": status.user.avatar_url,
-                "seen_at": status.seen_at.isoformat() if status.seen_at else None
-            })
+        chat_id = _chat_id(current_user.id, friend_id)
 
-        # Prepare broadcast data for WebSocket with Telegram-style replies
+        # Prepare WebSocket broadcast
+        seen_by = [
+            {
+                "user_id": s.user.id,
+                "username": s.user.username,
+                "avatar_url": s.user.avatar_url,
+                "seen_at": s.seen_at.isoformat() if s.seen_at else None
+            }
+            for s in full_msg.seen_statuses
+        ]
+
         broadcast_data = {
             "type": "message",
             "id": full_msg.id,
@@ -599,100 +604,134 @@ async def send_voice_message(
             "sender_id": full_msg.sender_id,
             "receiver_id": full_msg.receiver_id,
             "content": voice_url,
-            "message_type": full_msg.message_type.value,
-            "is_read": full_msg.is_read,
-            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
-            "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-            "reply_to_id": full_msg.reply_to_id,
-            "is_forwarded": full_msg.is_forwarded,
-            "original_sender": full_msg.original_sender,
+            "message_type": "voice",
+            "voice_duration": round(duration, 2),
+            "file_size": file_size,
+            "is_read": False,
             "created_at": full_msg.created_at.isoformat(),
             "sender_username": full_msg.sender.username,
-            "receiver_username": full_msg.receiver.username,
-            "voice_duration": full_msg.voice_duration,
-            "file_size": full_msg.file_size,
-            "seen_by": seen_by,
             "avatar_url": full_msg.sender.avatar_url or "",
+            "seen_by": seen_by,
         }
 
-        # Add Telegram-style reply data if exists
+        # Add reply preview (Telegram style)
         if full_msg.reply_to:
-            # Create compact reply preview (like Telegram)
-            reply_content = full_msg.reply_to.content or ""
-            if full_msg.reply_to.message_type == MessageType.voice:
-                reply_content = "🎤 Voice message"
-            elif full_msg.reply_to.message_type == MessageType.image:
-                reply_content = "🖼️ Photo" 
-            elif full_msg.reply_to.message_type == MessageType.file:
-                reply_content = "📎 File"
-            elif len(reply_content) > 100:
-                reply_content = reply_content[:100] + "..."
-            
-            # Add compact reply preview to broadcast
+            reply = full_msg.reply_to
+            reply_text = "Voice message"
+            if reply.message_type == MessageType.text:
+                reply_text = reply.content or "Message"
+                if len(reply_text) > 80:
+                    reply_text = reply_text[:80] + "..."
+            elif reply.message_type == MessageType.image:
+                reply_text = "Photo"
+            elif reply.message_type == MessageType.file:
+                reply_text = "File"
+
             broadcast_data["reply_preview"] = {
-                "id": full_msg.reply_to.id,
-                "sender_username": full_msg.reply_to.sender.username,
-                "content": reply_content,
-                "message_type": full_msg.reply_to.message_type.value,
-                "voice_duration": full_msg.reply_to.voice_duration,
-                "file_size": full_msg.reply_to.file_size
+                "id": reply.id,
+                "sender_username": reply.sender.username,
+                "content": reply_text,
+                "message_type": reply.message_type.value,
+                "voice_duration": reply.voice_duration,
+                "file_size": reply.file_size
             }
 
-        # Broadcast via WebSocket
-        chat_id = _chat_id(current_user.id, friend_id)
+        # Send via WebSocket
         await manager.broadcast(chat_id, broadcast_data)
 
-        # Build response with Telegram-style reply preview
+        # Build HTTP response
         response = MessageOut(
             id=full_msg.id,
             temp_id=temp_id,
             sender_id=full_msg.sender_id,
             receiver_id=full_msg.receiver_id,
             content=voice_url,
-            message_type=full_msg.message_type.value,
-            is_read=full_msg.is_read,
-            read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
-            delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            message_type="voice",
+            voice_duration=round(duration, 2),
+            file_size=file_size,
+            is_read=False,
             created_at=full_msg.created_at.isoformat(),
-            reply_to_id=full_msg.reply_to_id,
-            is_forwarded=full_msg.is_forwarded,
-            original_sender=full_msg.original_sender,
             sender_username=full_msg.sender.username,
             receiver_username=full_msg.receiver.username,
-            voice_duration=full_msg.voice_duration,
-            file_size=full_msg.file_size,
-            seen_by=[MessageSeenByUser(**item) for item in seen_by]
+            seen_by=[MessageSeenByUser(**s) for s in seen_by],
         )
 
-        # Add Telegram-style reply preview to response if exists
+        # Add reply preview to response too
         if full_msg.reply_to:
-            # Create compact preview for the response
-            reply_content = full_msg.reply_to.content or ""
-            if full_msg.reply_to.message_type == MessageType.voice:
-                reply_content = "🎤 Voice message"
-            elif full_msg.reply_to.message_type == MessageType.image:
-                reply_content = "🖼️ Photo"
-            elif full_msg.reply_to.message_type == MessageType.file:
-                reply_content = "📎 File"
-            elif len(reply_content) > 100:
-                reply_content = reply_content[:100] + "..."
-            
-            # Add reply_preview to response
+            reply = full_msg.reply_to
+            reply_text = "Voice message"
+            if reply.message_type == MessageType.text:
+                reply_text = (reply.content or "")[:100] + ("..." if len(reply.content or "") > 100 else "")
+            elif reply.message_type == MessageType.image:
+                reply_text = "Photo"
+            elif reply.message_type == MessageType.file:
+                reply_text = "File"
+
             response.reply_preview = ReplyPreview(
-                id=full_msg.reply_to.id,
-                sender_username=full_msg.reply_to.sender.username,
-                content=reply_content,
-                message_type=full_msg.reply_to.message_type.value,
-                voice_duration=full_msg.reply_to.voice_duration,
-                file_size=full_msg.reply_to.file_size
+                id=reply.id,
+                sender_username=reply.sender.username,
+                content=reply_text,
+                message_type=reply.message_type.value,
+                voice_duration=reply.voice_duration,
+                file_size=reply.file_size
             )
-        
+
+        print(f"VOICE MESSAGE SENT #{full_msg.id} | {duration}s | {file_size/1024:.1f}KB")
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send voice message: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Voice message failed: {str(e)}")
+    
+@router.get("/cloudinary-health")
+async def cloudinary_health_check():
+    """Check Cloudinary connectivity and configuration"""
+    try:
+        is_healthy, message = check_cloudinary_health()
+        
+        # Test actual upload if configuration is OK
+        if is_healthy:
+            try:
+                # Test with a small file
+                test_content = b"test voice message content"
+                test_result = upload_voice_message(
+                    test_content,
+                    public_id=f"health_check_{uuid.uuid4().hex}",
+                    folder="health_checks"
+                )
+                return {
+                    "status": "healthy",
+                    "message": "Cloudinary is fully operational",
+                    "upload_test": "success",
+                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
+                    "base_folder": settings.CLOUDINARY_UPLOAD_FOLDER
+                }
+            except Exception as upload_error:
+                return {
+                    "status": "unhealthy", 
+                    "message": f"Configuration OK but upload failed: {str(upload_error)}",
+                    "upload_test": "failed",
+                    "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
+                    "base_folder": settings.CLOUDINARY_UPLOAD_FOLDER
+                }
+        else:
+            return {
+                "status": "unhealthy",
+                "message": message,
+                "upload_test": "not_attempted",
+                "cloud_name": settings.CLOUDINARY_CLOUD_NAME if hasattr(settings, 'CLOUDINARY_CLOUD_NAME') else "not_set",
+                "base_folder": settings.CLOUDINARY_UPLOAD_FOLDER if hasattr(settings, 'CLOUDINARY_UPLOUD_FOLDER') else "not_set"
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Health check failed: {str(e)}",
+            "upload_test": "error"
+        }
     
 @router.post("/private/{friend_id}/image")
 async def send_image_message(

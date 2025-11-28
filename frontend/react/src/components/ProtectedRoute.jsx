@@ -1,7 +1,7 @@
 import {
-    Backdrop,
-    CircularProgress,
-    Typography
+  Backdrop,
+  CircularProgress,
+  Typography
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -31,8 +31,6 @@ const ProtectedRoute = ({ children }) => {
           message: 'Please log in to access this page'
         }
       });
-    }else{
-      navigate("/dashboard");
     }
   }, [authChecked, loading, isAuthenticated, navigate, location]);
 

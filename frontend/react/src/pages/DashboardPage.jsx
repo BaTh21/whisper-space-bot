@@ -1,3 +1,4 @@
+//DashboardPage.jsx
 import {
   Alert,
   Backdrop,
@@ -9,7 +10,7 @@ import {
   IconButton
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import BlockedUsersTab from '../components/BlockedUsersTab';
 import FeedTab from '../components/dashboard/FeedTab';
 import FriendsTab from '../components/dashboard/FriendsTab';
@@ -25,14 +26,13 @@ import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
 
-
 function TabPanel({ children, value, index, ...other }) {
   return (
     <div
       role="tabpanel"
       hidden={value !== index}
-      id={`dashboard-tabpanel-${index}`}
-      aria-labelledby={`dashboard-tab-${index}`}
+      id={`main-tabpanel-${index}`}
+      aria-labelledby={`main-tab-${index}`}
       {...other}
     >
       {value === index && <Box sx={{ p: { xs: 2, sm: 3 } }}>{children}</Box>}
@@ -43,8 +43,9 @@ function TabPanel({ children, value, index, ...other }) {
 const DashboardPage = ({ defaultTab = 0 }) => {
   const { isAuthenticated, auth, user: currentUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -59,8 +60,45 @@ const DashboardPage = ({ defaultTab = 0 }) => {
   const [viewGroupDialogOpen, setViewGroupDialogOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
 
+  // Map URL paths to tab indices
+  const pathToTabMap = {
+    '/feed': 0,
+    '/messages': 1,
+    '/friends': 2,
+    '/groups': 3,
+    '/notes': 4,
+    '/search': 5,
+    '/blocked': 6,
+    '/profile': 7,
+  };
+
+  // Map tab indices to URL paths
+  const tabToPathMap = {
+    0: '/feed',
+    1: '/messages',
+    2: '/friends',
+    3: '/groups',
+    4: '/notes',
+    5: '/search',
+    6: '/blocked',
+    7: '/profile',
+  };
+
+  // Handle URL-based tab navigation
+  useEffect(() => {
+    const currentTab = pathToTabMap[location.pathname] || 0;
+    setActiveTab(currentTab);
+  }, [location.pathname]);
+
+  // Update URL when tab changes
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    const newPath = tabToPathMap[newTab] || '/feed';
+    navigate(newPath);
+  };
+
+  // Initial data fetch - ONLY on component mount
   const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
     try {
       let profileData = auth?.user;
       if (!profileData) {
@@ -82,9 +120,9 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       setDiaries(feedData);
       setGroups(groupsData);
     } catch (err) {
-      setError(err.message || 'Failed to fetch dashboard data');
+      setError(err.message || 'Failed to fetch data');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [auth?.user]);
 
@@ -93,6 +131,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       navigate('/login');
       return;
     }
+    // Only fetch data on initial load, not on tab changes
     fetchDashboardData();
   }, [isAuthenticated, navigate, fetchDashboardData]);
 
@@ -101,7 +140,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
     setViewGroupDialogOpen(true);
   };
 
-  if (loading && !profile) {
+  // Show loading only during initial page load
+  if (initialLoading) {
     return (
       <Layout>
         <Backdrop open={true} sx={{ zIndex: 1300, color: '#40C4FF' }}>
@@ -122,11 +162,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
   }
 
   return (
-    <Layout onProfileClick={setActiveTab} setNewActiveTab={setActiveTab}>
-      <Backdrop open={loading} sx={{ zIndex: 1300 }}>
-        <CircularProgress color="inherit" />
-      </Backdrop>
-
+    <Layout onProfileClick={handleTabChange} setNewActiveTab={handleTabChange}>
       <Box
         sx={{
           display: "flex",
@@ -166,7 +202,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               friends={friends}
               pendingRequests={pendingRequests}
               profile={profile}
-              setActiveTab={setActiveTab}
+              setActiveTab={handleTabChange}
               setError={setError}
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}

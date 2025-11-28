@@ -18,44 +18,98 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// FIXED Response interceptor - using api instance for refresh
+// FIXED Response interceptor - with proper error handling
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
+    // If error is not 401 or it's already a retry, reject immediately
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
 
-      try {
-        // Attempt to refresh the token using the same api instance
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (refreshToken) {
-          const response = await api.post("/api/v1/auth/refresh", {
-            refresh_token: refreshToken,
-          });
+    // If we're already refreshing, add to queue
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then(token => {
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return api(originalRequest);
+      }).catch(err => {
+        return Promise.reject(err);
+      });
+    }
 
-          const { access_token, refresh_token } = response.data;
+    originalRequest._retry = true;
+    isRefreshing = true;
 
-          // Store new tokens
-          localStorage.setItem("accessToken", access_token);
-          if (refresh_token) {
-            localStorage.setItem("refreshToken", refresh_token);
-          }
-
-          // Retry the original request with new token
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return api(originalRequest);
-        }
-      } catch (refreshError) {
-        console.error("Token refresh failed:", refreshError);
-        // Continue to redirect if refresh fails
+    try {
+      const refreshToken = localStorage.getItem("refreshToken");
+      
+      // If no refresh token, redirect to login
+      if (!refreshToken) {
+        throw new Error("No refresh token available");
       }
 
-      // If refresh failed or no refresh token, then redirect to login
+      // Use a separate axios instance for refresh to avoid interceptor loops
+      const refreshApi = axios.create({
+        baseURL: BASE_URL,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const response = await refreshApi.post("/api/v1/auth/refresh", {
+        refresh_token: refreshToken,
+      });
+
+      const { access_token, refresh_token } = response.data;
+
+      // Store new tokens
+      localStorage.setItem("accessToken", access_token);
+      if (refresh_token) {
+        localStorage.setItem("refreshToken", refresh_token);
+      }
+
+      // Update the original request header
+      originalRequest.headers.Authorization = `Bearer ${access_token}`;
+
+      // Process queued requests
+      processQueue(null, access_token);
+
+      // Retry the original request
+      return api(originalRequest);
+    } catch (refreshError) {
+      console.error("Token refresh failed:", refreshError);
+      
+      // Process queued requests with error
+      processQueue(refreshError, null);
+      
+      // Clear tokens and redirect to login
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
-      window.location.href = "/login";
+      
+      // Only redirect if we're not already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = "/login";
+      }
+    } finally {
+      isRefreshing = false;
     }
 
     return Promise.reject(error);
@@ -123,8 +177,8 @@ export const verifyCode = async (data) => {
     console.error("Verify code error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Verification failed"
+      error.response?.data?.msg ||
+      "Verification failed"
     );
   }
 };
@@ -138,8 +192,8 @@ export const getMe = async () => {
     console.error("Get me error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch profile"
+      error.response?.data?.msg ||
+      "Failed to fetch profile"
     );
   }
 };
@@ -152,8 +206,8 @@ export const updateMe = async (data) => {
     console.error("Update me error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to update profile"
+      error.response?.data?.msg ||
+      "Failed to update profile"
     );
   }
 };
@@ -327,9 +381,9 @@ export const getFriends = async () => {
 
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.message ||
-        error.response?.data?.msg ||
-        "Failed to fetch friends"
+      error.response?.data?.message ||
+      error.response?.data?.msg ||
+      "Failed to fetch friends"
     );
   }
 };
@@ -342,8 +396,8 @@ export const getPendingRequests = async () => {
     console.error("Get pending requests error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch pending requests"
+      error.response?.data?.msg ||
+      "Failed to fetch pending requests"
     );
   }
 };
@@ -386,8 +440,8 @@ export const createDiary = async (data) => {
     console.error("Create diary error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to create diary"
+      error.response?.data?.msg ||
+      "Failed to create diary"
     );
   }
 };
@@ -443,10 +497,10 @@ export const shareDiaryById = async (diaryId, data) => {
 };
 
 export const deleteShareById = async (shareId) => {
-  try{
+  try {
     await api.delete(`/api/v1/diaries/share/${shareId}`);
     return true;
-  }catch(error){
+  } catch (error) {
     const errorMessage = error.response?.data?.detail || "Failed to remove share";
     throw new Error(errorMessage);
   }
@@ -460,8 +514,8 @@ export const getFeed = async () => {
     console.error("Get feed error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch feed"
+      error.response?.data?.msg ||
+      "Failed to fetch feed"
     );
   }
 };
@@ -481,8 +535,8 @@ export const likeDiary = async (diaryId) => {
 
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to like diary"
+      error.response?.data?.msg ||
+      "Failed to like diary"
     );
   }
 };
@@ -497,8 +551,8 @@ export const commentOnDiary = async (diaryId, content) => {
     console.error("Comment on diary error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to add comment"
+      error.response?.data?.msg ||
+      "Failed to add comment"
     );
   }
 };
@@ -514,8 +568,8 @@ export const getDiaryComments = async (diaryId) => {
     }
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch comments"
+      error.response?.data?.msg ||
+      "Failed to fetch comments"
     );
   }
 };
@@ -557,8 +611,8 @@ export const getDiaryLikes = async (diaryId) => {
     }
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch likes"
+      error.response?.data?.msg ||
+      "Failed to fetch likes"
     );
   }
 };
@@ -574,8 +628,8 @@ export const createGroup = async (data) => {
     console.error("Create group error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to create group"
+      error.response?.data?.msg ||
+      "Failed to create group"
     );
   }
 };
@@ -591,9 +645,9 @@ export const getUserGroups = async () => {
     );
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        error.message ||
-        "Failed to fetch groups"
+      error.response?.data?.msg ||
+      error.message ||
+      "Failed to fetch groups"
     );
   }
 };
@@ -609,9 +663,9 @@ export const getGroupById = async (groupId) => {
     );
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        error.message ||
-        "Failed to fetch groups"
+      error.response?.data?.msg ||
+      error.message ||
+      "Failed to fetch groups"
     );
   }
 };
@@ -627,9 +681,9 @@ export const updateGroupById = async (groupId, data) => {
     );
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        error.message ||
-        "Failed to update groups"
+      error.response?.data?.msg ||
+      error.message ||
+      "Failed to update groups"
     );
   }
 };
@@ -683,17 +737,17 @@ export const joinGroup = async (groupId) => {
     console.error("Join group error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to join group"
+      error.response?.data?.msg ||
+      "Failed to join group"
     );
   }
 };
 
 export const getGroupMessageSeen = async (messageId) => {
-  try{
+  try {
     const res = await api.get(`/api/v1/messages/${messageId}/seen`);
     return res.data;
-  }catch(error){
+  } catch (error) {
     throw new Error(
       error.response?.data?.detail || "Failed tp get seen messages"
     )
@@ -761,8 +815,8 @@ export const createGroupWithInvites = async (data, inviteeIds = []) => {
 
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to create group"
+      error.response?.data?.msg ||
+      "Failed to create group"
     );
   }
 };
@@ -790,8 +844,8 @@ export const sendPrivateMessage = async (friendId, data) => {
     console.error("Send private message error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to send message"  
+      error.response?.data?.msg ||
+      "Failed to send message"
     );
   }
 };
@@ -799,7 +853,7 @@ export const sendPrivateMessage = async (friendId, data) => {
 export const forwardMessage = async (friendId, messageData) => {
   try {
     console.log('📤 Forwarding message to:', friendId, 'Data:', messageData);
-    
+
     // Use the exact same payload without modification
     // Let the backend handle the validation
     const response = await api.post(`/api/v1/chats/private/${friendId}`, messageData);
@@ -812,7 +866,7 @@ export const forwardMessage = async (friendId, messageData) => {
       data: error.response?.data,
       detail: error.response?.data?.detail
     });
-    
+
     throw error;
   }
 };
@@ -842,8 +896,8 @@ export const getPrivateChat = async (friendId) => {
 
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to load messages"
+      error.response?.data?.msg ||
+      "Failed to load messages"
     );
   }
 };
@@ -918,8 +972,8 @@ export const getGroupMembers = async (groupId, search = "") => {
     console.error("Get members error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to load members"
+      error.response?.data?.msg ||
+      "Failed to load members"
     );
   }
 };
@@ -931,8 +985,8 @@ export const removeGroupMember = async (groupId, memberId) => {
     console.error("Remove members error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to remove members"
+      error.response?.data?.msg ||
+      "Failed to remove members"
     );
   }
 };
@@ -944,8 +998,8 @@ export const leaveGroupById = async (groupId) => {
     console.error("Leave error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to leave group"
+      error.response?.data?.msg ||
+      "Failed to leave group"
     );
   }
 };
@@ -962,8 +1016,8 @@ export const getGroupDiaries = async (groupId, search = "") => {
     console.error("Get group diaries error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to load group feed"
+      error.response?.data?.msg ||
+      "Failed to load group feed"
     );
   }
 };
@@ -1117,11 +1171,11 @@ export const getBlockedUsers = async () => {
 export const markMessagesAsRead = async (messageIds) => {
   try {
     console.log('📤 Marking messages as read:', messageIds);
-    
-    const response = await api.post('/api/v1/chats/messages/read', { 
-      message_ids: messageIds 
+
+    const response = await api.post('/api/v1/chats/messages/read', {
+      message_ids: messageIds
     });
-    
+
     console.log('✅ Mark as read successful:', response.data);
     return response.data;
   } catch (error) {
@@ -1130,7 +1184,7 @@ export const markMessagesAsRead = async (messageIds) => {
       data: error.response?.data,
       messageIds: messageIds
     });
-    
+
     // If endpoint doesn't exist, return success anyway for UX
     if (error.response?.status === 404 || error.response?.status === 422) {
       console.log("Mark as read endpoint issue, returning success");
@@ -1141,11 +1195,11 @@ export const markMessagesAsRead = async (messageIds) => {
         timestamp: new Date().toISOString(),
       };
     }
-    
+
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to mark messages as read"
+      error.response?.data?.msg ||
+      "Failed to mark messages as read"
     );
   }
 };
@@ -1160,17 +1214,17 @@ export const getMessageSeenStatus = async (messageId) => {
     return response.data;
   } catch (error) {
     console.error("Get message seen status error:", error.response?.data);
-    
+
     // If endpoint doesn't exist, return empty array
     if (error.response?.status === 404) {
       console.log("Get message seen status endpoint not found, returning empty array");
       return [];
     }
-    
+
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to get message seen status"
+      error.response?.data?.msg ||
+      "Failed to get message seen status"
     );
   }
 };
@@ -1267,8 +1321,8 @@ export const uploadImage = async (friendId, file) => {
     console.error("Upload image error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Upload failed"
+      error.response?.data?.msg ||
+      "Upload failed"
     );
   }
 };
@@ -1289,8 +1343,8 @@ export const sendImageMessage = async (friendId, imageUrl) => {
     console.error("Send image message error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to send image message"
+      error.response?.data?.msg ||
+      "Failed to send image message"
     );
   }
 };
@@ -1303,8 +1357,8 @@ export const deleteImageMessage = async (messageId) => {
     console.error("Delete image message error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to delete image message"
+      error.response?.data?.msg ||
+      "Failed to delete image message"
     );
   }
 };
@@ -1317,58 +1371,19 @@ export const getMessageInfo = async (messageId) => {
     console.error("Get message info error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to get message info"
+      error.response?.data?.msg ||
+      "Failed to get message info"
     );
   }
 };
 
 export const sendVoiceMessage = async (friendId, formData) => {
-  try {
-    console.log('🌐 DEBUG - API Request details:', {
-      url: `/api/v1/chats/private/${friendId}/voice`,
-      friendId: friendId,
-      hasFormData: !!formData
-    });
-
-    const response = await api.post(`/api/v1/chats/private/${friendId}/voice`, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-      timeout: 30000,
-    });
-    
-    console.log('✅ DEBUG - API success response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error("❌ DEBUG - API call failed:", {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      responseData: error.response?.data,
-      message: error.message
-    });
-    
-    // The error message is coming from somewhere else, let's check the full error
-    console.error("❌ DEBUG - Full error object:", error);
-    
-    let errorMessage = "Failed to send voice message";
-    
-    // Try to extract the actual error message from different places
-    if (error.response?.data) {
-      console.error("❌ DEBUG - Response data:", error.response.data);
-      errorMessage = error.response.data.detail || 
-                    error.response.data.msg || 
-                    error.response.data.message || 
-                    error.response.data.error ||
-                    JSON.stringify(error.response.data);
-    } else if (error.message && error.message.includes('Invalid file type')) {
-      // Use the message directly if it contains the file type error
-      errorMessage = error.message;
-    }
-    
-    throw new Error(errorMessage);
-  }
+  const response = await api.post(`/api/v1/chats/private/${friendId}/voice`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+    timeout: 30000,
+  });
+  return response.data;
 };
 export default api;

@@ -40,29 +40,78 @@ const App = () => (
                 </AuthRedirect>
               } />
 
-            {/* Protected Routes */}
+            {/* Protected Routes - Separate routes for each tab */}
             <Route
-              path="/dashboard"
+              path="/feed"
               element={
                 <ProtectedRoute>
-                  <DashboardPage />
+                  <DashboardPage defaultTab={0} />
                 </ProtectedRoute>
               }
             />
-            {/* <Route
-              path="/group/:groupId"
+            <Route
+              path="/messages"
               element={
                 <ProtectedRoute>
-                  <GroupChatPage />
+                  <DashboardPage defaultTab={1} />
                 </ProtectedRoute>
               }
-            /> */}
+            />
+            <Route
+              path="/friends"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage defaultTab={2} />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/groups"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage defaultTab={3} />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notes"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage defaultTab={4} />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/search"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage defaultTab={5} />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/blocked"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage defaultTab={6} />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage defaultTab={7} />
+                </ProtectedRoute>
+              }
+            />
+           
 
-            {/* Redirect root to login */}
-            <Route path="/" element={<Navigate to="/login" />} />
+            {/* Redirect root to feed */}
+            <Route path="/" element={<Navigate to="/feed" replace />} />
 
-            {/* Catch all route - redirect to login */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            {/* Catch all route - redirect to feed */}
+            <Route path="*" element={<Navigate to="/feed" replace />} />
           </Routes>
         </Router>
         <ToastContainer

@@ -14,8 +14,8 @@ export const useAvatar = () => {
       if (cleanUrl.includes('res.cloudinary.com')) {
         // Add optimization parameters to Cloudinary URL
         if (cleanUrl.includes('/upload/')) {
-          // Insert optimization transformations
-          return cleanUrl.replace('/upload/', '/upload/w_200,h_200,c_fill,q_auto,f_auto/');
+          // Insert optimization transformations - removed f_auto to prevent duplicate extensions
+          return cleanUrl.replace('/upload/', '/upload/w_200,h_200,c_fill,q_auto/');
         }
         return cleanUrl;
       }
