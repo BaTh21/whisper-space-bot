@@ -48,7 +48,7 @@ class WebSocketManager:
                 dead.add(ws)
 
         for ws in dead:
-            self.disconnect(chat_id, ws)
+            self.disconnect(chat_id, ws, user_id)
             
     async def send_to_user(self, chat_id: str, user_id: int, message: dict) -> None:
         if chat_id not in self.active_connections:
@@ -59,7 +59,7 @@ class WebSocketManager:
                 try:
                     await ws.send_json(message)
                 except:
-                    self.disconnect(chat_id, ws)
+                    self.disconnect(chat_id, ws, user_id)
             
     def get_online_users(self, chat_id: str) -> Set[int]:
         return self.online_users.get(chat_id, set())
