@@ -43,6 +43,9 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import VoiceRecordDialog from '../components/dialogs/VoiceRecordDialog';
 import { VoiceMessagePlayer } from '../components/group/VoiceMessagePlayer';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
+import CallModal from '../components/group/CallModal';
+import CallDialog from '../components/group/CallDialog';
+import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
 
 const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
@@ -80,6 +83,15 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [showDiaries, setShowDiaries] = useState(false);
+  const peersRef = useRef({});
+  const localStreamRef = useRef(null);
+  const [callPopupOpen, setCallPopupOpen] = useState(false);
+  const [callingUser, setCallingUser] = useState(null);
+  const [callingOpen, setCallingOpen] = useState(false);
+  const iceQueue = useRef({});
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [callStatus, setCallStatus] = useState(null);
 
   const toggleDiary = () => {
     setShowDiaries(prev => !prev);
@@ -286,7 +298,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     });
   }, [seenMessages, user]);
 
-  const handleWSMessage = (event) => {
+  const handleWSMessage = async (event) => {
     const data = JSON.parse(event.data);
     console.log('WS received:', data);
 
@@ -417,6 +429,35 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
           }
           return prev;
         });
+        break;
+
+      case "call_join":
+        console.log("User joined call:", data.user_id);
+        break;
+
+      case "call_leave":
+        setCallStatus(null);
+        console.log("User left call:", data.user_id);
+
+        if (peersRef.current[data.user_id]) {
+          peersRef.current[data.user_id].close();
+          delete peersRef.current[data.user_id];
+        }
+
+        await stopLocalStream();
+        break;
+
+      case "call_offer":
+        handleReceiveOffer(data);
+        break;
+
+      case "call_answer":
+        handleReceiveAnswer(data);
+        setCallStatus("In Call");
+        break;
+
+      case "call_ice":
+        handleNewIceCandidate(data);
         break;
 
       default:
@@ -649,6 +690,240 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
+  const createPeerConnection = (remoteUserId) => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        wsRef.current.send(JSON.stringify({
+          action: "call_ice",
+          to_user: remoteUserId,
+          candidate: event.candidate
+        }))
+      }
+    };
+
+    pc.ontrack = (event) => {
+      console.log("Remote track from:", remoteUserId, event.streams[0]);
+      setRemoteStream(event.streams[0]);
+    };
+
+    return pc;
+  };
+
+  const closeAllPeerConnections = (keepUserId = null) => {
+    Object.entries(peersRef.current).forEach(([userId, pc]) => {
+      if (parseInt(userId) !== keepUserId) {
+        try { pc.close(); } catch { }
+        delete peersRef.current[userId];
+      }
+    });
+  };
+
+  let mediaLock = false;
+
+  const getLocalStream = async () => {
+    if (mediaLock) return localStreamRef.current;
+    mediaLock = true;
+
+    try {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current = null;
+      }
+
+      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      });
+
+      return localStreamRef.current;
+    } catch (err) {
+      console.error("Failed to get local media stream:", err);
+      localStreamRef.current = null;
+      return null;
+    } finally {
+      mediaLock = false;
+    }
+  };
+
+  const handleReceiveOffer = async (data) => {
+    const { from_user, sdp } = data;
+
+    setIncomingCall({ userId: from_user, sdp });
+    setCallStatus('Incoming');
+
+    const pc = createPeerConnection(from_user);
+    peersRef.current[from_user] = pc;
+
+    Object.entries(peersRef.current).forEach(([userId, oldPc]) => {
+      if (parseInt(userId) !== from_user) {
+        oldPc.close();
+        delete peersRef.current[userId];
+      }
+    });
+
+    const stream = await getLocalStream();
+    if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
+  };
+
+
+  const handleReceiveAnswer = async (data) => {
+    const { from_user, sdp } = data;
+
+    console.log("Received answer from:", from_user);
+
+    const pc = peersRef.current[from_user];
+    if (!pc) return;
+
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+    if (iceQueue.current[from_user]) {
+      for (let c of iceQueue.current[from_user]) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c));
+        } catch (err) {
+          console.error("Failed to add queued ICE candidate", err);
+        }
+      }
+      delete iceQueue.current[from_user];
+    }
+
+
+  };
+
+  const stopLocalStream = async () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+  };
+
+  const handleNewIceCandidate = async (data) => {
+    const { from_user, candidate } = data;
+    const pc = peersRef.current[from_user];
+
+    if (!pc) {
+      console.warn("ICE received but no PeerConnection yet");
+      return;
+    }
+
+    if (!iceQueue.current[from_user]) {
+      iceQueue.current[from_user] = [];
+    }
+
+    if (!pc.remoteDescription) {
+      iceQueue.current[from_user].push(candidate);
+      console.log("Queued ICE candidate for", from_user);
+      return;
+    }
+
+    for (let c of iceQueue.current[from_user]) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch (err) {
+        console.error("Failed to add queued ICE candidate", err);
+      }
+    }
+
+    delete iceQueue.current[from_user];
+
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+      console.error("Failed to add ICE candidate", err);
+    }
+  };
+
+  const startCall = async (userId) => {
+    const pc = createPeerConnection(userId);
+    peersRef.current[userId] = pc;
+
+    closeAllPeerConnections(userId);
+    await stopLocalStream();
+
+    const stream = await getLocalStream();
+    if (!stream) {
+      console.warn("No local media stream available, cannot add tracks.");
+      return;
+    }
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_offer",
+      to_user: userId,
+      sdp: pc.localDescription
+    }));
+  };
+
+  const handleStartCall = async (userId) => {
+    setCallStatus('Calling'); 
+    setCallPopupOpen(false);
+
+    setCallingUser(userId);
+    setCallingOpen(true);
+
+    await startCall(userId);
+  };
+
+  const handleCancelCall = () => {
+    setCallingOpen(false);
+    setCallingUser(null);
+
+    wsRef.current?.send(JSON.stringify({ action: "call_leave" }));
+
+    Object.values(peersRef.current).forEach(pc => pc.close());
+    peersRef.current = {};
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+  };
+
+  const handleAcceptCall = async () => {
+    if (!incomingCall) return;
+
+    setCallStatus('In Call');
+    const { userId, sdp } = incomingCall;
+    setCallingUser(userId);
+    setCallingOpen(true);
+
+    const pc = peersRef.current[userId];
+    if (!pc) {
+      console.error("No peer connection found for", userId);
+      return;
+    }
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      wsRef.current.send(JSON.stringify({
+        action: "call_answer",
+        to_user: userId,
+        sdp: pc.localDescription
+      }));
+
+      setIncomingCall(null);
+    } catch (err) {
+      console.error("Failed to create/send answer:", err);
+    }
+  };
+
+  const handleRejectCall = () => {
+    wsRef.current.send(JSON.stringify({ action: "call_leave" }));
+    setIncomingCall(null);
+  };
+
+
   if (loading) {
     return (
       <Layout>
@@ -739,7 +1014,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                 px: { xs: 0.75, md: 1.5 },
                 py: { xs: 0, md: 0.5 },
                 mr: { xs: 0, md: 1 },
-                gap: { xs: 0, md: 1 }
+                gap: { xs: 0, sm: 1 }
               }}
             >
               <Typography sx={{ color: 'white', fontSize: { xs: 12, md: 14 } }}>
@@ -749,20 +1024,23 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                 sx={{
                   color: 'white',
                   fontSize: { xs: 12, md: 14 },
-                  display: { xs: 'none', md: 'block' }
+                  display: { xs: 'none', sm: 'block' }
                 }}
               >
                 Online
               </Typography>
             </Box>
-            <CallIcon sx={{
-              fontSize: { xs: 22, md: 26 },
-              color: 'primary.main',
-              transition: 'transform 1s',
-              '&:hover': {
-                scale: 1.1
-              }
-            }} />
+            <CallIcon
+              sx={{
+                fontSize: { xs: 22, md: 26 },
+                color: 'primary.main',
+                transition: 'transform 1s',
+                '&:hover': {
+                  scale: 1.1
+                }
+              }}
+              onClick={() => setCallPopupOpen(true)}
+            />
             <VideocamIcon
               sx={{
                 fontSize: { xs: 24, md: 30 },
@@ -772,6 +1050,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                   scale: 1.1
                 }
               }}
+              onClick={() => setCallPopupOpen(true)}
             />
             <AutoStoriesIcon
               sx={{
@@ -1412,6 +1691,28 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         messageId={selectedMessageId}
       />
 
+      <CallModal
+        open={callPopupOpen}
+        onClose={() => setCallPopupOpen(false)}
+        onlineUsers={onlineUsers}
+        onStartCall={handleStartCall}
+      />
+
+      <CallDialog
+        open={callingOpen}
+        userId={callingUser}
+        onCancel={handleCancelCall}
+        remoteStream={remoteStream}
+        onLocal={localStreamRef.current}
+        status={callStatus}
+      />
+
+      <IncomingCallDialog
+        open={!!incomingCall}
+        fromUserId={incomingCall?.userId}
+        onAccept={handleAcceptCall}
+        onReject={handleRejectCall}
+      />
     </Box >
 
   );
