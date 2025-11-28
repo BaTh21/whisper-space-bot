@@ -1,0 +1,19 @@
+{
+  "appName": "Whisper Space",
+  "feed": "មតិព័ត៌មាន",
+  "messages": "សារ",
+  "friends": "មិត្តភក្តិ",
+  "groups": "ក្រុម",
+  "notes": "កំណត់ចំណាំ",
+  "search": "ស្វែងរក",
+  "blocked": "បានទប់ស្កាត់",
+  "profile": "ប្រវត្តិរបស់ខ្ញុំ",
+  "register": "ចុះឈ្មោះ",
+  "login": "ចូលគណនី",
+  "invites": "ការអញ្ជើញ",
+  "logout": "ចាកចេញ",
+  "logoutConfirm": "តើអ្នកប្រាកដជាចង់ចាកចេញមែនទេ?",
+  "language": "ភាសា",
+  "english": "English",
+  "khmer": "ភាសាខ្មែរ"
+}
