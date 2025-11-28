@@ -526,6 +526,8 @@ async def websocket_group_chat(
                 parent_message_id = data.get("reply_to")  # Optional
                 action = data.get("action")
                 incoming_temp_id = data.get("temp_id")
+                to_user = data.get("to_user")
+                sdp = data.get("sdp")
                 
                 if action == "online_users":
                     online_user_ids = list(manager.get_online_users(chat_id))
@@ -682,6 +684,44 @@ async def websocket_group_chat(
                         "message_type": message_type,
                         "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
                         "temp_id": incoming_temp_id
+                    })
+                    continue
+                
+                if action == "call_join":
+                    await manager.broadcast(chat_id,{
+                        "action": "call_join",
+                        "user_id": current_user.id
+                    }, exclude={websocket})
+                    continue
+                
+                if action == "call_leave":
+                    await manager.broadcast(chat_id,{
+                        "action": "call_leave",
+                        "user_id": current_user.id
+                    })
+                    continue
+                
+                if action == "call_offer":
+                    await manager.send_to_user(chat_id, to_user, {
+                        "action": "call_offer",
+                        "from_user": current_user.id,
+                        "sdp": sdp
+                    })
+                    continue
+                
+                if action == "call_answer":
+                    await manager.send_to_user(chat_id, to_user, {
+                        "action": "call_answer",
+                        "from_user": current_user.id,
+                        "sdp": sdp
+                    })
+                    continue
+                
+                if action == "call_ice":
+                    await manager.send_to_user(chat_id, to_user, {
+                        "action": "call_ice",
+                        "from_user": current_user.id,
+                        "candidate": data["candidate"]
                     })
                     continue
                 

@@ -4,12 +4,11 @@ from fastapi import WebSocket
 
 class WebSocketManager:
     def __init__(self) -> None:
-        self.active_connections: Dict[str, Set[WebSocket]] = {}
+        self.active_connections: Dict[str, Set[WebSocket, dict]] = {}
         self.online_users: Dict[str, Set[int]] = {}
 
     async def connect(self, chat_id: str, websocket: WebSocket, user_id: int) -> None:
-        # await websocket.accept()
-        self.active_connections.setdefault(chat_id, set()).add(websocket)
+        self.active_connections.setdefault(chat_id, {})[websocket] = {"user_id": user_id}
         self.online_users.setdefault(chat_id, set()).add(user_id)
         
         await self.broadcast(chat_id, {
@@ -18,13 +17,15 @@ class WebSocketManager:
         }, exclude={websocket})
         
         await websocket.send_json({
-        "action": "online_users",
-        "user_ids": list(self.online_users[chat_id])
+            "action": "online_users",
+            "user_ids": list(self.online_users[chat_id])
         })
 
     def disconnect(self, chat_id: str, websocket: WebSocket, user_id: int) -> None:
-        if chat_id in self.active_connections:
-            self.active_connections[chat_id].discard(websocket)
+        if chat_id in self.active_connections and websocket in self.active_connections[chat_id]:
+            info = self.active_connections[chat_id].pop(websocket)
+            user_id = user_id or info["user_id"]
+            
             if not self.active_connections[chat_id]:
                 del self.active_connections[chat_id]
                 
@@ -38,15 +39,27 @@ class WebSocketManager:
             return
         exclude = exclude or set()
         dead = set()
-        for conn in self.active_connections[chat_id]:
-            if conn in exclude:
+        for ws in list(self.active_connections[chat_id].keys()):
+            if ws in exclude:
                 continue
             try:
-                await conn.send_json(message)
+                await ws.send_json(message)
             except Exception:
-                dead.add(conn)
-        for conn in dead:
-            self.disconnect(chat_id, conn, user_id=None)
+                dead.add(ws)
+
+        for ws in dead:
+            self.disconnect(chat_id, ws)
+            
+    async def send_to_user(self, chat_id: str, user_id: int, message: dict) -> None:
+        if chat_id not in self.active_connections:
+            return
+
+        for ws, info in self.active_connections[chat_id].items():
+            if info["user_id"] == user_id:
+                try:
+                    await ws.send_json(message)
+                except:
+                    self.disconnect(chat_id, ws)
             
     def get_online_users(self, chat_id: str) -> Set[int]:
         return self.online_users.get(chat_id, set())

@@ -43,9 +43,7 @@ async def delete_message(db: Session, message_id: int, current_user_id: int):
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    if message.forwarded_by_id and message.forwarded_by_id != current_user_id:
-        raise HTTPException(status_code=403, detail="Only sender can delete this message")
-    elif not message.forwarded_by_id and message.sender_id != current_user_id:
+    if message.sender_id != current_user_id:
         raise HTTPException(status_code=403, detail="Only sender can delete this message")
 
     if message.file_url:
