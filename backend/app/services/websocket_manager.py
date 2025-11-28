@@ -59,7 +59,7 @@ class WebSocketManager:
                 try:
                     await ws.send_json(message)
                 except:
-                    self.disconnect(chat_id, ws)
+                    self.disconnect(chat_id, ws, user_id)
             
     def get_online_users(self, chat_id: str) -> Set[int]:
         return self.online_users.get(chat_id, set())
