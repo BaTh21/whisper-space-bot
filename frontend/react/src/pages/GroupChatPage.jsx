@@ -89,9 +89,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [callingUser, setCallingUser] = useState(null);
   const [callingOpen, setCallingOpen] = useState(false);
   const iceQueue = useRef({});
-  const [remoteStream, setRemoteStream] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
   const [callStatus, setCallStatus] = useState(null);
+  const [localStream, setLocalStreamState] = useState(null);
+  const userId = user.id;
 
   const toggleDiary = () => {
     setShowDiaries(prev => !prev);
@@ -432,19 +434,33 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         break;
 
       case "call_join":
-        console.log("User joined call:", data.user_id);
+        const userId = data.user_id;
+        if (!peersRef.current[userId]) {
+          const pc = createPeerConnection(userId);
+          peersRef.current[userId] = pc;
+
+          const stream = await getLocalStream();
+          if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          wsRef.current.send(JSON.stringify({
+            action: "call_offer",
+            sdp: pc.localDescription
+          }));
+        }
         break;
 
       case "call_leave":
-        setCallStatus(null);
+        const leavingUserId = data.user_id;
         console.log("User left call:", data.user_id);
 
-        if (peersRef.current[data.user_id]) {
-          peersRef.current[data.user_id].close();
-          delete peersRef.current[data.user_id];
+        if (peersRef.current[leavingUserId]) {
+          peersRef.current[leavingUserId].close();
+          delete peersRef.current[leavingUserId];
         }
 
-        await stopLocalStream();
         break;
 
       case "call_offer":
@@ -701,17 +717,24 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
           action: "call_ice",
           to_user: remoteUserId,
           candidate: event.candidate
-        }))
+        }));
       }
     };
 
     pc.ontrack = (event) => {
-      console.log("Remote track from:", remoteUserId, event.streams[0]);
-      setRemoteStream(event.streams[0]);
+      setRemoteStreams(prev => {
+        const updated = { ...prev };
+        if (!updated[remoteUserId]) {
+          updated[remoteUserId] = new MediaStream();
+        }
+        event.streams[0].getTracks().forEach(track => updated[remoteUserId].addTrack(track));
+        return updated;
+      });
     };
 
     return pc;
   };
+
 
   const closeAllPeerConnections = (keepUserId = null) => {
     Object.entries(peersRef.current).forEach(([userId, pc]) => {
@@ -751,60 +774,69 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
   const handleReceiveOffer = async (data) => {
     const { from_user, sdp } = data;
+    if (!sdp || !sdp.type) {
+      console.warn("Received invalid SDP from", from_user, data);
+      return;
+    }
 
-    setIncomingCall({ userId: from_user, sdp });
-    setCallStatus('Incoming');
+    if (peersRef.current[from_user]) return;
 
     const pc = createPeerConnection(from_user);
     peersRef.current[from_user] = pc;
 
-    Object.entries(peersRef.current).forEach(([userId, oldPc]) => {
-      if (parseInt(userId) !== from_user) {
-        oldPc.close();
-        delete peersRef.current[userId];
-      }
-    });
+    setIncomingCall({ userId: from_user, sdp });
 
     const stream = await getLocalStream();
     if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
-  };
 
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      wsRef.current.send(JSON.stringify({
+        action: "call_answer",
+        to_user: from_user,
+        sdp: pc.localDescription
+      }));
+    } catch (err) {
+      console.error("Failed to handle offer from", from_user, err);
+    }
+  };
 
   const handleReceiveAnswer = async (data) => {
     const { from_user, sdp } = data;
-
-    console.log("Received answer from:", from_user);
-
     const pc = peersRef.current[from_user];
     if (!pc) return;
 
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    // Only set remote description if not already set
+    if (!pc.remoteDescription) {
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
 
-    if (iceQueue.current[from_user]) {
-      for (let c of iceQueue.current[from_user]) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
-        } catch (err) {
-          console.error("Failed to add queued ICE candidate", err);
+        // Flush queued ICE candidates
+        if (iceQueue.current[from_user]?.length) {
+          for (let c of iceQueue.current[from_user]) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(c));
+            } catch (err) {
+              console.error("Failed to add queued ICE candidate", err);
+            }
+          }
+          delete iceQueue.current[from_user];
         }
+      } catch (err) {
+        console.error("Failed to set remote description:", err);
       }
-      delete iceQueue.current[from_user];
     }
 
-
+    setCallStatus("In Call");
   };
 
-  const stopLocalStream = async () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-  };
 
   const handleNewIceCandidate = async (data) => {
     const { from_user, candidate } = data;
     const pc = peersRef.current[from_user];
-
     if (!pc) {
       console.warn("ICE received but no PeerConnection yet");
       return;
@@ -827,7 +859,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         console.error("Failed to add queued ICE candidate", err);
       }
     }
-
     delete iceQueue.current[from_user];
 
     try {
@@ -837,38 +868,34 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-  const startCall = async (userId) => {
-    const pc = createPeerConnection(userId);
-    peersRef.current[userId] = pc;
 
-    closeAllPeerConnections(userId);
-    await stopLocalStream();
+  const handleStartGroupCall = async () => {
+    closeAllPeerConnections();
+    setRemoteStreams({});
 
     const stream = await getLocalStream();
-    if (!stream) {
-      console.warn("No local media stream available, cannot add tracks.");
-      return;
-    }
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    if (!stream) return;
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_offer",
-      to_user: userId,
-      sdp: pc.localDescription
-    }));
-  };
-
-  const handleStartCall = async (userId) => {
-    setCallStatus('Calling'); 
-    setCallPopupOpen(false);
-
-    setCallingUser(userId);
+    setCallStatus("Calling");
     setCallingOpen(true);
 
-    await startCall(userId);
+    onlineUsers.forEach(async (userId) => {
+      if (userId === user.id) return;
+
+      const pc = createPeerConnection(userId);
+      peersRef.current[userId] = pc;
+
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      wsRef.current.send(JSON.stringify({
+        action: "call_offer",
+        to_user: userId,
+        sdp: pc.localDescription
+      }));
+    });
   };
 
   const handleCancelCall = () => {
@@ -877,28 +904,40 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
     wsRef.current?.send(JSON.stringify({ action: "call_leave" }));
 
-    Object.values(peersRef.current).forEach(pc => pc.close());
+    Object.values(peersRef.current).forEach(pc => {
+      pc.getSenders().forEach(sender => {
+        if (sender.track) sender.track.stop();
+      });
+      pc.close();
+    });
     peersRef.current = {};
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
     }
+
+    setRemoteStreams({});
   };
+
 
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
 
-    setCallStatus('In Call');
     const { userId, sdp } = incomingCall;
+
+    setCallStatus('In Call');
     setCallingUser(userId);
     setCallingOpen(true);
 
     const pc = peersRef.current[userId];
     if (!pc) {
-      console.error("No peer connection found for", userId);
-      return;
+      pc = createPeerConnection(userId);
+      peersRef.current[userId] = pc;
     }
+
+    const stream = await getLocalStream();
+    if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -1696,14 +1735,14 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         open={callPopupOpen}
         onClose={() => setCallPopupOpen(false)}
         onlineUsers={onlineUsers}
-        onStartCall={handleStartCall}
+        onStartGroupCall={handleStartGroupCall}
       />
 
       <CallDialog
         open={callingOpen}
         userId={callingUser}
         onCancel={handleCancelCall}
-        remoteStream={remoteStream}
+        remoteStreams={remoteStreams}
         onLocal={localStreamRef.current}
         status={callStatus}
       />

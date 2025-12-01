@@ -698,6 +698,14 @@ async def websocket_group_chat(
                     })
                     continue
                 
+                if action == "call_start":
+                    await manager.broadcast(chat_id, {
+                        "action": "call_offer",
+                        "from_user": current_user.id,
+                        "sdp": sdp
+                    }, exclude={websocket})
+                    continue
+                
                 if action == "call_join":
                     await manager.broadcast(chat_id,{
                         "action": "call_join",

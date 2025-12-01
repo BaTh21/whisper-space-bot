@@ -1,4 +1,4 @@
-import { Dialog, Button, Typography, Box, IconButton, Modal } from "@mui/material";
+import { Typography, Box, IconButton, Modal } from "@mui/material";
 import LocalPhoneIcon from '@mui/icons-material/LocalPhone';
 import CloseIcon from '@mui/icons-material/Close';
 

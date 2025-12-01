@@ -48,13 +48,18 @@ class WebSocketManager:
                 dead.add(ws)
 
         for ws in dead:
-            self.disconnect(chat_id, ws)
+            user_id = self.active_connections[chat_id][ws]["user_id"] if ws in self.active_connections[chat_id] else None
+            self.disconnect(chat_id, ws, user_id)
             
-    async def send_to_user(self, chat_id: str, user_id: int, message: dict) -> None:
+    async def send_to_user(self, chat_id: str, user_id: int, message: dict, exclude: Set[WebSocket] = None) -> None:
         if chat_id not in self.active_connections:
             return
 
+        exclude = exclude or set()
+
         for ws, info in self.active_connections[chat_id].items():
+            if ws in exclude:
+                continue
             if info["user_id"] == user_id:
                 try:
                     await ws.send_json(message)

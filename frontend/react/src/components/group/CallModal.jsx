@@ -9,12 +9,7 @@ import {
   Typography
 } from "@mui/material";
 
-const CallModal = ({ open, onClose, onlineUsers, onStartCall }) => {
-
-  const handleCall = (userId) => {
-    onStartCall(userId);
-    onClose();
-  };
+const CallModal = ({ open, onClose, onlineUsers, onStartGroupCall }) => {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
@@ -26,19 +21,28 @@ const CallModal = ({ open, onClose, onlineUsers, onStartCall }) => {
         ) : (
           <List>
             {Array.from(onlineUsers).map((userId) => (
-              <ListItemButton 
-                key={userId} 
-                onClick={() => handleCall(userId)}
+              <ListItemButton
+                key={userId}
+                // onClick={() => handleCall(userId)}
               >
                 <ListItemText primary={`Call User ${userId}`} />
               </ListItemButton>
             ))}
           </List>
         )}
+        <Button
+          variant="contained"
+          color="primary"
+          fullWidth
+          onClick={onStartGroupCall}
+        >
+          Call All
+        </Button>
 
-        <Button 
-          variant="outlined" 
-          color="error" 
+
+        <Button
+          variant="outlined"
+          color="error"
           onClick={onClose}
           fullWidth
           sx={{ mt: 2 }}
