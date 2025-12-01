@@ -8,6 +8,7 @@ from app.core.database import engine
 import os
 
 from app.core.cloudinary import configure_cloudinary
+from app.api.v1.routers import reactions
 
 # Create database tables
 base.Base.metadata.create_all(bind=engine)
@@ -44,6 +45,7 @@ app.include_router(websockets.router, prefix="/api/v1/ws", tags=["websockets"])
 app.include_router(notes.router, prefix="/api/v1/notes", tags=["notes"])
 app.include_router(avatar.router, prefix="/api/v1/avatars", tags=["avatars"])
 app.include_router(message.router, prefix="/api/v1/messages", tags=["messages"])
+app.include_router(reactions.router, prefix="/api/v1", tags=["reactions"])
 
 # Create static directories
 os.makedirs("static/avatars", exist_ok=True)

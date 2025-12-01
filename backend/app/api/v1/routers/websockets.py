@@ -21,6 +21,8 @@ from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
 from app.crud.message import handle_forward_message, update_message, delete_message
 from app.helpers.to_utc_iso import to_local_iso
+from app.crud.reaction import create_reaction, delete_reaction
+from app.schemas.reaction import ReactionCreate
 
 router = APIRouter()
 
@@ -485,7 +487,77 @@ async def handle_websocket_private(
                         "user_ids": list(online_users),
                         "timestamp": datetime.utcnow().isoformat()
                     })
+                    
+                elif msg_type == "reaction_add":
+                    message_id = data.get("message_id")
+                    emoji = data.get("emoji")
+                    
+                    if message_id and emoji:
+                        # Create reaction in database
+                        reaction_in = ReactionCreate(emoji=emoji)
+                        reaction = create_reaction(db, message_id, current_user.id, reaction_in)
+                        
+                        # Broadcast to all users in chat
+                        chat_id = _chat_id(current_user.id, friend_id)
+                        await manager.broadcast(chat_id, {
+                            "type": "reaction_added",
+                            "message_id": message_id,
+                            "reaction": {
+                                "id": reaction.id,
+                                "emoji": reaction.emoji,
+                                "user_id": reaction.user_id,
+                                "user": {
+                                    "id": reaction.user.id,
+                                    "username": reaction.user.username,
+                                    "avatar_url": reaction.user.avatar_url
+                                },
+                                "created_at": reaction.created_at.isoformat()
+                            }
+                        })
 
+
+                elif msg_type == "reaction_remove":
+                    message_id = data.get("message_id")
+                    reaction_id = data.get("reaction_id")
+                    
+                    if message_id and reaction_id:
+                        try:
+                            # Delete reaction from database
+                            success, error_message = delete_reaction(db, message_id, reaction_id, current_user.id)
+                            
+                            if success:
+                                # Broadcast removal to chat
+                                chat_id = _chat_id(current_user.id, friend_id)
+                                await manager.broadcast(chat_id, {
+                                    "type": "reaction_removed",
+                                    "message_id": message_id,
+                                    "reaction_id": reaction_id,
+                                    "user_id": current_user.id,
+                                    "timestamp": datetime.utcnow().isoformat()
+                                })
+                                
+                                # Also confirm to the sender
+                                await websocket.send_json({
+                                    "type": "reaction_removed",
+                                    "message_id": message_id,
+                                    "reaction_id": reaction_id,
+                                    "success": True
+                                })
+                            else:
+                                # Send error back to the user who tried to remove
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "message": f"Failed to remove reaction: {error_message}",
+                                    "success": False
+                                })
+                                
+                        except Exception as e:
+                            # Send error back to the user
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": f"Failed to remove reaction: {str(e)}",
+                                "success": False
+                            })
                 # ✅ CHECK SPECIFIC USER STATUS
                 elif msg_type == "check_user_status":
                     user_id_to_check = data.get("user_id")
@@ -512,6 +584,7 @@ async def handle_websocket_private(
                         "type": "error",
                         "error": f"Unknown message type: {msg_type}"
                     })
+                
 
             except asyncio.TimeoutError:
                 # ✅ HANDLE TIMEOUT (NORMAL - WAITING FOR MESSAGES)

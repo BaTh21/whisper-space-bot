@@ -39,6 +39,9 @@ import {
   sendImageMessage,
   sendPrivateMessage,
   uploadImage,
+  addReactionToMessage,
+  removeReactionFromMessage,
+  getMessageReactions
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
@@ -261,6 +264,42 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         console.log('👥 Online users list:', data.user_ids);
         setOnlineUsers(new Set(data.user_ids || []));
         return; // Don't process further
+      }
+
+      // === REACTION HANDLING ===
+      if (type === "reaction_added") {
+        console.log('➕ Reaction added:', data);
+
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === data.message_id) {
+            const currentReactions = msg.reactions || [];
+            // Check if reaction already exists
+            const exists = currentReactions.some(r => r.id === data.reaction.id);
+            if (!exists) {
+              return {
+                ...msg,
+                reactions: [...currentReactions, data.reaction]
+              };
+            }
+          }
+          return msg;
+        }));
+        return;
+
+      } else if (type === "reaction_removed") {
+        console.log('➖ Reaction removed:', data);
+
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === data.message_id) {
+            const currentReactions = msg.reactions || [];
+            return {
+              ...msg,
+              reactions: currentReactions.filter(r => r.id !== data.reaction_id)
+            };
+          }
+          return msg;
+        }));
+        return;
       }
       // === END ONLINE/OFFLINE STATUS HANDLING ===
 
@@ -932,6 +971,86 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       setIsUploadingVoice(false);
       setVoiceSending(false);
       setRecordingTime(0);
+    }
+  };
+  /* --------------------------------------------------------------------- */
+  /* Emoji Reaction */
+  /* --------------------------------------------------------------------- */
+
+  const handleAddReaction = async (messageId, emoji) => {
+    try {
+      const reaction = await addReactionToMessage(messageId, { emoji });
+
+      // Send WebSocket update
+      sendWsMessage({
+        type: 'reaction_add',
+        message_id: messageId,
+        emoji: emoji
+      });
+
+      // Optimistic update
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === messageId) {
+          const currentReactions = msg.reactions || [];
+          return {
+            ...msg,
+            reactions: [...currentReactions, reaction]
+          };
+        }
+        return msg;
+      }));
+
+    } catch (err) {
+      console.error('Failed to add reaction:', err);
+      setError('Failed to add reaction');
+    }
+  };
+
+  // Remove reaction from message
+  const handleRemoveReaction = async (messageId, reactionId) => {
+    try {
+      await removeReactionFromMessage(messageId, reactionId);
+
+      // Send WebSocket update
+      sendWsMessage({
+        type: 'reaction_remove',
+        message_id: messageId,
+        reaction_id: reactionId
+      });
+
+      // Optimistic update
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === messageId) {
+          const currentReactions = msg.reactions || [];
+          return {
+            ...msg,
+            reactions: currentReactions.filter(r => r.id !== reactionId)
+          };
+        }
+        return msg;
+      }));
+
+    } catch (err) {
+      console.error('Failed to remove reaction:', err);
+      setError('Failed to remove reaction');
+    }
+  };
+
+  // Load reactions for a message
+  const loadMessageReactions = async (messageId) => {
+    try {
+      const response = await getMessageReactions(messageId);
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === messageId) {
+          return {
+            ...msg,
+            reactions: response.reactions || []
+          };
+        }
+        return msg;
+      }));
+    } catch (err) {
+      console.error('Failed to load reactions:', err);
     }
   };
 
@@ -1929,6 +2048,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                       onUpdate={handleEditMessage}
                       onDelete={handleDeleteMessage}
                       onForward={handleForward}
+                      onAddReaction={handleAddReaction}
+                      onRemoveReaction={handleRemoveReaction}
+                      onLoadReactions={loadMessageReactions}
                       profile={profile}
                       currentFriend={selectedFriend}
                       getAvatarUrl={getAvatarUrl}

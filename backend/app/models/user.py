@@ -25,6 +25,9 @@ class User(Base):
     last_seen = Column(DateTime(timezone=True), default=datetime.utcnow)
     last_activity = Column(DateTime(timezone=True), default=datetime.utcnow)
 
+    message_reactions = relationship("MessageReaction", 
+                                 back_populates="user", 
+                                 cascade="all, delete-orphan")
 # Relationship to seen message statuses
     seen_message_statuses = relationship(
         "MessageSeenStatus", 

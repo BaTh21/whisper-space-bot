@@ -41,6 +41,10 @@ class PrivateMessage(Base):
     # Sender and receiver relationships
     sender = relationship("User", foreign_keys=[sender_id], backref="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], backref="received_messages")
+    reactions = relationship("MessageReaction", 
+                         back_populates="message", 
+                         cascade="all, delete-orphan",
+                         lazy="selectin") 
 
     # Many-to-many relationship for seen users (read-only)
     seen_by_users = relationship(

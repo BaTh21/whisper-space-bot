@@ -33,3 +33,17 @@ html, body {
   }
 }
 
+@keyframes reactionGlow {
+  0% { box-shadow: 0 0 0 0 rgba(29, 155, 240, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(29, 155, 240, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(29, 155, 240, 0); }
+}
+
+.reaction-glow {
+  animation: reactionGlow 1s ease-out;
+}
+
+/* Smooth transitions for reactions */
+.message-reaction-item {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
