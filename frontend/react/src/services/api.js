@@ -1403,4 +1403,59 @@ export const getBatchOnlineStatus = async (userIds) => {
   const response = await api.post(`/api/v1/chat/users/online-status/batch`, { user_ids: userIds });
   return response.data;
 };
+
+// Add reaction to message
+export const addReactionToMessage = async (messageId, reactionData) => {
+  try {
+    const response = await api.post(`/api/v1/messages/${messageId}/reactions`, reactionData);
+    return response.data;
+  } catch (error) {
+    console.error('Error adding reaction:', error);
+    throw error;
+  }
+};
+
+// Remove reaction from message
+export const removeReactionFromMessage = async (messageId, reactionId) => {
+  try {
+    const response = await api.delete(`/api/v1/messages/${messageId}/reactions/${reactionId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error removing reaction:', error);
+    throw error;
+  }
+};
+
+// Get message reactions
+export const getMessageReactions = async (messageId, params = {}) => {
+  try {
+    const response = await api.get(`/api/v1/messages/${messageId}/reactions`, { params });
+    return response.data;
+  } catch (error) {
+    console.error('Error getting reactions:', error);
+    throw error;
+  }
+};
+
+// Get reaction summary
+export const getReactionSummary = async (messageId) => {
+  try {
+    const response = await api.get(`/api/v1/messages/${messageId}/reactions/summary`);
+    return response.data;
+  } catch (error) {
+    console.error('Error getting reaction summary:', error);
+    throw error;
+  }
+};
+
+// Batch get reactions
+export const getBatchReactions = async (messageIds) => {
+  try {
+    const response = await api.post('/api/v1/messages/reactions/batch', { message_ids: messageIds });
+    return response.data;
+  } catch (error) {
+    console.error('Error getting batch reactions:', error);
+    throw error;
+  }
+};
 export default api;
