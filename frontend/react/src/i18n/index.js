@@ -1,7 +1,8 @@
 import i18n from 'i18next'
-import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
+import { initReactI18next } from 'react-i18next'
 import en from './en.json'
+import jp from './jp.json'
 import km from './km.json'
 
 i18n
@@ -10,8 +11,8 @@ i18n
   .init({
     resources: { 
       en: { translation: en }, 
-      km: { translation: km }
-
+      km: { translation: km },
+      jp: { translation: jp } 
     },
     fallbackLng: 'en',
     interpolation: { escapeValue: false }

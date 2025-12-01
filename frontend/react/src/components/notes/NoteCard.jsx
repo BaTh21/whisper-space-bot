@@ -10,6 +10,7 @@ import {
   Share as ShareIcon,
   Unarchive as UnarchiveIcon
 } from '@mui/icons-material';
+
 import {
   Box,
   Button,
@@ -26,63 +27,51 @@ import {
   MenuItem,
   Typography
 } from '@mui/material';
+
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 
 const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShare }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  
-  // Get current user from auth context
+
+  const { t } = useTranslation();
+
   const { auth } = useAuth();
   const currentUser = auth.user;
   const currentUserId = currentUser?.id;
-  
-  // Check if current user is the owner of the note
+
   const isOwner = note.user_id === currentUserId;
-  
-  // Flexible permission checking - handle different API structures
+
   let isSharedWithEdit = false;
-  
+
   if (!isOwner) {
-    // Method 1: Check if note has direct can_edit property
     if (note.can_edit !== undefined) {
       isSharedWithEdit = note.can_edit;
-    }
-    // Method 2: Check shared_with array with objects
-    else if (note.shared_with && Array.isArray(note.shared_with)) {
+    } else if (note.shared_with && Array.isArray(note.shared_with)) {
       isSharedWithEdit = note.shared_with.some(share => {
-        // Handle both object and simple ID structures
-        if (typeof share === 'object') {
+        if (typeof share === "object") {
           return share.user_id === currentUserId && share.can_edit;
         } else {
-          // If shared_with is just an array of user IDs, assume edit permission
           return share === currentUserId;
         }
       });
-    }
-    // Method 3: Check permissions object
-    else if (note.permissions && note.permissions.can_edit !== undefined) {
+    } else if (note.permissions && note.permissions.can_edit !== undefined) {
       isSharedWithEdit = note.permissions.can_edit;
     }
   }
 
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
+  const handleMenuOpen = (e) => setAnchorEl(e.currentTarget);
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const handleMenuClose = () => setAnchorEl(null);
 
   const handleEdit = () => {
     if (isOwner || isSharedWithEdit) {
-      console.log('Edit allowed - isOwner:', isOwner, 'isSharedWithEdit:', isSharedWithEdit);
       onEdit(note);
     } else {
-      console.log('Edit blocked - isOwner:', isOwner, 'isSharedWithEdit:', isSharedWithEdit);
-      alert('You can only view this note. Edit permission is not granted.');
+      alert(t("edit_not_allowed"));
     }
     handleMenuClose();
   };
@@ -103,7 +92,7 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
 
   const handleTogglePin = () => {
     if (!isOwner) {
-      alert('Only the note creator can pin/unpin this note.');
+      alert(t("owner_only_pin"));
       handleMenuClose();
       return;
     }
@@ -113,7 +102,7 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
 
   const handleToggleArchive = () => {
     if (!isOwner) {
-      alert('Only the note creator can archive/unarchive this note.');
+      alert(t("owner_only_archive"));
       handleMenuClose();
       return;
     }
@@ -123,7 +112,7 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
 
   const handleShare = () => {
     if (!isOwner) {
-      alert('Only the note creator can share this note.');
+      alert(t("owner_only_share"));
       handleMenuClose();
       return;
     }
@@ -132,62 +121,68 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
     });
   };
 
-  // Determine edit label based on permissions
   const getEditLabel = () => {
-    if (isOwner) return 'Edit';
-    if (isSharedWithEdit) return 'Edit (Shared)';
-    return 'View Only';
+    if (isOwner) return t("edit");
+    if (isSharedWithEdit) return t("edit_shared");
+    return t("view_only");
   };
 
   return (
     <>
       <Card
         sx={{
-          height: '100%',
-          backgroundColor: note.color || '#ffffff',
-          border: '1px solid',
-          borderColor: 'divider',
+          height: "100%",
+          backgroundColor: note.color || "#ffffff",
+          border: "1px solid",
+          borderColor: "divider",
           borderRadius: 2,
-          transition: 'all 0.2s',
-          '&:hover': {
-            boxShadow: 3,
-            transform: 'translateY(-2px)'
-          },
-          position: 'relative'
+          transition: "all 0.2s",
+          "&:hover": { boxShadow: 3, transform: "translateY(-2px)" },
+          position: "relative"
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
         <CardContent sx={{ p: 2, pb: 1 }}>
+
           {/* Sharing Indicators */}
-          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 0.5 }}>
-            {note.share_type === 'public' && (
-              <PublicIcon fontSize="small" color="primary" titleAccess="Public note" />
+          <Box sx={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 0.5 }}>
+            {note.share_type === "public" && (
+              <PublicIcon
+                fontSize="small"
+                color="primary"
+                titleAccess={t("public_note")}
+              />
             )}
-            {note.share_type === 'shared' && note.shared_with && note.shared_with.length > 0 && (
-              <GroupIcon fontSize="small" color="primary" titleAccess={`Shared with ${note.shared_with.length} friend${note.shared_with.length !== 1 ? 's' : ''}`} />
+
+            {note.share_type === "shared" && note.shared_with?.length > 0 && (
+              <GroupIcon
+                fontSize="small"
+                color="primary"
+                titleAccess={t("shared_with_count", { count: note.shared_with.length })}
+              />
             )}
+
             {!isOwner && (
-              <Chip 
-                label={isSharedWithEdit ? "Can Edit" : "View Only"} 
-                size="small" 
-                color={isSharedWithEdit ? "primary" : "secondary"} 
-                sx={{ height: 20, fontSize: '0.6rem' }} 
+              <Chip
+                label={isSharedWithEdit ? t("can_edit") : t("view_only")}
+                size="small"
+                color={isSharedWithEdit ? "primary" : "secondary"}
+                sx={{ height: 20, fontSize: "0.6rem" }}
               />
             )}
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "flex-start", mb: 1 }}>
             <Typography
               variant="h6"
-              component="div"
               sx={{
                 flexGrow: 1,
                 fontWeight: 600,
@@ -198,22 +193,13 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
             >
               {note.title}
             </Typography>
-            
-            {/* Pin button - only show for owner when hovered or pinned */}
+
             {(isHovered || note.is_pinned) && isOwner && (
-              <IconButton
-                size="small"
-                onClick={handleTogglePin}
-                sx={{ mt: -0.5 }}
-              >
-                {note.is_pinned ? (
-                  <PinIcon fontSize="small" />
-                ) : (
-                  <PinOutlinedIcon fontSize="small" />
-                )}
+              <IconButton size="small" onClick={handleTogglePin} sx={{ mt: -0.5 }}>
+                {note.is_pinned ? <PinIcon fontSize="small" /> : <PinOutlinedIcon fontSize="small" />}
               </IconButton>
             )}
-            
+
             <IconButton size="small" onClick={handleMenuOpen} sx={{ mt: -0.5 }}>
               <MoreIcon fontSize="small" />
             </IconButton>
@@ -226,219 +212,147 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
               sx={{
                 mb: 2,
                 lineHeight: 1.4,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word"
               }}
             >
-              {note.content.length > 150 
-                ? `${note.content.substring(0, 150)}...` 
-                : note.content
-              }
+              {note.content.length > 150
+                ? `${note.content.substring(0, 150)}...`
+                : note.content}
             </Typography>
           )}
 
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Typography variant="caption" color="text.secondary">
               {formatDate(note.updated_at)}
             </Typography>
+
             {!isOwner && (
               <Typography variant="caption" color="primary">
-                Shared with you
+                {t("shared_with_you")}
               </Typography>
             )}
           </Box>
         </CardContent>
 
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-        >
-          {/* Edit option - always visible but behavior depends on permissions */}
+        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+
           <MenuItem onClick={handleEdit}>
             <EditIcon fontSize="small" sx={{ mr: 1 }} />
             {getEditLabel()}
           </MenuItem>
-          
-          {/* Pin option - only for owner */}
+
           {isOwner && (
             <MenuItem onClick={handleTogglePin}>
               {note.is_pinned ? (
                 <>
                   <PinOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-                  Unpin
+                  {t("unpin")}
                 </>
               ) : (
                 <>
                   <PinIcon fontSize="small" sx={{ mr: 1 }} />
-                  Pin
+                  {t("pinned")}
                 </>
               )}
             </MenuItem>
           )}
-          
-          {/* Archive option - only for owner */}
+
           {isOwner && (
             <MenuItem onClick={handleToggleArchive}>
               {note.is_archived ? (
                 <>
                   <UnarchiveIcon fontSize="small" sx={{ mr: 1 }} />
-                  Unarchive
+                  {t("unarchive")}
                 </>
               ) : (
                 <>
                   <ArchiveIcon fontSize="small" sx={{ mr: 1 }} />
-                  Archive
+                  {t("archive")}
                 </>
               )}
             </MenuItem>
           )}
-          
-          {/* Share option - only for owner */}
+
           {isOwner && (
             <MenuItem onClick={handleShare}>
               <ShareIcon fontSize="small" sx={{ mr: 1 }} />
-              Share
-            </MenuItem>
-          )}
-          
-          {/* Delete option - only for owner */}
-          {isOwner && (
-            <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
-              <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
-              Delete
+              {t("share")}
             </MenuItem>
           )}
 
-          {/* Show message for shared users about limited permissions */}
+          {isOwner && (
+            <MenuItem onClick={handleDeleteClick} sx={{ color: "error.main" }}>
+              <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+              {t("delete")}
+            </MenuItem>
+          )}
+
           {!isOwner && (
-            <MenuItem disabled sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-              Only note creator can use other options
+            <MenuItem disabled sx={{ fontStyle: "italic", color: "text.secondary" }}>
+              {t("only_owner_options")}
             </MenuItem>
           )}
         </Menu>
       </Card>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-        aria-labelledby="delete-dialog-title"
-        aria-describedby="delete-dialog-description"
-        PaperProps={{
-          sx: {
-            borderRadius: 2,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-            minWidth: 400
-          }
-        }}
-      >
-        <DialogTitle 
-          id="delete-dialog-title"
-          sx={{ 
-            bgcolor: 'error.main', 
-            color: 'white',
-            py: 2,
-            px: 3
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {/* Delete dialog */}
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
+        <DialogTitle sx={{ bgcolor: "error.main", color: "white" }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <DeleteIcon />
-            <Typography variant="h6" component="span" fontWeight="600">
-              Delete Note
-            </Typography>
+            {t("delete_note")}
           </Box>
         </DialogTitle>
-        
-        <DialogContent sx={{ py: 3, px: 3 }}>
-          <DialogContentText 
-            id="delete-dialog-description"
-            sx={{ 
-              color: 'text.primary',
-              fontSize: '1rem',
-              mb: 2
-            }}
-          >
-            Are you sure you want to delete this note?
+
+        <DialogContent sx={{ py: 3 }}>
+          <DialogContentText sx={{ color: "text.primary" }}>
+            {t("delete_note_description")}
           </DialogContentText>
-          
-          <Card 
-            variant="outlined" 
-            sx={{ 
-              bgcolor: 'grey.50',
-              borderColor: 'grey.300',
-              p: 2,
-              mb: 2
-            }}
-          >
+
+          <Card variant="outlined" sx={{ bgcolor: "grey.50", borderColor: "grey.300", p: 2, mb: 2 }}>
             <Typography variant="subtitle1" fontWeight="600" gutterBottom>
               {note.title}
             </Typography>
+
             {note.content && (
-              <Typography 
-                variant="body2" 
+              <Typography
+                variant="body2"
                 color="text.secondary"
                 sx={{
-                  display: '-webkit-box',
+                  display: "-webkit-box",
                   WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden'
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden"
                 }}
               >
                 {note.content}
               </Typography>
             )}
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              Last updated: {formatDate(note.updated_at)}
+
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+              {t("last_updated")} {formatDate(note.updated_at)}
             </Typography>
           </Card>
-          
-          <DialogContentText 
-            sx={{ 
-              color: 'error.main',
-              fontSize: '0.875rem',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5
-            }}
-          >
+
+          <DialogContentText sx={{ color: "error.main", fontWeight: 500, display: "flex", alignItems: "center", gap: 1 }}>
             <DeleteIcon fontSize="small" />
-            This action cannot be undone.
+            {t("irreversible_action")}
           </DialogContentText>
         </DialogContent>
-        
+
         <DialogActions sx={{ py: 2, px: 3, gap: 1 }}>
-          <Button 
-            onClick={handleDeleteCancel}
-            variant="outlined"
-            sx={{
-              borderRadius: 1,
-              px: 3,
-              textTransform: 'none',
-              fontWeight: '600'
-            }}
-          >
-            Cancel
+          <Button onClick={handleDeleteCancel} variant="outlined">
+            {t("cancel")}
           </Button>
-          <Button 
+
+          <Button
             onClick={handleDeleteConfirm}
             variant="contained"
             color="error"
             startIcon={<DeleteIcon />}
-            sx={{
-              borderRadius: 1,
-              px: 3,
-              textTransform: 'none',
-              fontWeight: '600',
-              boxShadow: '0 2px 8px rgba(211, 47, 47, 0.3)',
-              '&:hover': {
-                boxShadow: '0 4px 12px rgba(211, 47, 47, 0.4)',
-                bgcolor: 'error.dark'
-              }
-            }}
           >
-            Delete Note
+            {t("delete_note_button")}
           </Button>
         </DialogActions>
       </Dialog>

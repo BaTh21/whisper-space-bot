@@ -246,9 +246,32 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                     open={langMenuOpen}
                     onClose={handleLangMenuClose}
                   >
-                    <MenuItem onClick={() => changeLanguage('en')}>English</MenuItem>
-                    <MenuItem onClick={() => changeLanguage('km')}>ភាសាខ្មែរ</MenuItem>
+                    <MenuItem onClick={() => changeLanguage('en')}>
+                      <img
+                        src="/flags/uk.png"
+                        alt="English"
+                        style={{ width: 20, height: 14, marginRight: 8 }}
+                      />
+                      English
+                    </MenuItem>
+                    <MenuItem onClick={() => changeLanguage('km')}>
+                      <img
+                        src="/flags/kh.png"
+                        alt="Khmer"
+                        style={{ width: 20, height: 14, marginRight: 8 }}
+                      />
+                      ភាសាខ្មែរ
+                    </MenuItem>
+                    <MenuItem onClick={() => changeLanguage('jp')}>
+                      <img
+                        src="/flags/japan.png"
+                        alt="Japanese"
+                        style={{ width: 20, height: 14, marginRight: 8 }}
+                      />
+                      日本語
+                    </MenuItem>
                   </Menu>
+
                 </>
               )}
 

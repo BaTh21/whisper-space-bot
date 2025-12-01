@@ -1,23 +1,27 @@
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Box,
   Button,
-  TextField,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   InputLabel,
-  Select,
-  MenuItem,
-  Checkbox,
   ListItemText,
-  Box
+  MenuItem,
+  Select,
+  TextField
 } from '@mui/material';
 import { useFormik } from 'formik';
+import { useTranslation } from 'react-i18next';
 import * as Yup from 'yup';
 import { createDiary } from '../../services/api';
 
+
+
 const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
+  const { t, i18n } = useTranslation();
   const formik = useFormik({
     initialValues: {
       title: '',
@@ -70,11 +74,11 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
         sx: { borderRadius: '16px' }
       }}
     >
-      <DialogTitle sx={{ fontWeight: 600 }}>Create New Diary</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 600 }}>{t('create_new_diary')}</DialogTitle>
       <DialogContent>
         <Box component="form" sx={{ mt: 1 }}>
           <TextField
-            label="Title"
+            label={t('title')}
             name="title"
             value={formik.values.title}
             onChange={formik.handleChange}
@@ -87,7 +91,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           />
 
           <TextField
-            label="Content"
+            label={t('content')}
             name="content"
             multiline
             rows={4}
@@ -102,7 +106,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           />
 
           <FormControl fullWidth margin="normal">
-            <InputLabel>Share Type</InputLabel>
+            <InputLabel>{t('share_type')}</InputLabel>
             <Select
               name="share_type"
               value={formik.values.share_type}
@@ -151,14 +155,14 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
 
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={handleClose}>
-          Cancel
+          {t('cancel')}
         </Button>
         <Button
           onClick={formik.handleSubmit}
           variant="contained"
           disabled={!formik.isValid || formik.isSubmitting}
         >
-          Create Diary
+          {t('create_diary')}
         </Button>
       </DialogActions>
     </Dialog>

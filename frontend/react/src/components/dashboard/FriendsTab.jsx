@@ -17,6 +17,7 @@ import {
   useTheme
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAvatar } from '../../hooks/useAvatar';
 import { acceptFriendRequest, blockUser, unfriend } from '../../services/api';
 
@@ -35,6 +36,8 @@ const FriendsTab = ({
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { t } = useTranslation();
+  
 
   // Use the avatar hook
   const { getUserAvatar, getUserInitials } = useAvatar();
@@ -43,11 +46,11 @@ const FriendsTab = ({
     setAcceptingId(requesterId);
     try {
       await acceptFriendRequest(requesterId);
-      setSuccess('Friend request accepted successfully!');
+      setSuccess(t('friend_request_accepted'));
       onDataUpdate();
     } catch (err) {
       console.error('Accept request failed:', err);
-      setError(err.message || 'Failed to accept friend request');
+      setError(err.message || t('friend_request_accept_failed'));
     } finally {
       setAcceptingId(null);
     }
@@ -69,11 +72,11 @@ const FriendsTab = ({
     setProcessingAction('unfriend');
     try {
       await unfriend(selectedFriend.id);
-      setSuccess(`Unfriended ${selectedFriend.username}`);
+      setSuccess(t('unfriended_user', { username: selectedFriend.username }));
       onDataUpdate();
     } catch (err) {
       console.error('Unfriend failed:', err);
-      setError(err.message || 'Failed to unfriend');
+      setError(err.message || t('unfriend_failed'));
     } finally {
       setProcessingAction(null);
       handleActionMenuClose();
@@ -86,11 +89,11 @@ const FriendsTab = ({
     setProcessingAction('block');
     try {
       await blockUser(selectedFriend.id);
-      setSuccess(`Blocked ${selectedFriend.username}`);
+      setSuccess(t('blocked_user', { username: selectedFriend.username }));
       onDataUpdate();
     } catch (err) {
       console.error('Block failed:', err);
-      setError(err.message || 'Failed to block user');
+      setError(err.message || t('block_user_failed'));
     } finally {
       setProcessingAction(null);
       handleActionMenuClose();
@@ -98,27 +101,26 @@ const FriendsTab = ({
   };
 
   const handleMessageFriend = (friend) => {
-  console.log('Message button clicked for friend:', friend);
+    console.log('Message button clicked for friend:', friend);
   
-  if (typeof setActiveTab === 'function') {
-    localStorage.setItem('selectedFriend', JSON.stringify(friend));
-    setActiveTab(1);
-    setSuccess(`Opening chat with ${friend.username}`);
-    
-    // Auto-hide success message after 2 seconds
-    setTimeout(() => {
-      setSuccess('');
-    }, 2000);
-  } else {
-    console.error('setActiveTab is not a function');
-    setError('Cannot open messages. Please try again.');
-    
-    // Auto-hide error message after 2 seconds
-    setTimeout(() => {
-      setError('');
-    }, 2000);
-  }
-};
+    if (typeof setActiveTab === 'function') {
+      localStorage.setItem('selectedFriend', JSON.stringify(friend));
+      setActiveTab(1);
+      setSuccess(t('opening_chat', { username: friend.username }));
+      
+      // Auto-hide success message after 2 seconds
+      setTimeout(() => {
+        setSuccess('');
+      }, 2000);
+    } else {
+      console.error('setActiveTab is not a function');
+      setError(t('cannot_open_messages'));
+      
+      setTimeout(() => {
+        setError('');
+      }, 2000);
+    }
+  };
 
   return (
     <Box sx={{ 
@@ -127,13 +129,13 @@ const FriendsTab = ({
       overflow: 'hidden'
     }}>
       <Typography variant="h5" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
-        Friends
+        {t('friends')}
       </Typography>
 
       {pendingRequests.length > 0 && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" gutterBottom color="primary" fontWeight="600" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-            Pending Requests ({pendingRequests.length})
+            {t('pending_requests_count', { count: pendingRequests.length })}
           </Typography>
           {pendingRequests.map((request) => (
             <Card 
@@ -156,15 +158,8 @@ const FriendsTab = ({
                 <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
                   <Avatar 
                     src={getUserAvatar(request)} 
-                    sx={{ 
-                      width: { xs: 40, sm: 48 }, 
-                      height: { xs: 40, sm: 48 } 
-                    }}
-                    imgProps={{
-                      onError: (e) => {
-                        e.target.style.display = 'none';
-                      }
-                    }}
+                    sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
+                    imgProps={{ onError: (e) => { e.target.style.display = 'none'; } }}
                   >
                     {getUserInitials(request.username)}
                   </Avatar>
@@ -173,24 +168,14 @@ const FriendsTab = ({
                   <Typography 
                     variant="body1" 
                     fontWeight="500" 
-                    sx={{ 
-                      fontSize: { xs: '0.9rem', sm: '1rem' },
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
+                    sx={{ fontSize: { xs: '0.9rem', sm: '1rem' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                   >
                     {request.username}
                   </Typography>
                   <Typography 
                     variant="body2" 
                     color="text.secondary"
-                    sx={{ 
-                      fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
+                    sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                   >
                     {request.email}
                   </Typography>
@@ -201,17 +186,9 @@ const FriendsTab = ({
                 size="small"
                 onClick={() => handleAcceptRequest(request.id)}
                 disabled={acceptingId === request.id}
-                sx={{ 
-                  borderRadius: '8px', 
-                  minWidth: { xs: '100%', sm: 100 },
-                  mt: { xs: 1, sm: 0 }
-                }}
+                sx={{ borderRadius: '8px', minWidth: { xs: '100%', sm: 100 }, mt: { xs: 1, sm: 0 } }}
               >
-                {acceptingId === request.id ? (
-                  <CircularProgress size={20} />
-                ) : (
-                  'Accept'
-                )}
+                {acceptingId === request.id ? <CircularProgress size={20} /> : t('accept')}
               </Button>
             </Card>
           ))}
@@ -219,11 +196,12 @@ const FriendsTab = ({
       )}
 
       <Typography variant="h6" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-        Your Friends ({friends.length})
+        {t('your_friends_count', { count: friends.length })}
       </Typography>
+
       {friends.length === 0 ? (
         <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-          No friends yet. Search for users to add friends!
+          {t('no_friends_yet')}
         </Typography>
       ) : (
         <List sx={{ p: 0 }}>
@@ -247,104 +225,50 @@ const FriendsTab = ({
               }}
             >
               {/* Friend Info Section */}
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center',
-                width: { xs: '100%', sm: 'auto' },
-                flex: 1,
-                minWidth: 0
-              }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', width: { xs: '100%', sm: 'auto' }, flex: 1, minWidth: 0 }}>
                 <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
                   <Avatar 
                     src={getUserAvatar(friend)} 
-                    sx={{ 
-                      width: { xs: 40, sm: 48 }, 
-                      height: { xs: 40, sm: 48 } 
-                    }}
-                    imgProps={{
-                      onError: (e) => {
-                        e.target.style.display = 'none';
-                      }
-                    }}
+                    sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
+                    imgProps={{ onError: (e) => { e.target.style.display = 'none'; } }}
                   >
                     {getUserInitials(friend.username)}
                   </Avatar>
                 </ListItemAvatar>
                 <ListItemText
                   primary={
-                    <Typography 
-                      variant="body1" 
-                      fontWeight="500"
-                      sx={{ 
-                        fontSize: { xs: '0.9rem', sm: '1rem' },
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
+                    <Typography variant="body1" fontWeight="500" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {friend.username}
                     </Typography>
                   }
                   secondary={
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary"
-                      sx={{ 
-                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {friend.email}
                     </Typography>
                   }
-                  sx={{ 
-                    my: 0,
-                    mr: { xs: 0, sm: 2 },
-                    flex: 1,
-                    minWidth: 0
-                  }}
+                  sx={{ my: 0, mr: { xs: 0, sm: 2 }, flex: 1, minWidth: 0 }}
                 />
               </Box>
 
               {/* Action Buttons */}
-              <Box sx={{ 
-                display: 'flex', 
-                gap: 1, 
-                alignItems: 'center',
-                width: { xs: '100%', sm: 'auto' },
-                justifyContent: { xs: 'space-between', sm: 'flex-end' }
-              }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: { xs: '100%', sm: 'auto' }, justifyContent: { xs: 'space-between', sm: 'flex-end' } }}>
                 <Button
                   variant="outlined"
                   size="small"
                   onClick={() => handleMessageFriend(friend)}
-                  sx={{ 
-                    borderRadius: '8px',
-                    minWidth: { xs: 'auto', sm: 100 },
-                    px: { xs: 1, sm: 2 },
-                    flex: { xs: 1, sm: 'none' }
-                  }}
+                  sx={{ borderRadius: '8px', minWidth: { xs: 'auto', sm: 100 }, px: { xs: 1, sm: 2 }, flex: { xs: 1, sm: 'none' } }}
                   startIcon={isMobile ? <MessageIcon /> : null}
                 >
-                  {isMobile ? '' : 'Message'}
+                  {isMobile ? '' : t('messages')}
                 </Button>
                 <IconButton
                   onClick={(e) => handleActionMenuOpen(e, friend)}
                   disabled={processingAction === friend.id}
-                  sx={{ 
-                    borderRadius: '8px',
-                    flex: { xs: 'none', sm: 'none' }
-                  }}
+                  sx={{ borderRadius: '8px', flex: { xs: 'none', sm: 'none' } }}
                   aria-label="friend actions"
                   size={isMobile ? 'small' : 'medium'}
                 >
-                  {processingAction === friend.id ? (
-                    <CircularProgress size={20} />
-                  ) : (
-                    <MoreVertIcon fontSize={isMobile ? 'small' : 'medium'} />
-                  )}
+                  {processingAction === friend.id ? <CircularProgress size={20} /> : <MoreVertIcon fontSize={isMobile ? 'small' : 'medium'} />}
                 </IconButton>
               </Box>
             </ListItem>
@@ -357,19 +281,14 @@ const FriendsTab = ({
         anchorEl={actionMenuAnchor}
         open={Boolean(actionMenuAnchor)}
         onClose={handleActionMenuClose}
-        PaperProps={{
-          sx: { 
-            borderRadius: '8px',
-            minWidth: 140
-          }
-        }}
+        PaperProps={{ sx: { borderRadius: '8px', minWidth: 140 } }}
       >
         <MenuItem 
           onClick={handleUnfriend}
           disabled={processingAction === 'unfriend'}
           sx={{ color: 'error.main', fontSize: { xs: '0.9rem', sm: '1rem' } }}
         >
-          {processingAction === 'unfriend' ? 'Unfriending...' : 'Unfriend'}
+          {processingAction === 'unfriend' ? t('unfriending') : t('unfriend')}
         </MenuItem>
         <MenuItem 
           onClick={handleBlock}
@@ -377,7 +296,7 @@ const FriendsTab = ({
           sx={{ color: 'error.main', fontSize: { xs: '0.9rem', sm: '1rem' } }}
         >
           <BlockIcon sx={{ mr: 1, fontSize: { xs: 18, sm: 20 } }} />
-          {processingAction === 'block' ? 'Blocking...' : 'Block User'}
+          {processingAction === 'block' ? t('blocking') : t('block_user')}
         </MenuItem>
       </Menu>
     </Box>

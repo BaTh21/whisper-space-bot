@@ -1,26 +1,26 @@
+import LogoImg from '@/assets/Login1.gif';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import {
   Alert,
   Box,
   Button,
-  Card,
   Collapse,
   IconButton,
   InputAdornment,
   TextField,
   Typography,
-  Avatar
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import * as Yup from 'yup';
 import { useAuth } from '../context/AuthContext';
 import { login as loginApi } from '../services/api';
-import LogoImg from '@/assets/Login1.gif';
-import {toast} from 'react-toastify';
 
 const LoginForm = () => {
+  const { t } = useTranslation();
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -30,8 +30,8 @@ const LoginForm = () => {
   const formik = useFormik({
     initialValues: { username: '', password: '' },
     validationSchema: Yup.object({
-      username: Yup.string().email('Invalid email').required('Required'),
-      password: Yup.string().required('Required'),
+      username: Yup.string().email(t('invalid_email')).required(t('required')),
+      password: Yup.string().required(t('required')),
     }),
     onSubmit: async (values) => {
       setError(null);
@@ -39,14 +39,14 @@ const LoginForm = () => {
       try {
         const response = await loginApi({
           email: values.username,
-          password: values.password
+          password: values.password,
         });
 
         await login(response);
         navigate('/dashboard');
       } catch (err) {
-        setError(err.message || 'Login failed');
-        toast.error(`Failed : ${err.message}`);
+        setError(err.message || t('login_failed'));
+        toast.error(`${t('failed')}: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -90,7 +90,6 @@ const LoginForm = () => {
           display: "flex",
           alignItems: { xs: 'start', md: "center" },
           justifyContent: "center",
-          // p: { xs: 2, sm: 4 },
           backgroundColor: { xs: 'transparent', md: "grey.300" },
           height: { md: '100vh' },
         }}
@@ -110,7 +109,7 @@ const LoginForm = () => {
             color="primary"
             sx={{ fontWeight: 600, mb: 3 }}
           >
-            SIGN IN
+            {t('sign_in')}
           </Typography>
 
           <Collapse in={!!error}>
@@ -120,8 +119,9 @@ const LoginForm = () => {
           </Collapse>
 
           <Box component="form" onSubmit={formik.handleSubmit}>
+            {/* Email */}
             <TextField
-              label="Email"
+              label={t('email')}
               name="username"
               type="email"
               fullWidth
@@ -135,8 +135,9 @@ const LoginForm = () => {
               disabled={loading}
             />
 
+            {/* Password */}
             <TextField
-              label="Password"
+              label={t('password')}
               name="password"
               type={showPassword ? "text" : "password"}
               fullWidth
@@ -159,6 +160,7 @@ const LoginForm = () => {
               }}
             />
 
+            {/* Create Account Link */}
             <Box
               sx={{
                 display: "flex",
@@ -167,13 +169,14 @@ const LoginForm = () => {
                 mt: 1,
               }}
             >
-              <Typography variant="body2">Don't have an account?</Typography>
+              <Typography variant="body2">{t('dont_have_account')}</Typography>
 
               <Button sx={{ color: "red" }} onClick={() => navigate("/register")}>
-                Create New
+                {t('create_new')}
               </Button>
             </Box>
 
+            {/* Login Button */}
             <Button
               type="submit"
               variant="contained"
@@ -181,14 +184,12 @@ const LoginForm = () => {
               sx={{ mt: 3, py: 1.5 }}
               disabled={loading}
             >
-              {loading ? "Logging in..." : "Login"}
+              {loading ? t('logging_in') : t('login')}
             </Button>
           </Box>
         </Box>
       </Box>
     </Box>
-
-
   );
 };
 

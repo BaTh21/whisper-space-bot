@@ -39,6 +39,7 @@ import {
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
+import { useTranslation } from 'react-i18next';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -80,6 +81,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
+  const { t, i18n } = useTranslation();
 
   // VOICE STATES
   const [isRecording, setIsRecording] = useState(false);
@@ -1407,7 +1409,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         {(!isMobile) && (
           <Box sx={{ width: { sm: 280, md: 300 }, borderRight: 1, borderColor: 'divider', overflow: 'auto' }}>
             <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600 }}>
-              Friends
+              {t('friends')}
             </Typography>
             <List>
               {friends.map((friend) => (
@@ -1490,8 +1492,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 {messages.length === 0 ? (
                   <Box sx={{ textAlign: 'center', mt: 4 }}>
                     <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary">No messages yet</Typography>
-                    <Typography color="text.secondary">Say hello to {selectedFriend.username}!</Typography>
+                    <Typography variant="h6" color="text.secondary">{t('no_message_yet')}</Typography>
+                    <Typography color="text.secondary">{t('say_hello')} {selectedFriend.username}!</Typography>
                   </Box>
                 ) : (
                   messages.map((message) => (
@@ -1622,7 +1624,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <ChatIcon sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
               <Typography variant="h6" color="text.secondary">
-                {isMobile ? 'Select a friend' : 'Choose a friend to start chatting'}
+                {isMobile ? 'Select a friend' : t('Choose a friend to start chatting')}
               </Typography>
               {isMobile && (
                 <Button variant="contained" onClick={() => setMobileDrawerOpen(true)} sx={{ mt: 2 }}>

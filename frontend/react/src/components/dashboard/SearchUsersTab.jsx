@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { searchUsers, sendFriendRequest } from '../../services/api';
+import { useTranslation } from 'react-i18next';
 
 const SearchUsersTab = ({ 
   setError, 
@@ -31,6 +32,7 @@ const SearchUsersTab = ({
   const [loading, setLoading] = useState(false);
   const [sendingRequests, setSendingRequests] = useState(new Set());
   const [failedImages, setFailedImages] = useState(new Set());
+  const { t, i18n } = useTranslation();
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -171,7 +173,7 @@ const SearchUsersTab = ({
       overflow: 'hidden'
     }}>
       <Typography variant="h5" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
-        Search Users
+        {t('search_users')}
       </Typography>
       
       <Box sx={{ 
@@ -182,7 +184,7 @@ const SearchUsersTab = ({
       }}>
         <TextField
           fullWidth
-          label="Search by username or email..."
+          label={t('Search_by_username')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -213,7 +215,7 @@ const SearchUsersTab = ({
 
       {searchResults.length === 0 && searchQuery.trim().length >= 2 && !loading && (
         <Typography color="text.secondary" align="center" sx={{ py: 2, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-          No users found matching "{searchQuery}"
+          {t('No_users_found')} "{searchQuery}"
         </Typography>
       )}
 

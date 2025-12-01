@@ -23,6 +23,7 @@ import {
   Typography
 } from '@mui/material';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 
 const ChatMessage = ({
@@ -49,6 +50,7 @@ const ChatMessage = ({
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
   const [isEditing, setIsEditing] = useState(false);
+  const { t, i18n } = useTranslation();
 
   /* ---------------------------------------------------------- */
   /*                     MESSAGE TYPE DETECTION                */
@@ -90,25 +92,25 @@ const ChatMessage = ({
   const handleClose = () => setAnchorEl(null);
 
   const handleEdit = async () => {
-  if (!editText.trim() || editText === message.content || !onUpdate) {
-    setEditing(false);
-    handleClose();
-    return;
-  }
+    if (!editText.trim() || editText === message.content || !onUpdate) {
+      setEditing(false);
+      handleClose();
+      return;
+    }
 
-  setIsEditing(true); // start loading BEFORE async call
+    setIsEditing(true); // start loading BEFORE async call
 
-  try {
-    await onUpdate(message.id, editText, message.is_temp);
-    setEditing(false);
-    handleClose();
-  } catch (err) {
-    console.error('Edit error:', err);
-    // keep editing open for retry
-  }
+    try {
+      await onUpdate(message.id, editText, message.is_temp);
+      setEditing(false);
+      handleClose();
+    } catch (err) {
+      console.error('Edit error:', err);
+      // keep editing open for retry
+    }
 
-  setIsEditing(false); // stop loading AFTER async call
-};
+    setIsEditing(false); // stop loading AFTER async call
+  };
 
 
   const handleCancelEdit = () => {
@@ -731,14 +733,14 @@ const ChatMessage = ({
               sx={{ borderRadius: '12px' }}
             />
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-              <Button size="small" onClick={handleCancelEdit}>Cancel</Button>
+              <Button size="small" onClick={handleCancelEdit}>{t('cancel')}</Button>
               <Button
                 size="small"
                 variant="contained"
                 onClick={handleEdit}
                 disabled={isEditing}
               >
-                {isEditing ? "Saving..." : "Save"}
+                {isEditing ? "Saving..." : t('save')}
               </Button>
             </Box>
           </Box>
@@ -853,37 +855,57 @@ const ChatMessage = ({
             {actualMessageType === 'image' && [
               <MenuItem key="view-full" onClick={handleViewFullImage}>
                 <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
-                View Full Image
+                {t('view_full_image')}
               </MenuItem>,
               <MenuItem key="download" onClick={handleDownloadImage}>
                 <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Download Image
+                {t('download_image')}
               </MenuItem>
             ]}
 
             {/* My messages */}
-            {isMine && [
-              actualMessageType === 'text' && (
-                <MenuItem key="edit" onClick={() => { setEditing(true); setEditText(message.content); handleClose(); }}>
-                  <EditIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  Edit
-                </MenuItem>
-              ),
-              <MenuItem key="forward" onClick={handleForwardClick}>
-                <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Forward
-              </MenuItem>,
-              <MenuItem key="delete" onClick={handleDelete} sx={{ color: 'error.main' }}>
-                <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Delete
-              </MenuItem>
-            ].filter(Boolean)}
+            {isMine && (
+              <>
+                {[
+                  actualMessageType === 'text' && {
+                    key: 'edit',
+                    icon: <EditIcon fontSize="small" sx={{ mr: 1.5 }} />,
+                    label: t('edit'),
+                    onClick: () => {
+                      setEditing(true);
+                      setEditText(message.content);
+                      handleClose();
+                    },
+                  },
+                  {
+                    key: 'forward',
+                    icon: <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />,
+                    label: t('forward'),
+                    onClick: handleForwardClick,
+                  },
+                  {
+                    key: 'delete',
+                    icon: <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />,
+                    label: t('delete'),
+                    onClick: handleDelete,
+                    sx: { color: 'error.main' },
+                  },
+                ]
+                  .filter(Boolean)
+                  .map((item) => (
+                    <MenuItem key={item.key} onClick={item.onClick} sx={item.sx}>
+                      {item.icon}
+                      {item.label}
+                    </MenuItem>
+                  ))}
+              </>
+            )}
 
             {/* Friend's messages */}
             {!isMine && (
               <MenuItem key="forward" onClick={handleForwardClick}>
                 <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Forward
+                {t('forward')}
               </MenuItem>
             )}
           </Menu>
