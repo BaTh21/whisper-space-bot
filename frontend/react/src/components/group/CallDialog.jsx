@@ -4,12 +4,14 @@ import {
   Box,
   IconButton
 } from "@mui/material";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import CloseIcon from '@mui/icons-material/Close';
 import KeyboardVoiceIcon from '@mui/icons-material/KeyboardVoice';
+import MicOffIcon from '@mui/icons-material/MicOff';
 
-const CallingDialog = ({ open, userId, onCancel, remoteStream, status }) => {
+const CallDialog = ({ open, userId, onCancel, remoteStream, onLocal, status }) => {
   const remoteVideoRef = useRef(null);
+  const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
@@ -17,23 +19,22 @@ const CallingDialog = ({ open, userId, onCancel, remoteStream, status }) => {
     }
   }, [remoteStream]);
 
+  const toggleMute = () => {
+    if (!onLocal) return;
+
+    onLocal.getAudioTracks().forEach(track => {
+      track.enabled = !track.enabled; // toggle audio track
+    });
+
+    setIsMuted(!isMuted);
+  };
+
   return (
-    <Dialog
-      open={open}
-      onClose={onCancel}
-      fullScreen
-      PaperProps={{
-        sx: {
-          position: "relative",
-          backgroundColor: "black",
-        }
-      }}
-    >
+    <Dialog open={open} onClose={onCancel} fullScreen>
       <video
         ref={remoteVideoRef}
         autoPlay
         playsInline
-        muted
         style={{
           width: "100%",
           height: "100%",
@@ -63,76 +64,35 @@ const CallingDialog = ({ open, userId, onCancel, remoteStream, status }) => {
             "linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0.0))",
         }}
       >
-        <Box
-          sx={{
-            textAlign: 'center'
-          }}
-        >
-          <Typography
-            variant="h4"
-            sx={{
-              color: "white",
-              mb: 2,
-              pointerEvents: "auto",
-              fontSize: 20
-            }}
-          >
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography variant="h4" sx={{ color: "white", pointerEvents: "auto" }}>
             Calling User {userId}
           </Typography>
-
-          <Typography
-            sx={{
-              color: "white",
-              opacity: 0.7,
-              mb: 3,
-              // fontSize: "1.2rem",
-              pointerEvents: "auto",
-            }}
-          >
+          <Typography sx={{ color: "white", opacity: 0.7, pointerEvents: "auto" }}>
             {status}
           </Typography>
         </Box>
 
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4
-          }}
-        >
-
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 4, pointerEvents: "auto" }}>
+          {/* Mute/Unmute */}
           <IconButton
-            onClick={onCancel}
-            variant="contained"
-            color="error"
+            onClick={toggleMute}
             sx={{
-              fontSize: "1.2rem",
-              padding: 1.5,
-              borderRadius: 6,
-              pointerEvents: "auto",
-              backgroundColor: 'primary.main',
+              backgroundColor: isMuted ? 'secondary.main' : 'primary.main',
               color: 'white',
-              '&:hover': {
-                backgroundColor: '#1a2f42ff',
-              }
+              '&:hover': { backgroundColor: isMuted ? '#68102fff' : '#1a2f42ff' }
             }}
           >
-            <KeyboardVoiceIcon />
+            {isMuted ? <MicOffIcon /> : <KeyboardVoiceIcon />}
           </IconButton>
+
+          {/* End Call */}
           <IconButton
             onClick={onCancel}
-            variant="contained"
-            color="error"
             sx={{
-              fontSize: "1.2rem",
-              padding: 1.5,
-              borderRadius: 6,
-              pointerEvents: "auto",
-              backgroundColor: 'secondary.main',
+              backgroundColor: 'error.main',
               color: 'white',
-              '&:hover': {
-                backgroundColor: '#68102fff',
-              }
+              '&:hover': { backgroundColor: '#b71c1c' }
             }}
           >
             <CloseIcon />
@@ -143,4 +103,4 @@ const CallingDialog = ({ open, userId, onCancel, remoteStream, status }) => {
   );
 };
 
-export default CallingDialog;
+export default CallDialog;
