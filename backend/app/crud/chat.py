@@ -16,6 +16,7 @@ from app.schemas.chat import MessageCreate
 from app.models.user_message_status import UserMessageStatus
 from app.models.message_seen_status import MessageSeenStatus
 from app.utils.chat_helpers import validate_reply_message
+from app.models.user import User
 
 
 def create_private_message(
@@ -318,7 +319,75 @@ def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
         db.rollback()
         return False
 
+def update_user_online_status(db: Session, user_id: int, is_online: bool) -> bool:
+    """Update user's online status"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return False
+            
+        user.is_online = is_online
+        user.last_activity = datetime.now(timezone.utc)
+        
+        if not is_online:
+            user.last_seen = datetime.now(timezone.utc)
+            
+        db.commit()
+        return True
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating user online status: {e}")
+        return False
 
+def get_user_online_status(db: Session, user_id: int) -> dict:
+    """Get user's online status and last activity"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None
+        
+    return {
+        "user_id": user.id,
+        "username": user.username,
+        "is_online": user.is_online,
+        "last_seen": user.last_seen,
+        "last_activity": user.last_activity,
+        "avatar_url": user.avatar_url
+    }
 
-# Add these functions to your crud/chat.py
+def get_friends_online_status(db: Session, user_id: int) -> List[dict]:
+    """Get online status of all friends"""
+    from app.crud.friend import get_user_friends
+    
+    friends = get_user_friends(db, user_id)
+    
+    status_list = []
+    for friend in friends:
+        status_list.append({
+            "user_id": friend.id,
+            "username": friend.username,
+            "avatar_url": friend.avatar_url,
+            "is_online": friend.is_online,
+            "last_seen": friend.last_seen.isoformat() if friend.last_seen else None,
+            "last_activity": friend.last_activity.isoformat() if friend.last_activity else None
+        })
+    
+    return status_list
+
+def get_multiple_users_online_status(db: Session, user_ids: List[int]) -> List[dict]:
+    """Get online status for multiple users"""
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    
+    status_list = []
+    for user in users:
+        status_list.append({
+            "user_id": user.id,
+            "username": user.username,
+            "avatar_url": user.avatar_url,
+            "is_online": user.is_online,
+            "last_seen": user.last_seen.isoformat() if user.last_seen else None,
+            "last_activity": user.last_activity.isoformat() if user.last_activity else None
+        })
+    
+    return status_list
 

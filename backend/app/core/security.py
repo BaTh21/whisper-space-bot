@@ -71,10 +71,52 @@ def get_current_user(
         
     return user
 
-async def get_current_user_ws(websocket: WebSocket, db: Session):
+def decode_access_token(token: str) -> Optional[dict]:
+    """Decode JWT token without throwing HTTP exceptions (for WebSocket use)"""
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        return payload
+    except JWTError:
+        return None
+
+async def get_current_user_ws(websocket: WebSocket, db: Session) -> Optional[User]:
+    """
+    Authenticate user via WebSocket connection token
+    """
     token = websocket.query_params.get("token")
     if not token:
-        await websocket.close(code=4401, reason="Missing or invalid token")
+        await websocket.close(code=4401, reason="Missing token")
         return None
-    # token = token.split(" ")[1]
-    return get_current_user(token=token, db=db)
+    
+    # If token is in "Bearer <token>" format, extract it
+    if token.startswith("Bearer "):
+        token = token.split(" ")[1]
+    
+    try:
+        # Decode token manually
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        if user_id is None or token_type != "access":
+            await websocket.close(code=4401, reason="Invalid token type")
+            return None
+            
+    except JWTError:
+        await websocket.close(code=4401, reason="Invalid or expired token")
+        return None
+    
+    try:
+        user_id_int = int(user_id)
+    except (ValueError, TypeError):
+        await websocket.close(code=4401, reason="Invalid user ID in token")
+        return None
+        
+    from app.crud.user import get_by_id
+    user = get_by_id(db, user_id_int)
+    
+    if user is None:
+        await websocket.close(code=4401, reason="User not found")
+        return None
+        
+    return user

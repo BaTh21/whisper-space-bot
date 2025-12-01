@@ -20,6 +20,10 @@ class User(Base):
     diaries = relationship("Diary", back_populates="author")
     diary_likes = relationship("DiaryLike", back_populates="user", cascade="all, delete-orphan")
     seen_messages = relationship("PrivateMessage", secondary="message_seen_status", back_populates="seen_by_users")
+    
+    is_online = Column(Boolean, default=False)
+    last_seen = Column(DateTime(timezone=True), default=datetime.utcnow)
+    last_activity = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 # Relationship to seen message statuses
     seen_message_statuses = relationship(

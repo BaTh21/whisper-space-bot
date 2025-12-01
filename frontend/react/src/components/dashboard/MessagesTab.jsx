@@ -2,7 +2,6 @@ import {
   Chat as ChatIcon,
   Close as CloseIcon,
   Image as ImageIcon,
-  Menu as MenuIcon,
   Send as SendIcon
 } from '@mui/icons-material';
 import MicIcon from '@mui/icons-material/Mic';
@@ -25,6 +24,7 @@ import {
   useTheme
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAvatar } from '../../hooks/useAvatar';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import {
@@ -32,14 +32,14 @@ import {
   deleteImageMessage,
   deleteMessage,
   editMessage,
+  getFriendsOnlineStatus,
   getPrivateChat,
   sendImageMessage,
   sendPrivateMessage,
-  uploadImage
+  uploadImage,
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
-import { useTranslation } from 'react-i18next';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -92,6 +92,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+
+  const [friendsWithStatus, setFriendsWithStatus] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [lastSeenMap, setLastSeenMap] = useState({});
+  const [onlineStatusInterval, setOnlineStatusInterval] = useState(null);
   useEffect(() => {
     const mobileStyles = `
     @media (max-width: 599px) {
@@ -172,10 +177,85 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /* WebSocket Handlers */
   /* --------------------------------------------------------------------- */
-  const handleWebSocketMessage = useCallback(
+const handleWebSocketMessage = useCallback(
     (data) => {
-      const { type } = data;
-      console.log("📡 WebSocket received:", data);
+    const { type } = data;
+    console.log("📡 WebSocket received:", data);
+
+    // === ONLINE/OFFLINE STATUS HANDLING ===
+    if (type === "user_online") {
+      console.log('📱 User came online:', data.user_id);
+      
+      // Update online users set
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.add(data.user_id);
+        return newSet;
+      });
+      
+      // Update last seen map
+      setLastSeenMap(prev => ({
+        ...prev,
+        [data.user_id]: data.timestamp || new Date().toISOString()
+      }));
+      
+      // Update friendsWithStatus state
+      setFriendsWithStatus(prev => prev.map(friend => 
+        friend.user_id === data.user_id 
+          ? { 
+              ...friend, 
+              is_online: true,
+              last_activity: data.timestamp || new Date().toISOString()
+            } 
+          : friend
+      ));
+      
+      // Show notification if this is the selected friend
+      if (selectedFriend?.id === data.user_id) {
+        setSuccess(`${selectedFriend.username} is now online`);
+        setTimeout(() => setSuccess(''), 2000);
+      }
+      
+      return; // Don't process further
+      
+    } else if (type === "user_offline") {
+      console.log('📱 User went offline:', data.user_id);
+      
+      // Update online users set
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(data.user_id);
+        return newSet;
+      });
+      
+      // Update last seen map with offline timestamp
+      const offlineTime = data.last_seen || data.timestamp || new Date().toISOString();
+      setLastSeenMap(prev => ({
+        ...prev,
+        [data.user_id]: offlineTime
+      }));
+      
+      // Update friendsWithStatus state
+      setFriendsWithStatus(prev => prev.map(friend => 
+        friend.user_id === data.user_id 
+          ? { 
+              ...friend, 
+              is_online: false,
+              last_seen: offlineTime,
+              last_activity: offlineTime
+            } 
+          : friend
+      ));
+      
+      return; // Don't process further
+      
+    } else if (type === "online_users") {
+      // Received list of online users in the chat
+      console.log('👥 Online users list:', data.user_ids);
+      setOnlineUsers(new Set(data.user_ids || []));
+      return; // Don't process further
+    }
+      // === END ONLINE/OFFLINE STATUS HANDLING ===
 
       // 1. New real message from server
       if (type === "message") {
@@ -355,8 +435,31 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
       }
     },
-    [getAvatarUrl, friends, selectedFriend, getUserAvatar]
+    [
+      getAvatarUrl, 
+      friends, 
+      selectedFriend, 
+      getUserAvatar,
+      setOnlineUsers,       // ADD THIS DEPENDENCY
+      setLastSeenMap,       // ADD THIS DEPENDENCY  
+      setFriendsWithStatus,           // ADD THIS DEPENDENCY
+      setSuccess           // ADD THIS DEPENDENCY
+    ]
   );
+  useEffect(() => {
+  if (friends.length > 0) {
+    // Initialize friendsWithStatus from friends prop
+    setFriendsWithStatus(friends.map(friend => ({
+      user_id: friend.id,
+      username: friend.username,
+      avatar_url: friend.avatar_url,
+      email: friend.email,
+      is_online: onlineUsers.has(friend.id),
+      last_seen: lastSeenMap[friend.id] || null,
+      last_activity: lastSeenMap[friend.id] || null
+    })));
+  }
+}, [friends]);
 
   const handleWebSocketOpen = useCallback(() => {
     console.log('[WS] Connected');
@@ -1053,6 +1156,126 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setCurrentSSelectedFriend(friend);
   };
 
+
+
+const updateFriendsOnlineStatus = useCallback(async () => {
+  try {
+    const response = await getFriendsOnlineStatus();
+    const friendsList = response.friends || [];
+    
+    const onlineIds = new Set();
+    const lastSeenData = {};
+    
+    friendsList.forEach(friend => {
+      if (friend.is_online) {
+        onlineIds.add(friend.user_id);
+      }
+      if (friend.last_seen) {
+        lastSeenData[friend.user_id] = friend.last_seen;
+      }
+    });
+    
+    setOnlineUsers(onlineIds);
+    setLastSeenMap(lastSeenData);
+    
+    // Update friends list with status
+    setFriendsWithStatus(prev => prev.map(friend => {
+      const statusInfo = friendsList.find(f => f.user_id === friend.id);
+      return {
+        ...friend,
+        is_online: statusInfo?.is_online || false,
+        last_seen: statusInfo?.last_seen || friend.last_seen,
+        last_activity: statusInfo?.last_activity || friend.last_activity
+      };
+    }));
+    
+  } catch (err) {
+    console.error('Failed to fetch online status:', err);
+  }
+}, [setFriendsWithStatus]);
+
+  // Add this effect to fetch online status on mount and set up interval
+useEffect(() => {
+  updateFriendsOnlineStatus();
+}, [updateFriendsOnlineStatus]);
+
+  // Add this effect to handle real-time WebSocket status updates
+  useEffect(() => {
+    if (!isConnected || !selectedFriend) return;
+
+    const handleStatusMessage = (data) => {
+      if (data.type === 'user_online') {
+        console.log('📱 User came online:', data.user_id);
+        setOnlineUsers(prev => {
+          const newSet = new Set(prev);
+          newSet.add(data.user_id);
+          return newSet;
+        });
+
+        // Update friends list
+        setFriendsWithStatus(prev => prev.map(friend =>
+          friend.id === data.user_id
+            ? { ...friend, is_online: true, last_activity: new Date().toISOString() }
+            : friend
+        ));
+
+        // Show notification if this is the selected friend
+        if (selectedFriend?.id === data.user_id) {
+          setSuccess(`${selectedFriend.username} is now online`);
+          setTimeout(() => setSuccess(''), 2000);
+        }
+
+      } else if (data.type === 'user_offline') {
+        console.log('📱 User went offline:', data.user_id);
+        setOnlineUsers(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(data.user_id);
+          return newSet;
+        });
+
+        setLastSeenMap(prev => ({
+          ...prev,
+          [data.user_id]: data.last_seen || new Date().toISOString()
+        }));
+
+        // Update friends list
+        setFriendsWithStatus(prev => prev.map(friend =>
+          friend.id === data.user_id
+            ? {
+              ...friend,
+              is_online: false,
+              last_seen: data.last_seen || new Date().toISOString(),
+              last_activity: data.last_seen || new Date().toISOString()
+            }
+            : friend
+        ));
+      } else if (data.type === 'online_users') {
+        // Received list of online users in the chat
+        setOnlineUsers(new Set(data.user_ids || []));
+      }
+    };
+
+    // Override the WebSocket message handler to add status handling
+    const originalHandleMessage = handleWebSocketMessage;
+
+    // We need to modify the existing WebSocket setup or add an additional listener
+    // Since we can't directly modify the hook, we'll handle this differently:
+    // Add a custom message handler for status updates
+    const ws = new WebSocket(getWsUrl());
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'user_online' || data.type === 'user_offline' || data.type === 'online_users') {
+          handleStatusMessage(data);
+        }
+      } catch (err) {
+        console.error('Failed to parse status message:', err);
+      }
+    };
+
+    return () => ws.close();
+  }, [isConnected, selectedFriend, getWsUrl]);
+
   /* --------------------------------------------------------------------- */
   /* Send Message */
   /* --------------------------------------------------------------------- */
@@ -1208,13 +1431,53 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     const unread = messages.filter(
       (m) => !m.is_read && m.sender_id === selectedFriend?.id
     ).length;
-    if (friendTyping) return { text: 'Typing...', color: 'info.main' };
-    if (!isConnected)
-      return {
-        text: reconnectAttempts > 0 ? `Reconnecting... (${reconnectAttempts})` : 'Connecting...',
-        color: 'warning.main',
-      };
-    return { text: `Online • ${unread} unread`, color: 'success.main' };
+
+    // Check if friend is online
+    const friendIsOnline = selectedFriend && onlineUsers.has(selectedFriend.id);
+
+    if (friendTyping) return {
+      text: 'Typing...',
+      color: 'info.main',
+      icon: 'typing'
+    };
+
+    if (!isConnected) return {
+      text: reconnectAttempts > 0 ? `Reconnecting... (${reconnectAttempts})` : 'Connecting...',
+      color: 'warning.main',
+      icon: 'disconnected'
+    };
+
+    if (friendIsOnline) return {
+      text: `Online • ${unread} unread`,
+      color: 'success.main',
+      icon: 'online'
+    };
+
+    // Friend is offline
+    let offlineText = 'Offline';
+    if (lastSeenMap[selectedFriend?.id]) {
+      const lastSeen = new Date(lastSeenMap[selectedFriend.id]);
+      const now = new Date();
+      const diffMinutes = Math.floor((now - lastSeen) / (1000 * 60));
+
+      if (diffMinutes < 1) {
+        offlineText = 'Just now';
+      } else if (diffMinutes < 60) {
+        offlineText = `${diffMinutes}m ago`;
+      } else if (diffMinutes < 1440) {
+        const hours = Math.floor(diffMinutes / 60);
+        offlineText = `${hours}h ago`;
+      } else {
+        const days = Math.floor(diffMinutes / 1440);
+        offlineText = `${days}d ago`;
+      }
+    }
+
+    return {
+      text: `Last seen ${offlineText} • ${unread} unread`,
+      color: 'text.secondary',
+      icon: 'offline'
+    };
   };
 
   const status = selectedFriend ? getConnectionStatus() : { text: 'Online', color: 'success.main' };
@@ -1378,7 +1641,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 color="error"
                 disabled={isDeleting}
               >
-                {isDeleting ? "Deleting..." : "Delete"} 
+                {isDeleting ? "Deleting..." : "Delete"}
               </Button>
             </Box>
           </Box>
@@ -1387,20 +1650,37 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
       {/* Mobile Header */}
       {isMobile && selectedFriend && (
-        <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <IconButton size="small" onClick={() => setMobileDrawerOpen(true)}>
-              <MenuIcon />
-            </IconButton>
-            <Avatar src={getUserAvatar(selectedFriend)} sx={{ width: 36, height: 36 }} />
-            <Box>
-              <Typography variant="body1" fontWeight="600">{selectedFriend.username}</Typography>
-              <Typography variant="caption" color={status.color}>{status.text}</Typography>
-            </Box>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ position: 'relative' }}>
+            <Avatar src={getUserAvatar(selectedFriend)} />
+            {status.icon === 'online' && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  bottom: 2,
+                  right: 2,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  bgcolor: '#4CAF50',
+                  border: '2px solid white',
+                  animation: 'pulse 2s infinite'
+                }}
+              />
+            )}
           </Box>
-          <IconButton size="small" onClick={() => setSelectedFriend(null)}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
+            <Typography variant="caption" color={status.color}>{status.text}</Typography>
+          </Box>
+          <Chip
+            label={status.text.split('•')[0].trim()}
+            size="small"
+            sx={{
+              bgcolor: status.color === 'text.secondary' ? 'grey.200' : status.color,
+              color: status.color === 'text.secondary' ? 'text.primary' : 'white'
+            }}
+          />
         </Box>
       )}
 
@@ -1408,32 +1688,120 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         {/* Sidebar */}
         {(!isMobile) && (
           <Box sx={{ width: { sm: 280, md: 300 }, borderRight: 1, borderColor: 'divider', overflow: 'auto' }}>
-            <Typography variant="h6" gutterBottom sx={{ p: 2, fontWeight: 600 }}>
-              {t('friends')}
-            </Typography>
+            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                {t('friends')}
+              </Typography>
+              <Chip
+                label={`${onlineUsers.size} online`}
+                size="small"
+                color="success"
+                variant="outlined"
+              />
+            </Box>
             <List>
-              {friends.map((friend) => (
-                <ListItem
-                  key={friend.id}
-                  selected={selectedFriend?.id === friend.id}
-                  onClick={() => handleSelectFriend(friend)}
-                  sx={{
-                    borderRadius: '12px',
-                    mb: 1,
-                    mx: 1,
-                    px: 2,
-                    py: 1.5,
-                    '&:hover': { bgcolor: 'action.hover' },
-                    '&.Mui-selected': { bgcolor: 'primary.light', color: 'primary.contrastText' },
-                  }}
-                >
-                  <ListItemAvatar>
-                    <Avatar src={getUserAvatar(friend)}>{getUserInitials(friend.username)}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText primary={friend.username} secondary={friend.email} />
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', ml: 1 }} />
-                </ListItem>
-              ))}
+              {friends.map((friend) => {
+                const isOnline = onlineUsers.has(friend.id);
+                const lastSeen = lastSeenMap[friend.id] || friend.last_seen;
+
+                // Calculate last seen text
+                let lastSeenText = '';
+                if (!isOnline && lastSeen) {
+                  const lastSeenDate = new Date(lastSeen);
+                  const now = new Date();
+                  const diffMinutes = Math.floor((now - lastSeenDate) / (1000 * 60));
+
+                  if (diffMinutes < 1) {
+                    lastSeenText = 'just now';
+                  } else if (diffMinutes < 60) {
+                    lastSeenText = `${diffMinutes}m ago`;
+                  } else if (diffMinutes < 1440) {
+                    const hours = Math.floor(diffMinutes / 60);
+                    lastSeenText = `${hours}h ago`;
+                  } else {
+                    const days = Math.floor(diffMinutes / 1440);
+                    lastSeenText = `${days}d ago`;
+                  }
+                }
+
+                return (
+                  <ListItem
+                    key={friend.id}
+                    selected={selectedFriend?.id === friend.id}
+                    onClick={() => handleSelectFriend(friend)}
+                    sx={{
+                      borderRadius: '12px',
+                      mb: 1,
+                      mx: 1,
+                      px: 2,
+                      py: 1.5,
+                      '&:hover': { bgcolor: 'action.hover' },
+                      '&.Mui-selected': {
+                        bgcolor: 'primary.light',
+                        color: 'primary.contrastText',
+                        '& .online-indicator': {
+                          borderColor: 'primary.contrastText'
+                        }
+                      },
+                    }}
+                  >
+                    <ListItemAvatar sx={{ position: 'relative' }}>
+                      <Avatar src={getUserAvatar(friend)}>
+                        {getUserInitials(friend.username)}
+                      </Avatar>
+                      {isOnline && (
+                        <Box
+                          className="online-indicator"
+                          sx={{
+                            position: 'absolute',
+                            bottom: 2,
+                            right: 2,
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            bgcolor: '#4CAF50',
+                            border: '2px solid white',
+                            animation: 'pulse 2s infinite'
+                          }}
+                        />
+                      )}
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {friend.username}
+                          {isOnline ? (
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              sx={{
+                                color: '#4CAF50',
+                                fontWeight: 500,
+                                fontSize: '0.7rem'
+                              }}
+                            >
+                              • Online
+                            </Typography>
+                          ) : null}
+                        </Box>
+                      }
+                      secondary={
+                        isOnline
+                          ? 'Active now'
+                          : lastSeenText
+                            ? `Last seen ${lastSeenText}`
+                            : friend.email
+                      }
+                      secondaryTypographyProps={{
+                        sx: {
+                          fontSize: '0.75rem',
+                          color: isOnline ? '#4CAF50' : 'text.secondary'
+                        }
+                      }}
+                    />
+                  </ListItem>
+                );
+              })}
             </List>
           </Box>
         )}
@@ -1446,16 +1814,57 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           sx={{ display: { xs: 'block', sm: 'none' }, '& .MuiDrawer-paper': { width: 280 } }}
         >
           <Box sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>Friends</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6">Friends</Typography>
+              <Chip
+                label={`${onlineUsers.size} online`}
+                size="small"
+                color="success"
+                variant="outlined"
+              />
+            </Box>
             <List>
-              {friends.map((friend) => (
-                <ListItem key={friend.id} selected={selectedFriend?.id === friend.id} onClick={() => handleSelectFriend(friend)}>
-                  <ListItemAvatar>
-                    <Avatar src={getUserAvatar(friend)}>{getUserInitials(friend.username)}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText primary={friend.username} secondary={friend.email} />
-                </ListItem>
-              ))}
+              {friends.map((friend) => {
+                const isOnline = onlineUsers.has(friend.id);
+                return (
+                  <ListItem
+                    key={friend.id}
+                    selected={selectedFriend?.id === friend.id}
+                    onClick={() => handleSelectFriend(friend)}
+                    sx={{
+                      position: 'relative',
+                      '&:before': isOnline ? {
+                        content: '""',
+                        position: 'absolute',
+                        left: 4,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        bgcolor: '#4CAF50',
+                        animation: 'pulse 2s infinite'
+                      } : {}
+                    }}
+                  >
+                    <ListItemAvatar>
+                      <Avatar src={getUserAvatar(friend)}>
+                        {getUserInitials(friend.username)}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={friend.username}
+                      secondary={isOnline ? 'Online' : 'Offline'}
+                      secondaryTypographyProps={{
+                        sx: {
+                          color: isOnline ? '#4CAF50' : 'text.secondary',
+                          fontSize: '0.75rem'
+                        }
+                      }}
+                    />
+                  </ListItem>
+                );
+              })}
             </List>
           </Box>
         </Drawer>

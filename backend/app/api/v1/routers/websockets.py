@@ -31,7 +31,7 @@ async def handle_websocket_private(
     db: Session = Depends(get_db)
 ):
     """
-    WebSocket endpoint for real-time private chat with seen status tracking
+    WebSocket endpoint for real-time private chat with online/offline status tracking
     """
     current_user = None
     heartbeat_task = None
@@ -113,32 +113,38 @@ async def handle_websocket_private(
                         }
                     )
                     print(f"📢 Broadcast initial seen status for message {msg_id}")
-                    
+        
         await websocket.accept()
         
-        # ✅ CONNECT TO MANAGER (This calls websocket.accept() internally)
+        # ✅ CONNECT TO MANAGER WITH ONLINE STATUS TRACKING
         await manager.connect(chat_id, websocket, user_id=current_user.id)
         
-        # ✅ HEARTBEAT FUNCTION
+        # ✅ HEARTBEAT FUNCTION WITH ACTIVITY UPDATES
         async def send_heartbeat():
-            """Send periodic pings to keep connection alive and detect dead connections"""
+            """Send periodic pings to keep connection alive and update activity"""
             try:
                 while True:
                     await asyncio.sleep(25)  # Send every 25 seconds
                     try:
+                        # Send ping message
                         await websocket.send_json({
                             "type": "ping",
                             "timestamp": datetime.utcnow().isoformat()
                         })
-                    except Exception:
+                        # Update user activity to keep online status fresh
+                        await manager.update_user_activity(current_user.id)
+                    except Exception as e:
+                        print(f"Heartbeat failed: {e}")
                         break  # Stop heartbeat if send fails
             except asyncio.CancelledError:
-                pass
-            except Exception:
-                pass
+                print("Heartbeat task cancelled")
+                raise
+            except Exception as e:
+                print(f"Heartbeat error: {e}")
 
         # ✅ START HEARTBEAT
         heartbeat_task = asyncio.create_task(send_heartbeat())
+        print(f"Started heartbeat for user {current_user.id}")
 
         # ✅ MAIN MESSAGE LOOP
         while True:
@@ -149,21 +155,29 @@ async def handle_websocket_private(
                     timeout=35.0  # Slightly longer than heartbeat interval
                 )
                 
+                # ✅ UPDATE USER ACTIVITY ON ANY MESSAGE RECEIVED
+                await manager.update_user_activity(current_user.id)
+                
                 # ✅ HANDLE PONG RESPONSES
                 if raw_data.strip():
                     try:
                         data = json.loads(raw_data)
                         if data.get("type") == "pong":
+                            # Update user activity on pong response
+                            await manager.update_user_activity(current_user.id)
+                            print(f"Received pong from user {current_user.id}")
                             continue  # Skip further processing for pong messages
                     except json.JSONDecodeError:
                         # If it's not JSON, it might be a raw pong
                         if raw_data.strip() == "pong":
+                            await manager.update_user_activity(current_user.id)
                             continue
 
                 # ✅ PARSE JSON DATA
                 try:
                     data = json.loads(raw_data) if raw_data.strip() else {}
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    print(f"Invalid JSON from user {current_user.id}: {raw_data}")
                     try:
                         await websocket.send_json({
                             "type": "error",
@@ -344,7 +358,7 @@ async def handle_websocket_private(
                             "error": "Failed to send message"
                         })
 
-                # ✅ READ RECEIPTS (REAL-TIME) - FIXED: Use message_updated for consistency
+                # ✅ READ RECEIPTS (REAL-TIME)
                 elif msg_type == "read":
                     message_id = data.get("message_id")
                     if not message_id:
@@ -375,9 +389,9 @@ async def handle_websocket_private(
                                         "seen_at": status.seen_at.isoformat() if status.seen_at else None
                                     })
 
-                                # ✅ FIX: Use message_updated type for consistency with frontend
+                                # ✅ Broadcast message update
                                 broadcast_data = {
-                                    "type": "message_updated",  # Changed from "read_receipt"
+                                    "type": "message_updated",
                                     "message_id": message_id,
                                     "id": message_id,
                                     "is_read": True,
@@ -462,6 +476,36 @@ async def handle_websocket_private(
                             "error": "Failed to delete message"
                         })
 
+                # ✅ ONLINE STATUS REQUESTS
+                elif msg_type == "get_online_users":
+                    # Send current online users for this chat
+                    online_users = manager.get_online_users(chat_id)
+                    await websocket.send_json({
+                        "type": "online_users",
+                        "user_ids": list(online_users),
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+
+                # ✅ CHECK SPECIFIC USER STATUS
+                elif msg_type == "check_user_status":
+                    user_id_to_check = data.get("user_id")
+                    if user_id_to_check:
+                        is_online = manager.is_user_online(user_id_to_check)
+                        last_activity = manager.get_user_last_activity(user_id_to_check)
+                        
+                        await websocket.send_json({
+                            "type": "user_status",
+                            "user_id": user_id_to_check,
+                            "is_online": is_online,
+                            "last_activity": last_activity.isoformat() if last_activity else None,
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+
+                # ✅ HEARTBEAT/ACTIVITY UPDATE
+                elif msg_type == "heartbeat":
+                    # Already handled above with activity update
+                    pass
+
                 # ✅ UNKNOWN MESSAGE TYPE
                 else:
                     await websocket.send_json({
@@ -471,14 +515,16 @@ async def handle_websocket_private(
 
             except asyncio.TimeoutError:
                 # ✅ HANDLE TIMEOUT (NORMAL - WAITING FOR MESSAGES)
+                print(f"Timeout waiting for message from user {current_user.id}")
                 continue  # Just continue waiting for messages
                 
             except WebSocketDisconnect:
                 # ✅ CLIENT DISCONNECTED NORMALLY
+                print(f"User {current_user.id} disconnected from WebSocket")
                 break
                 
             except Exception as e:
-                print(f"WebSocket error: {e}")
+                print(f"WebSocket error for user {current_user.id}: {e}")
                 try:
                     await websocket.send_json({
                         "type": "error",
@@ -488,7 +534,7 @@ async def handle_websocket_private(
                     break  # Client disconnected
 
     except WebSocketDisconnect:
-        print("Client disconnected normally")
+        print(f"User {current_user.id if current_user else 'unknown'} disconnected normally")
     except Exception as e:
         print(f"WebSocket connection error: {e}")
     finally:
@@ -499,14 +545,15 @@ async def handle_websocket_private(
                 try:
                     await heartbeat_task
                 except asyncio.CancelledError:
-                    pass
-        except Exception:
-            pass
+                    print("Heartbeat task cancelled successfully")
+        except Exception as e:
+            print(f"Error cancelling heartbeat: {e}")
 
-        # ✅ DISCONNECT FROM MANAGER
+        # ✅ DISCONNECT FROM MANAGER (handles offline status automatically)
         if current_user:
             chat_id = _chat_id(current_user.id, friend_id)
             manager.disconnect(chat_id, websocket, user_id=current_user.id)
+            print(f"User {current_user.id} fully disconnected from chat {chat_id}")
             
 @router.websocket("/group/{group_id}")
 async def websocket_group_chat(
