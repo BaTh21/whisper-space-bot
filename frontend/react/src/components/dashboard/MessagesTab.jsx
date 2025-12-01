@@ -1,7 +1,9 @@
 import {
   Chat as ChatIcon,
   Close as CloseIcon,
+  EmojiEmotions as EmojiEmotionsIcon,
   Image as ImageIcon,
+  InsertEmoticon as InsertEmoticonIcon,
   Send as SendIcon
 } from '@mui/icons-material';
 import MicIcon from '@mui/icons-material/Mic';
@@ -40,6 +42,8 @@ import {
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
+import EmojiButton from '../EmojiButton';
+import EmojiPicker from '../EmojiPicker';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -81,6 +85,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiButtonRef = useRef(null);
+
   const { t, i18n } = useTranslation();
 
   // VOICE STATES
@@ -177,84 +184,84 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /* WebSocket Handlers */
   /* --------------------------------------------------------------------- */
-const handleWebSocketMessage = useCallback(
+  const handleWebSocketMessage = useCallback(
     (data) => {
-    const { type } = data;
-    console.log("📡 WebSocket received:", data);
+      const { type } = data;
+      console.log("📡 WebSocket received:", data);
 
-    // === ONLINE/OFFLINE STATUS HANDLING ===
-    if (type === "user_online") {
-      console.log('📱 User came online:', data.user_id);
-      
-      // Update online users set
-      setOnlineUsers(prev => {
-        const newSet = new Set(prev);
-        newSet.add(data.user_id);
-        return newSet;
-      });
-      
-      // Update last seen map
-      setLastSeenMap(prev => ({
-        ...prev,
-        [data.user_id]: data.timestamp || new Date().toISOString()
-      }));
-      
-      // Update friendsWithStatus state
-      setFriendsWithStatus(prev => prev.map(friend => 
-        friend.user_id === data.user_id 
-          ? { 
-              ...friend, 
+      // === ONLINE/OFFLINE STATUS HANDLING ===
+      if (type === "user_online") {
+        console.log('📱 User came online:', data.user_id);
+
+        // Update online users set
+        setOnlineUsers(prev => {
+          const newSet = new Set(prev);
+          newSet.add(data.user_id);
+          return newSet;
+        });
+
+        // Update last seen map
+        setLastSeenMap(prev => ({
+          ...prev,
+          [data.user_id]: data.timestamp || new Date().toISOString()
+        }));
+
+        // Update friendsWithStatus state
+        setFriendsWithStatus(prev => prev.map(friend =>
+          friend.user_id === data.user_id
+            ? {
+              ...friend,
               is_online: true,
               last_activity: data.timestamp || new Date().toISOString()
-            } 
-          : friend
-      ));
-      
-      // Show notification if this is the selected friend
-      if (selectedFriend?.id === data.user_id) {
-        setSuccess(`${selectedFriend.username} is now online`);
-        setTimeout(() => setSuccess(''), 2000);
-      }
-      
-      return; // Don't process further
-      
-    } else if (type === "user_offline") {
-      console.log('📱 User went offline:', data.user_id);
-      
-      // Update online users set
-      setOnlineUsers(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(data.user_id);
-        return newSet;
-      });
-      
-      // Update last seen map with offline timestamp
-      const offlineTime = data.last_seen || data.timestamp || new Date().toISOString();
-      setLastSeenMap(prev => ({
-        ...prev,
-        [data.user_id]: offlineTime
-      }));
-      
-      // Update friendsWithStatus state
-      setFriendsWithStatus(prev => prev.map(friend => 
-        friend.user_id === data.user_id 
-          ? { 
-              ...friend, 
+            }
+            : friend
+        ));
+
+        // Show notification if this is the selected friend
+        if (selectedFriend?.id === data.user_id) {
+          setSuccess(`${selectedFriend.username} is now online`);
+          setTimeout(() => setSuccess(''), 2000);
+        }
+
+        return; // Don't process further
+
+      } else if (type === "user_offline") {
+        console.log('📱 User went offline:', data.user_id);
+
+        // Update online users set
+        setOnlineUsers(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(data.user_id);
+          return newSet;
+        });
+
+        // Update last seen map with offline timestamp
+        const offlineTime = data.last_seen || data.timestamp || new Date().toISOString();
+        setLastSeenMap(prev => ({
+          ...prev,
+          [data.user_id]: offlineTime
+        }));
+
+        // Update friendsWithStatus state
+        setFriendsWithStatus(prev => prev.map(friend =>
+          friend.user_id === data.user_id
+            ? {
+              ...friend,
               is_online: false,
               last_seen: offlineTime,
               last_activity: offlineTime
-            } 
-          : friend
-      ));
-      
-      return; // Don't process further
-      
-    } else if (type === "online_users") {
-      // Received list of online users in the chat
-      console.log('👥 Online users list:', data.user_ids);
-      setOnlineUsers(new Set(data.user_ids || []));
-      return; // Don't process further
-    }
+            }
+            : friend
+        ));
+
+        return; // Don't process further
+
+      } else if (type === "online_users") {
+        // Received list of online users in the chat
+        console.log('👥 Online users list:', data.user_ids);
+        setOnlineUsers(new Set(data.user_ids || []));
+        return; // Don't process further
+      }
       // === END ONLINE/OFFLINE STATUS HANDLING ===
 
       // 1. New real message from server
@@ -436,9 +443,9 @@ const handleWebSocketMessage = useCallback(
       }
     },
     [
-      getAvatarUrl, 
-      friends, 
-      selectedFriend, 
+      getAvatarUrl,
+      friends,
+      selectedFriend,
       getUserAvatar,
       setOnlineUsers,       // ADD THIS DEPENDENCY
       setLastSeenMap,       // ADD THIS DEPENDENCY  
@@ -447,19 +454,19 @@ const handleWebSocketMessage = useCallback(
     ]
   );
   useEffect(() => {
-  if (friends.length > 0) {
-    // Initialize friendsWithStatus from friends prop
-    setFriendsWithStatus(friends.map(friend => ({
-      user_id: friend.id,
-      username: friend.username,
-      avatar_url: friend.avatar_url,
-      email: friend.email,
-      is_online: onlineUsers.has(friend.id),
-      last_seen: lastSeenMap[friend.id] || null,
-      last_activity: lastSeenMap[friend.id] || null
-    })));
-  }
-}, [friends]);
+    if (friends.length > 0) {
+      // Initialize friendsWithStatus from friends prop
+      setFriendsWithStatus(friends.map(friend => ({
+        user_id: friend.id,
+        username: friend.username,
+        avatar_url: friend.avatar_url,
+        email: friend.email,
+        is_online: onlineUsers.has(friend.id),
+        last_seen: lastSeenMap[friend.id] || null,
+        last_activity: lastSeenMap[friend.id] || null
+      })));
+    }
+  }, [friends]);
 
   const handleWebSocketOpen = useCallback(() => {
     console.log('[WS] Connected');
@@ -1156,48 +1163,57 @@ const handleWebSocketMessage = useCallback(
     setCurrentSSelectedFriend(friend);
   };
 
+  <EmojiButton
+    onSelect={(emoji) => setNewMessage(prev => prev + emoji)}
+    disabled={!selectedFriend || uploadingImage || isRecording}
+    placement="top-start"
+    width={340}
+    height={400}
+    buttonProps={{
+      sx: { color: 'primary.main' }
+    }}
+  />
 
+  const updateFriendsOnlineStatus = useCallback(async () => {
+    try {
+      const response = await getFriendsOnlineStatus();
+      const friendsList = response.friends || [];
 
-const updateFriendsOnlineStatus = useCallback(async () => {
-  try {
-    const response = await getFriendsOnlineStatus();
-    const friendsList = response.friends || [];
-    
-    const onlineIds = new Set();
-    const lastSeenData = {};
-    
-    friendsList.forEach(friend => {
-      if (friend.is_online) {
-        onlineIds.add(friend.user_id);
-      }
-      if (friend.last_seen) {
-        lastSeenData[friend.user_id] = friend.last_seen;
-      }
-    });
-    
-    setOnlineUsers(onlineIds);
-    setLastSeenMap(lastSeenData);
-    
-    // Update friends list with status
-    setFriendsWithStatus(prev => prev.map(friend => {
-      const statusInfo = friendsList.find(f => f.user_id === friend.id);
-      return {
-        ...friend,
-        is_online: statusInfo?.is_online || false,
-        last_seen: statusInfo?.last_seen || friend.last_seen,
-        last_activity: statusInfo?.last_activity || friend.last_activity
-      };
-    }));
-    
-  } catch (err) {
-    console.error('Failed to fetch online status:', err);
-  }
-}, [setFriendsWithStatus]);
+      const onlineIds = new Set();
+      const lastSeenData = {};
+
+      friendsList.forEach(friend => {
+        if (friend.is_online) {
+          onlineIds.add(friend.user_id);
+        }
+        if (friend.last_seen) {
+          lastSeenData[friend.user_id] = friend.last_seen;
+        }
+      });
+
+      setOnlineUsers(onlineIds);
+      setLastSeenMap(lastSeenData);
+
+      // Update friends list with status
+      setFriendsWithStatus(prev => prev.map(friend => {
+        const statusInfo = friendsList.find(f => f.user_id === friend.id);
+        return {
+          ...friend,
+          is_online: statusInfo?.is_online || false,
+          last_seen: statusInfo?.last_seen || friend.last_seen,
+          last_activity: statusInfo?.last_activity || friend.last_activity
+        };
+      }));
+
+    } catch (err) {
+      console.error('Failed to fetch online status:', err);
+    }
+  }, [setFriendsWithStatus]);
 
   // Add this effect to fetch online status on mount and set up interval
-useEffect(() => {
-  updateFriendsOnlineStatus();
-}, [updateFriendsOnlineStatus]);
+  useEffect(() => {
+    updateFriendsOnlineStatus();
+  }, [updateFriendsOnlineStatus]);
 
   // Add this effect to handle real-time WebSocket status updates
   useEffect(() => {
@@ -2000,7 +2016,27 @@ useEffect(() => {
                     }
                   }}
                 />
+                <Box sx={{ position: 'relative' }}>
+                  <IconButton
+                    ref={emojiButtonRef}
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    disabled={!selectedFriend || uploadingImage || isRecording}
+                  >
+                    {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                  </IconButton>
 
+                  {showEmojiPicker && (
+                    <EmojiPicker
+                      onSelect={(emoji) => {
+                        setNewMessage(prev => prev + emoji);
+                        setShowEmojiPicker(false);
+                      }}
+                      onClose={() => setShowEmojiPicker(false)}
+                      anchorEl={emojiButtonRef.current}
+                      placement="top-start"
+                    />
+                  )}
+                </Box>
                 {isRecording ? (
                   <IconButton color="success" onClick={quickSendVoice} disabled={!selectedFriend || recordingTime < 1}
                     sx={{ bgcolor: 'success.main', color: 'white' }}>

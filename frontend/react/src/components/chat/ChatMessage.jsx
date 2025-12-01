@@ -7,13 +7,13 @@ import {
   Edit as EditIcon,
   Forward as ForwardIcon,
   Image as ImageIcon,
+  Schedule as LastSeenIcon,
   MoreVert as MoreVertIcon,
+  CircleOutlined as OfflineIcon,
+  FiberManualRecord as OnlineIcon,
   PlayArrow as PlayArrowIcon,
   Stop as StopIcon,
-  ZoomIn as ZoomInIcon,
-  FiberManualRecord as OnlineIcon,
-  CircleOutlined as OfflineIcon,
-  Schedule as LastSeenIcon
+  ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -28,7 +28,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
-
+import EmojiButton from '../EmojiButton';
 const ChatMessage = ({
   message,
   isMine,
@@ -918,6 +918,13 @@ const ChatMessage = ({
                 }
               }}
               sx={{ borderRadius: '12px' }}
+            />
+            <EmojiButton
+              onSelect={(emoji) => setEditText(prev => prev + emoji)}
+              placement="bottom-start"
+              size="small"
+              width={300}
+              height={350}
             />
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
               <Button size="small" onClick={handleCancelEdit}>{t('cancel')}</Button>
