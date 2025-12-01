@@ -1386,4 +1386,21 @@ export const sendVoiceMessage = async (friendId, formData) => {
   });
   return response.data;
 };
+
+export const getUserOnlineStatus = async (userId) => {
+  const response = await api.get(`/api/v1/chat/users/${userId}/status`);
+  return response.data;
+};
+
+// Get online status of all friends
+export const getFriendsOnlineStatus = async () => {
+  const response = await api.get(`/api/v1/chat/friends/online-status`);
+  return response.data;
+};
+
+// Get batch online status for multiple users
+export const getBatchOnlineStatus = async (userIds) => {
+  const response = await api.post(`/api/v1/chat/users/online-status/batch`, { user_ids: userIds });
+  return response.data;
+};
 export default api;

@@ -10,7 +10,10 @@ import {
   MoreVert as MoreVertIcon,
   PlayArrow as PlayArrowIcon,
   Stop as StopIcon,
-  ZoomIn as ZoomInIcon
+  ZoomIn as ZoomInIcon,
+  FiberManualRecord as OnlineIcon,
+  CircleOutlined as OfflineIcon,
+  Schedule as LastSeenIcon
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -22,7 +25,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 
@@ -50,6 +53,9 @@ const ChatMessage = ({
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [friendOnlineStatus, setFriendOnlineStatus] = useState(null);
+  const [lastSeenTime, setLastSeenTime] = useState(null);
+  const [showOnlineStatusTooltip, setShowOnlineStatusTooltip] = useState(false);
   const { t, i18n } = useTranslation();
 
   /* ---------------------------------------------------------- */
@@ -503,6 +509,184 @@ const ChatMessage = ({
   };
 
   /* ---------------------------------------------------------- */
+  /*                     RENDER VOICE                           */
+  /* ---------------------------------------------------------- */
+
+  const renderOnlineStatus = () => {
+    if (isMine || !friendOnlineStatus || !currentFriend) return null;
+
+    const isOnline = friendOnlineStatus.is_online;
+
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          ml: 1,
+          position: 'relative',
+          cursor: 'help'
+        }}
+        onMouseEnter={() => setShowOnlineStatusTooltip(true)}
+        onMouseLeave={() => setShowOnlineStatusTooltip(false)}
+      >
+        {isOnline ? (
+          <>
+            <OnlineIcon
+              sx={{
+                fontSize: '0.6rem',
+                color: '#4CAF50',
+                filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))',
+                animation: 'pulse 2s infinite'
+              }}
+            />
+            <Typography
+              variant="caption"
+              sx={{
+                color: '#4CAF50',
+                fontWeight: 500,
+                fontSize: '0.65rem',
+                letterSpacing: '0.3px'
+              }}
+            >
+              Online
+            </Typography>
+          </>
+        ) : (
+          <>
+            <OfflineIcon
+              sx={{
+                fontSize: '0.6rem',
+                color: 'text.disabled'
+              }}
+            />
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.65rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.3
+              }}
+            >
+              <LastSeenIcon fontSize="inherit" />
+              {lastSeenTime || 'Offline'}
+            </Typography>
+          </>
+        )}
+
+        {/* Tooltip with detailed status */}
+        {showOnlineStatusTooltip && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              bgcolor: 'background.paper',
+              boxShadow: 3,
+              borderRadius: '8px',
+              p: 1.5,
+              minWidth: 180,
+              zIndex: 9999,
+              border: '1px solid',
+              borderColor: 'divider'
+            }}
+          >
+            <Typography variant="caption" fontWeight="bold">
+              {currentFriend.username}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  bgcolor: isOnline ? '#4CAF50' : '#9E9E9E',
+                  animation: isOnline ? 'pulse 2s infinite' : 'none'
+                }}
+              />
+              <Typography variant="caption">
+                {isOnline ? 'Online now' : 'Currently offline'}
+              </Typography>
+            </Box>
+
+            {!isOnline && friendOnlineStatus.last_seen && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+                Last seen: {new Date(friendOnlineStatus.last_seen).toLocaleString()}
+              </Typography>
+            )}
+
+            {friendOnlineStatus.last_activity && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+                Last activity: {new Date(friendOnlineStatus.last_activity).toLocaleTimeString()}
+              </Typography>
+            )}
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
+  useEffect(() => {
+    if (!isMine && currentFriend) {
+      const fetchFriendStatus = async () => {
+        try {
+          // Import your API function
+          const { getUserOnlineStatus } = await import('../../services/api');
+          const status = await getUserOnlineStatus(currentFriend.id);
+          setFriendOnlineStatus(status);
+
+          // Calculate relative last seen time
+          if (status.last_seen) {
+            const lastSeen = new Date(status.last_seen);
+            const now = new Date();
+            const diffMinutes = Math.floor((now - lastSeen) / (1000 * 60));
+
+            if (diffMinutes < 1) {
+              setLastSeenTime('just now');
+            } else if (diffMinutes < 60) {
+              setLastSeenTime(`${diffMinutes}m ago`);
+            } else if (diffMinutes < 1440) {
+              const hours = Math.floor(diffMinutes / 60);
+              setLastSeenTime(`${hours}h ago`);
+            } else {
+              const days = Math.floor(diffMinutes / 1440);
+              setLastSeenTime(`${days}d ago`);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch friend status:', err);
+        }
+      };
+
+      fetchFriendStatus();
+      // Refresh status every 30 seconds
+      const interval = setInterval(fetchFriendStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isMine, currentFriend]);
+
+  // Add this CSS animation for online pulse
+  const pulseAnimation = `
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+`;
+
+  // Add this effect to inject the CSS
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = pulseAnimation;
+    document.head.appendChild(styleElement);
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+
+  /* ---------------------------------------------------------- */
   /*                     RENDER IMAGE CONTENT                  */
   /* ---------------------------------------------------------- */
   const renderImageContent = () => (
@@ -706,12 +890,15 @@ const ChatMessage = ({
       <Box sx={{ maxWidth: '70%', display: 'flex', flexDirection: 'column' }}>
         {/* Friend name */}
         {!isMine && (
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary', mb: 0.5, ml: 1, fontWeight: 500 }}
-          >
-            {senderInfo.username}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5, ml: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', fontWeight: 500, mr: 1 }}
+            >
+              {senderInfo.username}
+            </Typography>
+            {renderOnlineStatus()}
+          </Box>
         )}
 
         {editing ? (
@@ -851,63 +1038,67 @@ const ChatMessage = ({
               }
             }}
           >
-            {/* Image-specific options */}
-            {actualMessageType === 'image' && [
-              <MenuItem key="view-full" onClick={handleViewFullImage}>
-                <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
-                {t('view_full_image')}
-              </MenuItem>,
-              <MenuItem key="download" onClick={handleDownloadImage}>
-                <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
-                {t('download_image')}
-              </MenuItem>
-            ]}
+            {(() => {
+              // Collect all menu items in an array
+              const menuItems = [];
 
-            {/* My messages */}
-            {isMine && (
-              <>
-                {[
-                  actualMessageType === 'text' && {
-                    key: 'edit',
-                    icon: <EditIcon fontSize="small" sx={{ mr: 1.5 }} />,
-                    label: t('edit'),
-                    onClick: () => {
-                      setEditing(true);
-                      setEditText(message.content);
-                      handleClose();
-                    },
-                  },
-                  {
-                    key: 'forward',
-                    icon: <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />,
-                    label: t('forward'),
-                    onClick: handleForwardClick,
-                  },
-                  {
-                    key: 'delete',
-                    icon: <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />,
-                    label: t('delete'),
-                    onClick: handleDelete,
-                    sx: { color: 'error.main' },
-                  },
-                ]
-                  .filter(Boolean)
-                  .map((item) => (
-                    <MenuItem key={item.key} onClick={item.onClick} sx={item.sx}>
-                      {item.icon}
-                      {item.label}
+              // Image-specific options
+              if (actualMessageType === 'image') {
+                menuItems.push(
+                  <MenuItem key="view-full" onClick={handleViewFullImage}>
+                    <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('view_full_image')}
+                  </MenuItem>,
+                  <MenuItem key="download" onClick={handleDownloadImage}>
+                    <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('download_image')}
+                  </MenuItem>
+                );
+              }
+
+              // My messages
+              if (isMine) {
+                if (actualMessageType === 'text') {
+                  menuItems.push(
+                    <MenuItem
+                      key="edit"
+                      onClick={() => {
+                        setEditing(true);
+                        setEditText(message.content);
+                        handleClose();
+                      }}
+                    >
+                      <EditIcon fontSize="small" sx={{ mr: 1.5 }} />
+                      {t('edit')}
                     </MenuItem>
-                  ))}
-              </>
-            )}
+                  );
+                }
+                menuItems.push(
+                  <MenuItem key="forward" onClick={handleForwardClick}>
+                    <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('forward')}
+                  </MenuItem>,
+                  <MenuItem
+                    key="delete"
+                    onClick={handleDelete}
+                    sx={{ color: 'error.main' }}
+                  >
+                    <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('delete')}
+                  </MenuItem>
+                );
+              } else {
+                // Friend's messages
+                menuItems.push(
+                  <MenuItem key="forward" onClick={handleForwardClick}>
+                    <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('forward')}
+                  </MenuItem>
+                );
+              }
 
-            {/* Friend's messages */}
-            {!isMine && (
-              <MenuItem key="forward" onClick={handleForwardClick}>
-                <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
-                {t('forward')}
-              </MenuItem>
-            )}
+              return menuItems;
+            })()}
           </Menu>
         )}
       </Box>
