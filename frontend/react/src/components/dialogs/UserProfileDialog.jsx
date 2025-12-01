@@ -15,14 +15,14 @@ import DeleteDialog from '../dialogs/DeleteDialog';
 import { removeGroupMember } from '../../services/api';
 import { toast } from 'react-toastify';
 
-function UserProfileDialog({ open, onClose, userData, group, onSuccess }) {
+function UserProfileDialog({ open, onClose, userData, group, onSuccess, creatorId }) {
   const { auth } = useAuth();
   const currentUser = auth?.user;
 
   const [openDelete, setOpenDelete] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const isOwner = currentUser?.id === group?.creator_id;
+  const isOwner = currentUser?.id === (group?.creator_id ?? creatorId);
   const isSelf = currentUser?.id === userData?.id;
 
   const handleConfirmRemove = async () => {

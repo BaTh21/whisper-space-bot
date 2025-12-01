@@ -34,7 +34,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
   const [success, setSuccess] = useState("");
   const [recentlyInvited, setRecentlyInvited] = useState([]);
 
-  // Reset state when modal opens/closes
   useEffect(() => {
     if (open) {
       setUsers([]);
@@ -59,7 +58,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
       setLoading(true);
       const res = await searchUsers(value);
       
-      // Filter out users who are already in the group or recently invited
       const filteredUsers = Array.isArray(res) ? res.filter(user => 
         !recentlyInvited.includes(user.id) &&
         !group?.members?.some(member => member.id === user.id)
@@ -86,18 +84,14 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
       
       await inviteToGroup(group.id, user.id);
       
-      // Add to recently invited list
       setRecentlyInvited(prev => [...prev, user.id]);
       
-      // Remove from search results
       setUsers(prev => prev.filter(u => u.id !== user.id));
       
       setSuccess(`Invitation sent to ${user.name || user.email}!`);
       
-      // Call success callback
       if (onSuccess) onSuccess(user);
       
-      // Clear success message after 2 seconds
       setTimeout(() => setSuccess(""), 2000);
       
     } catch (error) {
@@ -146,7 +140,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
           flexDirection: 'column'
         }}
       >
-        {/* Header */}
         <Box
           sx={{
             p: 3,
@@ -166,7 +159,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
           </IconButton>
         </Box>
 
-        {/* Group Info */}
         {group && (
           <Box sx={{ p: 3, pb: 2, bgcolor: 'grey.50' }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -183,7 +175,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
           </Box>
         )}
 
-        {/* Search Section */}
         <Box sx={{ p: 3, pb: 2 }}>
           <TextField
             label="Search users by name or email"
@@ -199,7 +190,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
           />
         </Box>
 
-        {/* Messages */}
         <Box sx={{ px: 3 }}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
@@ -214,7 +204,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
           )}
         </Box>
 
-        {/* Results Section */}
         <Box sx={{ flex: 1, overflow: 'auto', px: 3, pb: 3 }}>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -302,7 +291,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
           )}
         </Box>
 
-        {/* Recently Invited Section */}
         {recentlyInvited.length > 0 && (
           <>
             <Divider />
@@ -329,22 +317,6 @@ function InviteMemberComponent({ open, onClose, onSuccess, group }) {
             </Box>
           </>
         )}
-
-        {/* Footer */}
-        <Box
-          sx={{
-            p: 2,
-            borderTop: 1,
-            borderColor: 'divider',
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 1
-          }}
-        >
-          <Button onClick={onClose} color="inherit">
-            Close
-          </Button>
-        </Box>
       </Paper>
     </Modal>
   );

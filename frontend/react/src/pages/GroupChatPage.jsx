@@ -1677,6 +1677,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         onClose={() => setOpen(false)}
         group={group}
         onSuccess={handleSuccess}
+        members={members}
       />
 
       <ImageDialog

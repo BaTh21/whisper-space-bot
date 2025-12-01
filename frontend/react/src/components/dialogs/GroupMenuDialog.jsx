@@ -27,8 +27,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteDialog from './DeleteDialog';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import GroupMemberComponent from '../group/GroupMemberComponent';
+import GroupsIcon from '@mui/icons-material/Groups';
 
-function GroupMenuDialog({ open, onClose, group, onSuccess }) {
+function GroupMenuDialog({ open, onClose, group, onSuccess, members }) {
   const [updatePopup, setUpdatePopup] = useState(false);
   const [invitePopup, setInvitePopup] = useState(false);
   const [covers, setCovers] = useState([]);
@@ -39,6 +41,8 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
   const { auth } = useAuth();
   const user = auth?.user;
   const [leavePopup, setLeavePopup] = useState(false);
+  const [viewMember, setViewMember] = useState(false);
+  const [selectedCreatorId, setSelectedCreatorId] = useState(null);
 
   // Fetch group covers
   useEffect(() => {
@@ -63,10 +67,11 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
     }
   };
 
-  const handleListItemClick = (event, index, action) => {
+  const handleListItemClick = (action, shouldClose = true) => {
     action?.();
-    onClose();
+    if (shouldClose) onClose();
   };
+
 
   const handleLeaveGroup = async () => {
     try {
@@ -145,7 +150,7 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: {xs: '90%', md: 380},
+            width: { xs: '90%', md: 380 },
             bgcolor: 'background.paper',
             borderRadius: 3,
             boxShadow: 24,
@@ -325,7 +330,9 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
             {/* Menu options */}
             {group.creator_id == user.id && (
               <ListItemButton
-                onClick={(e) => handleListItemClick(e, 0, () => setUpdatePopup(true))}
+                onClick={() =>
+                  handleListItemClick(() => setUpdatePopup(true), true)
+                }
               >
                 <ListItemIcon>
                   <EditIcon color="primary" />
@@ -335,7 +342,23 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
             )}
 
             <ListItemButton
-              onClick={(e) => handleListItemClick(e, 1, () => setInvitePopup(true))}
+              onClick={() => {
+                setSelectedCreatorId(group.creator_id);
+                setViewMember(true);
+                onClose();
+              }}
+
+            >
+              <ListItemIcon>
+                <GroupsIcon color="primary" />
+              </ListItemIcon>
+              <ListItemText primary="View Member" />
+            </ListItemButton>
+
+            <ListItemButton
+              onClick={() =>
+                handleListItemClick(() => setInvitePopup(true), true)
+              }
             >
               <ListItemIcon>
                 <ReplyAllIcon color="primary" />
@@ -345,7 +368,7 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
 
             {group.creator_id == user.id && (
               <ListItemButton
-                onClick={(e) => handleListItemClick(e, 2, () => setDeletePopup(true))}
+                onClick={() => handleListItemClick(() => setDeletePopup(true), true)}
                 sx={{
                   '&:hover': { bgcolor: 'error.light' },
                 }}
@@ -360,10 +383,8 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
             <Divider sx={{ my: 1.5 }} />
 
             <ListItemButton
-              onClick={(e) => {
-                handleListItemClick(e, 3);
-                setLeavePopup(true);
-              }}
+              onClick={() => handleListItemClick(() => setLeavePopup(true), true)}
+
               sx={{
                 '&:hover': { bgcolor: 'error.light' },
               }}
@@ -408,6 +429,12 @@ function GroupMenuDialog({ open, onClose, group, onSuccess }) {
         tag='Leave'
         description="Are you sure want to leave this group?"
         onConfirm={handleLeaveGroup}
+      />
+      <GroupMemberComponent
+        open={viewMember}
+        onClose={() => setViewMember(false)}
+        members={members}
+        creatorId={selectedCreatorId}
       />
     </>
   );
