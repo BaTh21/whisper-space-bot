@@ -92,8 +92,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
   const [callStatus, setCallStatus] = useState(null);
-  const [localStream, setLocalStreamState] = useState(null);
-  const userId = user.id;
+
+  console.log("streams", remoteStreams)
+  console.log("online users", onlineUsers)
 
   const toggleDiary = () => {
     setShowDiaries(prev => !prev);
@@ -788,7 +789,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
     const stream = await getLocalStream();
     if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
+    
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
       const answer = await pc.createAnswer();
@@ -809,12 +810,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     const pc = peersRef.current[from_user];
     if (!pc) return;
 
-    // Only set remote description if not already set
     if (!pc.remoteDescription) {
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(sdp));
 
-        // Flush queued ICE candidates
         if (iceQueue.current[from_user]?.length) {
           for (let c of iceQueue.current[from_user]) {
             try {
@@ -1078,7 +1077,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                   scale: 1.1
                 }
               }}
-              onClick={() => setCallPopupOpen(true)}
             />
             <VideocamIcon
               sx={{
@@ -1089,7 +1087,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                   scale: 1.1
                 }
               }}
-              onClick={() => setCallPopupOpen(true)}
+              onClick={handleStartGroupCall}
             />
             <AutoStoriesIcon
               sx={{
@@ -1735,7 +1733,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         open={callPopupOpen}
         onClose={() => setCallPopupOpen(false)}
         onlineUsers={onlineUsers}
-        onStartGroupCall={handleStartGroupCall}
+        // onStartGroupCall={handleStartGroupCall}
       />
 
       <CallDialog
