@@ -1,14 +1,14 @@
 import AddReactionIcon from '@mui/icons-material/AddReaction';
 import SentimentSatisfiedAltIcon from '@mui/icons-material/SentimentSatisfiedAlt';
 import {
-    Avatar,
-    Box,
-    ClickAwayListener,
-    Fade,
-    IconButton,
-    Popover,
-    Tooltip,
-    Typography
+  Avatar,
+  Box,
+  ClickAwayListener,
+  Fade,
+  IconButton,
+  Popover,
+  Tooltip,
+  Typography
 } from '@mui/material';
 import EmojiPickerReact from 'emoji-picker-react';
 import { useRef, useState } from 'react';
@@ -214,7 +214,7 @@ const MessageReactions = ({
               height: 24,
               borderRadius: '50%',
               bgcolor: isMine ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
-              color: isMine ? 'rgba(255, 255, 255, 0.8)' : 'text.secondary',
+              // color: isMine ? 'rgba(255, 255, 255, 0.8)' : 'text.secondary',
               border: '1px solid',
               borderColor: isMine ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.12)',
               transition: 'all 0.15s ease',
