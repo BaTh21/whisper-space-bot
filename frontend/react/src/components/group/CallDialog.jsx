@@ -12,7 +12,7 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import VideocamOffIcon from '@mui/icons-material/VideocamOff';
 import RemoteVideo from './RemoteVideo';
 
-const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
+const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status, peersRef }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const streamCount = Object.keys(remoteStreams).length;
@@ -20,14 +20,79 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
   const videoWidth = `${100 / gridCols}%`;
   const videoHeight = `${100 / gridCols}%`;
 
-
-  const toggleMute = () => {
+  const toggleMute = async () => {
     if (!onLocal) return;
-    onLocal.getAudioTracks().forEach(track => {
-      track.enabled = !track.enabled;
+
+    const currentEnabled = onLocal.getAudioTracks()[0]?.enabled;
+
+    let newTrack;
+
+    if (currentEnabled) {
+      newTrack = createSilentAudioTrack();
+    } else {
+      const newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      newTrack = newStream.getAudioTracks()[0];
+    }
+
+    Object.values(peersRef.current).forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === "audio");
+      if (sender) sender.replaceTrack(newTrack);
     });
-    setIsMuted(!isMuted);
+
+    onLocal.removeTrack(onLocal.getAudioTracks()[0]);
+    onLocal.addTrack(newTrack);
+
+    setIsMuted(!currentEnabled);
   };
+  ;
+
+  const toggleVideo = async () => {
+    if (!onLocal) return;
+
+    const currentEnabled = onLocal.getVideoTracks()[0]?.enabled;
+
+    let newTrack;
+
+    if (currentEnabled) {
+      newTrack = createBlackVideoTrack();
+    } else {
+      const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      newTrack = newStream.getVideoTracks()[0];
+    }
+
+    Object.values(peersRef.current).forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === "video");
+      if (sender) sender.replaceTrack(newTrack);
+    });
+
+    onLocal.removeTrack(onLocal.getVideoTracks()[0]);
+    onLocal.addTrack(newTrack);
+
+    setVideoEnabled(!currentEnabled);
+  };
+
+
+  const createSilentAudioTrack = () => {
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const dst = oscillator.connect(ctx.createMediaStreamDestination());
+    oscillator.start();
+    return Object.assign(dst.stream.getAudioTracks()[0], { enabled: false });
+  };
+
+  const createBlackVideoTrack = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const stream = canvas.captureStream(1);
+    const track = stream.getVideoTracks()[0];
+    return Object.assign(track, { enabled: false });
+  };
+
 
   return (
     <Dialog open={open} onClose={onCancel} fullScreen>
@@ -58,7 +123,7 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
             />
           ))}
 
-          {onLocal && videoEnabled && (
+          {onLocal &&  (
             <RemoteVideo
               stream={onLocal}
               width="150px"
@@ -110,11 +175,7 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
             </IconButton>
 
             <IconButton
-              onClick={() => {
-                if (!onLocal) return;
-                onLocal.getVideoTracks().forEach(track => track.enabled = !videoEnabled);
-                setVideoEnabled(!videoEnabled);
-              }}
+              onClick={toggleVideo}
               sx={{
                 backgroundColor: videoEnabled ? 'primary.main' : 'secondary.main',
                 color: 'white',

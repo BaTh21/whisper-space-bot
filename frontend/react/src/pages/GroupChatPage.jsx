@@ -762,16 +762,43 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       }
     };
 
-    pc.ontrack = (event) => {
-      console.log("New track from user:", remoteUserId, event.streams);
+    pc.onnegotiationneeded = async () => {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
+        wsRef.current.send(JSON.stringify({
+          action: "call_offer",
+          to_user: remoteUserId,
+          sdp: pc.localDescription
+        }));
+      } catch (e) {
+        console.error("Negotiation failed", e);
+      }
+    };
+
+
+    pc.ontrack = (event) => {
       setRemoteStreams(prev => {
         const updated = { ...prev };
-        if (!updated[remoteUserId]) updated[remoteUserId] = new MediaStream();
-        event.streams[0].getTracks().forEach(track => updated[remoteUserId].addTrack(track));
+        let stream = updated[remoteUserId];
+
+        if (!stream) {
+          stream = updated[remoteUserId] = new MediaStream();
+        }
+
+        const track = event.track;
+
+        stream.getTracks()
+          .filter(t => t.kind === track.kind)
+          .forEach(t => stream.removeTrack(t));
+
+        stream.addTrack(track);
+
         return updated;
       });
     };
+
 
     return pc;
   };
@@ -961,12 +988,36 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus('In Call');
     setCallingOpen(true);
 
+    const { userId: fromUserId, sdp } = incomingCall;
+
     const stream = await getLocalStream();
     if (!stream) return;
 
-    const allUsers = Array.from(onlineUsers).filter(id => id !== user.id);
+    let callerPC = peersRef.current[fromUserId];
+    if (!callerPC) {
+      callerPC = createPeerConnection(fromUserId);
+      peersRef.current[fromUserId] = callerPC;
 
-    for (let remoteUserId of allUsers) {
+      stream.getTracks().forEach(track => callerPC.addTrack(track, stream));
+    }
+
+    try {
+      await callerPC.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await callerPC.createAnswer();
+      await callerPC.setLocalDescription(answer);
+
+      wsRef.current.send(JSON.stringify({
+        action: "call_answer",
+        to_user: fromUserId,
+        sdp: callerPC.localDescription
+      }));
+    } catch (err) {
+      console.error("Error answering call:", err);
+    }
+
+    const otherUsers = Array.from(onlineUsers).filter(id => id !== user.id && id !== fromUserId);
+
+    for (let remoteUserId of otherUsers) {
       if (!peersRef.current[remoteUserId]) {
         const pc = createPeerConnection(remoteUserId);
         peersRef.current[remoteUserId] = pc;
@@ -984,33 +1035,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       }
     }
 
-    // Answer any incoming offer that triggered the call
-    const { userId: fromUserId, sdp } = incomingCall;
-
-    if (!peersRef.current[fromUserId]) {
-      const pc = createPeerConnection(fromUserId);
-      peersRef.current[fromUserId] = pc;
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-    }
-
-    try {
-      const pc = peersRef.current[fromUserId];
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      wsRef.current.send(JSON.stringify({
-        action: "call_answer",
-        to_user: fromUserId,
-        sdp: pc.localDescription
-      }));
-    } catch (err) {
-      console.error("Failed to handle incoming offer", err);
-    }
-
     setIncomingCall(null);
   };
-
 
   const handleRejectCall = () => {
     wsRef.current.send(JSON.stringify({ action: "call_leave" }));
@@ -1790,7 +1816,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         open={callPopupOpen}
         onClose={() => setCallPopupOpen(false)}
         onlineUsers={onlineUsers}
-      // onStartGroupCall={handleStartGroupCall}
       />
 
       <CallDialog
@@ -1799,6 +1824,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         onCancel={handleCancelCall}
         remoteStreams={remoteStreams}
         onLocal={localStreamRef.current}
+        peersRef={peersRef}
         status={callStatus}
       />
 
