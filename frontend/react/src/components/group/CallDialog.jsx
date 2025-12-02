@@ -50,6 +50,8 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
               key={userId}
               autoPlay
               playsInline
+              onPause={() => console.warn(`Video paused for user ${userId}`)}
+              onError={e => console.error(`Video error for user ${userId}`, e)}
               ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
               style={{
                 width: videoWidth,

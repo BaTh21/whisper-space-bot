@@ -776,6 +776,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const closeAllPeerConnections = (keepUserId = null) => {
     Object.entries(peersRef.current).forEach(([userId, pc]) => {
       if (parseInt(userId) !== keepUserId) {
+        pc.getSenders().forEach(sender => sender.track?.stop());
         try { pc.close(); } catch { }
         delete peersRef.current[userId];
       }
@@ -931,6 +932,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     });
   };
 
+
   const handleCancelCall = () => {
     setCallingOpen(false);
     setCallingUser(null);
@@ -938,9 +940,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     wsRef.current?.send(JSON.stringify({ action: "call_leave" }));
 
     Object.values(peersRef.current).forEach(pc => {
-      pc.getSenders().forEach(sender => {
-        if (sender.track) sender.track.stop();
-      });
+      pc.getSenders().forEach(sender => sender.track?.stop());
       pc.close();
     });
     peersRef.current = {};
