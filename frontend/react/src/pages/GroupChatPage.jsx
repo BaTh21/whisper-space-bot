@@ -467,13 +467,16 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "call_leave":
         const leavingUserId = data.user_id;
-        console.log("User left call:", data.user_id);
-
         if (peersRef.current[leavingUserId]) {
           peersRef.current[leavingUserId].close();
           delete peersRef.current[leavingUserId];
         }
 
+        setRemoteStreams(prev => {
+          const updated = { ...prev };
+          delete updated[leavingUserId];
+          return updated;
+        });
         break;
 
       case "call_offer":
@@ -902,7 +905,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-
   const handleStartGroupCall = async () => {
     closeAllPeerConnections();
     setRemoteStreams({});
@@ -953,7 +955,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setRemoteStreams({});
   };
 
-
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
 
@@ -970,10 +971,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         const pc = createPeerConnection(remoteUserId);
         peersRef.current[remoteUserId] = pc;
 
-        // Add local tracks
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-        // If we are initiating the connection, create offer
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 

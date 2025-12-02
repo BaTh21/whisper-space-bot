@@ -8,9 +8,13 @@ import { useState } from "react";
 import CloseIcon from '@mui/icons-material/Close';
 import KeyboardVoiceIcon from '@mui/icons-material/KeyboardVoice';
 import MicOffIcon from '@mui/icons-material/MicOff';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import VideocamOffIcon from '@mui/icons-material/VideocamOff';
+import RemoteVideo from './RemoteVideo';
 
 const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
   const [isMuted, setIsMuted] = useState(false);
+  const [videoEnabled, setVideoEnabled] = useState(true);
   const streamCount = Object.keys(remoteStreams).length;
   const gridCols = Math.ceil(Math.sqrt(streamCount + 1));
   const videoWidth = `${100 / gridCols}%`;
@@ -46,35 +50,24 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
           )}
 
           {Object.entries(remoteStreams).map(([userId, stream]) => (
-            <video
+            <RemoteVideo
               key={userId}
-              autoPlay
-              playsInline
-              onPause={() => console.warn(`Video paused for user ${userId}`)}
-              onError={e => console.error(`Video error for user ${userId}`, e)}
-              ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream; }}
-              style={{
-                width: videoWidth,
-                height: videoHeight,
-                objectFit: 'cover',
-              }}
+              stream={stream}
+              width={videoWidth}
+              height={videoHeight}
             />
           ))}
 
-          {onLocal && (
-            <video
-              autoPlay
-              muted
-              playsInline
-              ref={el => { if (el && el.srcObject !== onLocal) el.srcObject = onLocal; }}
+          {onLocal && videoEnabled && (
+            <RemoteVideo
+              stream={onLocal}
+              width="150px"
+              height="120px"
               style={{
-                width: '150px',
-                height: '120px',
                 position: 'absolute',
                 bottom: 16,
                 right: 16,
                 border: '2px solid white',
-                objectFit: 'cover',
                 zIndex: 10
               }}
             />
@@ -115,6 +108,22 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status }) => {
             >
               {isMuted ? <MicOffIcon /> : <KeyboardVoiceIcon />}
             </IconButton>
+
+            <IconButton
+              onClick={() => {
+                if (!onLocal) return;
+                onLocal.getVideoTracks().forEach(track => track.enabled = !videoEnabled);
+                setVideoEnabled(!videoEnabled);
+              }}
+              sx={{
+                backgroundColor: videoEnabled ? 'primary.main' : 'secondary.main',
+                color: 'white',
+                '&:hover': { backgroundColor: videoEnabled ? '#1a2f42ff' : '#68102fff' }
+              }}
+            >
+              {videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+            </IconButton>
+
 
             <IconButton
               onClick={onCancel}
