@@ -20,64 +20,28 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status, peersRef }
   const videoWidth = `${100 / gridCols}%`;
   const videoHeight = `${100 / gridCols}%`;
 
-  const toggleMute = async () => {
+  const toggleMute = () => {
     if (!onLocal) return;
-
-    const currentEnabled = onLocal.getAudioTracks()[0]?.enabled;
-
-    let newTrack;
-
-    if (currentEnabled) {
-      newTrack = createSilentAudioTrack();
-    } else {
-      const newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      newTrack = newStream.getAudioTracks()[0];
-    }
-
-    Object.values(peersRef.current).forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === "audio");
-      if (sender) sender.replaceTrack(newTrack);
+    onLocal.getAudioTracks().forEach(track => {
+      track.enabled = !track.enabled;
     });
-
-    onLocal.removeTrack(onLocal.getAudioTracks()[0]);
-    onLocal.addTrack(newTrack);
-
-    setIsMuted(!currentEnabled);
+    setIsMuted(!isMuted);
   };
-  ;
 
   const toggleVideo = async () => {
     if (!onLocal) return;
-
-    const currentEnabled = onLocal.getVideoTracks()[0]?.enabled;
-
-    let newTrack;
-
-    if (currentEnabled) {
-      newTrack = createBlackVideoTrack();
-    } else {
+    const currentEnabled = onLocal.getVideoTracks()[0]?.enabled; let newTrack;
+    if (currentEnabled) { newTrack = createBlackVideoTrack(); }
+    else {
       const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
       newTrack = newStream.getVideoTracks()[0];
     }
-
     Object.values(peersRef.current).forEach(pc => {
       const sender = pc.getSenders().find(s => s.track?.kind === "video");
       if (sender) sender.replaceTrack(newTrack);
     });
-
     onLocal.removeTrack(onLocal.getVideoTracks()[0]);
-    onLocal.addTrack(newTrack);
-
-    setVideoEnabled(!currentEnabled);
-  };
-
-
-  const createSilentAudioTrack = () => {
-    const ctx = new AudioContext();
-    const oscillator = ctx.createOscillator();
-    const dst = oscillator.connect(ctx.createMediaStreamDestination());
-    oscillator.start();
-    return Object.assign(dst.stream.getAudioTracks()[0], { enabled: false });
+    onLocal.addTrack(newTrack); setVideoEnabled(!currentEnabled);
   };
 
   const createBlackVideoTrack = () => {
@@ -123,7 +87,7 @@ const CallDialog = ({ open, remoteStreams, onLocal, onCancel, status, peersRef }
             />
           ))}
 
-          {onLocal &&  (
+          {onLocal && videoEnabled && (
             <RemoteVideo
               stream={onLocal}
               width="150px"
