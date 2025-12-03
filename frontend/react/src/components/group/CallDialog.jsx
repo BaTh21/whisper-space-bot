@@ -20,7 +20,7 @@ const Video = ({ stream }) => {
     if (ref.current && stream) {
       ref.current.srcObject = stream;
       ref.current.onloadedmetadata = () => {
-        ref.current.play().catch(() => {});
+        ref.current.play().catch(() => { });
       };
     }
   }, [stream]);
@@ -61,6 +61,10 @@ const CallDialog = ({
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
+  const [pipPos, setPipPos] = useState({ x: 20, y: 20 });
+  const pipRef = useRef(null);
+  const dragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
   const streams = Object.values(remoteStreams || {}).filter(
     (s) => s && s.getTracks().length > 0
@@ -112,6 +116,57 @@ const CallDialog = ({
     const track = stream.getVideoTracks()[0];
     return Object.assign(track, { enabled: false });
   };
+
+  const startDrag = (e) => {
+    dragging.current = true;
+
+    const rect = pipRef.current.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    dragOffset.current = {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+  };
+
+  const duringDrag = (e) => {
+    if (!dragging.current) return;
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    const newX = clientX - dragOffset.current.x;
+    const newY = clientY - dragOffset.current.y;
+
+    const maxX = window.innerWidth - 200;
+    const maxY = window.innerHeight - 140;
+
+    setPipPos({
+      x: Math.max(10, Math.min(newX, maxX)),
+      y: Math.max(10, Math.min(newY, maxY)),
+    });
+  };
+
+  const stopDrag = () => {
+    dragging.current = false;
+  };
+
+  useEffect(() => {
+    window.addEventListener("mousemove", duringDrag);
+    window.addEventListener("mouseup", stopDrag);
+
+    window.addEventListener("touchmove", duringDrag);
+    window.addEventListener("touchend", stopDrag);
+
+    return () => {
+      window.removeEventListener("mousemove", duringDrag);
+      window.removeEventListener("mouseup", stopDrag);
+
+      window.removeEventListener("touchmove", duringDrag);
+      window.removeEventListener("touchend", stopDrag);
+    };
+  }, []);
 
   return (
     <Dialog open={open} onClose={onCancel} fullScreen>
@@ -184,10 +239,15 @@ const CallDialog = ({
 
         {onLocal && videoEnabled && (
           <Box
+            ref={pipRef}
+            onMouseDown={startDrag}
+            onTouchStart={startDrag}
             sx={{
               position: "fixed",
-              bottom: 20,
-              right: 20,
+              bottom: "unset",
+              right: "unset",
+              left: pipPos.x,
+              top: pipPos.y,
               width: 200,
               height: 140,
               borderRadius: 2,
@@ -195,7 +255,9 @@ const CallDialog = ({
               zIndex: 20,
               border: "2px solid white",
               background: "black",
-              boxShadow: "0 0 10px rgba(0,0,0,0.5)"
+              cursor: "grab",
+              touchAction: "none",
+              boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             }}
           >
             <Video stream={onLocal} />
