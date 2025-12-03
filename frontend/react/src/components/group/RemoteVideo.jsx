@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export default function RemoteVideo ({ stream, width, height })  {
+export default function RemoteVideo ({ stream, style })  {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -15,13 +15,7 @@ export default function RemoteVideo ({ stream, width, height })  {
       autoPlay
       playsInline
       muted={false}
-      style={{
-        width,
-        height,
-        objectFit: 'cover',
-        transition: 'opacity 0.3s',
-        opacity: stream ? 1 : 0
-      }}
+      style={style}
     />
   );
 };

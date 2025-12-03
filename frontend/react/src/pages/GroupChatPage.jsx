@@ -92,6 +92,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
   const [callStatus, setCallStatus] = useState(null);
+  const negotiationLock = useRef({});
 
   console.log("streams", remoteStreams)
   console.log("online users", onlineUsers)
@@ -752,6 +753,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
+    negotiationLock.current[remoteUserId] = false;
+
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         wsRef.current.send(JSON.stringify({
@@ -763,6 +766,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     };
 
     pc.onnegotiationneeded = async () => {
+      if (negotiationLock.current[remoteUserId]) return;
+
+      negotiationLock.current[remoteUserId] = true;
+
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -777,28 +784,21 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       }
     };
 
-
     pc.ontrack = (event) => {
       setRemoteStreams(prev => {
         const updated = { ...prev };
-        let stream = updated[remoteUserId];
-
-        if (!stream) {
-          stream = updated[remoteUserId] = new MediaStream();
-        }
-
-        const track = event.track;
+        const stream = updated[remoteUserId] || new MediaStream();
 
         stream.getTracks()
-          .filter(t => t.kind === track.kind)
+          .filter(t => t.kind === event.track.kind)
           .forEach(t => stream.removeTrack(t));
 
-        stream.addTrack(track);
+        stream.addTrack(event.track);
 
+        updated[remoteUserId] = stream;
         return updated;
       });
     };
-
 
     return pc;
   };

@@ -726,8 +726,8 @@ async def websocket_group_chat(
                             continue
                         await websocket.send_json({
                             "action": "request_offer",
-                            "to_user": info["user_id"],     
-                            "from_user": current_user.id     
+                            "to_user": info["user_id"],
+                            "from_user": current_user.id
                         })
                     continue
                 
