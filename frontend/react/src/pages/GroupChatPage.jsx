@@ -92,7 +92,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
   const [callStatus, setCallStatus] = useState(null);
-  const negotiationLock = useRef({});
+  const [callingUsers, setCallingUsers] = useState(new Set());
+  const [peers, setPeers] = useState({});
+
 
   console.log("streams", remoteStreams)
   console.log("online users", onlineUsers)
@@ -435,78 +437,24 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         });
         break;
 
-      case "call_join":
-        const joiningUserId = data.user_id;
-        if (!peersRef.current[joiningUserId]) {
-          const pc = createPeerConnection(joiningUserId);
-          peersRef.current[joiningUserId] = pc;
-
-          const stream = await getLocalStream();
-          if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-
-          wsRef.current.send(JSON.stringify({
-            action: "call_offer",
-            to_user: joiningUserId,
-            sdp: pc.localDescription
-          }));
-        }
-
-        for (let [ws, info] of Object.entries(manager.active_connections[chat_id] || {})) {
-          const existingUserId = info.user_id;
-          if (existingUserId === user.id || existingUserId === joiningUserId) continue;
-
-          wsRef.current.send(JSON.stringify({
-            action: "request_offer",
-            to_user: existingUserId,
-            from_user: joiningUserId
-          }));
-        }
+      case "call_request":
+        handleIncomingCall(data);
         break;
 
-      case "call_leave":
-        const leavingUserId = data.user_id;
-        if (peersRef.current[leavingUserId]) {
-          peersRef.current[leavingUserId].close();
-          delete peersRef.current[leavingUserId];
-        }
+      case "call_accepted":
+        handleCallAcceptedByUser(data);
+        break;
 
-        setRemoteStreams(prev => {
-          const updated = { ...prev };
-          delete updated[leavingUserId];
-          return updated;
-        });
+      case "call_rejected":
+        handleCallRejected(data);
+        break;
+
+      case "call_join":
+        handleNewUserJoined(data.user_id);
         break;
 
       case "call_offer":
-        handleReceiveOffer(data);
-        break;
-
-      case "request_offer":
-        const { to_user, from_user } = data;
-        if (user.id !== from_user) return;
-
-        let pc = peersRef.current[to_user];
-        if (!pc) {
-          const pc = createPeerConnection(to_user);
-          peersRef.current[to_user] = pc;
-        }
-
-        const localStream = await getLocalStream();
-        if (localStream) {
-          localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-        }
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        wsRef.current.send(JSON.stringify({
-          action: "call_offer",
-          to_user: to_user,
-          sdp: pc.localDescription
-        }));
+        handleReceiveOffer(data)
         break;
 
       case "call_answer":
@@ -516,6 +464,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "call_ice":
         handleNewIceCandidate(data);
+        break;
+
+      case "call_leave":
+        handleUserLeave(data.user_id);
         break;
 
       default:
@@ -748,70 +700,40 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-  const createPeerConnection = (remoteUserId) => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+  const createPeerConnection = (userId) => {
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
 
-    negotiationLock.current[remoteUserId] = false;
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
+    pc.onicecandidate = e => {
+      if (e.candidate) {
         wsRef.current.send(JSON.stringify({
           action: "call_ice",
-          to_user: remoteUserId,
-          candidate: event.candidate
+          to_user: userId,
+          candidate: e.candidate
         }));
       }
     };
 
-    pc.onnegotiationneeded = async () => {
-      if (negotiationLock.current[remoteUserId]) return;
-
-      negotiationLock.current[remoteUserId] = true;
-
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        wsRef.current.send(JSON.stringify({
-          action: "call_offer",
-          to_user: remoteUserId,
-          sdp: pc.localDescription
-        }));
-      } catch (e) {
-        console.error("Negotiation failed", e);
-      }
-    };
-
-    pc.ontrack = (event) => {
+    pc.ontrack = e => {
       setRemoteStreams(prev => {
         const updated = { ...prev };
-        const stream = updated[remoteUserId] || new MediaStream();
+
+        const stream = updated[userId] || new MediaStream();
 
         stream.getTracks()
-          .filter(t => t.kind === event.track.kind)
+          .filter(t => t.kind === e.track.kind)
           .forEach(t => stream.removeTrack(t));
 
-        stream.addTrack(event.track);
+        stream.addTrack(e.track);
 
-        updated[remoteUserId] = stream;
+        updated[userId] = stream;
         return updated;
       });
     };
 
+
     return pc;
   };
 
-  const closeAllPeerConnections = (keepUserId = null) => {
-    Object.entries(peersRef.current).forEach(([userId, pc]) => {
-      if (parseInt(userId) !== keepUserId) {
-        pc.getSenders().forEach(sender => sender.track?.stop());
-        try { pc.close(); } catch { }
-        delete peersRef.current[userId];
-      }
-    });
-  };
 
   let mediaLock = false;
 
@@ -840,90 +762,130 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-  const handleReceiveOffer = async (data) => {
-    const { from_user, sdp } = data;
+  const handleStartGroupCall = async (targetUserId) => {
+    const stream = await getLocalStream();
+    if (!stream) return;
 
-    if (!peersRef.current[from_user]) {
-      const pc = createPeerConnection(from_user);
-      peersRef.current[from_user] = pc;
-
-      const localStream = await getLocalStream();
-      if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    }
-
-    setIncomingCall({ userId: from_user, sdp });
-
-    let pc = peersRef.current[from_user];
-
-    try {
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+    onlineUsers.forEach(userId => {
+      if (userId === user.id) return;
 
       wsRef.current.send(JSON.stringify({
-        action: "call_answer",
-        to_user: from_user,
-        sdp: pc.localDescription
+        action: "call_start",
+        to_user: userId
       }));
-    } catch (err) {
-      console.error("Failed to handle offer from", from_user, err);
-    }
+
+      setCallingUsers(prev => new Set(prev).add(userId));
+    });
+
+    setCallStatus("Calling...");
+    setCallingOpen(true);
   };
 
-  const handleReceiveAnswer = async (data) => {
-    const { from_user, sdp } = data;
-    const pc = peersRef.current[from_user];
-    if (!pc) return;
+  const handleIncomingCall = ({ from_user }) => {
+    if (from_user === user.id) return;
 
-    if (!pc.remoteDescription) {
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    setIncomingCall({
+      userId: from_user
+    });
+  };
 
-        if (iceQueue.current[from_user]?.length) {
-          for (let c of iceQueue.current[from_user]) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(c));
-            } catch (err) {
-              console.error("Failed to add queued ICE candidate", err);
-            }
-          }
-          delete iceQueue.current[from_user];
-        }
-      } catch (err) {
-        console.error("Failed to set remote description:", err);
-      }
-    }
+  const handleAcceptCall = async () => {
+    if (!incomingCall) return;
+
+    const fromUserId = incomingCall.userId;
+    if (fromUserId === user.id) return;
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_accept",
+      to_user: fromUserId
+    }));
+
+    setIncomingCall(null);
 
     setCallStatus("In Call");
+    setCallingOpen(true);
+
+    const pc = createPeerConnection(fromUserId);
+    peersRef.current[fromUserId] = pc;
+
+    const stream = await getLocalStream();
+    if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+  };
+
+  const handleCallAcceptedByUser = async ({ from_user }) => {
+    const userId = from_user;
+
+    const pc = createPeerConnection(userId);
+    peers[userId] = pc;
+
+    const stream = await getLocalStream();
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_offer",
+      to_user: userId,
+      sdp: pc.localDescription
+    }));
+
+    setPeers({ ...peers });
+  };
+
+  const handleNewUserJoined = async (newUserId) => {
+    const pc = createPeerConnection(newUserId);
+    peersRef.current[newUserId] = pc;
+
+    const stream = await getLocalStream();
+    if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_offer",
+      to_user: newUserId,
+      sdp: pc.localDescription
+    }));
   };
 
 
-  const handleNewIceCandidate = async (data) => {
-    const { from_user, candidate } = data;
-    const pc = peersRef.current[from_user];
+  const handleReceiveOffer = async ({ from_user, sdp }) => {
+    let pc = peers[from_user];
     if (!pc) {
-      console.warn("ICE received but no PeerConnection yet");
-      return;
+      pc = createPeerConnection(from_user);
+      peers[from_user] = pc;
+
+      const stream = await getLocalStream();
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
     }
 
-    if (!iceQueue.current[from_user]) {
-      iceQueue.current[from_user] = [];
-    }
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
 
-    if (!pc.remoteDescription) {
-      iceQueue.current[from_user].push(candidate);
-      console.log("Queued ICE candidate for", from_user);
-      return;
-    }
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
 
-    for (let c of iceQueue.current[from_user]) {
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(c));
-      } catch (err) {
-        console.error("Failed to add queued ICE candidate", err);
-      }
-    }
-    delete iceQueue.current[from_user];
+    wsRef.current.send(JSON.stringify({
+      action: "call_answer",
+      to_user: from_user,
+      sdp: pc.localDescription
+    }));
+
+    setPeers({ ...peers });
+  };
+
+  const handleReceiveAnswer = async ({ from_user, sdp }) => {
+    const pc = peers[from_user];
+    if (!pc) return;
+
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  };
+
+  const handleNewIceCandidate = async ({ from_user, candidate }) => {
+    const pc = peers[from_user];
+    if (!pc) return;
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -932,32 +894,17 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-  const handleStartGroupCall = async () => {
-    closeAllPeerConnections();
-    setRemoteStreams({});
+  const handleUserLeave = (userId) => {
+    if (peers[userId]) {
+      peers[userId].getSenders().forEach(s => s.track?.stop());
+      peers[userId].close();
+      delete peers[userId];
+    }
 
-    const stream = await getLocalStream();
-    if (!stream) return;
-
-    setCallStatus("Calling");
-    setCallingOpen(true);
-
-    onlineUsers.forEach(async (userId) => {
-      if (userId === user.id) return;
-
-      const pc = createPeerConnection(userId);
-      peersRef.current[userId] = pc;
-
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      wsRef.current.send(JSON.stringify({
-        action: "call_offer",
-        to_user: userId,
-        sdp: pc.localDescription
-      }));
+    setRemoteStreams(prev => {
+      const updated = { ...prev };
+      delete updated[userId];
+      return updated;
     });
   };
 
@@ -982,66 +929,14 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setRemoteStreams({});
   };
 
-  const handleAcceptCall = async () => {
-    if (!incomingCall) return;
-
-    setCallStatus('In Call');
-    setCallingOpen(true);
-
-    const { userId: fromUserId, sdp } = incomingCall;
-
-    const stream = await getLocalStream();
-    if (!stream) return;
-
-    let callerPC = peersRef.current[fromUserId];
-    if (!callerPC) {
-      callerPC = createPeerConnection(fromUserId);
-      peersRef.current[fromUserId] = callerPC;
-
-      stream.getTracks().forEach(track => callerPC.addTrack(track, stream));
-    }
-
-    try {
-      await callerPC.setRemoteDescription(new RTCSessionDescription(sdp));
-      const answer = await callerPC.createAnswer();
-      await callerPC.setLocalDescription(answer);
-
-      wsRef.current.send(JSON.stringify({
-        action: "call_answer",
-        to_user: fromUserId,
-        sdp: callerPC.localDescription
-      }));
-    } catch (err) {
-      console.error("Error answering call:", err);
-    }
-
-    const otherUsers = Array.from(onlineUsers).filter(id => id !== user.id && id !== fromUserId);
-
-    for (let remoteUserId of otherUsers) {
-      if (!peersRef.current[remoteUserId]) {
-        const pc = createPeerConnection(remoteUserId);
-        peersRef.current[remoteUserId] = pc;
-
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        wsRef.current.send(JSON.stringify({
-          action: "call_offer",
-          to_user: remoteUserId,
-          sdp: pc.localDescription
-        }));
-      }
-    }
-
-    setIncomingCall(null);
-  };
-
   const handleRejectCall = () => {
-    wsRef.current.send(JSON.stringify({ action: "call_leave" }));
+    wsRef.current.send(JSON.stringify({
+      action: "call_reject",
+      to_user: incomingCall.userId
+    }));
     setIncomingCall(null);
   };
+
 
 
   if (loading) {

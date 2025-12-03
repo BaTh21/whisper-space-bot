@@ -700,12 +700,25 @@ async def websocket_group_chat(
                 
                 if action == "call_start":
                     await manager.broadcast(chat_id, {
-                        "action": "call_offer",
+                        "action": "call_request",
                         "from_user": current_user.id,
-                        "sdp": sdp
-                    }, exclude={websocket})
+                    })
                     continue
                 
+                if action == "call_accept":
+                    await manager.send_to_user(chat_id, to_user, {
+                        "action": "call_accepted",
+                        "from_user": current_user.id
+                    })
+                    continue
+                
+                if action == "call_reject":
+                    await manager.send_to_user(chat_id, to_user, {
+                        "action": "call_rejected",
+                        "from_user": current_user.id
+                    })
+                    continue
+
                 if action == "call_join":
                     await manager.broadcast(chat_id,{
                         "action": "call_join",
