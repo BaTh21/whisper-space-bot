@@ -16,13 +16,30 @@ import CloseIcon from "@mui/icons-material/Close";
 const Video = ({ stream }) => {
   const ref = useRef();
 
+  console.log("dialog streams", stream);
+
   useEffect(() => {
-    if (ref.current && stream) {
-      ref.current.srcObject = stream;
-      ref.current.onloadedmetadata = () => {
-        ref.current.play().catch(() => { });
-      };
+    if (!ref.current) return;
+    if (!stream) return;
+
+    ref.current.srcObject = stream;
+
+    const playVideo = () => {
+      ref.current.play().catch(() => { });
+    };
+
+    if (stream.getVideoTracks().length > 0) {
+      playVideo();
     }
+
+    const handleTrack = () => {
+      playVideo();
+    };
+    stream.addEventListener("addtrack", handleTrack);
+
+    return () => {
+      stream.removeEventListener("addtrack", handleTrack);
+    };
   }, [stream]);
 
   return (
@@ -91,10 +108,8 @@ const CallDialog = ({
     }
 
     Object.values(peersRef.current).forEach((pc) => {
-      const sender = pc.getSenders().find(
-        (s) => s.track && s.track.kind === "video"
-      );
-      if (sender) sender.replaceTrack(newTrack);
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
+      if (sender) sender.replaceTrack(newTrack.clone());
     });
 
     const oldTrack = onLocal.getVideoTracks()[0];
