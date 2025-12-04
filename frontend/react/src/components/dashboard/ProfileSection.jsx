@@ -1,5 +1,7 @@
-//dashboard/ProfileSection.jsx
+// ProfileSection.jsx
+// dashboard/ProfileSection.jsx
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
+import DeleteIcon from '@mui/icons-material/Delete';
 import {
   Alert,
   Avatar,
@@ -10,13 +12,19 @@ import {
   Collapse,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useRef, useState } from 'react';
 import * as Yup from 'yup';
 import { useAvatar } from '../../hooks/useAvatar';
-import { updateMe, uploadAvatar } from '../../services/api';
+import { updateMe, uploadAvatar, deleteAvatar } from '../../services/api'; // Import deleteAvatar
 import { useTranslation } from 'react-i18next';
 
 const ProfileSection = ({ profile, setProfile, error, success, setError, setSuccess }) => {
@@ -25,8 +33,10 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const fileInputRef = useRef(null);
 
   const theme = useTheme();
@@ -133,6 +143,42 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
 
   const handleAvatarClick = () => fileInputRef.current?.click();
 
+  const handleDeleteAvatar = async () => {
+    if (!profile?.avatar_url) {
+      setError(t('no_avatar_to_delete'));
+      return;
+    }
+
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteAvatar = async () => {
+    setDeleting(true);
+    setError(null);
+    setSuccess(null);
+    
+    try {
+      await deleteAvatar();
+      
+      // Update profile locally
+      setProfile({
+        ...profile,
+        avatar_url: null
+      });
+      
+      setSuccess(t('avatar_deleted_success'));
+      setImagePreview(null);
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || t('delete_failed'));
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
   return (
@@ -163,52 +209,86 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           maxWidth: 500,
         }}
       >
-        {/* Avatar */}
+        {/* Avatar Section */}
         <Box
           sx={{
             position: 'relative',
-            cursor: 'pointer',
             display: 'flex',
-            justifyContent: 'center',
+            flexDirection: 'column',
             alignItems: 'center',
+            gap: 2,
           }}
-          onClick={handleAvatarClick}
         >
-          <Avatar
-            src={currentAvatarUrl}
-            alt={profile?.username}
-            sx={{
-              width: 200,
-              height: 200,
-              border: imagePreview ? '3px solid' : 'none',
-              borderColor: imagePreview ? 'primary.main' : 'transparent',
-              fontSize: getAvatarFontSize(),
-              bgcolor: 'primary.light',
-              borderRadius: 3,
-            }}
-          >
-            {getUserInitials(profile?.username)}
-          </Avatar>
-
+          {/* Avatar with Camera Icon */}
           <Box
             sx={{
-              position: 'absolute',
-              bottom: 0,
-              right: 0,
-              bgcolor: 'primary.main',
-              borderRadius: '50%',
-              width: 24,
-              height: 24,
+              position: 'relative',
+              cursor: 'pointer',
               display: 'flex',
-              alignItems: 'center',
               justifyContent: 'center',
-              color: 'white',
-              fontSize: 14,
-              p: 2
+              alignItems: 'center',
             }}
+            onClick={handleAvatarClick}
           >
-            <CameraswitchIcon sx={{ fontSize: 20 }} />
+            <Avatar
+              src={currentAvatarUrl}
+              alt={profile?.username}
+              sx={{
+                width: 200,
+                height: 200,
+                border: imagePreview ? '3px solid' : 'none',
+                borderColor: imagePreview ? 'primary.main' : 'transparent',
+                fontSize: getAvatarFontSize(),
+                bgcolor: 'primary.light',
+                borderRadius: 3,
+              }}
+            >
+              {getUserInitials(profile?.username)}
+            </Avatar>
+
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                bgcolor: 'primary.main',
+                borderRadius: '50%',
+                width: 24,
+                height: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 14,
+                p: 2
+              }}
+            >
+              <CameraswitchIcon sx={{ fontSize: 20 }} />
+            </Box>
           </Box>
+
+          {/* Delete Button - Only show if avatar exists */}
+          {profile?.avatar_url && (
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              startIcon={<DeleteIcon />}
+              onClick={handleDeleteAvatar}
+              disabled={deleting}
+              sx={{
+                borderRadius: '20px',
+                textTransform: 'none',
+                fontSize: '0.875rem',
+                '&:hover': {
+                  bgcolor: 'error.light',
+                  color: 'white',
+                }
+              }}
+            >
+              {deleting ? t('deleting') : t('delete_avatar')}
+            </Button>
+          )}
         </Box>
 
         {/* Profile Info */}
@@ -269,6 +349,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         </Box>
       </Box>
 
+      {/* File Input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -277,6 +358,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         style={{ display: 'none' }}
       />
 
+      {/* Alerts */}
       <Collapse in={!!error}>
         <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
           {error}
@@ -288,6 +370,36 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           {success}
         </Alert>
       </Collapse>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          {t('confirm_delete_avatar')}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            {t('delete_avatar_warning')}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} color="inherit">
+            {t('cancel')}
+          </Button>
+          <Button 
+            onClick={confirmDeleteAvatar} 
+            color="error" 
+            variant="contained"
+            disabled={deleting}
+          >
+            {deleting ? t('deleting') : t('delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 };

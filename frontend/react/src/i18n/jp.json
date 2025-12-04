@@ -169,5 +169,13 @@
   "failed": "失敗",
   "dont_have_account": "アカウントをお持ちでないですか？",
   "create_new": "新規作成",
-  "logging_in": "ログイン中..."
+  "logging_in": "ログイン中...",
+
+  "delete_avatar": "画像を削除",
+  "confirm_delete_avatar": "画像削除の確認",
+  "delete_avatar_warning": "本当に画像を削除しますか？この操作は取り消せません。",
+  "deleting": "削除中...",
+  "avatar_deleted_success": "画像を削除しました",
+  "no_avatar_to_delete": "削除する画像がありません",
+  "delete_failed": "画像の削除に失敗しました"
 }
