@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.models.friend import Friend, FriendshipStatus
 from app.models.user import User
+from app.services.websocket_manager import manager
 
 
 def create(db: Session, user_id: int, friend_id: int, status: str = "pending") -> Friend:
@@ -10,7 +11,18 @@ def create(db: Session, user_id: int, friend_id: int, status: str = "pending") -
     if existing:
         return existing
     
-    friendship = Friend(user_id=user_id, friend_id=friend_id, status=FriendshipStatus(status))
+    # Manually generate ID if database doesn't auto-generate it
+    # Get the next ID value
+    max_id_result = db.execute("SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM friends")
+    next_id = max_id_result.scalar() or 1
+    
+    friendship = Friend(
+        id=next_id,  # Manually set ID
+        user_id=user_id, 
+        friend_id=friend_id, 
+        status=FriendshipStatus(status)
+    )
+    
     db.add(friendship)
     db.commit()
     db.refresh(friendship)
