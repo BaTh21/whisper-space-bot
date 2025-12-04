@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.friend import create, update_status, get_friends, get_pending_requests, is_friend, get_friend_request, delete
+from app.crud.friend import create, is_blocked, is_blocked_by, update_status, get_friends, get_pending_requests, is_friend, get_friend_request, delete
 from app.models.user import User
 from app.models.friend import Friend, FriendshipStatus
 from datetime import datetime
@@ -432,11 +432,12 @@ async def unfriend(
 
 
 @router.post("/block/{user_id}")
-def block_user(
+async def block_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Block a user and optionally clear chat history"""
     try:
         if user_id == current_user.id:
             raise HTTPException(status_code=400, detail="Cannot block yourself")
@@ -447,18 +448,24 @@ def block_user(
         if existing:
             # Update existing relationship to blocked
             existing.status = FriendshipStatus.blocked
+            existing.updated_at = datetime.utcnow()
             db.commit()
         else:
             # Create new blocked relationship
             create(db, current_user.id, user_id, FriendshipStatus.blocked)
         
-        return {"msg": "User blocked successfully"}
+        return {
+            "msg": "User blocked successfully",
+            "blocked_user_id": user_id,
+            "blocker_id": current_user.id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
         
     except HTTPException:
         raise
     except Exception as e:
         print(f"Server error in block_user: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.post("/unblock/{user_id}")
@@ -634,3 +641,29 @@ def add_friend(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to add friend")
+    
+@router.get("/check-blocked/{user_id}")
+async def check_blocked_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Check if a user is blocked by or has blocked current user"""
+    try:
+        # Check if current user has blocked the target user
+        current_blocked_target = is_blocked(db, current_user.id, user_id)
+        
+        # Check if target user has blocked current user
+        target_blocked_current = is_blocked_by(db, current_user.id, user_id)
+        
+        return {
+            "current_user_has_blocked": current_blocked_target,
+            "target_user_has_blocked": target_blocked_current,
+            "is_blocked": current_blocked_target or target_blocked_current,
+            "current_user_id": current_user.id,
+            "target_user_id": user_id
+        }
+        
+    except Exception as e:
+        print(f"Error checking blocked status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

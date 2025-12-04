@@ -9,7 +9,6 @@ import {
   Image as ImageIcon,
   Schedule as LastSeenIcon,
   MoreVert as MoreVertIcon,
-  CircleOutlined as OfflineIcon,
   FiberManualRecord as OnlineIcon,
   PlayArrow as PlayArrowIcon,
   Stop as StopIcon,
@@ -545,12 +544,6 @@ const ChatMessage = ({
           </>
         ) : (
           <>
-            <OfflineIcon
-              sx={{
-                fontSize: '0.6rem',
-                color: 'text.disabled'
-              }}
-            />
             <Typography
               variant="caption"
               sx={{
@@ -562,7 +555,7 @@ const ChatMessage = ({
               }}
             >
               <LastSeenIcon fontSize="inherit" />
-              {lastSeenTime || 'Offline'}
+              {lastSeenTime || ''}
             </Typography>
           </>
         )}
@@ -596,9 +589,6 @@ const ChatMessage = ({
                   animation: isOnline ? 'pulse 2s infinite' : 'none'
                 }}
               />
-              <Typography variant="caption">
-                {isOnline ? 'Online now' : 'Currently offline'}
-              </Typography>
             </Box>
 
             {!isOnline && friendOnlineStatus.last_seen && (

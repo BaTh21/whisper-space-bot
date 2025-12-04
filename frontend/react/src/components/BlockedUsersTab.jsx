@@ -45,20 +45,21 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
     fetchBlockedUsers();
   }, []);
 
-  const handleUnblock = async (userId, username) => {
-    setUnblockingId(userId);
-    try {
-      await unblockUser(userId);
-      setSuccess(t('success_unblocked', { username }));
-      setBlockedUsers(prev => prev.filter(user => user.id !== userId));
-
-      if (onDataUpdate) onDataUpdate();
-    } catch (err) {
-      setError(t('error_unblock'));
-    } finally {
-      setUnblockingId(null);
-    }
-  };
+const handleUnblock = async (userId, username) => {
+  setUnblockingId(userId);
+  try {
+    await unblockUser(userId);
+    setSuccess(t('success_unblocked', { username }));
+    setBlockedUsers(prev => prev.filter(user => user.id !== userId));
+    
+    // Notify parent to refresh friends list
+    if (onDataUpdate) onDataUpdate();
+  } catch (err) {
+    setError(t('error_unblock'));
+  } finally {
+    setUnblockingId(null);
+  }
+};
 
   if (loading) {
     return (
