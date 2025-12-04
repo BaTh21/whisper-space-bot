@@ -30,18 +30,22 @@ import { useTranslation } from 'react-i18next';
 import { useAvatar } from '../../hooks/useAvatar';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import {
-  sendVoiceMessage as apiSendVoiceMessage,
+  addReactionToMessage,
+  sendVoiceMessage as apiSendVoiceMessage, // Add this import
+  blockUser, // Make sure this is imported
+  checkBlockedStatus,
   deleteImageMessage,
   deleteMessage,
   editMessage,
+  getBlockedUsers,
   getFriendsOnlineStatus,
+  getMessageReactions,
   getPrivateChat,
-  sendImageMessage,
-  sendPrivateMessage,
-  uploadImage,
-  addReactionToMessage,
   removeReactionFromMessage,
-  getMessageReactions
+  sendImageMessage,
+  sendPrivateMessage, // Add this import
+  unblockUser,
+  uploadImage
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
@@ -107,6 +111,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [lastSeenMap, setLastSeenMap] = useState({});
   const [onlineStatusInterval, setOnlineStatusInterval] = useState(null);
+
+
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [isCheckingBlocked, setIsCheckingBlocked] = useState(false);
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [unblockDialogOpen, setUnblockDialogOpen] = useState(false);
+  const [userToBlock, setUserToBlock] = useState(null);
+  const [isBlocking, setIsBlocking] = useState(false);
+  const [isUnblocking, setIsUnblocking] = useState(false);
+  const [blockStatus, setBlockStatus] = useState({});
   useEffect(() => {
     const mobileStyles = `
     @media (max-width: 599px) {
@@ -192,6 +206,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       const { type } = data;
       console.log("📡 WebSocket received:", data);
 
+      if (type === "message" && data.sender_id) {
+        const isSenderBlocked = blockedUsers.some(user => user.id === data.sender_id);
+        if (isSenderBlocked) {
+          console.log(`⚠️ Ignoring message from blocked user ${data.sender_id}`);
+          return;
+        }
+      }
+
       // === ONLINE/OFFLINE STATUS HANDLING ===
       if (type === "user_online") {
         console.log('📱 User came online:', data.user_id);
@@ -222,8 +244,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
         // Show notification if this is the selected friend
         if (selectedFriend?.id === data.user_id) {
-          setSuccess(`${selectedFriend.username} is now online`);
-          setTimeout(() => setSuccess(''), 2000);
         }
 
         return; // Don't process further
@@ -482,6 +502,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       }
     },
     [
+      blockedUsers,
       getAvatarUrl,
       friends,
       selectedFriend,
@@ -547,6 +568,121 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     heartbeatInterval: 30000,
     debug: true,
   });
+
+  /* --------------------------------------------------------------------- */
+  /* Block Users */
+  /* --------------------------------------------------------------------- */
+  // Add this useEffect to fetch blocked users on component mount
+  useEffect(() => {
+    const fetchBlockedUsers = async () => {
+      try {
+        const blockedUsersList = await getBlockedUsers();
+        setBlockedUsers(blockedUsersList);
+
+        // Initialize block status for all friends
+        const statusMap = {};
+        blockedUsersList.forEach(user => {
+          statusMap[user.id] = true;
+        });
+        setBlockStatus(statusMap);
+      } catch (error) {
+        console.error('Error fetching blocked users:', error);
+      }
+    };
+
+    fetchBlockedUsers();
+  }, []);
+
+  // Add this function to check if a specific user is blocked
+  const checkIfUserIsBlocked = async (userId) => {
+    try {
+      setIsCheckingBlocked(true);
+      const status = await checkBlockedStatus(userId);
+      setBlockStatus(prev => ({
+        ...prev,
+        [userId]: status.is_blocked
+      }));
+      return status.is_blocked;
+    } catch (error) {
+      console.error('Error checking blocked status:', error);
+      // Fallback to checking local blockedUsers list
+      return blockedUsers.some(user => user.id === userId);
+    } finally {
+      setIsCheckingBlocked(false);
+    }
+  };
+
+  // Add block user function
+  const handleBlockUser = async (friend) => {
+    setUserToBlock(friend);
+    setBlockDialogOpen(true);
+  };
+
+  // Add unblock user function
+  const handleUnblockUser = async (friend) => {
+    setUserToBlock(friend);
+    setUnblockDialogOpen(true);
+  };
+
+  // Confirm block action
+  const confirmBlock = async () => {
+    if (!userToBlock) return;
+
+    setIsBlocking(true);
+    try {
+      await blockUser(userToBlock.id);
+
+      // Update local state
+      setBlockedUsers(prev => [...prev, userToBlock]);
+      setBlockStatus(prev => ({
+        ...prev,
+        [userToBlock.id]: true
+      }));
+
+      // If this is the selected friend, close chat
+      if (selectedFriend?.id === userToBlock.id) {
+        setSelectedFriend(null);
+        setMessages([]);
+        setSuccess(`Blocked ${userToBlock.username}. Chat closed.`);
+      } else {
+        setSuccess(`${userToBlock.username} has been blocked`);
+      }
+
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError('Failed to block user');
+    } finally {
+      setIsBlocking(false);
+      setBlockDialogOpen(false);
+      setUserToBlock(null);
+    }
+  };
+
+  // Confirm unblock action
+  const confirmUnblock = async () => {
+    if (!userToBlock) return;
+
+    setIsUnblocking(true);
+    try {
+      await unblockUser(userToBlock.id);
+
+      // Update local state
+      setBlockedUsers(prev => prev.filter(user => user.id !== userToBlock.id));
+      setBlockStatus(prev => ({
+        ...prev,
+        [userToBlock.id]: false
+      }));
+
+      setSuccess(`${userToBlock.username} has been unblocked`);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError('Failed to unblock user');
+    } finally {
+      setIsUnblocking(false);
+      setUnblockDialogOpen(false);
+      setUserToBlock(null);
+    }
+  };
 
   /* --------------------------------------------------------------------- */
   /* Enhanced Auto-Seen Observer */
@@ -1187,9 +1323,39 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   const loadInitialMessages = async () => {
     if (!selectedFriend || messages.length > 0) return;
+
     try {
+      // Check if user is blocked before loading messages
+      const isBlocked = blockStatus[selectedFriend.id] ||
+        await checkIfUserIsBlocked(selectedFriend.id);
+
+      if (isBlocked) {
+        // Don't load messages if user is blocked
+        setMessages([]);
+        setError(`Cannot load messages. ${selectedFriend.username} is blocked.`);
+        return;
+      }
+
       const chatMessages = await getPrivateChat(selectedFriend.id);
-      const enhanced = chatMessages.map((msg) => {
+
+      // Check if backend returned blocked status
+      if (Array.isArray(chatMessages) && chatMessages.length === 0) {
+        // Might be blocked, re-check status
+        const recheckBlocked = await checkIfUserIsBlocked(selectedFriend.id);
+        if (recheckBlocked) {
+          setMessages([]);
+          setError(`Cannot load messages. ${selectedFriend.username} is blocked.`);
+          return;
+        }
+      }
+
+      // Filter out any messages from blocked users (additional safety)
+      const filteredMessages = chatMessages.filter(msg => {
+        const messageSenderId = msg.sender_id;
+        return !blockedUsers.some(blockedUser => blockedUser.id === messageSenderId);
+      });
+
+      const enhanced = filteredMessages.map((msg) => {
         const detectMessageType = (message) => {
           // Use backend message_type first
           if (message.message_type === 'image') return 'image';
@@ -1257,8 +1423,24 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       });
 
       setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+      setError(null); // Clear any previous errors
     } catch (err) {
-      setError('Failed to load messages');
+      // Check if error is about blocking
+      if (err.message?.includes('blocked') || err.response?.data?.detail?.includes('blocked')) {
+        setError(`Cannot load messages. ${selectedFriend?.username || 'User'} is blocked.`);
+
+        // Update blocked status
+        if (selectedFriend) {
+          setBlockStatus(prev => ({
+            ...prev,
+            [selectedFriend.id]: true
+          }));
+        }
+      } else if (err.response?.status === 403 && err.response?.data?.detail?.includes('Not friends')) {
+        setError(`You are not friends with ${selectedFriend?.username || 'this user'}.`);
+      } else {
+        setError('Failed to load messages');
+      }
       console.error(err);
     }
   };
@@ -1266,10 +1448,19 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* --------------------------------------------------------------------- */
   /* Friend Selection */
   /* --------------------------------------------------------------------- */
-  const handleSelectFriend = (friend) => {
+  const handleSelectFriend = async (friend) => {
+    // Check if user is blocked - make this asynchronous
+    const isBlocked = blockStatus[friend.id] || await checkIfUserIsBlocked(friend.id);
+
+    if (isBlocked) {
+      setError(`You have blocked ${friend.username}. Unblock them to chat.`);
+      return;
+    }
+
     if (isMobile) setMobileDrawerOpen(false);
     if (selectedFriend?.id === friend?.id) return;
     if (selectedFriend) closeConnection(1000, 'Switching friends');
+
     setSelectedFriend(friend);
     setMessages([]);
     setNewMessage('');
@@ -1415,6 +1606,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   /* Send Message */
   /* --------------------------------------------------------------------- */
   const sendTextMessage = async () => {
+    if (selectedFriend && (blockStatus[selectedFriend.id] ||
+      blockedUsers.some(user => user.id === selectedFriend.id))) {
+      setError(`Cannot send message to ${selectedFriend.username}. They are blocked.`);
+      return;
+    }
     const content = newMessage.trim();
     if (!content || !selectedFriend) return;
 
@@ -1837,6 +2033,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             <List>
               {friends.map((friend) => {
                 const isOnline = onlineUsers.has(friend.id);
+                const isBlocked = blockStatus[friend.id] ||
+                  blockedUsers.some(b => b.id === friend.id);
                 const lastSeen = lastSeenMap[friend.id] || friend.last_seen;
 
                 // Calculate last seen text

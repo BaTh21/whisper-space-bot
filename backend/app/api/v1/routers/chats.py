@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, get_multiple_users_online_status, mark_messages_as_read
-from app.crud.friend import is_friend
+from app.crud.friend import is_blocked, is_blocked_by, is_friend
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.user import User
@@ -117,9 +117,21 @@ async def get_private_chat(
 ):
     """
     Get private chat messages between current user and friend with Telegram-style replies
+    with blocked user filtering
     """
     try:
-        # Verify friendship
+        # Check if current user has blocked the friend
+        if is_blocked(db, current_user.id, friend_id):
+            # User has blocked this friend, return empty messages
+            return []
+        
+        # Check if friend has blocked current user
+        if is_blocked_by(db, current_user.id, friend_id):
+            # Friend has blocked current user, return empty messages
+            return []
+        
+        # Verify friendship (optional - you might want to remove this for blocked users)
+        # Only check friendship if not blocked
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 
@@ -230,7 +242,6 @@ async def get_private_chat(
 
 
 
-
 # Send text message
 @router.post("/private/{friend_id}", response_model=MessageOut)
 async def send_private_message(
@@ -243,6 +254,20 @@ async def send_private_message(
     Send a private message to a friend with Telegram-style reply handling
     """
     try:
+        
+        if is_blocked(db, current_user.id, friend_id):
+            raise HTTPException(
+                status_code=403, 
+                detail="Cannot send message to blocked user"
+            )
+        
+        # Check if friend has blocked current user
+        if is_blocked_by(db, current_user.id, friend_id):
+            raise HTTPException(
+                status_code=403, 
+                detail="This user has blocked you"
+            )
+            
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 

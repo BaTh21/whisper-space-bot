@@ -852,9 +852,23 @@ export const forwardMessage = async (friendId, messageData) => {
 export const getPrivateChat = async (friendId) => {
   try {
     const response = await api.get(`/api/v1/chats/private/${friendId}`);
-
+    
+    // Handle backend blocking response
+    if (response.data && typeof response.data === 'object') {
+      // If backend returns object with blocked property
+      if (response.data.blocked === true) {
+        throw new Error(`User is blocked: ${response.data.message || 'Cannot load messages'}`);
+      }
+      
+      // If backend returns messages array
+      if (Array.isArray(response.data.messages)) {
+        return response.data.messages;
+      }
+    }
+    
+    // Default: assume response is array of messages
     const messages = Array.isArray(response.data) ? response.data : [];
-
+    
     return messages.map((msg) => ({
       id: msg.id || Date.now() + Math.random(),
       sender_id: msg.sender_id,
@@ -863,9 +877,19 @@ export const getPrivateChat = async (friendId) => {
       message_type: msg.message_type || "text",
       is_read: msg.is_read || false,
       created_at: msg.created_at || new Date().toISOString(),
+      seen_by: msg.seen_by || [],
+      voice_duration: msg.voice_duration || 0,
+      file_size: msg.file_size || 0,
     }));
   } catch (error) {
     console.error("Get private chat error:", error.response?.data);
+    
+    // Handle blocking errors
+    if (error.response?.status === 403 && 
+        (error.response?.data?.detail?.includes('blocked') || 
+         error.response?.data?.message?.includes('blocked'))) {
+      throw new Error(`User is blocked: ${error.response.data.detail || error.response.data.message}`);
+    }
 
     if (error.response?.status === 404) {
       console.log("Chat endpoint not found, returning empty array");
@@ -1108,6 +1132,29 @@ export const blockUser = async (userId) => {
     }
 
     throw new Error(error.response?.data?.detail || "Failed to block user");
+  }
+};
+
+// In api.js, add this function
+export const checkBlockedStatus = async (userId) => {
+  try {
+    const response = await api.get(`/api/v1/friends/check-blocked/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Check blocked status error:", error.response?.data);
+    // If endpoint doesn't exist yet, return default response
+    if (error.response?.status === 404) {
+      return {
+        current_user_has_blocked: false,
+        target_user_has_blocked: false,
+        is_blocked: false
+      };
+    }
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to check blocked status"
+    );
   }
 };
 
