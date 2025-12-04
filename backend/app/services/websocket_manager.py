@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Set, Optional
+from typing import Dict, List, Set, Optional
 from fastapi import WebSocket
 from datetime import datetime, timezone
 import asyncio
@@ -10,6 +10,7 @@ class WebSocketManager:
         self.online_users: Dict[str, Set[int]] = {}  # chat_id -> set of online user_ids
         self.user_chats: Dict[int, Set[str]] = {}  # user_id -> set of chat_ids they're connected to
         self.last_activity: Dict[int, datetime] = {}  # user_id -> last activity timestamp
+        self.active_connections: Dict[str, List[dict]] = {}
 
     async def _update_user_online_status_db(self, user_id: int, is_online: bool):
         """Update user online status in database"""
@@ -314,5 +315,18 @@ class WebSocketManager:
             "stats": stats,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
-
+    async def broadcast_to_user(self, user_room: str, data: dict):
+        """Broadcast to a specific user's room"""
+        if user_room in self.active_connections:
+            connections = self.active_connections[user_room]
+            print(f"📢 Broadcasting to {user_room}, connections: {len(connections)}")
+            
+            for connection_info in connections:
+                try:
+                    await connection_info["websocket"].send_json(data)
+                    print(f"✅ Sent to user {user_room}")
+                except Exception as e:
+                    print(f"❌ Error sending to user {user_room}: {e}")
+        else:
+            print(f"⚠️ User room {user_room} not found in active connections")
 manager = WebSocketManager()

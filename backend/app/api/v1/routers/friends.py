@@ -1,3 +1,4 @@
+import traceback
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -5,26 +6,39 @@ from app.core.security import get_current_user
 from app.crud.friend import create, update_status, get_friends, get_pending_requests, is_friend, get_friend_request, delete
 from app.models.user import User
 from app.models.friend import Friend, FriendshipStatus
-
+from datetime import datetime
+import asyncio
+from app.services.websocket_manager import manager
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import text
 router = APIRouter()
 
+# ==================== HEALTH CHECK ====================
+@router.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "ok",
+        "message": "Friends API is working",
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
+# ==================== SEND FRIEND REQUEST ====================
 @router.post("/request/{user_id}")
-def send_friend_request(
+async def send_friend_request(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
-        # Check if trying to add self
+        print(f"=== Friend Request: {current_user.id} -> {user_id} ===")
+        
         if user_id == current_user.id:
             raise HTTPException(status_code=400, detail="Cannot send friend request to yourself")
         
-        # Check if already friends
         if is_friend(db, current_user.id, user_id):
             raise HTTPException(status_code=400, detail="Already friends")
         
-        # Check if friend request already exists in either direction
         existing_request = get_friend_request(db, current_user.id, user_id)
         if existing_request:
             if existing_request.status == FriendshipStatus.pending:
@@ -37,44 +51,338 @@ def send_friend_request(
             elif existing_request.status == FriendshipStatus.blocked:
                 raise HTTPException(status_code=400, detail="This friendship is blocked")
         
-        # Create new friend request
-        create(db, current_user.id, user_id, "pending")
-        return {"msg": "Friend request sent successfully"}
+        # Get next ID
+        try:
+            result = db.execute(text("SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM friends"))
+            next_id = result.scalar() or 1
+        except Exception as e:
+            print(f"Error getting next ID: {e}")
+            next_id = 1
+        
+        # Create friend request
+        friendship = Friend(
+            id=next_id,
+            user_id=current_user.id,
+            friend_id=user_id,
+            status=FriendshipStatus.pending
+        )
+        
+        db.add(friendship)
+        db.commit()
+        db.refresh(friendship)
+        
+        print(f"Created friend request ID: {friendship.id}")
+        
+        # Get target user
+        target_user = db.query(User).filter(User.id == user_id).first()
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Target user not found")
+        
+        # Prepare WebSocket notification
+        notification_data = {
+            "type": "friend_request",
+            "data": {
+                "id": friendship.id,
+                "requester_id": current_user.id,
+                "requester_username": current_user.username,
+                "requester_avatar_url": current_user.avatar_url or "",
+                "recipient_id": user_id,
+                "recipient_username": target_user.username,
+                "created_at": datetime.utcnow().isoformat(),
+                "status": "pending",
+                "message": f"{current_user.username} sent you a friend request"
+            }
+        }
+        
+        # Send WebSocket notification
+        recipient_room = f"user_{user_id}"
+        if manager and hasattr(manager, 'broadcast_to_user'):
+            try:
+                asyncio.create_task(
+                    manager.broadcast_to_user(recipient_room, notification_data)
+                )
+                print(f"WebSocket notification sent to user {user_id}")
+            except Exception as ws_error:
+                print(f"WebSocket error: {ws_error}")
+        
+        return {
+            "msg": "Friend request sent successfully",
+            "request_id": friendship.id,
+            "requester_id": current_user.id,
+            "recipient_id": user_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Server error in send_friend_request: {str(e)}")
+        print(f"Server error: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    
+# ==================== GET PENDING REQUESTS ====================
+@router.get("/pending")
+async def get_pending_friend_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get pending friend requests sent TO current user"""
+    try:
+        print(f"Getting pending requests for user {current_user.id}")
+        
+        pending_requests = db.query(Friend).options(
+            joinedload(Friend.user)
+        ).filter(
+            Friend.friend_id == current_user.id,
+            Friend.status == FriendshipStatus.pending
+        ).all()
+        
+        print(f"Found {len(pending_requests)} pending requests")
+        
+        result = []
+        for req in pending_requests:
+            requester = req.user
+            result.append({
+                "id": req.id,
+                "friend_request_id": req.id,
+                "requester_id": requester.id,
+                "requester_username": requester.username,
+                "requester_avatar_url": requester.avatar_url or "",
+                "requester_email": requester.email,
+                "created_at": req.created_at.isoformat() if req.created_at else None,
+                "status": req.status.value,
+                "message": f"{requester.username} wants to be your friend"
+            })
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error getting pending requests: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-
-@router.post("/accept/{requester_id}")
-def accept_request(
+    
+@router.get("/pending-requests/detailed")
+async def get_my_pending_requests_detailed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all pending friend requests with complete details"""
+    try:
+        print(f"=== Fetching pending requests for user {current_user.id} ===")
+        
+        # Get friend requests sent TO current user (where current user is the friend_id)
+        friend_requests = db.query(Friend).options(
+            joinedload(Friend.user)
+        ).filter(
+            Friend.friend_id == current_user.id,  # Requests where current user is the recipient
+            Friend.status == FriendshipStatus.pending
+        ).all()
+        
+        print(f"Found {len(friend_requests)} pending requests for user {current_user.id}")
+        
+        result = []
+        for fr in friend_requests:
+            requester = fr.user
+            print(f"Request from {requester.username} (ID: {requester.id}) to {current_user.username}")
+            
+            result.append({
+                "friend_request_id": fr.id,
+                "requester_id": requester.id,
+                "requester_username": requester.username,
+                "requester_avatar_url": requester.avatar_url or "",
+                "requester_email": requester.email,
+                "created_at": fr.created_at.isoformat() if fr.created_at else None,
+                "updated_at": fr.updated_at.isoformat() if fr.updated_at else None,
+                "status": fr.status.value,
+                "message": f"{requester.username} wants to be your friend"
+            })
+        
+        print(f"Returning {len(result)} requests")
+        return result
+        
+    except Exception as e:
+        print(f"Error getting pending requests: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+# ==================== DECLINE FRIEND REQUEST ====================
+@router.delete("/decline/{requester_id}")
+async def decline_friend_request(
     requester_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Decline a pending friend request"""
     try:
-        # Check if the friend request exists and is pending
-        friend_request = get_friend_request(db, requester_id, current_user.id)
+        print(f"=== Decline Request: User {current_user.id} declining from {requester_id} ===")
+        
+        # Find the friend request
+        friend_request = db.query(Friend).filter(
+            Friend.user_id == requester_id,
+            Friend.friend_id == current_user.id,
+            Friend.status == FriendshipStatus.pending
+        ).first()
+        
         if not friend_request:
             raise HTTPException(status_code=404, detail="Friend request not found")
         
-        if friend_request.status != FriendshipStatus.pending:
-            raise HTTPException(status_code=400, detail="Friend request already processed")
+        # Delete the request
+        db.delete(friend_request)
+        db.commit()
         
-        update_status(db, requester_id, current_user.id, "accepted")
-        return {"msg": "Friend request accepted successfully"}
+        print(f"Friend request declined: ID={friend_request.id}")
+        
+        # Notify requester
+        decline_data = {
+            "type": "friend_request_declined",
+            "data": {
+                "friend_request_id": friend_request.id,
+                "declined_by_id": current_user.id,
+                "declined_by_username": current_user.username,
+                "declined_at": datetime.utcnow().isoformat(),
+                "message": f"{current_user.username} declined your friend request"
+            }
+        }
+        
+        requester_room = f"user_{requester_id}"
+        if manager and hasattr(manager, 'broadcast_to_user'):
+            try:
+                asyncio.create_task(
+                    manager.broadcast_to_user(requester_room, decline_data)
+                )
+                print(f"Decline notification sent to {requester_id}")
+            except Exception as ws_error:
+                print(f"WebSocket error: {ws_error}")
+        
+        return {
+            "msg": "Friend request declined successfully",
+            "friend_request_id": friend_request.id,
+            "requester_id": requester_id,
+            "declined_at": datetime.utcnow().isoformat()
+        }
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Server error in accept_request: {str(e)}")
+        print(f"Server error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    
+
+    
+@router.get("/pending-requests")
+async def get_my_pending_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all pending friend requests sent TO the current user"""
+    try:
+        # Get users who sent requests to current user
+        pending_requests = db.query(User).join(
+            Friend, User.id == Friend.user_id
+        ).filter(
+            Friend.friend_id == current_user.id,
+            Friend.status == FriendshipStatus.pending
+        ).all()
+        
+        print(f"Found {len(pending_requests)} pending requests for user {current_user.id}")
+        
+        return [{
+            "id": req.id,
+            "requester_id": req.id,
+            "requester_username": req.username,
+            "requester_avatar_url": req.avatar_url or "",
+            "requester_email": req.email,
+            "friend_request_id": None,  # We'll need to get this from Friend table
+            "created_at": None,  # We'll need to get this from Friend table
+            "status": "pending"
+        } for req in pending_requests]
+        
+    except Exception as e:
+        print(f"Error getting pending requests: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+# ==================== ACCEPT FRIEND REQUEST ====================
+@router.post("/accept/{requester_id}")
+async def accept_friend_request(
+    requester_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Accept a pending friend request"""
+    try:
+        print(f"=== Accept Request: User {current_user.id} accepting from {requester_id} ===")
+        
+        # Find the friend request
+        friend_request = db.query(Friend).filter(
+            Friend.user_id == requester_id,
+            Friend.friend_id == current_user.id,
+            Friend.status == FriendshipStatus.pending
+        ).first()
+        
+        if not friend_request:
+            print(f"No pending friend request found from {requester_id} to {current_user.id}")
+            raise HTTPException(status_code=404, detail="Friend request not found")
+        
+        print(f"Found friend request: ID={friend_request.id}")
+        
+        # Update status
+        friend_request.status = FriendshipStatus.accepted
+        friend_request.updated_at = datetime.utcnow()
+        db.commit()
+        
+        print(f"Friend request accepted: ID={friend_request.id}")
+        
+        # Get requester info
+        requester = db.query(User).filter(User.id == requester_id).first()
+        if not requester:
+            raise HTTPException(status_code=404, detail="Requester not found")
+        
+        # Prepare WebSocket notification for requester
+        acceptance_data = {
+            "type": "friend_request_accepted",
+            "data": {
+                "friend_request_id": friend_request.id,
+                "friend_id": current_user.id,
+                "friend_username": current_user.username,
+                "friend_avatar_url": current_user.avatar_url or "",
+                "accepted_at": datetime.utcnow().isoformat(),
+                "message": f"{current_user.username} accepted your friend request!"
+            }
+        }
+        
+        # Send notification
+        requester_room = f"user_{requester_id}"
+        if manager and hasattr(manager, 'broadcast_to_user'):
+            try:
+                asyncio.create_task(
+                    manager.broadcast_to_user(requester_room, acceptance_data)
+                )
+                print(f"Acceptance notification sent to {requester_id}")
+            except Exception as ws_error:
+                print(f"WebSocket error: {ws_error}")
+        
+        return {
+            "msg": "Friend request accepted successfully",
+            "friend_request_id": friend_request.id,
+            "friend_id": requester_id,
+            "friend_username": requester.username,
+            "accepted_at": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Server error: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.post("/unfriend/{friend_id}")
-def unfriend(
+async def unfriend(
     friend_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -90,6 +398,30 @@ def unfriend(
         
         # Delete the friendship
         delete(db, current_user.id, friend_id)
+        
+        # Notify the other user about unfriending
+        unfriend_data = {
+            "type": "unfriended",
+            "data": {
+                "unfriended_by_id": current_user.id,
+                "unfriended_by_username": current_user.username,
+                "unfriended_at": datetime.utcnow().isoformat(),
+                "message": f"{current_user.username} unfriended you"
+            }
+        }
+        
+        # Send real-time notification
+        friend_room = f"user_{friend_id}"
+        
+        try:
+            if hasattr(manager, 'broadcast_to_user'):
+                asyncio.create_task(
+                    manager.broadcast_to_user(friend_room, unfriend_data)
+                )
+                print(f"Unfriend notification sent to user {friend_id}")
+        except Exception as ws_error:
+            print(f"WebSocket unfriend notification error: {ws_error}")
+        
         return {"msg": "Unfriended successfully"}
         
     except HTTPException:
@@ -181,18 +513,32 @@ def pending_requests(
 ):
     try:
         requests = get_pending_requests(db, current_user.id)
-        return [{
-            "id": u.id, 
-            "username": u.username, 
-            "email": u.email,
-            "avatar_url": u.avatar_url,  # ADD THIS LINE
-            "requester_id": u.id,
-            "is_verified": u.is_verified  # Optional: add if you have this field
-        } for u in requests]
+        
+        # Transform User objects to friend request format
+        formatted_requests = []
+        for user in requests:
+            # Find the actual friend request record to get request-specific data
+            friend_request = db.query(Friend).filter(
+                Friend.user_id == user.id,  # The user who sent the request
+                Friend.friend_id == current_user.id,  # Current user is the receiver
+                Friend.status == FriendshipStatus.pending
+            ).first()
+            
+            formatted_requests.append({
+                "friend_request_id": friend_request.id if friend_request else None,
+                "requester_id": user.id,
+                "requester_username": user.username,
+                "requester_email": user.email,
+                "requester_avatar_url": user.avatar_url,
+                "created_at": friend_request.created_at.isoformat() if friend_request and friend_request.created_at else None,
+                "status": "pending"
+            })
+        
+        return formatted_requests
+        
     except Exception as e:
         print(f"Server error in pending_requests: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 @router.get("/blocked")
 def get_blocked_users_route(

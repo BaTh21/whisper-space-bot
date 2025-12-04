@@ -81,9 +81,9 @@ api.interceptors.response.use(
       const { access_token, refresh_token } = response.data;
 
       // Store new tokens
-      localStorage.setItem("accessToken", access_token);
+      localStorage.setItem("access_token", access_token);
       if (refresh_token) {
-        localStorage.setItem("refreshToken", refresh_token);
+        localStorage.setItem("refresh_token", refresh_token);
       }
 
       // Update the original request header
@@ -403,33 +403,11 @@ export const getPendingRequests = async () => {
 };
 
 export const acceptFriendRequest = async (requesterId) => {
-  try {
-    console.log("✅ Accepting friend request from:", requesterId);
-    const response = await api.post(`/api/v1/friends/accept/${requesterId}`);
-    console.log("✅ Friend request accepted:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("❌ Accept friend request error:", {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-    });
-
-    if (error.response?.status === 404) {
-      throw new Error("Friend request not found");
-    } else if (error.response?.status === 400) {
-      throw new Error(
-        error.response?.data?.detail || "Friend request already processed"
-      );
-    } else if (error.response?.status === 500) {
-      throw new Error("Server error while accepting friend request");
-    }
-
-    throw new Error(
-      error.response?.data?.detail || "Failed to accept friend request"
-    );
-  }
+  const response = await api.post(`/api/v1/friends/accept/${requesterId}`, {});
+  return response.data;
 };
+
+
 
 // Diary endpoints
 export const createDiary = async (data) => {
@@ -1457,5 +1435,17 @@ export const getBatchReactions = async (messageIds) => {
     console.error('Error getting batch reactions:', error);
     throw error;
   }
+};
+
+export const getPendingFriendRequests = async () => {
+  const response = await api.get("/api/v1/friends/pending");
+  return response.data;
+};
+
+export const declineFriendRequest = async (requesterId) => {
+    const response = await axios.delete(`/api/v1/friends/decline/${requesterId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    return response.data;
 };
 export default api;
