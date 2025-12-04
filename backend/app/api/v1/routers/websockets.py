@@ -724,7 +724,7 @@ async def websocket_group_chat(
                         "action": "call_join",
                         "user_id": current_user.id
                     }, exclude={websocket})
-                    
+
                     for ws, info in manager.active_connections.get(chat_id, {}).items():
                         if ws == websocket:
                             continue
@@ -733,10 +733,6 @@ async def websocket_group_chat(
                             "to_user": current_user.id,
                             "from_user": info["user_id"]
                         })
-                        
-                    for ws, info in manager.active_connections.get(chat_id, {}).items():
-                        if ws == websocket:
-                            continue
                         await websocket.send_json({
                             "action": "request_offer",
                             "to_user": info["user_id"],

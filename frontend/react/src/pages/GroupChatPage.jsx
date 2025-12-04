@@ -88,7 +88,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [callPopupOpen, setCallPopupOpen] = useState(false);
   const [callingUser, setCallingUser] = useState(null);
   const [callingOpen, setCallingOpen] = useState(false);
-  const iceQueue = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
   const [callStatus, setCallStatus] = useState(null);
@@ -716,7 +715,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     pc.ontrack = e => {
       setRemoteStreams(prev => {
         const updated = { ...prev };
-
         const stream = updated[userId] || new MediaStream();
 
         stream.getTracks()
@@ -835,28 +833,48 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   };
 
   const handleNewUserJoined = async (newUserId) => {
-    const pc = createPeerConnection(newUserId);
-    peersRef.current[newUserId] = pc;
+    const localStream = await getLocalStream();
 
-    const stream = await getLocalStream();
-    if (stream) stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    for (let existingUserId of Object.keys(peersRef.current)) {
+      const pc = createPeerConnection(newUserId); // a new PC for newUserId
+      peersRef.current[newUserId + "_" + existingUserId] = pc; // unique key
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+      if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    wsRef.current.send(JSON.stringify({
-      action: "call_offer",
-      to_user: newUserId,
-      sdp: pc.localDescription
-    }));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      wsRef.current.send(JSON.stringify({
+        action: "call_offer",
+        to_user: newUserId,
+        sdp: pc.localDescription
+      }));
+    }
+
+    const pcNewUser = createPeerConnection(newUserId);
+    peersRef.current[newUserId] = pcNewUser;
+
+    if (localStream) localStream.getTracks().forEach(track => pcNewUser.addTrack(track, localStream));
+
+    for (let existingUserId of Object.keys(peersRef.current)) {
+      if (existingUserId === newUserId) continue;
+
+      const offer = await pcNewUser.createOffer();
+      await pcNewUser.setLocalDescription(offer);
+
+      wsRef.current.send(JSON.stringify({
+        action: "call_offer",
+        to_user: existingUserId,
+        sdp: pcNewUser.localDescription
+      }));
+    }
   };
 
-
   const handleReceiveOffer = async ({ from_user, sdp }) => {
-    let pc = peers[from_user];
+    let pc = peersRef.current[from_user];
     if (!pc) {
       pc = createPeerConnection(from_user);
-      peers[from_user] = pc;
+      peersRef.current[from_user] = pc;
 
       const stream = await getLocalStream();
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
