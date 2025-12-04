@@ -177,7 +177,15 @@
   "failed": "Failed",
   "dont_have_account": "Don't have an account?",
   "create_new": "Create New",
-  "logging_in": "Logging in..."
+  "logging_in": "Logging in...",
 
+
+  "delete_avatar": "Delete Picture",
+  "confirm_delete_avatar": "Confirm Delete Picture",
+  "delete_avatar_warning": "Are you sure you want to delete your Picture? This action cannot be undone.",
+  "deleting": "Deleting...",
+  "avatar_deleted_success": "Picture deleted successfully",
+  "no_avatar_to_delete": "No Picture to delete",
+  "delete_failed": "Failed to delete Picture"
   
 }

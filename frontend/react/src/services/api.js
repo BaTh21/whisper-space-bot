@@ -1388,6 +1388,31 @@ export const deleteImageMessage = async (messageId) => {
   }
 };
 
+
+export const deleteAvatar = async () => {
+  try {
+    const response = await api.delete('/api/v1/avatars/delete');
+    return response.data;
+  } catch (error) {
+    console.error('Delete avatar error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      url: '/api/v1/avatars/delete'
+    });
+    
+    // Provide more helpful error message
+    if (error.response?.status === 404) {
+      throw new Error('Avatar delete endpoint not found. Please check the API endpoint.');
+    }
+    
+    throw new Error(
+      error.response?.data?.detail || 
+      error.response?.data?.message || 
+      'Failed to delete avatar'
+    );
+  }
+};
+
 export const getMessageInfo = async (messageId) => {
   try {
     const response = await api.get(`/api/v1/chats/private/${messageId}/info`);
