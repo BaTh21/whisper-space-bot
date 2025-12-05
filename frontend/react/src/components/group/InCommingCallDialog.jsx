@@ -5,8 +5,8 @@ import CloseIcon from '@mui/icons-material/Close';
 export const IncomingCallDialog = ({ open, fromUserId, onAccept, onReject }) => (
   <Modal
     open={open}
-    maxWidth="sm"
-    fullWidth
+    // maxWidth="sm"
+    // fullWidth
     sx={{
       textAlign: 'center',
       display: 'flex',

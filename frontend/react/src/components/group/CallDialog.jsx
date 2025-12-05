@@ -4,7 +4,6 @@ import {
   Box,
   Typography,
   IconButton,
-  Card
 } from "@mui/material";
 
 import MicOffIcon from "@mui/icons-material/MicOff";
@@ -12,45 +11,7 @@ import KeyboardVoiceIcon from "@mui/icons-material/KeyboardVoice";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import CloseIcon from "@mui/icons-material/Close";
-
-const Video = ({ stream }) => {
-  const ref = useRef();
-
-  console.log("dialog streams", stream);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    if (!stream) return;
-
-    ref.current.srcObject = stream;
-
-    const playVideo = () => {
-      ref.current.play().catch(() => { });
-    };
-
-    if (stream.getVideoTracks().length > 0) {
-      playVideo();
-    }
-
-    const handleTrack = () => {
-      playVideo();
-    };
-    stream.addEventListener("addtrack", handleTrack);
-
-    return () => {
-      stream.removeEventListener("addtrack", handleTrack);
-    };
-  }, [stream]);
-
-  return (
-    <video
-      ref={ref}
-      autoPlay
-      playsInline
-      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-    />
-  );
-};
+import VideoCard from './VideoCard';
 
 const getRows = (streams) => {
   const count = streams.length;
@@ -74,11 +35,13 @@ const CallDialog = ({
   onLocal,
   onCancel,
   status,
-  peersRef
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
-  const [pipPos, setPipPos] = useState({ x: 20, y: 20 });
+  const [pipPos, setPipPos] = useState({
+    x: window.innerWidth - 220, // 200px width + 20px margin from right
+    y: 20                        // 20px from top
+  });
   const pipRef = useRef(null);
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -97,39 +60,12 @@ const CallDialog = ({
 
   const toggleVideo = async () => {
     if (!onLocal) return;
-    const currentEnabled = onLocal.getVideoTracks()[0]?.enabled;
+    const videoTrack = onLocal.getVideoTracks()[0];
 
-    let newTrack;
-    if (currentEnabled) {
-      newTrack = createBlackVideoTrack();
-    } else {
-      const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      newTrack = newStream.getVideoTracks()[0];
-    }
+    if (!videoTrack) return;
 
-    Object.values(peersRef.current).forEach((pc) => {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
-      if (sender) sender.replaceTrack(newTrack.clone());
-    });
-
-    const oldTrack = onLocal.getVideoTracks()[0];
-    if (oldTrack) onLocal.removeTrack(oldTrack);
-    onLocal.addTrack(newTrack);
-
-    setVideoEnabled(!currentEnabled);
-  };
-
-  const createBlackVideoTrack = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 480;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const stream = canvas.captureStream(1);
-    const track = stream.getVideoTracks()[0];
-    return Object.assign(track, { enabled: false });
+    videoTrack.enabled = !videoTrack.enabled;
+    setVideoEnabled(videoTrack.enabled);
   };
 
   const startDrag = (e) => {
@@ -220,18 +156,9 @@ const CallDialog = ({
               }}
             >
               {row.map((stream, cIndex) => (
-                <Card
-                  key={cIndex}
-                  sx={{
-                    flex: row.length === 1 ? "0 1 70%" : "0 1 48%",
-                    height: "100%",
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    background: "#111",
-                  }}
-                >
-                  <Video stream={stream} />
-                </Card>
+                <VideoCard
+                  key={cIndex} stream={stream} userName={stream?.name}
+                />
               ))}
             </Box>
           ))}
@@ -252,7 +179,7 @@ const CallDialog = ({
           )}
         </Box>
 
-        {onLocal && videoEnabled && (
+        {onLocal && (
           <Box
             ref={pipRef}
             onMouseDown={startDrag}
@@ -275,7 +202,7 @@ const CallDialog = ({
               boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             }}
           >
-            <Video stream={onLocal} />
+            <VideoCard stream={onLocal} userName="You"/>
           </Box>
         )}
 

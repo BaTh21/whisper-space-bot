@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Set
 from fastapi import WebSocket
+import asyncio
 
 class WebSocketManager:
     def __init__(self) -> None:
@@ -33,6 +34,14 @@ class WebSocketManager:
                 self.online_users[chat_id].discard(user_id)
                 if not self.online_users[chat_id]:
                     del self.online_users[chat_id]
+                    
+        try:
+            asyncio.create_task(self.broadcast(chat_id, {
+                "action": "user_offline",
+                "user_id": user_id
+            }))
+        except Exception as e:
+            print(f"[Disconnect Broadcast Error] {e}")
 
     async def broadcast(self, chat_id: str, message: dict, exclude: Set[WebSocket] = None) -> None:
         if chat_id not in self.active_connections:
