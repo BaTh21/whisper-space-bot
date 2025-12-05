@@ -150,7 +150,7 @@ const CallDialog = ({
             position: "absolute",
             top: 0,
             left: 0,
-            overflow: "hidden"
+            overflow: "hidden",
           }}
         >
           {rows.map((row, rIndex) => (
@@ -166,7 +166,7 @@ const CallDialog = ({
             >
               {row.map((stream, cIndex) => (
                 <VideoCard
-                  key={cIndex} stream={stream} userName={stream?.name}
+                  key={stream.id || cIndex} stream={stream} userName={stream?.id || "Unknown"}
                 />
               ))}
             </Box>
@@ -211,7 +211,7 @@ const CallDialog = ({
               boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             }}
           >
-            <VideoCard stream={onLocal} userName="You" />
+            <VideoCard stream={onLocal} userName="You" muted="You" />
           </Box>
         )}
 

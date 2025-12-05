@@ -87,7 +87,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
   const [callPopupOpen, setCallPopupOpen] = useState(false);
-  const [callingUser, setCallingUser] = useState(null);
   const [callingOpen, setCallingOpen] = useState(false);
   const remoteStreamsRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
@@ -738,8 +737,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     });
 
     pc.ontrack = (e) => {
-      console.log("REMOTE TRACK RECEIVED:", e.streams[0]);
-      remoteStreamsRef.current[userId] = e.streams[0];
+      const stream = e.streams[0] || new MediaStream([e.track]);
+      remoteStreamsRef.current[userId] = stream;
       setRemoteStreams({ ...remoteStreamsRef.current });
     };
 
@@ -1695,7 +1694,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       <CallDialog
         open={callingOpen}
-        userId={callingUser}
         onCancel={handleCancelCall}
         remoteStreams={remoteStreams}
         onLocal={localStreamRef.current}
