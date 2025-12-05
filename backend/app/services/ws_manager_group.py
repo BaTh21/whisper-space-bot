@@ -5,8 +5,9 @@ import asyncio
 
 class WebSocketManager:
     def __init__(self) -> None:
-        self.active_connections: Dict[str, Set[WebSocket, dict]] = {}
+        self.active_connections: Dict[str, Dict[WebSocket, dict]] = {}
         self.online_users: Dict[str, Set[int]] = {}
+        self.group_call_accepts: Dict[str, Set[int]] = {}
 
     async def connect(self, chat_id: str, websocket: WebSocket, user_id: int) -> None:
         self.active_connections.setdefault(chat_id, {})[websocket] = {"user_id": user_id}
@@ -35,11 +36,14 @@ class WebSocketManager:
                 if not self.online_users[chat_id]:
                     del self.online_users[chat_id]
                     
+        self.remove_user_accepted(chat_id, user_id)
+                    
         try:
             asyncio.create_task(self.broadcast(chat_id, {
                 "action": "user_offline",
                 "user_id": user_id,
-                "remove_stream": True
+                "remove_stream": True,
+                "total_accepted": self.get_total_accepted(chat_id)
             }))
         except Exception as e:
             print(f"[Disconnect Broadcast Error] {e}")
@@ -78,5 +82,20 @@ class WebSocketManager:
             
     def get_online_users(self, chat_id: str) -> Set[int]:
         return self.online_users.get(chat_id, set())
+    
+    def mark_user_accepted(self, chat_id: str, user_id: int) -> None:
+        if chat_id not in self.group_call_accepts:
+            self.group_call_accepts[chat_id] = set()
+        self.group_call_accepts[chat_id].add(user_id)
+
+    def remove_user_accepted(self, chat_id: str, user_id: int) -> None:
+        if chat_id in self.group_call_accepts:
+            self.group_call_accepts[chat_id].discard(user_id)
+            if not self.group_call_accepts[chat_id]:
+                del self.group_call_accepts[chat_id]
+
+    def get_total_accepted(self, chat_id: str) -> int:
+        return len(self.group_call_accepts.get(chat_id, set()))
+
 
 manager = WebSocketManager()

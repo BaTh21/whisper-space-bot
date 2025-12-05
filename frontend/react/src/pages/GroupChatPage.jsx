@@ -83,6 +83,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [showDiaries, setShowDiaries] = useState(false);
+  const [totalAccepted, setTotalAccepted] = useState(null);
 
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
@@ -95,9 +96,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const pendingOffers = useRef({});           // userId -> SDP
   const pendingAnswers = useRef({});          // userId -> SDP
 
-
   console.log("streams", remoteStreams)
   console.log("online users", onlineUsers)
+  console.log("total accepted", totalAccepted);
 
   const toggleDiary = () => {
     setShowDiaries(prev => !prev);
@@ -482,6 +483,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       case "call_leave":
         handleUserLeave(data.user_id);
         break;
+
+      case "total_accepted":
+        setTotalAccepted(data.total);
+        break;
+
 
       default:
         setMessages((prev) => {
@@ -1760,6 +1766,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         onLocal={localStreamRef.current}
         peersRef={peersRef}
         status={callStatus}
+        totalAccepted={totalAccepted}
       />
 
       <IncomingCallDialog

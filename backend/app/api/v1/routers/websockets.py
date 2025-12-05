@@ -1136,9 +1136,17 @@ async def websocket_group_chat(
                     continue
                 
                 if action == "call_accept":
+                    manager.mark_user_accepted(chat_id, current_user.id)
+                    
                     await manager.send_to_user(chat_id, to_user, {
                         "action": "call_accepted",
                         "from_user": current_user.id
+                    })
+                    
+                    total_accepted = manager.get_total_accepted(chat_id)
+                    await manager.broadcast(chat_id, {
+                        "action": "total_accepted",
+                        "total": total_accepted
                     })
                     continue
                 
@@ -1160,6 +1168,13 @@ async def websocket_group_chat(
                     await manager.broadcast(chat_id,{
                         "action": "call_leave",
                         "user_id": current_user.id
+                    })
+                    
+                    manager.remove_user_accepted(chat_id, current_user.id)
+                    total_accepted = manager.get_total_accepted(chat_id)
+                    await manager.broadcast(chat_id, {
+                        "action": "total_accepted",
+                        "total": total_accepted
                     })
                     continue
                 

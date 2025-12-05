@@ -13,18 +13,16 @@ import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import CloseIcon from "@mui/icons-material/Close";
 import VideoCard from './VideoCard';
 
-const getRows = (streams) => {
-  const count = streams.length;
-
+const getRowsByCount = (count) => {
   if (count === 0) return [];
-  if (count === 1) return [[streams[0]]];
-  if (count === 2) return [[streams[0]], [streams[1]]];
-  if (count === 3) return [[streams[0], streams[1]], [streams[2]]];
-  if (count === 4) return [[streams[0], streams[1]], [streams[2], streams[3]]];
+  if (count === 1) return [[0]];
+  if (count === 2) return [[0], [1]];
+  if (count === 3) return [[0, 1], [2]];
+  if (count === 4) return [[0, 1], [2, 3]];
 
   const rows = [];
   for (let i = 0; i < count; i += 2) {
-    rows.push(streams.slice(i, i + 2));
+    rows.push([i, i + 1].filter(idx => idx < count));
   }
   return rows;
 };
@@ -35,7 +33,8 @@ const CallDialog = ({
   onLocal,
   onCancel,
   status,
-  peersRef
+  peersRef,
+  totalAccepted
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -54,7 +53,7 @@ const CallDialog = ({
   console.log("remote streams", remoteStreams);
   console.log("local streams", onLocal);
 
-  const rows = getRows(streams);
+  const rows = getRowsByCount(totalAccepted);
 
   const toggleMute = () => {
     if (!onLocal) return;
@@ -154,25 +153,21 @@ const CallDialog = ({
           }}
         >
           {rows.map((row, rIndex) => (
-            <Box
-              key={rIndex}
-              sx={{
-                flex: 1,
-                display: "flex",
-                justifyContent: "center",
-                gap: "6px",
-                height: 120,
-              }}
-            >
-              {row.map((stream, cIndex) => (
-                <VideoCard
-                  key={stream.id || cIndex} stream={stream} userName={stream?.id || "Unknown"}
-                />
-              ))}
+            <Box key={rIndex} sx={{ flex: 1, display: "flex", justifyContent: "center", gap: "6px", height: 120 }}>
+              {row.map((idx, cIndex) => {
+                const stream = streams[idx];
+                return (
+                  <VideoCard
+                    key={idx}
+                    stream={stream || null}
+                    userName={stream?.id || `User ${idx + 1}`}
+                  />
+                );
+              })}
             </Box>
           ))}
 
-          {streams.length === 0 && (
+          {totalAccepted === 0 && (
             <Typography
               variant="h5"
               sx={{
