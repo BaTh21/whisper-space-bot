@@ -7,7 +7,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getMe, getPendingGroupInvites } from '../services/api';
 import DeleteDialog from './dialogs/DeleteDialog';
-import InboxComponent from './dialogs/InboxComponentDialog';
+import InboxComponent, { getFriendRequestCount, getGroupInviteCount, onNotificationCountChange } from './dialogs/InboxComponentDialog';
 import LogoImg from '/whisperspace.png';
 
 import BlockIcon from '@mui/icons-material/Block';
@@ -38,6 +38,11 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   // Language menu
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const langMenuOpen = Boolean(langAnchorEl);
+
+  // ADD THESE STATES
+  const [friendRequestCount, setFriendRequestCount] = useState(0);
+  const [groupInviteCount, setGroupInviteCount] = useState(0);
+  const [totalNotificationCount, setTotalNotificationCount] = useState(0);
 
   const pathToTabMap = {
     '/feed': 0,
@@ -71,6 +76,33 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
       console.log("Failed to get profile", error);
     }
   };
+
+  // FIXED: Notification subscription useEffect
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Get initial counts
+    const initialFriendCount = getFriendRequestCount();
+    const initialGroupCount = getGroupInviteCount();
+    
+    setFriendRequestCount(initialFriendCount);
+    setGroupInviteCount(initialGroupCount);
+    setTotalNotificationCount(initialFriendCount + initialGroupCount);
+
+    // Subscribe to changes
+    const handleNotificationUpdate = (counts) => {
+      console.log('📬 Notification update received in Layout:', counts);
+      setFriendRequestCount(counts.friendRequests);
+      setGroupInviteCount(counts.groupInvites);
+      setTotalNotificationCount(counts.total);
+    };
+
+    const unsubscribe = onNotificationCountChange(handleNotificationUpdate);
+    
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -108,6 +140,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
   const totalInvites = invites.length;
+  const totalNotifications = totalInvites + friendRequestCount;
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -288,9 +321,46 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
               ) : (
                 /* Authenticated User */
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Badge badgeContent={totalInvites || 0} color="secondary" sx={{ mr: { xs: 0, sm: 2 } }}>
-                    <MailIcon sx={{ cursor: 'pointer' }} onClick={() => setPopup(true)} />
-                  </Badge>
+                  {/* Mail Icon with combined badge for friend requests + group invites */}
+                  <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                    <Badge
+                      badgeContent={totalNotifications}
+                      color="error"
+                      sx={{
+                        mr: { xs: 0, sm: 2 },
+                        '& .MuiBadge-badge': {
+                          fontSize: '0.7rem',
+                          height: '18px',
+                          minWidth: '18px',
+                        }
+                      }}
+                    >
+                      <MailIcon
+                        sx={{
+                          cursor: 'pointer',
+                          fontSize: '1.5rem'
+                        }}
+                        onClick={() => setPopup(true)}
+                      />
+                    </Badge>
+
+                    {/* Optional: Show separate badges for friend requests if you want */}
+                    {friendRequestCount > 0 && (
+                      <Box
+                        // sx={{
+                        //   position: 'absolute',
+                        //   top: -4,
+                        //   right: 8,
+                        //   width: 8,
+                        //   height: 8,
+                        //   borderRadius: '50%',
+                        //   backgroundColor: '#ff4081', // Pink color for friend requests
+                        //   border: '2px solid white',
+                        //   zIndex: 1,
+                        // }}
+                      />
+                    )}
+                  </Box>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={handleMenuOpen}>
                     <Avatar src={profile?.avatar_url}>{profile?.username?.charAt(0) || "P"}</Avatar>
