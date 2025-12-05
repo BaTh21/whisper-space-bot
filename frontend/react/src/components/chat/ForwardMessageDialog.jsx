@@ -111,7 +111,6 @@ const ForwardMessageDialog = ({
           {friends.map((friend) => (
             <ListItem
               key={friend.id}
-              button
               selected={selectedFriend?.id === friend.id}
               onClick={() => handleSelectFriend(friend)}
               sx={{

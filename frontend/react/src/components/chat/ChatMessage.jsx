@@ -7,7 +7,9 @@ import {
   Edit as EditIcon,
   Forward as ForwardIcon,
   Image as ImageIcon,
+  Schedule as LastSeenIcon,
   MoreVert as MoreVertIcon,
+  FiberManualRecord as OnlineIcon,
   PlayArrow as PlayArrowIcon,
   Stop as StopIcon,
   ZoomIn as ZoomInIcon
@@ -22,8 +24,12 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
+
+import EmojiButton from '../EmojiButton';
+import MessageReactions from '../MessageReactions';
 
 const ChatMessage = ({
   message,
@@ -36,6 +42,9 @@ const ChatMessage = ({
   getAvatarUrl,
   getUserInitials,
   showSeenStatus = false,
+  onAddReaction,
+  onRemoveReaction,
+  onLoadReactions,
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -49,6 +58,12 @@ const ChatMessage = ({
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [friendOnlineStatus, setFriendOnlineStatus] = useState(null);
+  const [lastSeenTime, setLastSeenTime] = useState(null);
+  const [showOnlineStatusTooltip, setShowOnlineStatusTooltip] = useState(false);
+  const [reactions, setReactions] = useState(message.reactions || []);
+  const [showReactionAnimation, setShowReactionAnimation] = useState(null);
+  const { t, i18n } = useTranslation();
 
   /* ---------------------------------------------------------- */
   /*                     MESSAGE TYPE DETECTION                */
@@ -90,29 +105,27 @@ const ChatMessage = ({
   const handleClose = () => setAnchorEl(null);
 
   const handleEdit = async () => {
-  if (!editText.trim() || editText === message.content || !onUpdate) {
-    setEditing(false);
-    handleClose();
-    return;
-  }
+    if (!editText.trim() || editText === message.content || !onUpdate) {
+      setEditing(false);
+      handleClose();
+      return;
+    }
 
-  setIsEditing(true); // start loading BEFORE async call
+    setIsEditing(true);
 
-  try {
-    await onUpdate(message.id, editText, message.is_temp);
-    setEditing(false);
-    handleClose();
-  } catch (err) {
-    console.error('Edit error:', err);
-    // keep editing open for retry
-  }
+    try {
+      await onUpdate(message.id, editText, message.is_temp);
+      setEditing(false);
+      handleClose();
+    } catch (err) {
+      console.error('Edit error:', err);
+    }
 
-  setIsEditing(false); // stop loading AFTER async call
-};
-
+    setIsEditing(false);
+  };
 
   const handleCancelEdit = () => {
-    setEditText(message.content); // Reset to original
+    setEditText(message.content);
     setEditing(false);
   };
 
@@ -291,14 +304,10 @@ const ChatMessage = ({
   };
 
   const renderSeenAvatar = () => {
-    // Only show for MY messages that have been seen
     if (!isMine) return null;
-
-    // Get the reader (should be the friend for 1-on-1 chat)
     const reader = currentFriend;
     if (!reader) return null;
 
-    // Check if this specific friend has seen the message
     const hasSeen = Array.isArray(message.seen_by) &&
       message.seen_by.some(s => s.user_id === reader.id);
 
@@ -312,7 +321,7 @@ const ChatMessage = ({
           justifyContent: 'flex-end',
           mt: 0.5,
           gap: 0.5,
-          minHeight: 20 // Prevent layout shift
+          minHeight: 20
         }}>
           <Typography
             variant="caption"
@@ -340,7 +349,6 @@ const ChatMessage = ({
       );
     }
 
-    // Show "Delivered" status for messages that are delivered but not seen
     if (message.is_read && !hasSeen) {
       return (
         <Box sx={{
@@ -374,17 +382,15 @@ const ChatMessage = ({
 
     return (
       <Box sx={{ mb: 1 }}>
-        {/* Hidden audio element — plays real MP3 from backend */}
         <audio
           ref={audioRef}
-          src={message.content}               // Direct MP3 URL
+          src={message.content}
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleEnded}
           onLoadedMetadata={handleLoadedMetadata}
           preload="metadata"
         />
 
-        {/* Beautiful voice message bubble */}
         <Box
           sx={{
             display: 'flex',
@@ -406,7 +412,6 @@ const ChatMessage = ({
           }}
           onClick={handlePlayVoice}
         >
-          {/* Play/Stop Button */}
           <IconButton
             size="small"
             sx={{
@@ -423,7 +428,6 @@ const ChatMessage = ({
             {isPlaying ? <StopIcon /> : <PlayArrowIcon />}
           </IconButton>
 
-          {/* Text + Progress */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
               variant="body2"
@@ -432,9 +436,6 @@ const ChatMessage = ({
                 mb: 0.5,
                 color: isMine ? 'white' : 'text.primary',
                 fontSize: '0.8rem',
-                // display: 'flex',
-                // alignItems: 'center',
-                // gap: 0.5,
               }}
             >
               Voice message
@@ -456,7 +457,6 @@ const ChatMessage = ({
             </Typography>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              {/* Progress Bar */}
               <Box
                 sx={{
                   flex: 1,
@@ -479,7 +479,6 @@ const ChatMessage = ({
                 />
               </Box>
 
-              {/* Duration */}
               <Typography
                 variant="caption"
                 sx={{
@@ -499,6 +498,329 @@ const ChatMessage = ({
       </Box>
     );
   };
+
+  /* ---------------------------------------------------------- */
+  /*                     RENDER Online                          */
+  /* ---------------------------------------------------------- */
+  const renderOnlineStatus = () => {
+    if (isMine || !friendOnlineStatus || !currentFriend) return null;
+
+    const isOnline = friendOnlineStatus.is_online;
+
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          ml: 1,
+          position: 'relative',
+          cursor: 'help'
+        }}
+        onMouseEnter={() => setShowOnlineStatusTooltip(true)}
+        onMouseLeave={() => setShowOnlineStatusTooltip(false)}
+      >
+        {isOnline ? (
+          <>
+            <OnlineIcon
+              sx={{
+                fontSize: '0.6rem',
+                color: '#4CAF50',
+                filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))',
+                animation: 'pulse 2s infinite'
+              }}
+            />
+            <Typography
+              variant="caption"
+              sx={{
+                color: '#4CAF50',
+                fontWeight: 500,
+                fontSize: '0.65rem',
+                letterSpacing: '0.3px'
+              }}
+            >
+              Online
+            </Typography>
+          </>
+        ) : (
+          <>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.65rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.3
+              }}
+            >
+              <LastSeenIcon fontSize="inherit" />
+              {lastSeenTime || ''}
+            </Typography>
+          </>
+        )}
+
+        {showOnlineStatusTooltip && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              bgcolor: 'background.paper',
+              boxShadow: 3,
+              borderRadius: '8px',
+              p: 1.5,
+              minWidth: 180,
+              zIndex: 9999,
+              border: '1px solid',
+              borderColor: 'divider'
+            }}
+          >
+            <Typography variant="caption" fontWeight="bold">
+              {currentFriend.username}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  bgcolor: isOnline ? '#4CAF50' : '#9E9E9E',
+                  animation: isOnline ? 'pulse 2s infinite' : 'none'
+                }}
+              />
+            </Box>
+
+            {!isOnline && friendOnlineStatus.last_seen && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+                Last seen: {new Date(friendOnlineStatus.last_seen).toLocaleString()}
+              </Typography>
+            )}
+
+            {friendOnlineStatus.last_activity && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+                Last activity: {new Date(friendOnlineStatus.last_activity).toLocaleTimeString()}
+              </Typography>
+            )}
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
+  useEffect(() => {
+    if (!isMine && currentFriend) {
+      const fetchFriendStatus = async () => {
+        try {
+          const { getUserOnlineStatus } = await import('../../services/api');
+          const status = await getUserOnlineStatus(currentFriend.id);
+          setFriendOnlineStatus(status);
+
+          if (status.last_seen) {
+            const lastSeen = new Date(status.last_seen);
+            const now = new Date();
+            const diffMinutes = Math.floor((now - lastSeen) / (1000 * 60));
+
+            if (diffMinutes < 1) {
+              setLastSeenTime('just now');
+            } else if (diffMinutes < 60) {
+              setLastSeenTime(`${diffMinutes}m ago`);
+            } else if (diffMinutes < 1440) {
+              const hours = Math.floor(diffMinutes / 60);
+              setLastSeenTime(`${hours}h ago`);
+            } else {
+              const days = Math.floor(diffMinutes / 1440);
+              setLastSeenTime(`${days}d ago`);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch friend status:', err);
+        }
+      };
+
+      fetchFriendStatus();
+      const interval = setInterval(fetchFriendStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isMine, currentFriend]);
+
+  // Add pulse animation
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+`;
+    document.head.appendChild(styleElement);
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+
+  /* ---------------------------------------------------------- */
+  /*                     REACTION HANDLERS                      */
+  /* ---------------------------------------------------------- */
+
+  // Update reactions when message changes
+  useEffect(() => {
+    setReactions(message.reactions || []);
+  }, [message.reactions]);
+
+  // Enhanced add reaction handler
+  const handleAddReaction = async (emoji) => {
+    if (onAddReaction) {
+      try {
+        // Show immediate animation
+        setShowReactionAnimation({
+          emoji,
+          type: 'add',
+          timestamp: Date.now()
+        });
+
+        // Clear animation after 1 second
+        setTimeout(() => {
+          setShowReactionAnimation(null);
+        }, 1000);
+
+        await onAddReaction(message.id, emoji);
+
+        // Play sound if available (optional)
+        playReactionSound('add');
+      } catch (err) {
+        console.error('Failed to add reaction:', err);
+      }
+    }
+  };
+
+  // Enhanced remove reaction handler
+  const handleRemoveReaction = async (reactionId) => {
+    if (onRemoveReaction) {
+      try {
+        const reactionToRemove = reactions.find(r => r.id === reactionId);
+        if (reactionToRemove) {
+          // Show immediate animation
+          setShowReactionAnimation({
+            emoji: reactionToRemove.emoji,
+            type: 'remove',
+            timestamp: Date.now()
+          });
+
+          // Clear animation after 1 second
+          setTimeout(() => {
+            setShowReactionAnimation(null);
+          }, 1000);
+        }
+
+        await onRemoveReaction(message.id, reactionId);
+
+        // Play sound if available (optional)
+        playReactionSound('remove');
+      } catch (err) {
+        console.error('Failed to remove reaction:', err);
+      }
+    }
+  };
+
+  // Load reactions when component mounts - ONLY for non-temp messages
+  useEffect(() => {
+    // Check if this is a temp message
+    const isTempMessage = message.is_temp || 
+      (typeof message.id === 'string' && message.id.startsWith('temp-'));
+    
+    // Only load reactions for real messages
+    if (onLoadReactions && message.id && !isTempMessage && !message.reactions) {
+      onLoadReactions(message.id);
+    }
+  }, [message.id, onLoadReactions, message.reactions, message.is_temp]);
+
+  // Animation for new reactions
+  useEffect(() => {
+    if (showReactionAnimation) {
+      const floatingAnimation = document.createElement('div');
+      floatingAnimation.className = 'floating-emoji';
+      floatingAnimation.innerHTML = showReactionAnimation.emoji;
+
+      const messageBubble = document.querySelector(`[data-message-id="${message.id}"] .message-bubble`);
+      if (messageBubble) {
+        const rect = messageBubble.getBoundingClientRect();
+        floatingAnimation.style.cssText = `
+          position: fixed;
+          font-size: 24px;
+          z-index: 9999;
+          pointer-events: none;
+          animation: floatUp 1s ease-out forwards;
+          left: ${rect.right - 30}px;
+          top: ${rect.top}px;
+        `;
+
+        document.body.appendChild(floatingAnimation);
+
+        setTimeout(() => {
+          if (floatingAnimation.parentNode) {
+            document.body.removeChild(floatingAnimation);
+          }
+        }, 1000);
+      }
+    }
+  }, [showReactionAnimation, message.id]);
+
+  // Sound effect helper
+  const playReactionSound = (type) => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const audio = new Audio();
+      audio.volume = 0.2;
+
+      if (type === 'add') {
+        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3';
+      } else if (type === 'remove') {
+        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3';
+      }
+
+      audio.play().catch(() => {});
+    } catch (error) {}
+  };
+
+  // Add CSS animations for reactions
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      @keyframes floatUp {
+        0% {
+          transform: translateY(0) scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: translateY(-30px) scale(1.2);
+          opacity: 0.8;
+        }
+        100% {
+          transform: translateY(-60px) scale(0.8);
+          opacity: 0;
+        }
+      }
+      
+      @keyframes reactionPop {
+        0% { transform: scale(0.5); opacity: 0; }
+        70% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      
+      .floating-emoji {
+        will-change: transform, opacity;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+      }
+    `;
+    document.head.appendChild(styleElement);
+
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   /* ---------------------------------------------------------- */
   /*                     RENDER IMAGE CONTENT                  */
@@ -601,7 +923,7 @@ const ChatMessage = ({
       }}
       data-message-id={message.id}
       data-is-unread={!isMine && !message.is_read && !message.is_temp ? "true" : "false"}
-      data-is-friend={!isMine ? "true" : "false"} // Add this for auto-seen
+      data-is-friend={!isMine ? "true" : "false"}
       data-sender-id={message.sender_id}
     >
       {/* Image Modal */}
@@ -704,12 +1026,15 @@ const ChatMessage = ({
       <Box sx={{ maxWidth: '70%', display: 'flex', flexDirection: 'column' }}>
         {/* Friend name */}
         {!isMine && (
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary', mb: 0.5, ml: 1, fontWeight: 500 }}
-          >
-            {senderInfo.username}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5, ml: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', fontWeight: 500, mr: 1 }}
+            >
+              {senderInfo.username}
+            </Typography>
+            {renderOnlineStatus()}
+          </Box>
         )}
 
         {editing ? (
@@ -730,15 +1055,22 @@ const ChatMessage = ({
               }}
               sx={{ borderRadius: '12px' }}
             />
+            <EmojiButton
+              onSelect={(emoji) => setEditText(prev => prev + emoji)}
+              placement="bottom-start"
+              size="small"
+              width={300}
+              height={350}
+            />
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-              <Button size="small" onClick={handleCancelEdit}>Cancel</Button>
+              <Button size="small" onClick={handleCancelEdit}>{t('cancel')}</Button>
               <Button
                 size="small"
                 variant="contained"
                 onClick={handleEdit}
                 disabled={isEditing}
               >
-                {isEditing ? "Saving..." : "Save"}
+                {isEditing ? "Saving..." : t('save')}
               </Button>
             </Box>
           </Box>
@@ -746,6 +1078,7 @@ const ChatMessage = ({
           <Box sx={{ position: 'relative' }}>
             {/* Message bubble */}
             <Box
+              className="message-bubble"
               sx={{
                 bgcolor: isMine ? '#0088cc' : '#f0f0f0',
                 color: isMine ? 'white' : 'text.primary',
@@ -754,13 +1087,14 @@ const ChatMessage = ({
                 position: 'relative',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                 transition: 'all 0.2s ease',
+                borderBottomLeftRadius: reactions.length > 0 ? '12px' : (isMine ? '4px' : '18px'),
+                borderBottomRightRadius: reactions.length > 0 ? '12px' : (isMine ? '18px' : '4px'),
                 '&:hover': {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                   '& .image-actions': {
                     opacity: 1
                   }
                 },
-
               }}
             >
               {/* Forwarded badge */}
@@ -781,23 +1115,62 @@ const ChatMessage = ({
               ) : (
                 <Typography
                   variant="body2"
-                  sx={{ wordBreak: 'break-word', lineHeight: 1.4, fontSize: '0.9rem' }}
+                  sx={{
+                    wordBreak: 'break-word',
+                    lineHeight: 1.4,
+                    fontSize: '0.9rem',
+                    mb: reactions.length > 0 ? 0.5 : 0
+                  }}
                 >
                   {message.content}
                 </Typography>
               )}
 
               {/* Time + tick */}
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 1, gap: 0.5 }}>
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                mt: reactions.length > 0 ? 0.5 : 1,
+                gap: 0.5
+              }}>
                 <Typography
                   variant="caption"
-                  sx={{ opacity: 0.7, fontSize: '0.7rem', lineHeight: 1 }}
+                  sx={{
+                    opacity: 0.7,
+                    fontSize: '0.7rem',
+                    lineHeight: 1,
+                    color: isMine ? 'rgba(255,255,255,0.8)' : 'text.secondary'
+                  }}
                 >
                   {formatCambodiaTime(message.created_at)}
                   {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
                 </Typography>
                 {isMine && renderTick()}
               </Box>
+
+              {/* Reactions - ONLY for non-temp messages */}
+              {!message.is_temp && reactions.length > 0 && (
+                <Box
+                  sx={{
+                    mt: 0.5,
+                    pt: 0.5,
+                    borderTop: '1px solid',
+                    borderColor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                  }}
+                >
+                  <MessageReactions
+                    messageId={message.id}
+                    reactions={reactions}
+                    currentUserId={profile?.id}
+                    onAddReaction={handleAddReaction}
+                    onRemoveReaction={handleRemoveReaction}
+                    showAddButton={true}
+                    size="small"
+                    isMine={isMine}
+                  />
+                </Box>
+              )}
 
               {/* Menu button */}
               {showMenu && (
@@ -828,6 +1201,36 @@ const ChatMessage = ({
                 </IconButton>
               )}
             </Box>
+
+            {/* Floating reaction button for messages without reactions - ONLY for non-temp */}
+            {!message.is_temp && reactions.length === 0 && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  right: isMine ? -12 : 'auto',
+                  left: isMine ? 'auto' : -12,
+                  transform: 'translateY(-50%)',
+                  opacity: 0,
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    opacity: 1,
+                    transform: 'translateY(-50%) scale(1.05)'
+                  }
+                }}
+              >
+                <MessageReactions
+                  messageId={message.id}
+                  reactions={reactions}
+                  currentUserId={profile?.id}
+                  onAddReaction={handleAddReaction}
+                  onRemoveReaction={handleRemoveReaction}
+                  showAddButton={true}
+                  size="small"
+                  isMine={isMine}
+                />
+              </Box>
+            )}
           </Box>
         )}
 
@@ -849,43 +1252,63 @@ const ChatMessage = ({
               }
             }}
           >
-            {/* Image-specific options */}
-            {actualMessageType === 'image' && [
-              <MenuItem key="view-full" onClick={handleViewFullImage}>
-                <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
-                View Full Image
-              </MenuItem>,
-              <MenuItem key="download" onClick={handleDownloadImage}>
-                <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Download Image
-              </MenuItem>
-            ]}
+            {(() => {
+              const menuItems = [];
 
-            {/* My messages */}
-            {isMine && [
-              actualMessageType === 'text' && (
-                <MenuItem key="edit" onClick={() => { setEditing(true); setEditText(message.content); handleClose(); }}>
-                  <EditIcon fontSize="small" sx={{ mr: 1.5 }} />
-                  Edit
-                </MenuItem>
-              ),
-              <MenuItem key="forward" onClick={handleForwardClick}>
-                <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Forward
-              </MenuItem>,
-              <MenuItem key="delete" onClick={handleDelete} sx={{ color: 'error.main' }}>
-                <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Delete
-              </MenuItem>
-            ].filter(Boolean)}
+              if (actualMessageType === 'image') {
+                menuItems.push(
+                  <MenuItem key="view-full" onClick={handleViewFullImage}>
+                    <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('view_full_image')}
+                  </MenuItem>,
+                  <MenuItem key="download" onClick={handleDownloadImage}>
+                    <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('download_image')}
+                  </MenuItem>
+                );
+              }
 
-            {/* Friend's messages */}
-            {!isMine && (
-              <MenuItem key="forward" onClick={handleForwardClick}>
-                <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
-                Forward
-              </MenuItem>
-            )}
+              if (isMine) {
+                if (actualMessageType === 'text') {
+                  menuItems.push(
+                    <MenuItem
+                      key="edit"
+                      onClick={() => {
+                        setEditing(true);
+                        setEditText(message.content);
+                        handleClose();
+                      }}
+                    >
+                      <EditIcon fontSize="small" sx={{ mr: 1.5 }} />
+                      {t('edit')}
+                    </MenuItem>
+                  );
+                }
+                menuItems.push(
+                  <MenuItem key="forward" onClick={handleForwardClick}>
+                    <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('forward')}
+                  </MenuItem>,
+                  <MenuItem
+                    key="delete"
+                    onClick={handleDelete}
+                    sx={{ color: 'error.main' }}
+                  >
+                    <DeleteIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('delete')}
+                  </MenuItem>
+                );
+              } else {
+                menuItems.push(
+                  <MenuItem key="forward" onClick={handleForwardClick}>
+                    <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('forward')}
+                  </MenuItem>
+                );
+              }
+
+              return menuItems;
+            })()}
           </Menu>
         )}
       </Box>

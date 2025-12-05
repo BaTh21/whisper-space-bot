@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, mark_messages_as_read
-from app.crud.friend import is_friend
+from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, get_multiple_users_online_status, mark_messages_as_read
+from app.crud.friend import is_blocked, is_blocked_by, is_friend
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.user import User
@@ -117,9 +117,21 @@ async def get_private_chat(
 ):
     """
     Get private chat messages between current user and friend with Telegram-style replies
+    with blocked user filtering
     """
     try:
-        # Verify friendship
+        # Check if current user has blocked the friend
+        if is_blocked(db, current_user.id, friend_id):
+            # User has blocked this friend, return empty messages
+            return []
+        
+        # Check if friend has blocked current user
+        if is_blocked_by(db, current_user.id, friend_id):
+            # Friend has blocked current user, return empty messages
+            return []
+        
+        # Verify friendship (optional - you might want to remove this for blocked users)
+        # Only check friendship if not blocked
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 
@@ -230,7 +242,6 @@ async def get_private_chat(
 
 
 
-
 # Send text message
 @router.post("/private/{friend_id}", response_model=MessageOut)
 async def send_private_message(
@@ -243,6 +254,20 @@ async def send_private_message(
     Send a private message to a friend with Telegram-style reply handling
     """
     try:
+        
+        if is_blocked(db, current_user.id, friend_id):
+            raise HTTPException(
+                status_code=403, 
+                detail="Cannot send message to blocked user"
+            )
+        
+        # Check if friend has blocked current user
+        if is_blocked_by(db, current_user.id, friend_id):
+            raise HTTPException(
+                status_code=403, 
+                detail="This user has blocked you"
+            )
+            
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 
@@ -1139,3 +1164,59 @@ async def delete_cloudinary_image(
         return {"status": "deleted"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cloudinary delete failed: {str(e)}")
+    
+@router.get("/users/{user_id}/status")
+async def get_user_online_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get online status of a specific user"""
+    try:
+        # Verify friendship or same user
+        if user_id != current_user.id and not is_friend(db, current_user.id, user_id):
+            raise HTTPException(status_code=403, detail="Not friends")
+            
+        status_info = get_user_online_status(db, user_id)
+        if not status_info:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        return status_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get user status: {str(e)}")
+
+@router.get("/friends/online-status")
+async def get_friends_online_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get online status of all friends"""
+    try:
+        friends_status = get_friends_online_status(db, current_user.id)
+        return {"friends": friends_status}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get friends status: {str(e)}")
+
+@router.post("/users/online-status/batch")
+async def get_batch_online_status(
+    user_ids: List[int],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get online status for multiple users"""
+    try:
+        # Limit the number of users to prevent abuse
+        if len(user_ids) > 50:
+            raise HTTPException(status_code=400, detail="Too many users requested")
+            
+        status_list = get_multiple_users_online_status(db, user_ids)
+        return {"users": status_list}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get batch status: {str(e)}")

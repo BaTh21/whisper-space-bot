@@ -81,9 +81,9 @@ api.interceptors.response.use(
       const { access_token, refresh_token } = response.data;
 
       // Store new tokens
-      localStorage.setItem("accessToken", access_token);
+      localStorage.setItem("access_token", access_token);
       if (refresh_token) {
-        localStorage.setItem("refreshToken", refresh_token);
+        localStorage.setItem("refresh_token", refresh_token);
       }
 
       // Update the original request header
@@ -403,33 +403,11 @@ export const getPendingRequests = async () => {
 };
 
 export const acceptFriendRequest = async (requesterId) => {
-  try {
-    console.log("✅ Accepting friend request from:", requesterId);
-    const response = await api.post(`/api/v1/friends/accept/${requesterId}`);
-    console.log("✅ Friend request accepted:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("❌ Accept friend request error:", {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-    });
-
-    if (error.response?.status === 404) {
-      throw new Error("Friend request not found");
-    } else if (error.response?.status === 400) {
-      throw new Error(
-        error.response?.data?.detail || "Friend request already processed"
-      );
-    } else if (error.response?.status === 500) {
-      throw new Error("Server error while accepting friend request");
-    }
-
-    throw new Error(
-      error.response?.data?.detail || "Failed to accept friend request"
-    );
-  }
+  const response = await api.post(`/api/v1/friends/accept/${requesterId}`, {});
+  return response.data;
 };
+
+
 
 // Diary endpoints
 export const createDiary = async (data) => {
@@ -874,9 +852,23 @@ export const forwardMessage = async (friendId, messageData) => {
 export const getPrivateChat = async (friendId) => {
   try {
     const response = await api.get(`/api/v1/chats/private/${friendId}`);
-
+    
+    // Handle backend blocking response
+    if (response.data && typeof response.data === 'object') {
+      // If backend returns object with blocked property
+      if (response.data.blocked === true) {
+        throw new Error(`User is blocked: ${response.data.message || 'Cannot load messages'}`);
+      }
+      
+      // If backend returns messages array
+      if (Array.isArray(response.data.messages)) {
+        return response.data.messages;
+      }
+    }
+    
+    // Default: assume response is array of messages
     const messages = Array.isArray(response.data) ? response.data : [];
-
+    
     return messages.map((msg) => ({
       id: msg.id || Date.now() + Math.random(),
       sender_id: msg.sender_id,
@@ -885,9 +877,19 @@ export const getPrivateChat = async (friendId) => {
       message_type: msg.message_type || "text",
       is_read: msg.is_read || false,
       created_at: msg.created_at || new Date().toISOString(),
+      seen_by: msg.seen_by || [],
+      voice_duration: msg.voice_duration || 0,
+      file_size: msg.file_size || 0,
     }));
   } catch (error) {
     console.error("Get private chat error:", error.response?.data);
+    
+    // Handle blocking errors
+    if (error.response?.status === 403 && 
+        (error.response?.data?.detail?.includes('blocked') || 
+         error.response?.data?.message?.includes('blocked'))) {
+      throw new Error(`User is blocked: ${error.response.data.detail || error.response.data.message}`);
+    }
 
     if (error.response?.status === 404) {
       console.log("Chat endpoint not found, returning empty array");
@@ -1133,6 +1135,29 @@ export const blockUser = async (userId) => {
   }
 };
 
+// In api.js, add this function
+export const checkBlockedStatus = async (userId) => {
+  try {
+    const response = await api.get(`/api/v1/friends/check-blocked/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Check blocked status error:", error.response?.data);
+    // If endpoint doesn't exist yet, return default response
+    if (error.response?.status === 404) {
+      return {
+        current_user_has_blocked: false,
+        target_user_has_blocked: false,
+        is_blocked: false
+      };
+    }
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to check blocked status"
+    );
+  }
+};
+
 export const unblockUser = async (userId) => {
   try {
     const response = await api.post(`/api/v1/friends/unblock/${userId}`);
@@ -1363,6 +1388,31 @@ export const deleteImageMessage = async (messageId) => {
   }
 };
 
+
+export const deleteAvatar = async () => {
+  try {
+    const response = await api.delete('/api/v1/avatars/delete');
+    return response.data;
+  } catch (error) {
+    console.error('Delete avatar error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      url: '/api/v1/avatars/delete'
+    });
+    
+    // Provide more helpful error message
+    if (error.response?.status === 404) {
+      throw new Error('Avatar delete endpoint not found. Please check the API endpoint.');
+    }
+    
+    throw new Error(
+      error.response?.data?.detail || 
+      error.response?.data?.message || 
+      'Failed to delete avatar'
+    );
+  }
+};
+
 export const getMessageInfo = async (messageId) => {
   try {
     const response = await api.get(`/api/v1/chats/private/${messageId}/info`);
@@ -1385,5 +1435,89 @@ export const sendVoiceMessage = async (friendId, formData) => {
     timeout: 30000,
   });
   return response.data;
+};
+
+export const getUserOnlineStatus = async (userId) => {
+  const response = await api.get(`/api/v1/chat/users/${userId}/status`);
+  return response.data;
+};
+
+// Get online status of all friends
+export const getFriendsOnlineStatus = async () => {
+  const response = await api.get(`/api/v1/chat/friends/online-status`);
+  return response.data;
+};
+
+// Get batch online status for multiple users
+export const getBatchOnlineStatus = async (userIds) => {
+  const response = await api.post(`/api/v1/chat/users/online-status/batch`, { user_ids: userIds });
+  return response.data;
+};
+
+// Add reaction to message
+export const addReactionToMessage = async (messageId, reactionData) => {
+  try {
+    const response = await api.post(`/api/v1/messages/${messageId}/reactions`, reactionData);
+    return response.data;
+  } catch (error) {
+    console.error('Error adding reaction:', error);
+    throw error;
+  }
+};
+
+// Remove reaction from message
+export const removeReactionFromMessage = async (messageId, reactionId) => {
+  try {
+    const response = await api.delete(`/api/v1/messages/${messageId}/reactions/${reactionId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error removing reaction:', error);
+    throw error;
+  }
+};
+
+// Get message reactions
+export const getMessageReactions = async (messageId, params = {}) => {
+  try {
+    const response = await api.get(`/api/v1/messages/${messageId}/reactions`, { params });
+    return response.data;
+  } catch (error) {
+    console.error('Error getting reactions:', error);
+    throw error;
+  }
+};
+
+// Get reaction summary
+export const getReactionSummary = async (messageId) => {
+  try {
+    const response = await api.get(`/api/v1/messages/${messageId}/reactions/summary`);
+    return response.data;
+  } catch (error) {
+    console.error('Error getting reaction summary:', error);
+    throw error;
+  }
+};
+
+// Batch get reactions
+export const getBatchReactions = async (messageIds) => {
+  try {
+    const response = await api.post('/api/v1/messages/reactions/batch', { message_ids: messageIds });
+    return response.data;
+  } catch (error) {
+    console.error('Error getting batch reactions:', error);
+    throw error;
+  }
+};
+
+export const getPendingFriendRequests = async () => {
+  const response = await api.get("/api/v1/friends/pending");
+  return response.data;
+};
+
+export const declineFriendRequest = async (requesterId) => {
+    const response = await axios.delete(`/api/v1/friends/decline/${requesterId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    return response.data;
 };
 export default api;

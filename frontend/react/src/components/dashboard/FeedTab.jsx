@@ -20,6 +20,7 @@ import {
 import { useState } from 'react';
 import { commentOnDiary, getDiaryComments, getDiaryLikes, likeDiary } from '../../services/api';
 import { formatCambodiaDate, formatCambodiaTime } from '../../utils/dateUtils';
+import { useTranslation } from 'react-i18next';
 
 const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
   const [expandedDiary, setExpandedDiary] = useState(null);
@@ -28,6 +29,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
   const [commentTexts, setCommentTexts] = useState({});
   const [likedDiaries, setLikedDiaries] = useState(new Set());
   const [commentLoading, setCommentLoading] = useState({});
+  const { t, i18n } = useTranslation();
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -133,7 +135,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
           fontWeight="600"
           sx={{ textAlign: { xs: 'center', sm: 'left' } }}
         >
-          Your Feed
+          {t('your_feed')}
         </Typography>
         <Button
           variant="contained"
@@ -145,13 +147,13 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess }) => {
           }}
           size={isMobile ? 'small' : 'medium'}
         >
-          {isMobile ? 'New' : 'New Diary'}
+          {isMobile ? t('new') : t('new_diary')}
         </Button>
       </Box>
 
       {diaries.length === 0 ? (
         <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-          No diaries in your feed yet. Create one or follow more friends!
+          {t('no_diaries_yet')}
         </Typography>
       ) : (
         // Scrollable container

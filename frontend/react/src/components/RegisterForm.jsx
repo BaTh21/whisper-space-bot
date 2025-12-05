@@ -14,10 +14,12 @@ import { useFormik } from 'formik';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
+import { useTranslation } from 'react-i18next';
 import { register } from '../services/api';
 import RegisterImg from '@/assets/register.gif';
 
 const RegisterForm = () => {
+  const { t } = useTranslation();
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -28,11 +30,10 @@ const RegisterForm = () => {
     initialValues: { username: '', email: '', password: '' },
     validationSchema: Yup.object({
       username: Yup.string()
-        .min(3, 'Username must be at least 3 characters')
-        .required('Required'),
-      email: Yup.string().email('Invalid email').required('Required'),
-      password: Yup.string()
-        .required('Required'),
+        .min(3, t('username_min'))
+        .required(t('required')),
+      email: Yup.string().email(t('invalid_email')).required(t('required')),
+      password: Yup.string().required(t('required')),
     }),
     onSubmit: async (values) => {
       setError(null);
@@ -41,9 +42,9 @@ const RegisterForm = () => {
       try {
         await register(values);
         navigate(`/verify-code/${values.email}`);
-        setSuccess('Verification code sent to your email');
+        setSuccess(t('verification_sent'));
       } catch (err) {
-        setError(err.message || 'Registration failed');
+        setError(err.message || t('registration_failed'));
       } finally {
         setLoading(false);
       }
@@ -103,17 +104,17 @@ const RegisterForm = () => {
             height: "auto",
           }}
         />
-
       </Box>
 
+      {/* Form Section */}
       <Box
         sx={{
           flex: { xs: "0 0 auto", md: 1 },
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: {md: "grey.200", sm: 'white'},
-          height: {md: '100vh'}
+          backgroundColor: { md: "grey.200", sm: 'white' },
+          height: { md: '100vh' }
         }}
       >
         <Box
@@ -123,7 +124,7 @@ const RegisterForm = () => {
             backgroundColor: "white",
             p: { xs: 3, sm: 5 },
             borderRadius: 3,
-            boxShadow: {md: 5},
+            boxShadow: { md: 5 },
           }}
           component="form"
           onSubmit={formik.handleSubmit}
@@ -134,12 +135,12 @@ const RegisterForm = () => {
             color="primary"
             sx={{ fontWeight: 600, mb: 3 }}
           >
-            Create Your Account
+            {t('create_account')}
           </Typography>
 
           {/* Username */}
           <TextField
-            label="Username"
+            label={t('username')}
             name="username"
             value={formik.values.username}
             onChange={formik.handleChange}
@@ -154,7 +155,7 @@ const RegisterForm = () => {
 
           {/* Email */}
           <TextField
-            label="Email"
+            label={t('email')}
             name="email"
             type="email"
             value={formik.values.email}
@@ -170,7 +171,7 @@ const RegisterForm = () => {
 
           {/* Password */}
           <TextField
-            label="Password"
+            label={t('password')}
             name="password"
             type={showPassword ? "text" : "password"}
             value={formik.values.password}
@@ -205,9 +206,9 @@ const RegisterForm = () => {
               mt: 2,
             }}
           >
-            <Typography variant="body2">Already have an account?</Typography>
+            <Typography variant="body2">{t('already_have_account')}</Typography>
             <Button sx={{ color: "red" }} onClick={() => navigate("/login")}>
-              Login
+              {t('login')}
             </Button>
           </Box>
 
@@ -220,12 +221,11 @@ const RegisterForm = () => {
             sx={{ mt: 3 }}
             disabled={loading}
           >
-            {loading ? "Registering..." : "Register"}
+            {loading ? t('registering') : t('register')}
           </Button>
         </Box>
       </Box>
     </Card>
-
   );
 };
 

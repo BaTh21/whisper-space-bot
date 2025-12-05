@@ -17,8 +17,10 @@ import AddBoxIcon from '@mui/icons-material/AddBox';
 import CreateGroupDialog from '../CreateGroupDialog';
 import { getFriends } from '../../services/api';
 import SearchIcon from '@mui/icons-material/Search';
+import { useTranslation } from 'react-i18next';
 
 const GroupsTab = ({ groups }) => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -40,7 +42,6 @@ const GroupsTab = ({ groups }) => {
       setSelectedGroupId(null);
     };
   }, []);
-
 
   const getLatestCover = (group) => {
     if (!group.images || group.images.length === 0) return null;
@@ -67,11 +68,9 @@ const GroupsTab = ({ groups }) => {
             width: { xs: '100%', md: '25%' },
           }}
         >
-          <Box
-            sx={{ display: 'flex', flexDirection: { sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: { xs: 2, sm: 0 }, mb: 3 }}
-          >
+          <Box sx={{ display: 'flex', flexDirection: { sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, gap: { xs: 2, sm: 0 }, mb: 3 }}>
             <Typography variant="h5" fontWeight="600" sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
-              Groups
+              {t('groups')}
             </Typography>
             <Button
               variant="contained"
@@ -83,7 +82,7 @@ const GroupsTab = ({ groups }) => {
               size={isMobile ? 'small' : 'medium'}
               onClick={() => setOpenCreateGroup(true)}
             >
-              {isMobile ? 'Create' : 'Create Group'}
+              {isMobile ? t('create') : t('create_group')}
             </Button>
           </Box>
 
@@ -91,26 +90,24 @@ const GroupsTab = ({ groups }) => {
             <TextField
               sx={{ width: "100%" }}
               id="outlined-member-search"
-              label="Search group"
+              label={t('search_group')}
               variant="outlined"
               size="small"
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton
-                    >
+                    <IconButton>
                       <SearchIcon />
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
             />
-
           </Box>
 
           {groups.length === 0 ? (
             <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-              No groups yet. Create one to get started!
+              {t('no_groups_yet')}
             </Typography>
           ) : (
             groups.map((group) => (
@@ -137,21 +134,18 @@ const GroupsTab = ({ groups }) => {
                   display: 'flex',
                   flexDirection: { sm: 'row' },
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
                   gap: { xs: 1, sm: 2 },
                   alignItems: 'center'
                 }}>
-                  <Avatar
-                    src={getLatestCover(group)}
-                  >
+                  <Avatar src={getLatestCover(group)}>
                     {!group.images || group.images.length === 0 ? group.name[0] : null}
                   </Avatar>
                   <Box sx={{ flex: 1 }}>
-                    <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' }, }}>
+                    <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}>
                       {group.name}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 12 }, }}>
-                      Created {formatCambodiaDate(group.created_at)}
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 12 } }}>
+                      {t('created')} {formatCambodiaDate(group.created_at)}
                     </Typography>
                   </Box>
                 </Box>
@@ -161,35 +155,15 @@ const GroupsTab = ({ groups }) => {
         </Box>
       )}
       {(!isMobile || !showGroupList) && (
-        <Box
-          sx={{
-            width: '100%',
-          }}
-        >
+        <Box sx={{ width: '100%' }}>
           {!selectedGroupId ? (
-            <Box
-              sx={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100vh'
-              }}
-            >
-              <Typography
-                align="center"
-                color="text.secondary"
-                sx={{ fontSize: 18, mb: 10 }}
-              >
-                Select a group to view chat
+            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+              <Typography align="center" color="text.secondary" sx={{ fontSize: 18, mb: 10 }}>
+                {t('select_group_to_view_chat')}
               </Typography>
             </Box>
           ) : (
-            <Box
-              sx={{
-                pl: {xs: 0, md: 3},
-              }}
-            >
+            <Box sx={{ pl: {xs: 0, md: 3} }}>
               <GroupChatPage key={selectedGroupId} groupId={selectedGroupId} toggleGroupList={toggleGroupList} />
             </Box>
           )}

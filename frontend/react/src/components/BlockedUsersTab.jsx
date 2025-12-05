@@ -14,6 +14,7 @@ import {
   useTheme
 } from '@mui/material';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useImage } from '../hooks/useImage';
 import { getBlockedUsers, unblockUser } from '../services/api';
 
@@ -26,15 +27,15 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { t } = useTranslation();
 
   const fetchBlockedUsers = async () => {
     setLoading(true);
     try {
       const users = await getBlockedUsers();
-      console.log('📋 Blocked users data:', users); // Debug log
       setBlockedUsers(users);
     } catch (err) {
-      setError(err.message || 'Failed to fetch blocked users');
+      setError(t('error_fetch_blocked'));
     } finally {
       setLoading(false);
     }
@@ -44,19 +45,21 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
     fetchBlockedUsers();
   }, []);
 
-  const handleUnblock = async (userId, username) => {
-    setUnblockingId(userId);
-    try {
-      await unblockUser(userId);
-      setSuccess(`Unblocked ${username}`);
-      setBlockedUsers(prev => prev.filter(user => user.id !== userId));
-      if (onDataUpdate) onDataUpdate();
-    } catch (err) {
-      setError(err.message || 'Failed to unblock user');
-    } finally {
-      setUnblockingId(null);
-    }
-  };
+const handleUnblock = async (userId, username) => {
+  setUnblockingId(userId);
+  try {
+    await unblockUser(userId);
+    setSuccess(t('success_unblocked', { username }));
+    setBlockedUsers(prev => prev.filter(user => user.id !== userId));
+    
+    // Notify parent to refresh friends list
+    if (onDataUpdate) onDataUpdate();
+  } catch (err) {
+    setError(t('error_unblock'));
+  } finally {
+    setUnblockingId(null);
+  }
+};
 
   if (loading) {
     return (
@@ -73,7 +76,7 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
       overflow: 'hidden'
     }}>
       <Typography variant="h5" gutterBottom fontWeight="600" sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
-        Blocked Users
+        {t('blocked_users')}
       </Typography>
 
       {blockedUsers.length === 0 ? (
@@ -90,21 +93,12 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
             mb: 2 
           }} />
           <Typography color="text.secondary">
-            No blocked users
+            {t('no_blocked_users')}
           </Typography>
         </Box>
       ) : (
         <List sx={{ p: 0 }}>
           {blockedUsers.map((user) => {
-            // Debug user data
-            console.log('👤 User data:', {
-              id: user.id,
-              username: user.username,
-              avatar_url: user.avatar_url,
-              email: user.email
-            });
-
-            // Get optimized Cloudinary image URL for avatar
             const imageUrl = getOptimizedImageUrl(user.avatar_url, {
               width: isMobile ? 80 : 100,
               height: isMobile ? 80 : 100,
@@ -113,8 +107,6 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
               gravity: 'face'
             });
 
-            console.log('🖼️ Final image URL:', imageUrl); // Debug log
-            
             return (
               <ListItem
                 key={user.id}
@@ -135,28 +127,25 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
                   }
                 }}
               >
-                {/* User Info Section */}
+                {/* User Info */}
                 <Box sx={{ 
                   display: 'flex', 
                   alignItems: 'center',
-                  width: { xs: '100%', sm: 'auto' },
-                  mb: { xs: 0, sm: 0 }
+                  width: { xs: '100%', sm: 'auto' }
                 }}>
                   <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
                     <Avatar 
                       src={imageUrl}
-                      sx={{ 
-                        width: { xs: 40, sm: 48 }, 
-                        height: { xs: 40, sm: 48 } 
-                      }}
+                      sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
                       imgProps={{
-                        crossOrigin: 'anonymous', // This prevents third-party cookie warnings
+                        crossOrigin: 'anonymous',
                         onError: (e) => handleImageError(user.avatar_url, e)
                       }}
                     >
                       {user.username?.charAt(0)?.toUpperCase() || <BlockIcon fontSize={isSmallMobile ? 'small' : 'medium'} />}
                     </Avatar>
                   </ListItemAvatar>
+
                   <ListItemText
                     primary={
                       <Box sx={{ 
@@ -169,7 +158,7 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
                           {user.username}
                         </Typography>
                         <Chip 
-                          label="Blocked" 
+                          label={t('blocked')}
                           size="small" 
                           color="error" 
                           variant="outlined"
@@ -181,11 +170,10 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
                       </Box>
                     }
                     secondary={
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
+                      <Typography variant="body2" color="text.secondary">
                         {user.email}
                       </Typography>
                     }
-                    sx={{ my: 0 }}
                   />
                 </Box>
 
@@ -209,7 +197,11 @@ const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
                     mt: { xs: 1, sm: 0 }
                   }}
                 >
-                  {unblockingId === user.id ? 'Unblocking...' : isMobile ? 'Unblock' : 'Unblock User'}
+                  {unblockingId === user.id 
+                    ? t('unblocking') 
+                    : isMobile 
+                      ? t('unblock') 
+                      : t('unblock_user')}
                 </Button>
               </ListItem>
             );

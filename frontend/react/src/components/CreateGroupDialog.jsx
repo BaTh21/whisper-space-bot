@@ -1,4 +1,3 @@
-// components/CreateGroupDialog.jsx
 import {
   Avatar,
   Box,
@@ -21,44 +20,42 @@ import {
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { createGroup } from '../services/api';
+import { useTranslation } from 'react-i18next';
 
 const CreateGroupDialog = ({ 
   open, 
   onClose, 
   onSuccess, 
   setError, 
-  friends = [] // Make sure friends prop is passed
+  friends = [] 
 }) => {
+  const { t } = useTranslation();
+
   const formik = useFormik({
     initialValues: {
       name: '',
       description: '',
-      invited_friends: [], // This should store friend IDs
+      invited_friends: [],
     },
     validationSchema: Yup.object({
-      name: Yup.string().required('Group name is required'),
-      description: Yup.string().max(500, 'Description too long'),
+      name: Yup.string().required(t('group_name_required')),
+      description: Yup.string().max(500, t('description_too_long')),
       invited_friends: Yup.array(),
     }),
     onSubmit: async (values, { resetForm }) => {
       try {
-        console.log('Creating group with:', values);
-        
         const groupData = {
           name: values.name,
           description: values.description,
-          invited_user_ids: values.invited_friends, // Send friend IDs to backend
+          invited_user_ids: values.invited_friends,
         };
 
         const newGroup = await createGroup(groupData);
-        console.log('Group created:', newGroup);
-        
         onSuccess(newGroup);
         resetForm();
         setError(null);
       } catch (err) {
-        console.error('Create group error:', err);
-        setError(err.message || 'Failed to create group');
+        setError(err.message || t('failed_create_group'));
       }
     },
   });
@@ -74,19 +71,17 @@ const CreateGroupDialog = ({
       onClose={handleClose} 
       maxWidth="md" 
       fullWidth
-      PaperProps={{
-        sx: { borderRadius: '16px' }
-      }}
+      PaperProps={{ sx: { borderRadius: '16px' } }}
     >
       <DialogTitle sx={{ fontWeight: 600, pb: 1 }}>
-        Create New Group
+        {t('create_new_group')}
       </DialogTitle>
       
       <DialogContent>
         <Box component="form" sx={{ mt: 1 }}>
           {/* Group Name */}
           <TextField
-            label="Group Name *"
+            label={t('group_name') + ' *'}
             name="name"
             fullWidth
             margin="normal"
@@ -95,14 +90,12 @@ const CreateGroupDialog = ({
             onBlur={formik.handleBlur}
             error={formik.touched.name && !!formik.errors.name}
             helperText={formik.touched.name && formik.errors.name}
-            InputProps={{
-              sx: { borderRadius: '8px' }
-            }}
+            InputProps={{ sx: { borderRadius: '8px' } }}
           />
 
           {/* Group Description */}
           <TextField
-            label="Description"
+            label={t('description')}
             name="description"
             multiline
             rows={3}
@@ -113,14 +106,12 @@ const CreateGroupDialog = ({
             onBlur={formik.handleBlur}
             error={formik.touched.description && !!formik.errors.description}
             helperText={formik.touched.description && formik.errors.description}
-            InputProps={{
-              sx: { borderRadius: '8px' }
-            }}
+            InputProps={{ sx: { borderRadius: '8px' } }}
           />
 
           {/* Friend Invitation Section */}
           <FormControl fullWidth margin="normal">
-            <InputLabel>Invite Friends to Group</InputLabel>
+            <InputLabel>{t('invite_friends')}</InputLabel>
             <Select
               multiple
               name="invited_friends"
@@ -134,7 +125,7 @@ const CreateGroupDialog = ({
                     return (
                       <Chip 
                         key={friendId}
-                        label={friend?.username || 'Unknown'} 
+                        label={friend?.username || t('unknown')} 
                         size="small"
                         sx={{ borderRadius: '6px' }}
                       />
@@ -143,44 +134,30 @@ const CreateGroupDialog = ({
                 </Box>
               )}
               MenuProps={{
-                PaperProps: {
-                  sx: {
-                    maxHeight: 300,
-                  }
-                }
+                PaperProps: { sx: { maxHeight: 300 } }
               }}
             >
               {friends.length === 0 ? (
                 <MenuItem disabled>
                   <Typography color="text.secondary">
-                    No friends available to invite
+                    {t('no_friends_available')}
                   </Typography>
                 </MenuItem>
               ) : (
                 friends.map((friend) => (
                   <MenuItem key={friend.id} value={friend.id}>
-                    <Checkbox 
-                      checked={formik.values.invited_friends.includes(friend.id)} 
-                    />
+                    <Checkbox checked={formik.values.invited_friends.includes(friend.id)} />
                     <ListItemAvatar>
                       <Avatar 
                         src={friend.avatar_url}
                         sx={{ width: 32, height: 32, mr: 2 }}
-                        imgProps={{ 
-                          onError: (e) => { 
-                            e.target.style.display = 'none';
-                          } 
-                        }}
+                        imgProps={{ onError: (e) => { e.target.style.display = 'none'; } }}
                       >
                         {friend.username?.charAt(0)?.toUpperCase() || 'F'}
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText 
-                      primary={
-                        <Typography variant="body1" fontWeight="500">
-                          {friend.username}
-                        </Typography>
-                      }
+                      primary={<Typography variant="body1" fontWeight="500">{friend.username}</Typography>}
                       secondary={friend.email}
                     />
                   </MenuItem>
@@ -192,18 +169,15 @@ const CreateGroupDialog = ({
           {/* Selected Friends Count */}
           {formik.values.invited_friends.length > 0 && (
             <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
-              {formik.values.invited_friends.length} friend(s) selected for invitation
+              {formik.values.invited_friends.length} {t('friends_selected')}
             </Typography>
           )}
         </Box>
       </DialogContent>
 
       <DialogActions sx={{ p: 2, pt: 1 }}>
-        <Button 
-          onClick={handleClose}
-          sx={{ borderRadius: '8px' }}
-        >
-          Cancel
+        <Button onClick={handleClose} sx={{ borderRadius: '8px' }}>
+          {t('cancel')}
         </Button>
         <Button
           variant="contained"
@@ -211,7 +185,7 @@ const CreateGroupDialog = ({
           disabled={!formik.isValid || formik.isSubmitting}
           sx={{ borderRadius: '8px' }}
         >
-          Create Group
+          {t('create_group')}
         </Button>
       </DialogActions>
     </Dialog>
