@@ -38,7 +38,8 @@ class WebSocketManager:
         try:
             asyncio.create_task(self.broadcast(chat_id, {
                 "action": "user_offline",
-                "user_id": user_id
+                "user_id": user_id,
+                "remove_stream": True
             }))
         except Exception as e:
             print(f"[Disconnect Broadcast Error] {e}")

@@ -327,6 +327,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
           updated.delete(data.user_id);
           return updated;
         });
+
+        if (remoteStreamsRef.current[data.user_id]) {
+          remoteStreamsRef.current[data.user_id].getTracks().forEach(track => track.stop());
+          delete remoteStreamsRef.current[data.user_id];
+          setRemoteStreams({ ...remoteStreamsRef.current });
+        }
+
+        if (callStatus === "In Call" && peersRef.current[data.user_id]) {
+          const pc = peersRef.current[data.user_id];
+          pc.getSenders().forEach(s => s.track?.stop());
+          pc.close();
+          delete peersRef.current[data.user_id];
+        }
         break;
 
       case "seen":
@@ -517,6 +530,18 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         updated.delete(user.id);
         return updated;
       });
+
+      Object.values(peersRef.current).forEach(pc => {
+        pc.getSenders().forEach(s => s.track?.stop());
+        pc.close();
+      });
+      peersRef.current = {};
+      remoteStreamsRef.current = {};
+      setRemoteStreams({});
+
+      setCallStatus(null);
+      setCallingOpen(false);
+
       setTimeout(setupWebSocket, 3000);
     };
 
@@ -736,9 +761,13 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       pc.addTrack(track, localStreamRef.current);
     });
 
-    pc.ontrack = (e) => {
-      const stream = e.streams[0] || new MediaStream([e.track]);
-      remoteStreamsRef.current[userId] = stream;
+    pc.ontrack = (event) => {
+      let stream = remoteStreamsRef.current[userId];
+      if (!stream) {
+        stream = new MediaStream();
+        remoteStreamsRef.current[userId] = stream;
+      }
+      event.streams[0]?.getTracks().forEach(track => stream.addTrack(track));
       setRemoteStreams({ ...remoteStreamsRef.current });
     };
 
@@ -763,6 +792,20 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       action: "call_start"
     }));
 
+    onlineUsers.forEach(async (uid) => {
+      if (uid !== user.id) {
+        const pc = await getOrCreatePeer(uid);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        wsRef.current.send(JSON.stringify({
+          action: "call_offer",
+          to_user: uid,
+          sdp: pc.localDescription
+        }));
+      }
+    });
+
     setCallStatus("Calling...");
     setCallingOpen(true);
   };
@@ -784,6 +827,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     wsRef.current.send(JSON.stringify({
       action: "call_accept",
       to_user: caller
+    }));
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_join"
     }));
 
     setIncomingCall(null);
@@ -881,13 +928,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const handleUserLeave = (userId) => {
     const pc = peersRef.current[userId];
     if (pc) {
-      pc.getSenders().forEach(s => s.track?.stop());
+      pc.getReceivers().forEach(receiver => receiver.track?.stop());
       pc.close();
       delete peersRef.current[userId];
     }
 
-    delete remoteStreamsRef.current[userId];
-    setRemoteStreams({ ...remoteStreamsRef.current });
+    const remoteStream = remoteStreamsRef.current[userId];
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => track.stop());
+      delete remoteStreamsRef.current[userId];
+      setRemoteStreams({ ...remoteStreamsRef.current });
+    }
+
+    console.log(`User ${userId} left the call, cleaned up remote stream.`);
   };
 
   const handleCancelCall = () => {
@@ -1699,7 +1752,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <CallDialog
         open={callingOpen}
         onCancel={handleCancelCall}
-        remoteStreams={remoteStreams}
+        remoteStreams={Object.fromEntries(
+          Object.entries(remoteStreams).filter(([uid, stream]) => (
+            stream && stream.getTracks().length > 0
+          ))
+        )}
         onLocal={localStreamRef.current}
         peersRef={peersRef}
         status={callStatus}
