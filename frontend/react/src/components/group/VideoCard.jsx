@@ -1,25 +1,28 @@
 import { Card, Box, Typography } from "@mui/material";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
-const Video = ({ stream }) => {
+
+const Video = ({ stream, muted }) => {
   const ref = useRef();
-  const userName = useState(null);
 
   useEffect(() => {
-    if (!ref.current || !stream) return;
+    const videoEl = ref.current;
+    if (!videoEl || !stream) return;
 
-    ref.current.srcObject = stream;
-    ref.current.play().catch(() => { });
+    videoEl.srcObject = stream;
 
-    const handleTrack = () => ref.current.play().catch(() => { });
-    stream.addEventListener("addtrack", handleTrack);
-    stream.addEventListener("removetrack", handleTrack);
+    const handleLoadedMetadata = () => {
+      videoEl.play().catch((err) => console.warn("Video play failed", err));
+    };
+
+    videoEl.addEventListener("loadedmetadata", handleLoadedMetadata);
 
     return () => {
-      stream.removeEventListener("addtrack", handleTrack);
-      stream.removeEventListener("removetrack", handleTrack);
+      videoEl.pause();
+      videoEl.srcObject = null;
+      videoEl.removeEventListener("loadedmetadata", handleLoadedMetadata);
     };
   }, [stream]);
 
@@ -28,7 +31,7 @@ const Video = ({ stream }) => {
       ref={ref}
       autoPlay
       playsInline
-      muted={userName === "You"}
+      muted={muted}
       style={{ width: "100%", height: "100%", objectFit: "cover" }}
     />
   );
@@ -76,7 +79,7 @@ const VideoCard = ({ stream, userName }) => {
       }}
     >
       {videoEnabled ? (
-        <Video stream={stream} />
+        <Video stream={stream} userName={userName} muted={userName === "You"} />
       ) : (
         <Box
           sx={{
