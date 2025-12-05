@@ -838,6 +838,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
+    if (pendingAnswers.current[from_user]) {
+      await pc.setRemoteDescription(new RTCSessionDescription(pendingAnswers.current[from_user]));
+      delete pendingAnswers.current[from_user];
+    }
 
     wsRef.current.send(JSON.stringify({
       action: "call_answer",
@@ -858,7 +862,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
   };
 
-  const pendingCandidates = {};
+  const pendingCandidates = useRef({});
 
   const handleNewIceCandidate = async ({ from_user, candidate }) => {
     const pc = peersRef.current[from_user];
