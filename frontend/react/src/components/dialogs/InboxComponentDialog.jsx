@@ -1,11 +1,14 @@
 // InboxComponentDialog.jsx
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
+import MailIcon from '@mui/icons-material/Mail';
 import Avatar from '@mui/material/Avatar';
+import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -19,13 +22,48 @@ import {
     declineFriendRequest,
     deleteInvite,
     getPendingFriendRequests,
-    getPendingGroupInvites
+    getPendingGroupInvites,
+    refreshTokenIfNeeded
 } from '../../services/api';
 import { websocketService } from '../../services/websocketService';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 import DeleteDialog from './DeleteDialog';
 
-export default function InboxComponent({ open, onClose, onSuccess }) {
+// Export a function to get the current friend request count for other components
+let externalFriendRequestCount = 0;
+let externalGroupInviteCount = 0;
+let externalNewMessageCount = 0;
+let externalTotalNotificationCount = 0;
+let externalNotificationCallback = null;
+
+export const getFriendRequestCount = () => externalFriendRequestCount;
+export const getGroupInviteCount = () => externalGroupInviteCount;
+export const getNewMessageCount = () => externalNewMessageCount;
+export const getTotalNotificationCount = () => externalTotalNotificationCount;
+
+export const onNotificationCountChange = (callback) => {
+    externalNotificationCallback = callback;
+    return () => { externalNotificationCallback = null; };
+};
+
+// Helper to update all counts and notify callback
+const updateExternalCounts = (friendCount, groupCount, messageCount) => {
+    externalFriendRequestCount = friendCount;
+    externalGroupInviteCount = groupCount;
+    externalNewMessageCount = messageCount;
+    externalTotalNotificationCount = friendCount + groupCount + messageCount;
+    
+    if (externalNotificationCallback) {
+        externalNotificationCallback({
+            friendRequests: friendCount,
+            groupInvites: groupCount,
+            newMessages: messageCount,
+            total: externalTotalNotificationCount
+        });
+    }
+};
+
+export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnButton = null }) {
     const [invites, setInvites] = useState([]);
     const [loading, setLoading] = useState(true);
     const [deletePopup, setDeletePopup] = useState(false);
@@ -36,11 +74,39 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
     const [newMessages, setNewMessages] = useState([]);
     const [wsConnected, setWsConnected] = useState(false);
     const [loadingFriendRequests, setLoadingFriendRequests] = useState(false);
+    
+    // State for tracking total notification counts
+    const [friendRequestCount, setFriendRequestCount] = useState(0);
+    const [groupInviteCount, setGroupInviteCount] = useState(0);
+    const [newMessageCount, setNewMessageCount] = useState(0);
+    const [totalNotificationCount, setTotalNotificationCount] = useState(0);
 
-    // Initialize friendRequests as array on mount
+    // Update counts whenever friendRequests, invites, or newMessages change
+    useEffect(() => {
+        const friendCount = Array.isArray(friendRequests) ? friendRequests.length : 0;
+        const groupCount = Array.isArray(invites) ? invites.length : 0;
+        const messageCount = Array.isArray(newMessages) ? newMessages.length : 0;
+        const total = friendCount + groupCount + messageCount;
+        
+        setFriendRequestCount(friendCount);
+        setGroupInviteCount(groupCount);
+        setNewMessageCount(messageCount);
+        setTotalNotificationCount(total);
+        
+        // Update external counts
+        updateExternalCounts(friendCount, groupCount, messageCount);
+    }, [friendRequests, invites, newMessages]);
+
+    // Initialize arrays on mount
     useEffect(() => {
         if (!Array.isArray(friendRequests)) {
             setFriendRequests([]);
+        }
+        if (!Array.isArray(invites)) {
+            setInvites([]);
+        }
+        if (!Array.isArray(newMessages)) {
+            setNewMessages([]);
         }
     }, []);
 
@@ -61,11 +127,14 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
         try {
             setLoadingFriendRequests(true);
 
-            // Check if user is logged in
-            const token = localStorage.getItem('access_token') || 'dummy-dev-token';
-            if (!token) {
-                toast.error("Please login first");
+            // Check and refresh token if needed
+            const tokenResult = await refreshTokenIfNeeded();
+            if (!tokenResult.success) {
+                toast.error("Session expired. Please login again.");
                 setFriendRequests([]);
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
                 return;
             }
 
@@ -93,6 +162,9 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
                 toast.error("Friend requests endpoint not found");
             } else if (apiError.response?.status === 401) {
                 toast.error("Session expired. Please login again.");
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
             } else {
                 toast.error("Failed to load friend requests");
             }
@@ -277,16 +349,28 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
         if (open) {
             console.log('📬 Opening inbox...');
 
-            // Fetch initial data
-            fetchInvites();
-            fetchFriendRequests();
-
             // Connect WebSocket with proper error handling
             console.log('🔌 Initializing WebSocket...');
 
             const connectWebSocket = async () => {
                 try {
-                    // Connect to notifications WebSocket
+                    // Check and refresh token if needed
+                    const tokenResult = await refreshTokenIfNeeded();
+                    
+                    if (!tokenResult.success) {
+                        toast.error('Session expired. Please login again.');
+                        onClose(); // Close inbox modal
+                        setTimeout(() => {
+                            window.location.href = '/login';
+                        }, 2000);
+                        return;
+                    }
+
+                    // Fetch initial data
+                    await fetchInvites();
+                    await fetchFriendRequests();
+
+                    // Now connect to WebSocket with valid token
                     const authResult = await websocketService.connectToNotifications();
                     console.log('✅ WebSocket connected and authenticated:', authResult);
 
@@ -310,7 +394,20 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
                 } catch (error) {
                     console.error('❌ Failed to connect WebSocket:', error);
                     setWsConnected(false);
-                    toast.error('Failed to connect to notifications: ' + error.message);
+                    
+                    // Check if it's a token error
+                    if (error.message.includes('token') || 
+                        error.message.includes('expired') || 
+                        error.message.includes('401') ||
+                        error.message.includes('auth')) {
+                        toast.error('Session expired. Please login again.');
+                        onClose();
+                        setTimeout(() => {
+                            window.location.href = '/login';
+                        }, 2000);
+                    } else {
+                        toast.error('Failed to connect to notifications: ' + error.message);
+                    }
                 }
             };
 
@@ -337,10 +434,6 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
                 websocketService.removeHandler('group_invite');
                 websocketService.removeHandler('message');
                 websocketService.removeHandler('auth_success');
-
-                // Note: Don't disconnect the WebSocket completely as it might be used elsewhere
-                // Only unsubscribe from notifications if that's the only use
-                // websocketService.disconnect();
             };
         }
     }, [
@@ -552,6 +645,13 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <Typography id="inbox-modal-title" variant="h6" gutterBottom sx={{ flexGrow: 1 }}>
                             Inbox
+                            {totalNotificationCount > 0 && (
+                                <Badge
+                                    badgeContent={totalNotificationCount}
+                                    color="error"
+                                    sx={{ ml: 2 }}
+                                />
+                            )}
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Box sx={{
@@ -561,7 +661,7 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
                                 bgcolor: wsConnected ? 'success.main' : 'error.main'
                             }} />
                             <Typography variant="caption" color="text.secondary">
-                                {wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
+                                {wsConnected ? 'Connected' : 'Disconnected'}
                             </Typography>
                         </Box>
                     </Box>
@@ -673,5 +773,201 @@ export default function InboxComponent({ open, onClose, onSuccess }) {
                 </Box>
             </Modal>
         </>
+    );
+}
+
+// New component to show badge on a button
+export function InboxButtonWithBadge({ onClick, children, sx = {} }) {
+    const [totalNotificationCount, setTotalNotificationCount] = useState(0);
+
+    useEffect(() => {
+        const unsubscribe = onNotificationCountChange((counts) => {
+            setTotalNotificationCount(counts.total);
+        });
+        return unsubscribe;
+    }, []);
+
+    return (
+        <Badge
+            badgeContent={totalNotificationCount}
+            color="error"
+            sx={{ 
+                '& .MuiBadge-badge': { 
+                    fontSize: '0.75rem', 
+                    height: '20px', 
+                    minWidth: '20px',
+                    top: 8,
+                    right: 8
+                } 
+            }}
+        >
+            <Button onClick={onClick} sx={sx}>
+                {children}
+            </Button>
+        </Badge>
+    );
+}
+
+// Alternative: Simple badge-only component
+export function NotificationBadge({ sx = {} }) {
+    const [totalNotificationCount, setTotalNotificationCount] = useState(0);
+
+    useEffect(() => {
+        const unsubscribe = onNotificationCountChange((counts) => {
+            setTotalNotificationCount(counts.total);
+        });
+        return unsubscribe;
+    }, []);
+
+    if (totalNotificationCount === 0) return null;
+
+    return (
+        <Badge
+            badgeContent={totalNotificationCount}
+            color="error"
+            sx={{
+                '& .MuiBadge-badge': {
+                    fontSize: '0.75rem',
+                    height: '20px',
+                    minWidth: '20px',
+                    top: 8,
+                    right: 8,
+                },
+                ...sx
+            }}
+        />
+    );
+}
+
+// NEW: Mail Icon with Badge that shows TOTAL notification count
+export function InboxIconButton({ onClick, sx = {}, size = "medium", showTooltip = true }) {
+    const [totalNotificationCount, setTotalNotificationCount] = useState(0);
+    const [notificationDetails, setNotificationDetails] = useState({
+        friendRequests: 0,
+        groupInvites: 0,
+        newMessages: 0,
+        total: 0
+    });
+
+    useEffect(() => {
+        const unsubscribe = onNotificationCountChange((counts) => {
+            setTotalNotificationCount(counts.total);
+            setNotificationDetails(counts);
+        });
+        return unsubscribe;
+    }, []);
+
+    // Tooltip content showing breakdown
+    const tooltipContent = totalNotificationCount > 0 ? (
+        <Box sx={{ p: 1 }}>
+            <Typography variant="body2" fontWeight="bold">Notifications</Typography>
+            {notificationDetails.friendRequests > 0 && (
+                <Typography variant="caption" display="block">
+                    👤 {notificationDetails.friendRequests} friend request{notificationDetails.friendRequests !== 1 ? 's' : ''}
+                </Typography>
+            )}
+            {notificationDetails.groupInvites > 0 && (
+                <Typography variant="caption" display="block">
+                    👥 {notificationDetails.groupInvites} group invite{notificationDetails.groupInvites !== 1 ? 's' : ''}
+                </Typography>
+            )}
+            {notificationDetails.newMessages > 0 && (
+                <Typography variant="caption" display="block">
+                    💬 {notificationDetails.newMessages} new message{notificationDetails.newMessages !== 1 ? 's' : ''}
+                </Typography>
+            )}
+        </Box>
+    ) : "No new notifications";
+
+    return (
+        <Box 
+            sx={{ 
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                ...sx 
+            }}
+        >
+            <IconButton 
+                onClick={onClick} 
+                sx={{ 
+                    color: 'inherit',
+                }}
+                size={size}
+                title={showTooltip ? `Inbox (${totalNotificationCount} notifications)` : undefined}
+            >
+                <MailIcon />
+            </IconButton>
+            
+            {/* Notification badge */}
+            {totalNotificationCount > 0 && (
+                <Badge
+                    badgeContent={totalNotificationCount}
+                    color="error"
+                    sx={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        '& .MuiBadge-badge': {
+                            fontSize: '0.65rem',
+                            height: '18px',
+                            minWidth: '18px',
+                            border: '2px solid white',
+                            boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
+                        }
+                    }}
+                />
+            )}
+        </Box>
+    );
+}
+
+// NEW: Advanced badge showing different colors for different notification types
+export function AdvancedNotificationBadge({ onClick, sx = {} }) {
+    const [notificationDetails, setNotificationDetails] = useState({
+        friendRequests: 0,
+        groupInvites: 0,
+        newMessages: 0,
+        total: 0
+    });
+
+    useEffect(() => {
+        const unsubscribe = onNotificationCountChange(setNotificationDetails);
+        return unsubscribe;
+    }, []);
+
+    // Determine badge color based on priority
+    const getBadgeColor = () => {
+        if (notificationDetails.friendRequests > 0) return 'error'; // Red for friend requests
+        if (notificationDetails.groupInvites > 0) return 'warning'; // Orange for group invites
+        if (notificationDetails.newMessages > 0) return 'info'; // Blue for new messages
+        return 'default';
+    };
+
+    return (
+        <Badge
+            badgeContent={notificationDetails.total}
+            color={getBadgeColor()}
+            sx={{
+                '& .MuiBadge-badge': {
+                    fontSize: '0.7rem',
+                    height: '20px',
+                    minWidth: '20px',
+                    top: 8,
+                    right: 8,
+                    boxShadow: '0 0 0 2px white',
+                }
+            }}
+        >
+            <IconButton 
+                onClick={onClick} 
+                sx={{ 
+                    color: 'inherit',
+                    ...sx 
+                }}
+            >
+                <MailIcon />
+            </IconButton>
+        </Badge>
     );
 }
