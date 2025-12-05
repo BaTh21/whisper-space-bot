@@ -17,7 +17,6 @@ from app.models.private_message import PrivateMessage, MessageType
 from app.models.group_message import GroupMessage
 from app.models.group_message_seen import GroupMessageSeen
 from app.schemas.chat import GroupMessageOut, ParentMessageResponse, AuthorResponse
-from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
 from app.crud.message import handle_forward_message, update_message, delete_message
 from app.helpers.to_utc_iso import to_local_iso
@@ -30,6 +29,8 @@ async def handle_websocket_private(
     friend_id: int,
     db: Session = Depends(get_db)
 ):
+    
+    from app.services.websocket_manager import manager
     """
     WebSocket endpoint for real-time private chat with seen status tracking
     """
@@ -513,6 +514,9 @@ async def websocket_group_chat(
     websocket: WebSocket,
     group_id: int,
 ):
+    
+    from app.services.ws_manager_group import manager
+    
     await websocket.accept()
     
     db = next(get_db())
