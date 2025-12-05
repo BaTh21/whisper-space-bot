@@ -1,18 +1,19 @@
 import { Card, Box, Typography } from "@mui/material";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const Video = ({ stream }) => {
   const ref = useRef();
+  const userName = useState(null);
 
   useEffect(() => {
     if (!ref.current || !stream) return;
 
     ref.current.srcObject = stream;
-    ref.current.play().catch(() => {});
+    ref.current.play().catch(() => { });
 
-    const handleTrack = () => ref.current.play().catch(() => {});
+    const handleTrack = () => ref.current.play().catch(() => { });
     stream.addEventListener("addtrack", handleTrack);
     stream.addEventListener("removetrack", handleTrack);
 
@@ -27,7 +28,7 @@ const Video = ({ stream }) => {
       ref={ref}
       autoPlay
       playsInline
-      muted // Important for local preview
+      muted={userName === "You"}
       style={{ width: "100%", height: "100%", objectFit: "cover" }}
     />
   );

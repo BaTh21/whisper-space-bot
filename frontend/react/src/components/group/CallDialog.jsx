@@ -35,6 +35,7 @@ const CallDialog = ({
   onLocal,
   onCancel,
   status,
+  peersRef
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -50,6 +51,9 @@ const CallDialog = ({
     (s) => s && s.getTracks().length > 0
   );
 
+  console.log("remote streams", remoteStreams);
+  console.log("local streams", onLocal);
+
   const rows = getRows(streams);
 
   const toggleMute = () => {
@@ -58,14 +62,19 @@ const CallDialog = ({
     setIsMuted(!isMuted);
   };
 
-  const toggleVideo = async () => {
+  const toggleVideo = () => {
     if (!onLocal) return;
-    const videoTrack = onLocal.getVideoTracks()[0];
 
-    if (!videoTrack) return;
+    const track = onLocal.getVideoTracks()[0];
+    if (!track) return;
 
-    videoTrack.enabled = !videoTrack.enabled;
-    setVideoEnabled(videoTrack.enabled);
+    track.enabled = !track.enabled;
+    setVideoEnabled(track.enabled);
+
+    Object.values(peersRef.current).forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === "video");
+      if (sender) sender.replaceTrack(track);
+    });
   };
 
   const startDrag = (e) => {
@@ -202,7 +211,7 @@ const CallDialog = ({
               boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             }}
           >
-            <VideoCard stream={onLocal} userName="You"/>
+            <VideoCard stream={onLocal} userName="You" />
           </Box>
         )}
 

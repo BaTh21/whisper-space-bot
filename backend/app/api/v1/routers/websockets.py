@@ -803,6 +803,8 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
     """
     Unified WebSocket endpoint for all notifications
     """
+    from app.services.websocket_manager import manager
+    
     current_user: User | None = None
 
     try:
