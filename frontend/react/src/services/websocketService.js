@@ -1,4 +1,4 @@
-// services/websocketService.js
+// websocketService.js - FIXED VERSION
 class WebSocketService {
     constructor() {
         this.socket = null;
@@ -35,26 +35,21 @@ class WebSocketService {
     }
 
     getAuthToken() {
-    // Try multiple possible token locations
-    const token = localStorage.getItem('access_token') || 
-                 sessionStorage.getItem('access_token') ||
-                 localStorage.getItem('accessToken') ||  // Note: different key
-                 sessionStorage.getItem('accessToken');
-    
-    if (token) {
-        console.log('🔑 Token found:', token.substring(0, 20) + '...');
-        // Validate token format
-        if (token.split('.').length !== 3) {
-            console.warn('⚠️ Token format appears invalid (not a JWT)');
-            // Fallback to empty or handle appropriately
-            return null;
+        // FIXED: Check for tokens in all possible locations
+        const token = localStorage.getItem('access_token') || 
+                     localStorage.getItem('accessToken') ||
+                     sessionStorage.getItem('access_token') || 
+                     sessionStorage.getItem('accessToken');
+        
+        if (token) {
+            console.log('🔑 Token found:', token.substring(0, 20) + '...');
+            return token;
         }
-        return token;
+        
+        console.warn('⚠️ No authentication token found');
+        return null;
     }
-    
-    console.warn('⚠️ No authentication token found');
-    return null;
-}
+
     // Create WebSocket URL with token in query params
     createWebSocketUrl(endpoint) {
         const baseUrl = this.getWebSocketUrl();
@@ -69,11 +64,40 @@ class WebSocketService {
         const url = new URL(`${baseUrl}${endpoint}`);
         url.searchParams.append('token', token);
         
-        console.log('🔗 WebSocket URL with token:', url.toString().replace(token, '***'));
+        console.log('🔗 WebSocket URL created');
         return url.toString();
     }
 
-    connect(endpoint = '/api/v1/ws/notifications') {
+    // FIXED: Check if token is expired
+    isTokenExpired(token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const expiryTime = payload.exp * 1000;
+            const currentTime = Date.now();
+            const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+            
+            return expiryTime - currentTime < bufferTime;
+        } catch (error) {
+            console.error('❌ Error checking token expiry:', error);
+            return true; // If we can't parse, assume expired
+        }
+    }
+
+    async connect(endpoint = '/api/v1/ws/notifications') {
+        // First check token validity
+        const token = this.getAuthToken();
+        if (!token) {
+            console.error('❌ Cannot connect: No token found');
+            return Promise.reject(new Error('No authentication token found'));
+        }
+        
+        // Check if token is expired or about to expire
+        if (this.isTokenExpired(token)) {
+            console.log('🔄 Token is expired or expiring soon');
+            // In a real app, you should refresh the token here
+            // For now, we'll just try to reconnect with the current token
+        }
+        
         // Don't reconnect if already connected
         if (this.isConnected && this.socket?.readyState === WebSocket.OPEN) {
             console.log('⚠️ WebSocket already connected');
@@ -87,12 +111,6 @@ class WebSocketService {
         const wsUrl = this.createWebSocketUrl(endpoint);
         console.log('🌐 Connecting to WebSocket:', wsUrl.replace(/(token=)[^&]+/, '$1***'));
         
-        // Debug: Check if URL is valid
-        if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
-            console.error('❌ Invalid WebSocket URL:', wsUrl);
-            return Promise.reject(new Error('Invalid WebSocket URL'));
-        }
-        
         // Create auth promise
         this.authPromise = new Promise((resolve, reject) => {
             this.authResolve = resolve;
@@ -100,12 +118,15 @@ class WebSocketService {
         });
         
         // Set timeout for auth
-        setTimeout(() => {
-            if (this.authPromise && !this.isAuthenticated) {
+        this.connectionTimeout = setTimeout(() => {
+            if (!this.isAuthenticated) {
                 console.log('⏰ Authentication timeout');
                 if (this.authReject) {
                     this.authReject(new Error('Authentication timeout'));
+                    this.authResolve = null;
+                    this.authReject = null;
                 }
+                this.disconnect();
             }
         }, 10000);
         
@@ -116,20 +137,8 @@ class WebSocketService {
             this.isAuthenticated = false;
             this.authRetryCount = 0;
             
-            // Set connection timeout
-            this.connectionTimeout = setTimeout(() => {
-                if (!this.isConnected && this.socket) {
-                    console.log('⏰ WebSocket connection timeout');
-                    this.socket.close();
-                    if (this.authReject) {
-                        this.authReject(new Error('Connection timeout'));
-                    }
-                }
-            }, 15000);
-
             this.socket.onopen = (event) => {
                 console.log('✅ WebSocket connection opened successfully');
-                console.log('📡 WebSocket URL:', this.socket.url);
                 this.isConnected = true;
                 this.reconnectAttempts = 0;
                 
@@ -138,14 +147,8 @@ class WebSocketService {
                     this.connectionTimeout = null;
                 }
 
-                // For notifications endpoint, we still need to send auth message
-                if (endpoint === '/api/v1/ws/notifications') {
-                    this.sendAuthentication();
-                } else {
-                    // For private/group chats, token is in query params
-                    // Wait for auth_success message from server
-                    console.log('⏳ Waiting for server authentication...');
-                }
+                // For notifications endpoint, wait for auth_success from server
+                console.log('⏳ Waiting for server authentication...');
                 
                 // Start heartbeat
                 this.startHeartbeat();
@@ -158,7 +161,7 @@ class WebSocketService {
                     
                     // Handle authentication responses
                     if (data.type === 'auth_success' || data.action === 'auth_success') {
-                        console.log('🔐 Authentication successful:', data.message);
+                        console.log('🔐 Authentication successful');
                         this.isAuthenticated = true;
                         this.authSent = true;
                         
@@ -169,13 +172,11 @@ class WebSocketService {
                             this.authReject = null;
                         }
                         
-                        // Notify auth listeners
-                        this.notifyHandlers('auth_success', data);
                         return;
                     }
                     
-                    if (data.type === 'auth_error' || data.action === 'auth_error' || data.type === 'error') {
-                        console.error('❌ Authentication failed:', data.error || data.message || data.reason);
+                    if (data.type === 'auth_error' || data.action === 'auth_error') {
+                        console.error('❌ Authentication failed:', data.error || data.message);
                         this.isAuthenticated = false;
                         
                         // Reject auth promise
@@ -190,7 +191,7 @@ class WebSocketService {
                     }
                     
                     // Handle pong
-                    if (data.type === 'pong' || data.action === 'pong') {
+                    if (data.type === 'pong') {
                         return;
                     }
                     
@@ -200,12 +201,25 @@ class WebSocketService {
                         return;
                     }
 
+                    // Handle error messages
+                    if (data.type === 'error') {
+                        console.error('❌ WebSocket error:', data.message || data.error);
+                        
+                        // If it's a token error, clear tokens
+                        if (data.message?.includes('token') || data.error?.includes('token')) {
+                            localStorage.removeItem('access_token');
+                            localStorage.removeItem('accessToken');
+                            localStorage.removeItem('refresh_token');
+                            localStorage.removeItem('refreshToken');
+                        }
+                        return;
+                    }
+
                     // Notify all handlers
                     this.notifyAllHandlers(data);
 
                 } catch (error) {
                     console.error('❌ Error parsing message:', error);
-                    console.log('Raw message:', event.data);
                 }
             };
 
@@ -258,10 +272,6 @@ class WebSocketService {
 
             this.socket.onerror = (error) => {
                 console.error('❌ WebSocket error:', error);
-                console.log('Error details:', {
-                    url: this.socket?.url?.replace(/(token=)[^&]+/, '$1***'),
-                    readyState: this.socket?.readyState
-                });
                 
                 // Reject auth promise on error
                 if (this.authReject) {

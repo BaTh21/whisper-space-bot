@@ -11,7 +11,12 @@ const api = axios.create({
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
+  // Try all possible token locations
+  const token = localStorage.getItem("access_token") || 
+                localStorage.getItem("accessToken") ||
+                sessionStorage.getItem("access_token") || 
+                sessionStorage.getItem("accessToken");
+  
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -37,81 +42,61 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    
+    // Only handle 401 errors and not retry requests
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        const refreshToken = localStorage.getItem("refresh_token") || 
+                            localStorage.getItem("refreshToken");
+        
+        if (!refreshToken) {
+          throw new Error("No refresh token available");
+        }
 
-    // If error is not 401 or it's already a retry, reject immediately
-    if (error.response?.status !== 401 || originalRequest._retry) {
-      return Promise.reject(error);
-    }
+        // Use a new axios instance to avoid infinite loops
+        const refreshResponse = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, {
+          refresh_token: refreshToken,
+        });
 
-    // If we're already refreshing, add to queue
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        failedQueue.push({ resolve, reject });
-      }).then(token => {
-        originalRequest.headers.Authorization = `Bearer ${token}`;
+        const { access_token, refresh_token } = refreshResponse.data;
+
+        // Store tokens consistently
+        localStorage.setItem("access_token", access_token);
+        localStorage.setItem("accessToken", access_token); // For compatibility
+        
+        if (refresh_token) {
+          localStorage.setItem("refresh_token", refresh_token);
+          localStorage.setItem("refreshToken", refresh_token); // For compatibility
+        }
+
+        // Update the original request with new token
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        
+        // Retry the original request
         return api(originalRequest);
-      }).catch(err => {
-        return Promise.reject(err);
-      });
+        
+      } catch (refreshError) {
+        console.error("Token refresh failed:", refreshError);
+        
+        // Clear all tokens
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("refreshToken");
+        sessionStorage.removeItem("access_token");
+        sessionStorage.removeItem("accessToken");
+        
+        // Redirect to login if not already there
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = "/login";
+        }
+        
+        return Promise.reject(new Error("Session expired. Please login again."));
+      }
     }
-
-    originalRequest._retry = true;
-    isRefreshing = true;
-
-    try {
-      const refreshToken = localStorage.getItem("refreshToken");
-      
-      // If no refresh token, redirect to login
-      if (!refreshToken) {
-        throw new Error("No refresh token available");
-      }
-
-      // Use a separate axios instance for refresh to avoid interceptor loops
-      const refreshApi = axios.create({
-        baseURL: BASE_URL,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      const response = await refreshApi.post("/api/v1/auth/refresh", {
-        refresh_token: refreshToken,
-      });
-
-      const { access_token, refresh_token } = response.data;
-
-      // Store new tokens
-      localStorage.setItem("access_token", access_token);
-      if (refresh_token) {
-        localStorage.setItem("refresh_token", refresh_token);
-      }
-
-      // Update the original request header
-      originalRequest.headers.Authorization = `Bearer ${access_token}`;
-
-      // Process queued requests
-      processQueue(null, access_token);
-
-      // Retry the original request
-      return api(originalRequest);
-    } catch (refreshError) {
-      console.error("Token refresh failed:", refreshError);
-      
-      // Process queued requests with error
-      processQueue(refreshError, null);
-      
-      // Clear tokens and redirect to login
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      
-      // Only redirect if we're not already on login page
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = "/login";
-      }
-    } finally {
-      isRefreshing = false;
-    }
-
+    
     return Promise.reject(error);
   }
 );
@@ -123,17 +108,25 @@ export const login = async (data) => {
     formData.append("username", data.email);
     formData.append("password", data.password);
 
-    const response = await api.post(`/api/v1/auth/login`, formData, {
+    const response = await axios.post(`${BASE_URL}/api/v1/auth/login`, formData, {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
     });
 
-    return {
+    // Store tokens with consistent naming
+    const tokens = {
       access_token: response.data.access_token,
       refresh_token: response.data.refresh_token,
       token_type: response.data.token_type,
     };
+
+    localStorage.setItem("access_token", tokens.access_token);
+    localStorage.setItem("accessToken", tokens.access_token); // For compatibility
+    localStorage.setItem("refresh_token", tokens.refresh_token);
+    localStorage.setItem("refreshToken", tokens.refresh_token); // For compatibility
+
+    return tokens;
   } catch (error) {
     console.error("Login error details:", {
       status: error.response?.status,
@@ -1515,9 +1508,131 @@ export const getPendingFriendRequests = async () => {
 };
 
 export const declineFriendRequest = async (requesterId) => {
-    const response = await axios.delete(`/api/v1/friends/decline/${requesterId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
-    });
+    const response = await api.delete(`/api/v1/friends/decline/${requesterId}`);
     return response.data;
 };
+
+export const checkTokenValidity = () => {
+    try {
+        const token = localStorage.getItem("access_token") || 
+                     localStorage.getItem("accessToken");
+        
+        if (!token) return { valid: false, reason: "No token found" };
+        
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const expiryTime = payload.exp * 1000;
+        const currentTime = Date.now();
+        
+        const valid = expiryTime > currentTime;
+        const expiresIn = expiryTime - currentTime;
+        
+        return {
+            valid,
+            expiresIn,
+            expiryTime: new Date(expiryTime),
+            willExpireSoon: expiresIn < 5 * 60 * 1000 // 5 minutes
+        };
+    } catch (error) {
+        return { valid: false, reason: "Invalid token format" };
+    }
+};
+
+export const refreshTokenIfNeeded = async () => {
+    const tokenCheck = checkTokenValidity();
+    
+    // If token is valid and not expiring soon, no need to refresh
+    if (tokenCheck.valid && !tokenCheck.willExpireSoon) {
+        return { success: true, message: 'Token is valid' };
+    }
+    
+    console.log('🔄 Token needs refresh:', tokenCheck.reason || 'Expiring soon');
+    
+    const refreshToken = localStorage.getItem("refresh_token") || 
+                        localStorage.getItem("refreshToken");
+    
+    if (!refreshToken) {
+        console.error('❌ No refresh token available');
+        return { success: false, error: 'No refresh token' };
+    }
+    
+    try {
+        // Use a fresh axios instance to avoid interceptor loops
+        const refreshApi = axios.create({
+            baseURL: BASE_URL,
+            headers: {
+                "Content-Type": "application/json",
+            },
+        });
+        
+        const response = await refreshApi.post("/api/v1/auth/refresh", {
+            refresh_token: refreshToken,
+        });
+        
+        const { access_token, refresh_token } = response.data;
+        
+        // Store new tokens
+        localStorage.setItem("access_token", access_token);
+        localStorage.setItem("accessToken", access_token);
+        
+        if (refresh_token) {
+            localStorage.setItem("refresh_token", refresh_token);
+            localStorage.setItem("refreshToken", refresh_token);
+        }
+        
+        console.log('✅ Token refreshed successfully');
+        return { 
+            success: true, 
+            access_token,
+            refresh_token 
+        };
+    } catch (error) {
+        console.error('❌ Token refresh failed:', error);
+        return { 
+            success: false, 
+            error: error.response?.data?.detail || 'Refresh failed' 
+        };
+    }
+};
+
+export const ensureValidToken = async () => {
+    const tokenCheck = checkTokenValidity();
+    
+    if (!tokenCheck.valid) {
+        console.log('❌ Token invalid:', tokenCheck.reason);
+        
+        // Try to refresh token if we have a refresh token
+        const refreshToken = localStorage.getItem("refresh_token") || 
+                            localStorage.getItem("refreshToken");
+        
+        if (refreshToken) {
+            try {
+                const response = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, {
+                    refresh_token: refreshToken,
+                });
+                
+                const { access_token, refresh_token } = response.data;
+                
+                localStorage.setItem("access_token", access_token);
+                localStorage.setItem("accessToken", access_token);
+                
+                if (refresh_token) {
+                    localStorage.setItem("refresh_token", refresh_token);
+                    localStorage.setItem("refreshToken", refresh_token);
+                }
+                
+                console.log('✅ Token refreshed successfully');
+                return true;
+            } catch (error) {
+                console.error('❌ Token refresh failed:', error);
+                return false;
+            }
+        }
+        
+        return false;
+    }
+    
+    return true;
+};
+
+
 export default api;
