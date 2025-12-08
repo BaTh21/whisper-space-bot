@@ -1,6 +1,6 @@
 # app/core/config.py
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from typing import Optional, List
 import os
 from dotenv import load_dotenv
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Email Configuration (SMTP)
     SMTP_ENABLED: bool = True
     SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
+    SMTP_PORT: int = 465
     SMTP_USER: str
     SMTP_PASS: str
     SMTP_FROM: str
@@ -37,8 +37,13 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
     
-    # CORS
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:5174"]
+    # CORS - Make it accept ALL origins or specify yours
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://whisper-space-two.vercel.app",
+        "https://whisper-space-bot-reactjs.onrender.com"
+    ]
     
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -55,11 +60,12 @@ class Settings(BaseSettings):
 # Create settings instance
 settings = Settings()
 
-# Override CORS for production
+# For production, allow all Vercel domains
 if settings.is_production():
     settings.BACKEND_CORS_ORIGINS = [
-        "https://whisper-space-bot-reactjs.onrender.com",
         "https://whisper-space-two.vercel.app",
+        "https://*.vercel.app",
+        "https://whisper-space-bot-reactjs.onrender.com",
         "http://localhost:5173",
         "http://localhost:5174"
     ]
