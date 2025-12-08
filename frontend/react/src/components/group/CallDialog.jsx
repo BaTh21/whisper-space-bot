@@ -34,7 +34,8 @@ const CallDialog = ({
   onCancel,
   status,
   peersRef,
-  totalAccepted
+  totalAccepted,
+  isAudioOnly = false
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -152,7 +153,7 @@ const CallDialog = ({
             overflow: "hidden",
           }}
         >
-          {rows.map((row, rIndex) => (
+          {!isAudioOnly && rows.map((row, rIndex) => (
             <Box key={rIndex} sx={{ flex: 1, display: "flex", justifyContent: "center", gap: "6px", height: 120 }}>
               {row.map((idx, cIndex) => {
                 const stream = streams[idx];
@@ -183,7 +184,7 @@ const CallDialog = ({
           )}
         </Box>
 
-        {onLocal && (
+        {onLocal && !isAudioOnly && (
           <Box
             ref={pipRef}
             onMouseDown={startDrag}
@@ -234,18 +235,20 @@ const CallDialog = ({
             {isMuted ? <MicOffIcon /> : <KeyboardVoiceIcon />}
           </IconButton>
 
-          <IconButton
-            onClick={toggleVideo}
-            sx={{
-              backgroundColor: videoEnabled ? "primary.main" : "secondary.main",
-              color: "white",
-              "&:hover": {
-                backgroundColor: videoEnabled ? "#1a2f42ff" : "#68102fff"
-              }
-            }}
-          >
-            {videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
-          </IconButton>
+          {!isAudioOnly && (
+            <IconButton
+              onClick={toggleVideo}
+              sx={{
+                backgroundColor: videoEnabled ? "primary.main" : "secondary.main",
+                color: "white",
+                "&:hover": {
+                  backgroundColor: videoEnabled ? "#1a2f42ff" : "#68102fff"
+                }
+              }}
+            >
+              {videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+            </IconButton>
+          )}
 
           <IconButton
             onClick={onCancel}

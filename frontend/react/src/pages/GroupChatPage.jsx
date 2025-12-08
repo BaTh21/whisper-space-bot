@@ -738,12 +738,17 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-  const getLocalStream = async () => {
+  const getLocalStream = async (isAudioOnly = false) => {
     if (!localStreamRef.current) {
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-      });
+      localStreamRef.current = await navigator.mediaDevices.getUserMedia(
+        isAudioOnly ? {
+          video: false,
+          audio: true
+        } : {
+          video: true,
+          audio: true
+        }
+      );
     }
     return localStreamRef.current;
   };
@@ -816,8 +821,35 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallingOpen(true);
   };
 
-  const handleIncomingCall = async ({ from_user }) => {
-    await getLocalStream();
+  const handleStartVoiceCall = async () => {
+    await getLocalStream(true);
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_start_voice"
+    }));
+
+    onlineUsers.forEach(async (uid) => {
+      if (uid !== user.id) {
+        const pc = await getOrCreatePeer(uid);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        wsRef.current.send(JSON.stringify({
+          action: "call_offer",
+          to_user: uid,
+          sdp: pc.localDescription
+        }));
+      }
+    });
+
+    setCallStatus("Voice Calling…");
+    setCallingOpen(true);
+  };
+
+  const handleIncomingCall = async ({ from_user, call_type }) => {
+    const isAudioOnly = call_type === "voice";
+
+    await getLocalStream(isAudioOnly);
     await getOrCreatePeer(from_user);
 
     if (from_user !== user.id) {
@@ -826,9 +858,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   };
 
   const handleAcceptCall = async () => {
-    const caller = incomingCall.userId;
+    const { userId: caller, isAudioOnly } = incomingCall;
 
-    await getLocalStream();
+    await getLocalStream(isAudioOnly);
 
     wsRef.current.send(JSON.stringify({
       action: "call_accept",
@@ -840,7 +872,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }));
 
     setIncomingCall(null);
-    setCallStatus("In Call");
+    setCallStatus(isAudioOnly ? "In Voice Call" : "In Video Call");
     setCallingOpen(true);
 
     await getOrCreatePeer(caller);
@@ -1096,7 +1128,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                   scale: 1.1
                 }
               }}
-              onClick={handleAcceptCall}
+              onClick={handleStartVoiceCall}
             />
             <VideocamIcon
               sx={{
@@ -1758,6 +1790,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <CallDialog
         open={callingOpen}
         onCancel={handleCancelCall}
+        isAudioOnly={callStatus?.includes("Voice")}
         remoteStreams={Object.fromEntries(
           Object.entries(remoteStreams).filter(([uid, stream]) => (
             stream && stream.getTracks().length > 0
@@ -1772,6 +1805,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <IncomingCallDialog
         open={!!incomingCall}
         fromUserId={incomingCall?.userId}
+        isAudioOnly={incomingCall?.isAudioOnly}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
       />

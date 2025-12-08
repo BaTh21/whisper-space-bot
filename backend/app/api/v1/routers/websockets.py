@@ -1129,9 +1129,20 @@ async def websocket_group_chat(
                     continue
                 
                 if action == "call_start":
+                    call_type = data.get("call_type")
                     await manager.broadcast(chat_id, {
                         "action": "call_request",
                         "from_user": current_user.id,
+                        "call_type": call_type
+                    })
+                    continue
+                
+                if action == "call_start_voice":
+                    call_type = "voice"
+                    await manager.broadcast(chat_id, {
+                        "action": "call_request",
+                        "from_user": current_user.id,
+                        "call_type": "voice"
                     })
                     continue
                 
