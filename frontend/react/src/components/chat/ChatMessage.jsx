@@ -41,7 +41,6 @@ const ChatMessage = ({
   currentFriend,
   getAvatarUrl,
   getUserInitials,
-  showSeenStatus = false,
   onAddReaction,
   onRemoveReaction,
   onLoadReactions,
@@ -65,9 +64,6 @@ const ChatMessage = ({
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t, i18n } = useTranslation();
 
-  /* ---------------------------------------------------------- */
-  /*                     MESSAGE TYPE DETECTION                */
-  /* ---------------------------------------------------------- */
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
     if (msg.message_type === 'voice') return 'voice';
@@ -94,9 +90,6 @@ const ChatMessage = ({
   };
   const actualMessageType = detectMessageType(message);
 
-  /* ---------------------------------------------------------- */
-  /*                     MENU HANDLERS                         */
-  /* ---------------------------------------------------------- */
   const handleMenu = (e) => {
     e.stopPropagation();
     setAnchorEl(e.currentTarget);
@@ -147,9 +140,6 @@ const ChatMessage = ({
 
   const showMenu = true;
 
-  /* ---------------------------------------------------------- */
-  /*                     VOICE MESSAGE HANDLING                */
-  /* ---------------------------------------------------------- */
   const handlePlayVoice = async (e) => {
     e.stopPropagation();
     if (!audioRef.current) return;
@@ -185,9 +175,6 @@ const ChatMessage = ({
     }
   };
 
-  /* ---------------------------------------------------------- */
-  /*                     IMAGE HANDLERS                        */
-  /* ---------------------------------------------------------- */
   const handleImageError = () => {
     setImageError(true);
   };
@@ -221,9 +208,6 @@ const ChatMessage = ({
     setImageError(false);
   };
 
-  /* ---------------------------------------------------------- */
-  /*                     AVATAR HELPERS                        */
-  /* ---------------------------------------------------------- */
   const getSenderInfo = () => {
     if (message.sender?.username) {
       const url = message.sender.avatar_url || message.sender.avatar;
@@ -262,21 +246,6 @@ const ChatMessage = ({
     };
   };
 
-  const friendAvatar = () => {
-    if (!currentFriend) return { avatar_url: null, initial: 'F' };
-    const url = currentFriend.avatar_url || currentFriend.avatar;
-    return {
-      avatar_url: getAvatarUrl ? getAvatarUrl(url) : url,
-      initial: getUserInitials?.(currentFriend.username) ?? (currentFriend.username?.[0] ?? 'F').toUpperCase(),
-    };
-  };
-
-  const myAv = myAvatar();
-  const friendAv = friendAvatar();
-
-  /* ---------------------------------------------------------- */
-  /*                     STATUS LOGIC                           */
-  /* ---------------------------------------------------------- */
   const getMessageStatus = () => {
     if (!isMine) return 'sent';
     if (message.is_temp) return 'sending';
@@ -312,7 +281,6 @@ const ChatMessage = ({
       message.seen_by.some(s => s.user_id === reader.id);
 
     if (hasSeen) {
-      const seenInfo = message.seen_by.find(s => s.user_id === reader.id);
 
       return (
         <Box sx={{
@@ -374,9 +342,6 @@ const ChatMessage = ({
     return null;
   };
 
-  /* ---------------------------------------------------------- */
-  /*                     RENDER VOICE                           */
-  /* ---------------------------------------------------------- */
   const renderVoiceContent = () => {
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -499,9 +464,6 @@ const ChatMessage = ({
     );
   };
 
-  /* ---------------------------------------------------------- */
-  /*                     RENDER Online                          */
-  /* ---------------------------------------------------------- */
   const renderOnlineStatus = () => {
     if (isMine || !friendOnlineStatus || !currentFriend) return null;
 
@@ -644,7 +606,6 @@ const ChatMessage = ({
     }
   }, [isMine, currentFriend]);
 
-  // Add pulse animation
   useEffect(() => {
     const styleElement = document.createElement('style');
     styleElement.textContent = `
@@ -660,11 +621,6 @@ const ChatMessage = ({
     };
   }, []);
 
-  /* ---------------------------------------------------------- */
-  /*                     REACTION HANDLERS                      */
-  /* ---------------------------------------------------------- */
-
-  // Update reactions when message changes
   useEffect(() => {
     setReactions(message.reactions || []);
   }, [message.reactions]);
@@ -727,9 +683,9 @@ const ChatMessage = ({
   // Load reactions when component mounts - ONLY for non-temp messages
   useEffect(() => {
     // Check if this is a temp message
-    const isTempMessage = message.is_temp || 
+    const isTempMessage = message.is_temp ||
       (typeof message.id === 'string' && message.id.startsWith('temp-'));
-    
+
     // Only load reactions for real messages
     if (onLoadReactions && message.id && !isTempMessage && !message.reactions) {
       onLoadReactions(message.id);
@@ -781,8 +737,8 @@ const ChatMessage = ({
         audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3';
       }
 
-      audio.play().catch(() => {});
-    } catch (error) {}
+      audio.play().catch(() => { });
+    } catch (error) { }
   };
 
   // Add CSS animations for reactions
@@ -822,9 +778,6 @@ const ChatMessage = ({
     };
   }, []);
 
-  /* ---------------------------------------------------------- */
-  /*                     RENDER IMAGE CONTENT                  */
-  /* ---------------------------------------------------------- */
   const renderImageContent = () => (
     <Box sx={{ mb: 1, position: 'relative' }}>
       {imageError && (
@@ -909,9 +862,6 @@ const ChatMessage = ({
     </Box>
   );
 
-  /* ---------------------------------------------------------- */
-  /*                     RENDER                                 */
-  /* ---------------------------------------------------------- */
   return (
     <Box
       sx={{
@@ -926,7 +876,6 @@ const ChatMessage = ({
       data-is-friend={!isMine ? "true" : "false"}
       data-sender-id={message.sender_id}
     >
-      {/* Image Modal */}
       {imageModalOpen && (
         <Box
           sx={{
@@ -1004,7 +953,6 @@ const ChatMessage = ({
         </Box>
       )}
 
-      {/* Friend avatar (left) */}
       {!isMine && (
         <Avatar
           src={avatarError ? undefined : senderInfo.avatar_url}
@@ -1024,7 +972,6 @@ const ChatMessage = ({
       )}
 
       <Box sx={{ maxWidth: '70%', display: 'flex', flexDirection: 'column' }}>
-        {/* Friend name */}
         {!isMine && (
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5, ml: 1 }}>
             <Typography
@@ -1313,24 +1260,6 @@ const ChatMessage = ({
         )}
       </Box>
 
-      {/* My avatar (right) */}
-      {isMine && (
-        <Avatar
-          src={avatarError ? undefined : myAv.avatar_url}
-          sx={{
-            width: 32,
-            height: 32,
-            ml: 1,
-            mt: 'auto',
-            fontSize: '0.8rem',
-            bgcolor: 'primary.main',
-            fontWeight: 'bold',
-          }}
-          imgProps={{ onError: () => setAvatarError(true) }}
-        >
-          {myAv.initial}
-        </Avatar>
-      )}
     </Box>
   );
 };

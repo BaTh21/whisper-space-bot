@@ -23,7 +23,8 @@ import {
   TextField,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
+  InputAdornment,
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -51,6 +52,10 @@ import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 import EmojiButton from '../EmojiButton';
 import EmojiPicker from '../EmojiPicker';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CallIcon from '@mui/icons-material/Call';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import SearchIcon from '@mui/icons-material/Search';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -61,22 +66,6 @@ const getWebSocketBaseUrl = () => {
   return wsUrl;
 };
 const BASE_URI = getWebSocketBaseUrl();
-
-// const convertWebmToMp3Url = (webmUrl) => {
-//   if (webmUrl.includes('cloudinary.com') && webmUrl.includes('.webm')) {
-//     return webmUrl
-//       .replace('/upload/', '/upload/f_mp3,fl_attachment/')
-//       .replace('.webm', '.mp3');
-//   }
-//   return webmUrl;
-// };
-
-// const ensureMp3VoiceUrl = (message) => {
-//   if (message.message_type === 'voice' && message.content.includes('.webm')) {
-//     return convertWebmToMp3Url(message.content);
-//   }
-//   return message.content;
-// };
 
 const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [selectedFriend, setSelectedFriend] = useState(null);
@@ -94,6 +83,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef(null);
+  const [showFriend, setShowFriend] = useState(false);
+
+  const toggleShowFriend = () => {
+    setShowFriend(prev => !prev);
+  }
 
   const { t, i18n } = useTranslation();
 
@@ -110,8 +104,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [friendsWithStatus, setFriendsWithStatus] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [lastSeenMap, setLastSeenMap] = useState({});
-  const [onlineStatusInterval, setOnlineStatusInterval] = useState(null);
-
 
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [isCheckingBlocked, setIsCheckingBlocked] = useState(false);
@@ -183,7 +175,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const typingTimeoutRef = useRef(null);
   const lastMessageCount = useRef(0);
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const tempToRealIdMap = useRef({});
 
   const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
@@ -1470,7 +1462,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setAudioUrl(null);
     setRecordingTime(0);
     setIsRecording(false);
-    setCurrentSSelectedFriend(friend);
   };
 
   <EmojiButton
@@ -1813,9 +1804,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   const status = selectedFriend ? getConnectionStatus() : { text: 'Online', color: 'success.main' };
 
-  /* --------------------------------------------------------------------- */
-  /* Edit Message */
-  /* --------------------------------------------------------------------- */
   const handleEditMessage = async (messageId, newContent) => {
     if (!newContent.trim()) return;
 
@@ -1886,34 +1874,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, [messages]);
 
-  /* --------------------------------------------------------------------- */
-  /* Render */
-  /* --------------------------------------------------------------------- */
   return (
     <Box
       sx={{
         display: 'flex',
         flexDirection: { xs: 'column', sm: 'row' },
-        height: {
-          xs: 'calc(100vh - 50px)', // Better mobile height calculation
-          sm: '75vh',
-          md: 600
-        },
-        minHeight: { sm: 'auto' }, // Ensure minimum height on mobile
-        maxHeight: { sm: '75vh' }, // Prevent overflow
-        borderRadius: { xs: '12px', sm: '16px' },
-        margin: { xs: -2, sm: 2, md: 0 },
+        height: '88vh',
         overflow: 'auto',
-        border: 1,
         borderColor: 'divider',
-        bgcolor: 'background.paper',
-        width: {
-          sm: 'calc(100% - 32px)',
-          md: '100%'
-        },
-        maxWidth: { sm: '900px', md: 'none' },
+        bgcolor: 'transparent',
         mx: { sm: 'auto', md: 0 },
-        // Ensure proper positioning
         position: 'relative'
       }}
     >
@@ -1979,46 +1949,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         </Box>
       )}
 
-      {/* Mobile Header */}
-      {isMobile && selectedFriend && (
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ position: 'relative' }}>
-            <Avatar src={getUserAvatar(selectedFriend)} />
-            {status.icon === 'online' && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  bottom: 2,
-                  right: 2,
-                  width: 10,
-                  height: 10,
-                  borderRadius: '50%',
-                  bgcolor: '#4CAF50',
-                  border: '2px solid white',
-                  animation: 'pulse 2s infinite'
-                }}
-              />
-            )}
-          </Box>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
-            <Typography variant="caption" color={status.color}>{status.text}</Typography>
-          </Box>
-          <Chip
-            label={status.text.split('•')[0].trim()}
-            size="small"
-            sx={{
-              bgcolor: status.color === 'text.secondary' ? 'grey.200' : status.color,
-              color: status.color === 'text.secondary' ? 'text.primary' : 'white'
-            }}
-          />
-        </Box>
-      )}
+      <Box sx={{ display: 'flex', gap: 3, width: '100%', height: '88vh' }}>
 
-      <Box sx={{ display: 'flex', flex: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
-        {/* Sidebar */}
-        {(!isMobile) && (
-          <Box sx={{ width: { sm: 280, md: 300 }, borderRight: 1, borderColor: 'divider', overflow: 'auto' }}>
+        {(!showFriend || !isMobile) && (
+          <Box
+            sx={{
+              width: { xs: '100%', md: 300 },
+              borderColor: 'divider',
+              overflow: 'auto',
+            }}>
             <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 {t('friends')}
@@ -2030,14 +1969,29 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 variant="outlined"
               />
             </Box>
-            <List>
+            <Box>
+              <TextField
+                sx={{ width: "100%" }}
+                id="outlined-member-search"
+                label={t('search_friend')}
+                variant="outlined"
+                size="small"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton>
+                        <SearchIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
+            <List sx={{ mt: 2 }}>
               {friends.map((friend) => {
                 const isOnline = onlineUsers.has(friend.id);
-                const isBlocked = blockStatus[friend.id] ||
-                  blockedUsers.some(b => b.id === friend.id);
                 const lastSeen = lastSeenMap[friend.id] || friend.last_seen;
 
-                // Calculate last seen text
                 let lastSeenText = '';
                 if (!isOnline && lastSeen) {
                   const lastSeenDate = new Date(lastSeen);
@@ -2061,13 +2015,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   <ListItem
                     key={friend.id}
                     selected={selectedFriend?.id === friend.id}
-                    onClick={() => handleSelectFriend(friend)}
+                    onClick={() => {
+                      setShowFriend(true);
+                      handleSelectFriend(friend);
+                    }}
                     sx={{
                       borderRadius: '12px',
                       mb: 1,
-                      mx: 1,
                       px: 2,
-                      py: 1.5,
+                      width: '100%',
+                      backgroundColor: 'white',
                       '&:hover': { bgcolor: 'action.hover' },
                       '&.Mui-selected': {
                         bgcolor: 'primary.light',
@@ -2138,267 +2095,273 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             </List>
           </Box>
         )}
-
-        <Drawer
-          variant="temporary"
-          open={mobileDrawerOpen}
-          onClose={() => setMobileDrawerOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{ display: { xs: 'block', sm: 'none' }, '& .MuiDrawer-paper': { width: 280 } }}
-        >
-          <Box sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6">Friends</Typography>
-              <Chip
-                label={`${onlineUsers.size} online`}
-                size="small"
-                color="success"
-                variant="outlined"
-              />
-            </Box>
-            <List>
-              {friends.map((friend) => {
-                const isOnline = onlineUsers.has(friend.id);
-                return (
-                  <ListItem
-                    key={friend.id}
-                    selected={selectedFriend?.id === friend.id}
-                    onClick={() => handleSelectFriend(friend)}
+        {showFriend && (
+          <Box
+            sx={{
+              width: '100%',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              bgcolor: '#f8f9fa',
+              overflow: 'hidden',
+              border: 1,
+              borderColor: 'grey.300'
+            }}>
+            {selectedFriend && (
+              <>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    px: { xs: 0.5, md: 2 },
+                    py: 1,
+                    boxShadow: 1
+                  }}>
+                  <Box
                     sx={{
-                      position: 'relative',
-                      '&:before': isOnline ? {
-                        content: '""',
-                        position: 'absolute',
-                        left: 4,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        bgcolor: '#4CAF50',
-                        animation: 'pulse 2s infinite'
-                      } : {}
+                      display: 'flex',
+                      alignItems: 'center'
                     }}
                   >
-                    <ListItemAvatar>
-                      <Avatar src={getUserAvatar(friend)}>
-                        {getUserInitials(friend.username)}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={friend.username}
-                      secondary={isOnline ? 'Online' : 'Offline'}
-                      secondaryTypographyProps={{
-                        sx: {
-                          color: isOnline ? '#4CAF50' : 'text.secondary',
-                          fontSize: '0.75rem'
+                    <IconButton
+                      onClick={toggleShowFriend}
+                      sx={{
+                        display: { xs: 'block', md: 'none' }
+                      }}
+                    >
+                      <ArrowBackIcon />
+                    </IconButton>
+                    <Avatar src={getUserAvatar(selectedFriend)} />
+                    <Box sx={{ ml: 1 }}>
+                      <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
+                      <Typography sx={{ display: { xs: 'block', md: 'none' } }} variant="caption" color="text.secondary">{status.text}</Typography>
+                    </Box>
+                  </Box>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1
+                    }}
+                  >
+                    <Chip label={status.text} size="small" sx={{ bgcolor: status.color, color: 'white', display: { xs: 'none', md: 'block' } }} />
+                    <CallIcon
+                      sx={{
+                        fontSize: { xs: 22, md: 26 },
+                        color: 'primary.main',
+                        transition: 'transform 1s',
+                        '&:hover': {
+                          scale: 1.1
                         }
                       }}
                     />
-                  </ListItem>
-                );
-              })}
-            </List>
-          </Box>
-        </Drawer>
-
-        {/* Chat Area */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#f8f9fa', minHeight: { xs: '300px', sm: 'auto' }, overflow: 'hidden' }}>
-          {selectedFriend ? (
-            <>
-              {(!isMobile) && (
-                <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Avatar src={getUserAvatar(selectedFriend)} />
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
-                    <Typography variant="caption" color="text.secondary">{status.text}</Typography>
-                  </Box>
-                  <Chip label={status.text} size="small" sx={{ bgcolor: status.color, color: 'white' }} />
-                </Box>
-              )}
-
-              <Box
-                ref={messagesContainerRef}
-                className="messages-area"
-                sx={{
-                  flex: 1,
-                  overflowY: 'auto',
-                  px: { xs: 1, sm: 2 },
-                  py: { xs: 1, sm: 2 },
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 1,
-                  minHeight: { xs: '200px', sm: 'auto' },
-                }}
-              >
-                {messages.length === 0 ? (
-                  <Box sx={{ textAlign: 'center', mt: 4 }}>
-                    <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary">{t('no_message_yet')}</Typography>
-                    <Typography color="text.secondary">{t('say_hello')} {selectedFriend.username}!</Typography>
-                  </Box>
-                ) : (
-                  messages.map((message) => (
-                    <ChatMessage
-                      key={message.id}
-                      message={message}
-                      isMine={message.sender_id === profile?.id}
-                      onUpdate={handleEditMessage}
-                      onDelete={handleDeleteMessage}
-                      onForward={handleForward}
-                      onAddReaction={handleAddReaction}
-                      onRemoveReaction={handleRemoveReaction}
-                      onLoadReactions={loadMessageReactions}
-                      profile={profile}
-                      currentFriend={selectedFriend}
-                      getAvatarUrl={getAvatarUrl}
-                      getUserInitials={getUserInitials}
-                    />
-                  ))
-                )}
-              </Box>
-
-              {/* Input Area */}
-              <Box className="input-area" sx={{
-                p: { xs: 4, sm: 2 }, // Responsive padding
-                borderTop: 1,
-                borderColor: 'divider',
-                bgcolor: 'white',
-                display: 'flex',
-                gap: { xs: 1, sm: 1.5 }, // Responsive gap
-                alignItems: 'flex-end',
-                flexShrink: 0, // Prevent shrinking
-                minHeight: { xs: '60px', sm: 'auto' } // Ensure minimum height
-              }}>
-                {/* Recording UI */}
-                {isRecording && (
-                  <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: 'error.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'white', animation: 'pulse 1.5s infinite' }} />
-                      <Typography>Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}</Typography>
-                    </Box>
-                    <Button variant="contained" color="inherit" size="small" startIcon={<StopIcon />} onClick={stopRecording}>
-                      Stop
-                    </Button>
-                  </Box>
-                )}
-
-                {audioUrl && !isRecording && (
-                  <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: voiceSending ? 'grey.500' : 'success.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <MicIcon />
-                      <Typography>{voiceSending ? 'Sending...' : `Recorded • ${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')}`}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button variant="outlined" size="small" onClick={cancelRecording} disabled={voiceSending}>Cancel</Button>
-                      <Button variant="contained" size="small" onClick={sendVoiceMessage} disabled={voiceSending || isUploadingVoice} startIcon={isUploadingVoice ? <CircularProgress size={16} /> : <SendIcon />}>
-                        {isUploadingVoice ? 'Sending...' : 'Send'}
-                      </Button>
-                    </Box>
-                  </Box>
-                )}
-
-                <IconButton onClick={isRecording ? stopRecording : startRecording} disabled={!selectedFriend || uploadingImage}
-                  sx={{ color: isRecording ? 'error.main' : (audioUrl ? 'success.main' : 'primary.main') }}>
-                  {isRecording ? <StopIcon /> : <MicIcon />}
-                </IconButton>
-
-                <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
-                <label htmlFor="image-upload">
-                  <IconButton component="span" disabled={!selectedFriend || uploadingImage}>
-                    {uploadingImage ? <CircularProgress size={24} /> : <ImageIcon />}
-                  </IconButton>
-                </label>
-
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder={!selectedFriend ? 'Select a friend...' : 'Aa...'}
-                  value={newMessage}
-                  onChange={handleInputChange}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && selectedFriend && !isRecording) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  multiline
-                  maxRows={3}
-                  disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '24px',
-                      maxHeight: { xs: '44px', sm: 'none' }
-                    },
-                    bgcolor: '#f8f9fa',
-                    '& .MuiInputBase-input': {
-                      fontSize: { xs: '0.875rem', sm: '1rem' }
-                    }
-                  }}
-                />
-                <Box sx={{ position: 'relative' }}>
-                  <IconButton
-                    ref={emojiButtonRef}
-                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                    disabled={!selectedFriend || uploadingImage || isRecording}
-                  >
-                    {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
-                  </IconButton>
-
-                  {showEmojiPicker && (
-                    <EmojiPicker
-                      onSelect={(emoji) => {
-                        setNewMessage(prev => prev + emoji);
-                        setShowEmojiPicker(false);
+                    <VideocamIcon
+                      sx={{
+                        fontSize: { xs: 24, md: 30 },
+                        color: 'primary.main',
+                        transition: 'transform 1s',
+                        '&:hover': {
+                          scale: 1.1
+                        }
                       }}
-                      onClose={() => setShowEmojiPicker(false)}
-                      anchorEl={emojiButtonRef.current}
-                      placement="top-start"
                     />
+                  </Box>
+                </Box>
+
+                <Box
+                  ref={messagesContainerRef}
+                  className="messages-area"
+                  sx={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    px: { xs: 1, sm: 2 },
+                    py: { xs: 1, sm: 2 },
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    minHeight: { xs: '200px', sm: 'auto' },
+                    '&::-webkit-scrollbar': { display: 'none' },
+                    scrollbarWidth: 'none',
+                  }}
+                >
+                  {messages.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', mt: 4 }}>
+                      <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary">{t('no_message_yet')}</Typography>
+                      <Typography color="text.secondary">{t('say_hello')} {selectedFriend.username}!</Typography>
+                    </Box>
+                  ) : (
+                    messages.map((message) => (
+                      <ChatMessage
+                        key={message.id}
+                        message={message}
+                        isMine={message.sender_id === profile?.id}
+                        onUpdate={handleEditMessage}
+                        onDelete={handleDeleteMessage}
+                        onForward={handleForward}
+                        onAddReaction={handleAddReaction}
+                        onRemoveReaction={handleRemoveReaction}
+                        onLoadReactions={loadMessageReactions}
+                        profile={profile}
+                        currentFriend={selectedFriend}
+                        getAvatarUrl={getAvatarUrl}
+                        getUserInitials={getUserInitials}
+                      />
+                    ))
                   )}
                 </Box>
-                {isRecording ? (
-                  <IconButton color="success" onClick={quickSendVoice} disabled={!selectedFriend || recordingTime < 1}
-                    sx={{ bgcolor: 'success.main', color: 'white' }}>
-                    <SendIcon />
-                  </IconButton>
-                ) : audioUrl && !isRecording ? (
-                  <IconButton color="primary" onClick={sendVoiceMessage} disabled={!selectedFriend || isUploadingVoice}
-                    sx={{ bgcolor: 'primary.main', color: 'white' }}>
-                    {isUploadingVoice ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
-                  </IconButton>
-                ) : (
-                  <IconButton color="primary" onClick={handleSendMessage} disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
-                    sx={{ bgcolor: 'primary.main', color: 'white' }}>
-                    <SendIcon />
-                  </IconButton>
-                )}
 
-                {imagePreview && (
-                  <Box sx={{ position: 'relative' }}>
-                    <img src={imagePreview} alt="Preview" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: '8px' }} />
-                    <IconButton size="small" onClick={handleRemoveImagePreview}
-                      sx={{ position: 'absolute', top: -8, right: -8, bgcolor: 'error.main', color: 'white' }}>
-                      <CloseIcon fontSize="small" />
+                {/* Input Area */}
+                <Box className="input-area" sx={{
+                  p: { xs: 4, sm: 2 },
+                  borderTop: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'white',
+                  display: 'flex',
+                  gap: { xs: 1, sm: 1.5 },
+                  alignItems: 'flex-end',
+                  flexShrink: 0,
+                  minHeight: { xs: '60px', sm: 'auto' }
+                }}>
+                  {/* Recording UI */}
+                  {isRecording && (
+                    <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: 'error.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'white', animation: 'pulse 1.5s infinite' }} />
+                        <Typography>Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}</Typography>
+                      </Box>
+                      <Button variant="contained" color="inherit" size="small" startIcon={<StopIcon />} onClick={stopRecording}>
+                        Stop
+                      </Button>
+                    </Box>
+                  )}
+
+                  {audioUrl && !isRecording && (
+                    <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: voiceSending ? 'grey.500' : 'success.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <MicIcon />
+                        <Typography>{voiceSending ? 'Sending...' : `Recorded • ${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')}`}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button variant="outlined" size="small" onClick={cancelRecording} disabled={voiceSending}>Cancel</Button>
+                        <Button variant="contained" size="small" onClick={sendVoiceMessage} disabled={voiceSending || isUploadingVoice} startIcon={isUploadingVoice ? <CircularProgress size={16} /> : <SendIcon />}>
+                          {isUploadingVoice ? 'Sending...' : 'Send'}
+                        </Button>
+                      </Box>
+                    </Box>
+                  )}
+
+                  <IconButton onClick={isRecording ? stopRecording : startRecording} disabled={!selectedFriend || uploadingImage}
+                    sx={{ color: isRecording ? 'error.main' : (audioUrl ? 'success.main' : 'primary.main') }}>
+                    {isRecording ? <StopIcon /> : <MicIcon />}
+                  </IconButton>
+
+                  <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
+                  <label htmlFor="image-upload">
+                    <IconButton component="span" disabled={!selectedFriend || uploadingImage}>
+                      {uploadingImage ? <CircularProgress size={24} /> : <ImageIcon />}
                     </IconButton>
+                  </label>
+
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder={!selectedFriend ? 'Select a friend...' : 'Aa...'}
+                    value={newMessage}
+                    onChange={handleInputChange}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && selectedFriend && !isRecording) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    multiline
+                    maxRows={3}
+                    disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '24px',
+                        maxHeight: { xs: '44px', sm: 'none' }
+                      },
+                      bgcolor: '#f8f9fa',
+                      '& .MuiInputBase-input': {
+                        fontSize: { xs: '0.875rem', sm: '1rem' }
+                      }
+                    }}
+                  />
+                  <Box sx={{ position: 'relative' }}>
+                    <IconButton
+                      ref={emojiButtonRef}
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                      disabled={!selectedFriend || uploadingImage || isRecording}
+                    >
+                      {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                    </IconButton>
+
+                    {showEmojiPicker && (
+                      <EmojiPicker
+                        onSelect={(emoji) => {
+                          setNewMessage(prev => prev + emoji);
+                          setShowEmojiPicker(false);
+                        }}
+                        onClose={() => setShowEmojiPicker(false)}
+                        anchorEl={emojiButtonRef.current}
+                        placement="top-start"
+                      />
+                    )}
                   </Box>
-                )}
-              </Box>
-            </>
-          ) : (
+                  {isRecording ? (
+                    <IconButton color="success" onClick={quickSendVoice} disabled={!selectedFriend || recordingTime < 1}
+                      sx={{ bgcolor: 'success.main', color: 'white' }}>
+                      <SendIcon />
+                    </IconButton>
+                  ) : audioUrl && !isRecording ? (
+                    <IconButton color="primary" onClick={sendVoiceMessage} disabled={!selectedFriend || isUploadingVoice}
+                      sx={{ bgcolor: 'primary.main', color: 'white' }}>
+                      {isUploadingVoice ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
+                    </IconButton>
+                  ) : (
+                    <IconButton color="primary" onClick={handleSendMessage} disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
+                      sx={{ bgcolor: 'primary.main', color: 'white' }}>
+                      <SendIcon />
+                    </IconButton>
+                  )}
+
+                  {imagePreview && (
+                    <Box sx={{ position: 'relative' }}>
+                      <img src={imagePreview} alt="Preview" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: '8px' }} />
+                      <IconButton size="small" onClick={handleRemoveImagePreview}
+                        sx={{ position: 'absolute', top: -8, right: -8, bgcolor: 'error.main', color: 'white' }}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  )}
+                </Box>
+              </>
+            )}
+          </Box>
+        )}
+        {!selectedFriend && !isMobile && (
+          <Box
+            sx={{
+              width: '100%',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              bgcolor: '#f8f9fa',
+              overflow: 'hidden',
+              border: 1,
+              borderColor: 'divider',
+            }}
+          >
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <ChatIcon sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
               <Typography variant="h6" color="text.secondary">
-                {isMobile ? 'Select a friend' : t('Choose a friend to start chatting')}
+                Choose a friend to start chatting
               </Typography>
-              {isMobile && (
-                <Button variant="contained" onClick={() => setMobileDrawerOpen(true)} sx={{ mt: 2 }}>
-                  Open Friends List
-                </Button>
-              )}
             </Box>
-          )}
-        </Box>
+          </Box>
+        )}
       </Box>
 
       <ForwardMessageDialog

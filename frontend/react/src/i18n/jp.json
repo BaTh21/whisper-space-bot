@@ -123,6 +123,7 @@
   "create": "作成",
   "create_group": "グループ作成",
   "search_group": "グループ検索",
+  "search_friend": "グループ検索",
   "no_groups_yet": "まだグループはありません。まずは作成しましょう！",
   "created": "作成日",
   "select_group_to_view_chat": "チャットを表示するグループを選択してください",
