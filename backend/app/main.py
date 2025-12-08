@@ -1,10 +1,11 @@
 # app/main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import os
 import logging
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.v1.routers import auth, users, chats, diaries, websockets, friends, groups, avatar, notes, message
 from app.models import base
@@ -19,13 +20,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create database tables - IMPORTANT: Import models BEFORE creating tables
-# This ensures all models are registered with SQLAlchemy
+# Create database tables
 from app.models.user import User
 from app.models.verification_code import VerificationCode
 from app.models.refresh_token import RefreshToken
 
-# Now create tables
 try:
     base.Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified successfully")
@@ -40,55 +39,80 @@ app = FastAPI(
     redoc_url="/redoc" if settings.is_development() else None
 )
 
-# ============ CRITICAL CORS FIXES ============
-# Log the origins for debugging
-logger.info(f"CORS Origins configured: {settings.BACKEND_CORS_ORIGINS}")
-logger.info(f"Environment: {settings.ENVIRONMENT}")
+# ============ CRITICAL CORS FIX ============
+# Option 1: Use this for production (more secure)
+origins = [
+    "https://whisper-space-two.vercel.app",
+    "https://whisper-space-bot-reactjs.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:5174",
+]
 
-# For production, you might need to handle OPTIONS requests explicitly
-if settings.is_production():
-    # Add specific OPTIONS handler for preflight requests
-    @app.middleware("http")
-    async def add_cors_headers(request, call_next):
-        response = await call_next(request)
+# Option 2: Or use from settings if configured
+if hasattr(settings, 'BACKEND_CORS_ORIGINS') and settings.BACKEND_CORS_ORIGINS:
+    origins = settings.BACKEND_CORS_ORIGINS
+
+logger.info(f"CORS Origins: {origins}")
+
+# ============ ADD CUSTOM CORS MIDDLEWARE ============
+class CustomCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Handle OPTIONS preflight
+        if request.method == "OPTIONS":
+            response = JSONResponse(content={})
+        else:
+            response = await call_next(request)
+        
+        # Add CORS headers to ALL responses
+        origin = request.headers.get("origin")
         
         # Check if origin is in allowed list
-        origin = request.headers.get("origin")
-        if origin and origin in settings.BACKEND_CORS_ORIGINS:
-            response.headers["Access-Control-Allow-Origin"] = origin
+        allowed_origin = None
+        if origin and origin in origins:
+            allowed_origin = origin
+        elif origins:
+            allowed_origin = origins[0]
         else:
-            # Allow specific origins or use the first one
-            response.headers["Access-Control-Allow-Origin"] = settings.BACKEND_CORS_ORIGINS[0] if settings.BACKEND_CORS_ORIGINS else "*"
+            allowed_origin = "*"
         
+        response.headers["Access-Control-Allow-Origin"] = allowed_origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With"
         
         return response
 
-# CORS middleware - FIXED: Add OPTIONS to allowed methods
+# Add both middlewares for maximum compatibility
+app.add_middleware(CustomCORSMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # EXPLICITLY include OPTIONS
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],  # EXPLICIT headers
-    expose_headers=["*"],  # ADD THIS: Expose headers to browser
-    max_age=600,  # Cache preflight requests for 10 minutes
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    expose_headers=["*"],
 )
 
-# ============ IMPORTANT: Add OPTIONS handler ============
+# ============ EXPLICIT OPTIONS HANDLER ============
 @app.options("/{path:path}")
-async def options_handler():
-    """Handle all OPTIONS requests for CORS preflight"""
+async def options_handler(request: Request):
+    """Handle OPTIONS requests for CORS preflight"""
+    origin = request.headers.get("origin", "")
+    
+    # Check if origin is allowed
+    if origin in origins:
+        allowed_origin = origin
+    else:
+        allowed_origin = origins[0] if origins else "*"
+    
     return JSONResponse(
-        content={},
+        content={"message": "CORS preflight successful"},
         headers={
-            "Access-Control-Allow-Origin": ", ".join(settings.BACKEND_CORS_ORIGINS) if settings.BACKEND_CORS_ORIGINS else "*",
+            "Access-Control-Allow-Origin": allowed_origin,
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
             "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
             "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "600"
+            "Access-Control-Max-Age": "86400",  # 24 hours
         }
     )
 
@@ -118,31 +142,39 @@ def root():
         "message": "Welcome to Whisper Space API",
         "version": "1.0.0",
         "environment": settings.ENVIRONMENT,
-        "cors_origins": settings.BACKEND_CORS_ORIGINS,
+        "cors_origins": origins,
         "docs": "/docs" if settings.is_development() else None
     }
 
 @app.get("/api/v1/health")
 def health_check():
     from datetime import datetime
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "environment": settings.ENVIRONMENT,
-        "service": "whisper-space-api",
-        "cors_enabled": True
-    }
+    import json
+    return JSONResponse(
+        content={
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "environment": settings.ENVIRONMENT,
+            "service": "whisper-space-api"
+        },
+        headers={
+            "Access-Control-Allow-Origin": "https://whisper-space-two.vercel.app",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
 
-# Add a CORS test endpoint
 @app.get("/api/v1/cors-test")
-def cors_test():
-    """Test CORS configuration"""
+async def cors_test(request: Request):
+    """Test CORS headers"""
     from datetime import datetime
+    origin = request.headers.get("origin", "")
+    
     return {
-        "message": "CORS test successful",
+        "message": "CORS test endpoint",
         "timestamp": datetime.utcnow().isoformat(),
-        "allowed_origins": settings.BACKEND_CORS_ORIGINS,
-        "environment": settings.ENVIRONMENT
+        "your_origin": origin,
+        "allowed_origins": origins,
+        "headers_received": dict(request.headers)
     }
 
 @app.get("/api/v1/config/email-test")
