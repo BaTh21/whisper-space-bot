@@ -1,92 +1,252 @@
+# app/api/v1/routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-import random
+from sqlalchemy.orm import Session, joinedload
+import logging
+from datetime import datetime, timedelta
+
 from app.schemas.base import BaseResponse
 from app.schemas.auth import Token, UserCreate, UserLogin, VerifyCodeRequest
 from app.core.database import get_db
-from app.crud.user import get_by_email, create, verify
-from app.crud.auth import create_verification_code, delete_code, get_valid_code, get_valid_refresh_token, revoke_refresh_token, store_refresh_token
-from app.services.email import send_verification_email
-from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password
+from app.core.security import (
+    create_access_token, create_refresh_token, 
+    get_current_user, verify_password, hash_password,
+    generate_verification_code
+)
+from app.services.email import email_service
 from app.schemas.refresh_token import RefreshTokenRequest
+
+# Import models
 from app.models.user import User
+from app.models.verification_code import VerificationCode
+from app.models.refresh_token import RefreshToken
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/refresh", response_model=Token)
 def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
-    rt = get_valid_refresh_token(db, req.refresh_token)
-    if not rt:
+    """Refresh access token using refresh token"""
+    from app.core.security import verify_token
+    
+    payload = verify_token(req.refresh_token)
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Invalid or expired refresh token"
         )
-
-    revoke_refresh_token(db, req.refresh_token)
-    new_access = create_access_token(rt.user_id)
-    new_refresh = create_refresh_token(rt.user_id)
-    store_refresh_token(db, rt.user_id, new_refresh)
-
+    
+    if payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid token type"
+        )
+    
+    user_id_str = payload.get("sub")
+    if not user_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid token payload"
+        )
+    
+    try:
+        user_id = int(user_id_str)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid user ID"
+        )
+    
+    # Find the refresh token in database
+    refresh_token_obj = db.query(RefreshToken).filter(
+        RefreshToken.token == req.refresh_token,
+        RefreshToken.user_id == user_id,
+        RefreshToken.revoked == False,
+        RefreshToken.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not refresh_token_obj:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid or expired refresh token"
+        )
+    
+    # Revoke old refresh token
+    refresh_token_obj.revoked = True
+    db.commit()
+    
+    # Create new tokens
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="User not found"
+        )
+    
+    new_access_token = create_access_token(user.id)
+    new_refresh_token = create_refresh_token(user.id)
+    
+    # Store new refresh token
+    new_refresh_token_obj = RefreshToken(
+        user_id=user.id,
+        token=new_refresh_token,
+        expires_at=datetime.utcnow() + timedelta(days=7)
+    )
+    db.add(new_refresh_token_obj)
+    db.commit()
+    
     return Token(
-        access_token=new_access, 
-        refresh_token=new_refresh,
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
         token_type="bearer"
     )
 
-@router.post("/register", response_model=BaseResponse)
-async def register(user_in: UserCreate, 
-                   background_tasks: BackgroundTasks,
-                   db: Session = Depends(get_db), 
-                   ):
+@router.post("/register", response_model=dict)
+async def register(
+    user_in: UserCreate, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Register a new user"""
+    # Check if user already exists
     user_by_email = db.query(User).filter(User.email == user_in.email).first()
     if user_by_email:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, 
-            detail="Email already registered")
+            detail="Email already registered"
+        )
     
     user_by_username = db.query(User).filter(User.username == user_in.username).first()
     if user_by_username:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, 
-            detail="Username already registered")
+            detail="Username already registered"
+        )
     
-    code = "".join(random.choices("0123456789", k=6))
+    # Create new user
+    hashed_password = hash_password(user_in.password)
+    new_user = User(
+        username=user_in.username,
+        email=user_in.email,
+        password_hash=hashed_password,
+        is_verified=False
+    )
     
-    new_user = create(db, user_in)
-    create_verification_code(db, new_user.id, code)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
     
-    background_tasks.add_task(send_verification_email, user_in.email, code)
+    # Generate verification code
+    code = generate_verification_code()
     
-    return BaseResponse(msg="Verification code sent")
-
+    # Store verification code
+    verification_code = VerificationCode(
+        user_id=new_user.id,
+        code=code,
+        expires_at=datetime.utcnow() + timedelta(minutes=10)
+    )
+    
+    db.add(verification_code)
+    db.commit()
+    
+    # Send verification email in background
+    background_tasks.add_task(
+        email_service.send_verification_email,
+        user_in.email,
+        code
+    )
+    
+    # Prepare response
+    response_data = {
+        "msg": "Verification code sent to your email",
+        "user_id": new_user.id,
+        "email": new_user.email,
+        "username": new_user.username
+    }
+    
+    # In development, include the code for testing
+    from app.core.config import settings
+    if settings.is_development():
+        response_data["verification_code"] = code
+        response_data["debug_note"] = "Email simulation in development mode"
+    
+    logger.info(f"User registered: {new_user.email}, code: {code}")
+    
+    return response_data
 
 @router.post("/verify-code", response_model=Token)
-def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
-    user = get_by_email(db, req.email)
+async def verify_code(
+    req: VerifyCodeRequest, 
+    db: Session = Depends(get_db)
+):
+    """Verify email with code"""
+    user = db.query(User).filter(User.email == req.email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail="User not found"
         )
-
-    code_obj = get_valid_code(db, user.id, req.code)
-    if not code_obj:
+    
+    if user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Invalid or expired code"
+            detail="Email already verified"
         )
-
-    verify(db, user.id)
-    delete_code(db, code_obj.id)
     
+    # Find valid verification code
+    current_time = datetime.utcnow()
+    code_obj = db.query(VerificationCode).filter(
+        VerificationCode.user_id == user.id,
+        VerificationCode.code == req.code,
+        VerificationCode.is_used == False,
+        VerificationCode.expires_at > current_time
+    ).first()
+    
+    if not code_obj:
+        # Check if code exists but expired
+        expired_code = db.query(VerificationCode).filter(
+            VerificationCode.user_id == user.id,
+            VerificationCode.code == req.code,
+            VerificationCode.expires_at <= current_time
+        ).first()
+        
+        if expired_code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Verification code has expired"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Invalid verification code"
+            )
+    
+    # Mark code as used
+    code_obj.is_used = True
+    
+    # Verify user
+    user.is_verified = True
+    user.updated_at = datetime.utcnow()
+    
+    # Create tokens
     access_token = create_access_token(user.id)
-    refresh_token_jwt = create_refresh_token(user.id)
-    store_refresh_token(db, user.id, refresh_token_jwt)
-
+    refresh_token = create_refresh_token(user.id)
+    
+    # Store refresh token
+    refresh_token_obj = RefreshToken(
+        user_id=user.id,
+        token=refresh_token,
+        expires_at=datetime.utcnow() + timedelta(days=7)
+    )
+    
+    db.add(refresh_token_obj)
+    db.commit()
+    
+    logger.info(f"Email verified for user: {user.email}")
+    
     return Token(
         access_token=access_token,
-        refresh_token=refresh_token_jwt,
+        refresh_token=refresh_token,
         token_type="bearer"
     )
 
@@ -95,7 +255,12 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    user = get_by_email(db, form_data.username)
+    """Login user"""
+    # Try to find user by email or username
+    user = db.query(User).filter(
+        (User.email == form_data.username) | (User.username == form_data.username)
+    ).first()
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -111,16 +276,38 @@ def login(
     if not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified"
+            detail="Email not verified. Please verify your email first."
         )
-
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated"
+        )
+    
+    # Create tokens
     access_token = create_access_token(user.id)
-    refresh_token_jwt = create_refresh_token(user.id)
-    store_refresh_token(db, user.id, refresh_token_jwt)
-
+    refresh_token = create_refresh_token(user.id)
+    
+    # Store refresh token
+    refresh_token_obj = RefreshToken(
+        user_id=user.id,
+        token=refresh_token,
+        expires_at=datetime.utcnow() + timedelta(days=7)
+    )
+    
+    db.add(refresh_token_obj)
+    db.commit()
+    
+    # Update last activity
+    user.last_activity = datetime.utcnow()
+    db.commit()
+    
+    logger.info(f"User logged in: {user.email}")
+    
     return Token(
         access_token=access_token,
-        refresh_token=refresh_token_jwt,
+        refresh_token=refresh_token,
         token_type="bearer"
     )
 
@@ -130,15 +317,29 @@ def logout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    revoke_refresh_token(db, req.refresh_token)
-    return BaseResponse(msg="Logged out")
+    """Logout user by revoking refresh token"""
+    refresh_token_obj = db.query(RefreshToken).filter(
+        RefreshToken.token == req.refresh_token,
+        RefreshToken.user_id == current_user.id,
+        RefreshToken.revoked == False
+    ).first()
+    
+    if refresh_token_obj:
+        refresh_token_obj.revoked = True
+        db.commit()
+    
+    logger.info(f"User logged out: {current_user.email}")
+    
+    return BaseResponse(msg="Logged out successfully")
 
 @router.post("/resend-verification", response_model=BaseResponse)
-async def resend_verification(email: str, db: Session = Depends(get_db)):
-    """
-    Resend verification code to user's email
-    """
-    user = get_by_email(db, email)
+async def resend_verification(
+    email: str, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Resend verification code"""
+    user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -152,19 +353,78 @@ async def resend_verification(email: str, db: Session = Depends(get_db)):
         )
     
     # Generate new verification code
-    code = "".join(random.choices("0123456789", k=6))
+    code = generate_verification_code()
     
-    # Delete any existing codes and create new one
-    # (You might need to implement delete_user_codes function)
-    create_verification_code(db, user.id, code)
+    # Invalidate old codes
+    db.query(VerificationCode).filter(
+        VerificationCode.user_id == user.id,
+        VerificationCode.is_used == False
+    ).update({"is_used": True})
+    db.commit()
     
-    # Send verification email
-    email_sent = await send_verification_email(email, code)
+    # Create new verification code
+    verification_code = VerificationCode(
+        user_id=user.id,
+        code=code,
+        expires_at=datetime.utcnow() + timedelta(minutes=10)
+    )
     
-    if not email_sent:
+    db.add(verification_code)
+    db.commit()
+    
+    # Send verification email in background
+    background_tasks.add_task(
+        email_service.send_verification_email,
+        email,
+        code
+    )
+    
+    response_data = {"msg": "Verification code resent"}
+    
+    # In development, include the code
+    from app.core.config import settings
+    if settings.is_development():
+        response_data["verification_code"] = code
+    
+    logger.info(f"Verification code resent to: {email}, code: {code}")
+    
+    return BaseResponse(**response_data)
+
+@router.get("/test-email", response_model=dict)
+async def test_email():
+    """Test email service (development only)"""
+    from app.core.config import settings
+    
+    if settings.is_production():
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send verification email"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is only available in development mode"
         )
     
-    return BaseResponse(msg="Verification code sent")
+    test_email = "test@example.com"
+    test_code = generate_verification_code()
+    
+    try:
+        success = await email_service.send_verification_email(test_email, test_code)
+        
+        return {
+            "success": success,
+            "test_email": test_email,
+            "test_code": test_code,
+            "environment": settings.ENVIRONMENT,
+            "smtp_enabled": settings.SMTP_ENABLED,
+            "email_config": {
+                "host": settings.SMTP_HOST,
+                "port": settings.SMTP_PORT,
+                "user": settings.SMTP_USER,
+                "from": settings.SMTP_FROM,
+                "has_password": bool(settings.SMTP_PASS)
+            }
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "test_code": test_code,
+            "environment": settings.ENVIRONMENT
+        }
