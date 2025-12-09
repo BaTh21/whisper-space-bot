@@ -67,20 +67,6 @@ async def register(
     
     # Store verification code
     create_verification_code(db, new_user.id, code)
-    
-    # Log details to console
-    print(f"\n{'='*70}")
-    print(f"🚀 REGISTRATION ATTEMPT - {datetime.now()}")
-    print(f"{'='*70}")
-    print(f"Email: {user_in.email}")
-    print(f"Code: {code}")
-    print(f"User ID: {new_user.id}")
-    print(f"SMTP Config:")
-    print(f"  Host: {settings.SMTP_HOST}")
-    print(f"  Port: {settings.SMTP_PORT}")
-    print(f"  User: {settings.SMTP_USER}")
-    print(f"{'='*70}\n")
-    
     # Try to send email
     email_sent = False
     try:
@@ -95,14 +81,6 @@ async def register(
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, "email_debug.log")
-    
-    with open(log_file, "a", encoding="utf-8") as f:
-        f.write(f"\n{'='*70}\n")
-        f.write(f"Registration: {datetime.now()}\n")
-        f.write(f"Email: {user_in.email}\n")
-        f.write(f"Code: {code}\n")
-        f.write(f"Sent: {'YES' if email_sent else 'NO'}\n")
-        f.write(f"{'='*70}\n")
     
     if email_sent:
         return BaseResponse(

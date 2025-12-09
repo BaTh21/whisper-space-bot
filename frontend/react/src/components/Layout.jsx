@@ -45,8 +45,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const [groupInviteCount, setGroupInviteCount] = useState(0);
   const [totalNotificationCount, setTotalNotificationCount] = useState(0);
 
-  console.log("frien", friendRequestCount)
-
   const pathToTabMap = {
     '/feed': 0,
     '/messages': 1,
