@@ -1,3 +1,6 @@
+
+from datetime import datetime
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -7,10 +10,11 @@ from app.schemas.auth import Token, UserCreate, UserLogin, VerifyCodeRequest
 from app.core.database import get_db
 from app.crud.user import get_by_email, create, verify
 from app.crud.auth import create_verification_code, delete_code, get_valid_code, get_valid_refresh_token, revoke_refresh_token, store_refresh_token
-from app.services.email import send_verification_email
+from app.services.email import send_verification_email, send_verification_email_sync
 from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password
 from app.schemas.refresh_token import RefreshTokenRequest
 from app.models.user import User
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -40,11 +44,6 @@ async def register(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db), 
 ):
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    logger.info(f"📝 Registration attempt for: {user_in.email}")
-    
     # Check existing users
     existing_email = db.query(User).filter(User.email == user_in.email).first()
     if existing_email:
@@ -69,35 +68,54 @@ async def register(
     # Store verification code
     create_verification_code(db, new_user.id, code)
     
-    # Send email IMMEDIATELY (for reliability)
-    from app.services.email import send_verification_email_sync
-    
-    logger.info(f"📤 Sending verification code to {user_in.email}")
-    email_sent = send_verification_email_sync(user_in.email, code)
-    
-    # Debug output
-    print(f"\n{'='*60}")
-    print(f"VERIFICATION EMAIL:")
-    print(f"To: {user_in.email}")
+    # Log details to console
+    print(f"\n{'='*70}")
+    print(f"🚀 REGISTRATION ATTEMPT - {datetime.now()}")
+    print(f"{'='*70}")
+    print(f"Email: {user_in.email}")
     print(f"Code: {code}")
-    print(f"Sent: {'✅ SUCCESS' if email_sent else '❌ FAILED'}")
-    print(f"{'='*60}\n")
+    print(f"User ID: {new_user.id}")
+    print(f"SMTP Config:")
+    print(f"  Host: {settings.SMTP_HOST}")
+    print(f"  Port: {settings.SMTP_PORT}")
+    print(f"  User: {settings.SMTP_USER}")
+    print(f"{'='*70}\n")
+    
+    # Try to send email
+    email_sent = False
+    try:
+        email_sent = send_verification_email_sync(user_in.email, code)
+        print(f"📧 Email send attempt: {'✅ SUCCESS' if email_sent else '❌ FAILED'}")
+    except Exception as e:
+        print(f"❌ Email error: {e}")
+        # Still try background task
+        background_tasks.add_task(send_verification_email_sync, user_in.email, code)
+    
+    # Write to log file (platform independent)
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "email_debug.log")
+    
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(f"\n{'='*70}\n")
+        f.write(f"Registration: {datetime.now()}\n")
+        f.write(f"Email: {user_in.email}\n")
+        f.write(f"Code: {code}\n")
+        f.write(f"Sent: {'YES' if email_sent else 'NO'}\n")
+        f.write(f"{'='*70}\n")
     
     if email_sent:
         return BaseResponse(
-            msg="✅ Verification code sent to your email",
+            success=True,
+            msg="Verification email sent! Please check your inbox.",
             data={"email": user_in.email}
         )
     else:
-        # Still return success but warn user
         return BaseResponse(
-            msg="⚠️ Account created but email may have failed. Please try login/resend.",
-            data={"email": user_in.email, "code": code}  # Include code for testing
+            success=True,
+            msg="Registration complete! Check your email for verification code.",
+            data={"email": user_in.email}
         )
-
-
-
-
 
 @router.post("/verify-code", response_model=Token)
 def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
@@ -220,3 +238,44 @@ async def test_email(email: str):
             status_code=500,
             detail="Failed to send test email. Check server logs."
         )
+        
+@router.get("/debug-smtp")
+async def debug_smtp():
+    """Check SMTP connection"""
+    import socket
+    import smtplib
+    
+    result = {
+        "host": settings.SMTP_HOST,
+        "port": settings.SMTP_PORT,
+        "user": settings.SMTP_USER,
+        "has_password": bool(settings.SMTP_PASS),
+        "environment": settings.ENVIRONMENT
+    }
+    
+    # Test connection
+    try:
+        sock = socket.create_connection((settings.SMTP_HOST, settings.SMTP_PORT), timeout=10)
+        result["connection"] = "✅ Connected"
+        sock.close()
+    except Exception as e:
+        result["connection"] = f"❌ Failed: {str(e)}"
+    
+    return result
+
+
+@router.post("/send-test")
+async def send_test_email(email: str = "mokkolsambath21@gmail.com"):
+    """Direct test email"""
+    from app.services.email import send_verification_email_sync
+    
+    code = "999999"
+    
+    result = send_verification_email_sync(email, code)
+    
+    return {
+        "success": result,
+        "message": f"Test email {'sent' if result else 'failed'} to {email}",
+        "code": code,
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }

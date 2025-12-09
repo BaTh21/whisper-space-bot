@@ -1,96 +1,108 @@
 import smtplib
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
 
 def send_verification_email_sync(to_email: str, code: str) -> bool:
     """
-    Send verification email - SYNC version (MORE RELIABLE)
+    Simple and reliable email sending function
     """
     try:
+        print(f"📧 Starting email send to: {to_email}")
+        
         # Create message
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = 'Whisper Space - Email Verification'
+        msg['Subject'] = 'Verify Your Whisper Space Account'
         msg['From'] = settings.SMTP_FROM
         msg['To'] = to_email
         
         # Text version
-        text = f"""Whisper Space Verification Code: {code}
-        
-This code expires in 10 minutes.
-If you didn't request this, please ignore this email."""
+        text = f"""Whisper Space Verification
+
+Your verification code is: {code}
+
+Enter this code in the app to verify your email.
+
+This code will expire in 10 minutes.
+
+If you didn't request this, please ignore this email.
+"""
         
         # HTML version
         html = f"""<!DOCTYPE html>
 <html>
-<head>
-    <style>
-        body {{ font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }}
-        .container {{ max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-        .code {{ font-size: 32px; font-weight: bold; color: #4a90e2; padding: 20px; background: #f0f8ff; border-radius: 8px; text-align: center; margin: 20px 0; letter-spacing: 5px; }}
-        .footer {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 12px; }}
-    </style>
-</head>
-<body>
-    <div class="container">
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 30px; background: #f8f9fa; border-radius: 10px;">
         <h2 style="color: #333;">Whisper Space</h2>
-        <h3>Verify Your Email Address</h3>
-        <p>Please use the following verification code to complete your registration:</p>
+        <h3 style="color: #555;">Email Verification Required</h3>
         
-        <div class="code">{code}</div>
+        <p>Hello,</p>
         
-        <p style="color: #666;">This code will expire in <strong>10 minutes</strong>.</p>
-        <p>If you didn't create an account with Whisper Space, please ignore this email.</p>
+        <p>Please use the following code to verify your email address:</p>
         
-        <div class="footer">
-            <p>© 2024 Whisper Space. All rights reserved.</p>
-            <p>This is an automated message, please do not reply.</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <div style="
+                display: inline-block;
+                font-size: 32px;
+                font-weight: bold;
+                color: white;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 20px 40px;
+                border-radius: 8px;
+                letter-spacing: 5px;
+            ">
+                {code}
+            </div>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">
+            <strong>Note:</strong> This code expires in 10 minutes.
+        </p>
+        
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #888; font-size: 12px;">
+            <p>If you didn't create an account with Whisper Space, please ignore this email.</p>
+            <p>© 2024 Whisper Space</p>
         </div>
     </div>
 </body>
 </html>"""
         
-        # Add parts
-        part1 = MIMEText(text, 'plain')
-        part2 = MIMEText(html, 'html')
-        msg.attach(part1)
-        msg.attach(part2)
+        # Attach parts
+        msg.attach(MIMEText(text, 'plain'))
+        msg.attach(MIMEText(html, 'html'))
         
-        # Send email with SSL (port 465)
-        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            server.login(settings.SMTP_USER, settings.SMTP_PASS)
-            server.send_message(msg)
+        # Send email
+        if settings.SMTP_PORT == 465:
+            # SSL
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
+                server.login(settings.SMTP_USER, settings.SMTP_PASS)
+                server.send_message(msg)
+                print(f"✅ Email sent via SSL to {to_email}")
+        else:
+            # TLS (587 or 2525)
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
+                server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASS)
+                server.send_message(msg)
+                print(f"✅ Email sent via TLS to {to_email}")
         
-        logger.info(f"✅ Email sent successfully to {to_email}")
         return True
         
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"❌ SMTP Authentication failed: {e}")
-        logger.error("Please check your Gmail app password")
+    except smtplib.SMTPAuthenticationError:
+        print(f"❌ SMTP Authentication failed for {settings.SMTP_USER}")
+        print("Please check your email password/API key")
         return False
     except Exception as e:
-        logger.error(f"❌ Failed to send email to {to_email}: {str(e)}")
+        print(f"❌ Failed to send email: {e}")
         return False
 
 
 async def send_verification_email(to_email: str, code: str) -> bool:
     """
-    Async wrapper for email sending
+    Async wrapper
     """
     import asyncio
-    loop = asyncio.get_event_loop()
-    try:
-        # Run sync function in thread pool
-        result = await loop.run_in_executor(
-            None, 
-            send_verification_email_sync, 
-            to_email, 
-            code
-        )
-        return result
-    except Exception as e:
-        logger.error(f"❌ Async email error: {e}")
-        return False
+    return await asyncio.to_thread(send_verification_email_sync, to_email, code)
