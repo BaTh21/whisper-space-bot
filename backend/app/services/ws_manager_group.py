@@ -2,12 +2,17 @@ from __future__ import annotations
 from typing import Dict, Set
 from fastapi import WebSocket
 import asyncio
+from datetime import datetime
+from app.models.group_message import GroupMessage
+from app.helpers.to_utc_iso import to_local_iso
 
 class WebSocketManager:
     def __init__(self) -> None:
         self.active_connections: Dict[str, Dict[WebSocket, dict]] = {}
         self.online_users: Dict[str, Set[int]] = {}
         self.group_call_accepts: Dict[str, Set[int]] = {}
+        self.group_call_sessions: Dict[str, dict] = {}
+        self.call_timers: Dict[str, asyncio.Task] = {}
 
     async def connect(self, chat_id: str, websocket: WebSocket, user_id: int) -> None:
         self.active_connections.setdefault(chat_id, {})[websocket] = {"user_id": user_id}
@@ -96,6 +101,30 @@ class WebSocketManager:
 
     def get_total_accepted(self, chat_id: str) -> int:
         return len(self.group_call_accepts.get(chat_id, set()))
+    
+    async def end_group_call(self, chat_id: str, db):
+        session = manager.group_call_sessions.get(chat_id)
 
+        if not session:
+            return
+
+        end_time = datetime.utcnow()
+
+        message_id = session.get("start_message_id")
+
+        if message_id:
+            msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+            if msg:
+                msg.call_content = f"Call ended at {end_time.strftime('%H:%M:%S')}"
+                db.commit()
+
+        await manager.broadcast(chat_id, {
+            "action": "call_end",
+            "call_message_id": message_id,
+            "ended_at": to_local_iso(end_time, tz_offset_hours=7),
+        })
+
+        manager.group_call_accepts.pop(chat_id, None)
+        manager.group_call_sessions.pop(chat_id, None)
 
 manager = WebSocketManager()

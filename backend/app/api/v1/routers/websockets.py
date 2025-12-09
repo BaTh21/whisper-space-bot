@@ -1141,6 +1141,12 @@ async def websocket_group_chat(
                     db.commit()
                     db.refresh(system_msg)
                     
+                    manager.group_call_sessions[chat_id] = {
+                        "start_message_id": system_msg.id,
+                        "start_time": datetime.utcnow(),
+                        "end_time": None,
+                    }
+                    
                     await manager.broadcast(chat_id, {
                         "action": "new_call_message",
                         "id": system_msg.id,
@@ -1161,6 +1167,14 @@ async def websocket_group_chat(
                         "avatar_url": current_user.avatar_url,
                         "call_type": call_type
                     })
+                    
+                    ## auto close if no one accepted
+                    async def auto_close_no_accept(chat_id, db):
+                        await asyncio.sleep(20)
+                        if manager.get_total_accepted(chat_id) == 0:
+                            await manager.end_group_call(chat_id, db)
+
+                    asyncio.create_task(auto_close_no_accept(chat_id, db))
                     continue
                 
                 if action == "call_start_voice":
@@ -1175,6 +1189,12 @@ async def websocket_group_chat(
                     db.add(system_msg)
                     db.commit()
                     db.refresh(system_msg)
+                    
+                    manager.group_call_sessions[chat_id] = {
+                        "start_message_id": system_msg.id,
+                        "start_time": datetime.utcnow(),
+                        "end_time": None,
+                    }
                     
                     await manager.broadcast(chat_id, {
                         "action": "new_call_message",
@@ -1196,6 +1216,14 @@ async def websocket_group_chat(
                         "avatar_url": current_user.avatar_url,
                         "call_type": "voice"
                     })
+                    
+                    ## auto close if no one accepted
+                    async def auto_close_no_accept(chat_id, db):
+                        await asyncio.sleep(20)
+                        if manager.get_total_accepted(chat_id) == 0:
+                            await manager.end_group_call(chat_id, db)
+
+                    asyncio.create_task(auto_close_no_accept(chat_id, db))
                     continue
                 
                 if action == "call_accept":
@@ -1213,6 +1241,15 @@ async def websocket_group_chat(
                         "action": "total_accepted",
                         "total": total_accepted
                     })
+
+                    if total_accepted < 1:
+                        await manager.end_group_call(chat_id, db)
+                        continue
+
+                    if total_accepted > 1 and chat_id not in manager.call_timers:
+                        manager.call_timers[chat_id] = asyncio.create_task(
+                            auto_end_call(chat_id, db)
+                        )
                     continue
                 
                 if action == "call_reject":
@@ -1234,17 +1271,26 @@ async def websocket_group_chat(
                     continue
                 
                 if action == "call_leave":
+                    
+                    manager.remove_user_accepted(chat_id, current_user.id)
+                    total_accepted = manager.get_total_accepted(chat_id)
+                    
                     await manager.broadcast(chat_id,{
                         "action": "call_leave",
                         "user_id": current_user.id
                     })
                     
-                    manager.remove_user_accepted(chat_id, current_user.id)
-                    total_accepted = manager.get_total_accepted(chat_id)
                     await manager.broadcast(chat_id, {
                         "action": "total_accepted",
                         "total": total_accepted
                     })
+                    
+                    timer = manager.call_timers.pop(chat_id, None)
+                    if timer:
+                        timer.cancel()
+
+                    if total_accepted <= 1:
+                        await manager.end_group_call(chat_id, db)
                     continue
                 
                 if action == "call_offer":
@@ -1350,3 +1396,18 @@ async def websocket_group_chat(
         await websocket.close(code=1011, reason="Server error")
     finally:
         db.close()
+        
+async def auto_end_call(chat_id: str, db):
+    from app.services.ws_manager_group import manager
+    
+    await asyncio.sleep(20)
+
+    total = manager.get_total_accepted(chat_id)
+
+    if total <= 1:
+        await manager.end_group_call(chat_id, db)
+
+    manager.call_timers.pop(chat_id, None)
+
+    
+

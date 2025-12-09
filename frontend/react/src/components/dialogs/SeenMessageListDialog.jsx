@@ -56,7 +56,8 @@ function SeenMessageListDialog({ open, onClose, messageId }) {
               key={seen.user.id}
               sx={{
                 backgroundColor: 'grey.200',
-                borderRadius: 3
+                borderRadius: 3,
+                mt: 1
               }}
               >
                 <ListItemAvatar>

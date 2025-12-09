@@ -46,6 +46,7 @@ import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
+import { toast } from 'react-toastify';
 
 const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
@@ -461,10 +462,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         handleCallAcceptedByUser(data);
         break;
 
-      case "call_rejected":
-        handleCallRejected(data);
-        break;
-
       case "call_join":
         console.log("CALL JOIN DATA:", data);
         handleNewUserJoined(data.user_id, data.username, data.avatar_url);
@@ -485,12 +482,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "call_leave":
         handleUserLeave(data.user_id);
+
+        if (Object.keys(peersRef.current).length <= 1) {
+          console.log("Waiting for server to auto-end call…");
+        }
         break;
 
       case "total_accepted":
         setTotalAccepted(data.total);
         break;
 
+      case "call_end":
+        handleCallEnded(data);
+        break;
 
       default:
         setMessages((prev) => {
@@ -1015,6 +1019,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const handleCancelCall = () => {
     wsRef.current.send(JSON.stringify({ action: "call_leave" }));
 
+    setCallStatus("Ending call...");
+
     Object.values(peersRef.current).forEach(pc => {
       pc.getSenders().forEach(s => s.track?.stop());
       pc.close();
@@ -1041,6 +1047,36 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       action: "call_reject",
       to_user: incomingCall.userId
     }));
+    setIncomingCall(null);
+  };
+
+  const handleCallEnded = (data) => {
+
+    const msg = {
+      id: data.call_message_id ?? `system-${Date.now()}`,
+      message_type: "system",
+      content: `Call ended at ${new Date(data.ended_at).toLocaleTimeString()}`,
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages(prev => [...prev, msg]);
+
+    Object.values(peersRef.current).forEach(pc => {
+      pc.getSenders().forEach(s => s.track?.stop());
+      pc.close();
+    });
+    peersRef.current = {};
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+    }
+
+    remoteStreamsRef.current = {};
+    setRemoteStreams({});
+
+    setCallStatus(null);
+    setCallingOpen(false);
     setIncomingCall(null);
   };
 
@@ -1546,10 +1582,13 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                               color="text.secondary"
                               sx={{ display: 'block', textAlign: isOwn ? 'right' : 'left', mt: 0.5, mx: 1 }}
                             >
-                              {message.updated_at
-                                ? `edited at: ${formatCambodiaTime(message.updated_at)}`
-                                : formatCambodiaTime(message.created_at)
-                              }
+                              {message.call_content && message.updated_at ? (
+                                `ended at: ${formatCambodiaTime(message.updated_at)}`
+                              ) : message.updated_at ? (
+                                `edited at: ${formatCambodiaTime(message.updated_at)}`
+                              ) : (
+                                formatCambodiaTime(message.created_at)
+                              )}
                               {message.is_temp && ' • Sending...'}
                             </Typography>
                             <Box sx={{ mt: 0.5 }}>
