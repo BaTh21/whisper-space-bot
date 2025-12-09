@@ -900,7 +900,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   };
 
   const handleCallAcceptedByUser = async ({ from_user }) => {
-    
+
     await getLocalStream();
     const pc = await getOrCreatePeer(from_user);
 
@@ -1493,10 +1493,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                     wordBreak: 'break-word',
                                     transition: 'all 0.2s',
                                   }}
+                                  onClick={(e) => openSecondMenu(e, message.id)}
                                 >
                                   <Typography
                                     variant="body2"
-                                    onClick={(e) => openSecondMenu(e, message.id)}
                                   >
                                     {message.call_content}
                                   </Typography>

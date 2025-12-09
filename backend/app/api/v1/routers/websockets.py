@@ -1142,13 +1142,14 @@ async def websocket_group_chat(
                     db.refresh(system_msg)
                     
                     await manager.broadcast(chat_id, {
+                        "action": "new_call_message",
                         "id": system_msg.id,
                         "sender": {
                             "id": current_user.id,
                             "username": current_user.username,
                             "avatar_url": current_user.avatar_url,
                         },
-                        "call_content": system_msg.content,
+                        "call_content": system_msg.call_content,
                         "message_type": "system",
                         "created_at": to_local_iso(system_msg.created_at, tz_offset_hours=7),
                     })
@@ -1176,13 +1177,14 @@ async def websocket_group_chat(
                     db.refresh(system_msg)
                     
                     await manager.broadcast(chat_id, {
+                        "action": "new_call_message",
                         "id": system_msg.id,
                         "sender": {
                             "id": current_user.id,
                             "username": current_user.username,
                             "avatar_url": current_user.avatar_url,
                         },
-                        "call_content": system_msg.content,
+                        "call_content": system_msg.call_content,
                         "message_type": "system",
                         "created_at": to_local_iso(system_msg.created_at, tz_offset_hours=7),
                     })

@@ -85,6 +85,8 @@ const VideoCard = ({ stream, userName, avatarUrl }) => {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
+        border: 1,
+        borderColor: 'divider'
       }}
     >
       {videoEnabled ? (
