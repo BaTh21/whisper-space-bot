@@ -65,7 +65,7 @@ const CallDialog = ({
   const toggleVideo = () => {
     if (!onLocal) return;
 
-    const track = onLocal.getVideoTracks()[0];
+    const [track] = onLocal.getVideoTracks();
     if (!track) return;
 
     track.enabled = !track.enabled;

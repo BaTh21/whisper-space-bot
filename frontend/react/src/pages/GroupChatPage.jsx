@@ -742,7 +742,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     if (!localStreamRef.current) {
       localStreamRef.current = await navigator.mediaDevices.getUserMedia(
         isAudioOnly ? {
-          video: false,
+          video: true,
           audio: true
         } : {
           video: true,
@@ -750,15 +750,24 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         }
       );
     }
+
+    if (isAudioOnly) {
+      localStreamRef.current.getVideoTracks().forEach(t => (t.enabled = false));
+    }
+
     return localStreamRef.current;
   };
 
   const getOrCreatePeer = async (userId) => {
     if (!localStreamRef.current) {
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true
+      if (!localStreamRef.current) {
+        throw new Error("Local stream must be created before peer!");
+      }
+
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current);
       });
+
     }
 
     let pc = peersRef.current[userId];
@@ -773,12 +782,18 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     });
 
     pc.ontrack = (event) => {
+      console.log("TRACK RECEIVED:", event.track.kind, event.track.enabled);
       let stream = remoteStreamsRef.current[userId];
-      if (!stream) {
-        stream = new MediaStream();
-        remoteStreamsRef.current[userId] = stream;
+      if (!stream) stream = new MediaStream();
+
+      if (event.track) {
+        stream.addTrack(event.track);
       }
-      event.streams[0]?.getTracks().forEach(track => stream.addTrack(track));
+      if (event.streams?.[0]) {
+        event.streams[0].getTracks().forEach(t => stream.addTrack(t));
+      }
+
+      remoteStreamsRef.current[userId] = stream;
       setRemoteStreams({ ...remoteStreamsRef.current });
     };
 
@@ -872,7 +887,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }));
 
     setIncomingCall(null);
-    setCallStatus(isAudioOnly ? "In Voice Call" : "In Video Call");
+    setCallStatus("In Call");
     setCallingOpen(true);
 
     await getOrCreatePeer(caller);

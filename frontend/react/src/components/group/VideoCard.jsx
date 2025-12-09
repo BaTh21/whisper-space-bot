@@ -3,28 +3,37 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import { useEffect, useRef } from "react";
 
-
 const Video = ({ stream, muted }) => {
   const ref = useRef();
 
+  const isAudioOnly = stream.getVideoTracks().length === 0;
+
   useEffect(() => {
-    const videoEl = ref.current;
-    if (!videoEl || !stream) return;
+    const el = ref.current;
+    if (!el || !stream) return;
 
-    videoEl.srcObject = stream;
+    el.srcObject = stream;
 
-    const handleLoadedMetadata = () => {
-      videoEl.play().catch((err) => console.warn("Video play failed", err));
+    const tryPlay = () => {
+      el.muted = muted;          // USE the prop correctly
+      el.volume = muted ? 0 : 1;
+
+      el.play().catch(err => console.log("play() failed", err));
     };
 
-    videoEl.addEventListener("loadedmetadata", handleLoadedMetadata);
+    el.addEventListener("loadedmetadata", tryPlay);
+    tryPlay();
 
     return () => {
-      videoEl.pause();
-      videoEl.srcObject = null;
-      videoEl.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      el.pause();
+      el.srcObject = null;
+      el.removeEventListener("loadedmetadata", tryPlay);
     };
-  }, [stream]);
+  }, [stream, muted]);
+
+  if (isAudioOnly) {
+    return <audio ref={ref} autoPlay playsInline />;
+  }
 
   return (
     <video
