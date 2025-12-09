@@ -105,6 +105,11 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
             : t('profile_updated')
         );
 
+        // Clear the success message after 2 seconds
+        setTimeout(() => {
+          setSuccess(null);
+        }, 2000);
+
         setSelectedFile(null);
         setImagePreview(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -156,21 +161,21 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     setDeleting(true);
     setError(null);
     setSuccess(null);
-    
+
     try {
       await deleteAvatar();
-      
+
       // Update profile locally
       setProfile({
         ...profile,
         avatar_url: null
       });
-      
+
       setSuccess(t('avatar_deleted_success'));
       setImagePreview(null);
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      
+
     } catch (err) {
       setError(err.response?.data?.detail || err.message || t('delete_failed'));
     } finally {
@@ -390,9 +395,9 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           <Button onClick={() => setDeleteDialogOpen(false)} color="inherit">
             {t('cancel')}
           </Button>
-          <Button 
-            onClick={confirmDeleteAvatar} 
-            color="error" 
+          <Button
+            onClick={confirmDeleteAvatar}
+            color="error"
             variant="contained"
             disabled={deleting}
           >

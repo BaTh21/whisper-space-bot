@@ -6,16 +6,20 @@ import {
   InsertEmoticon as InsertEmoticonIcon,
   Send as SendIcon
 } from '@mui/icons-material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CallIcon from '@mui/icons-material/Call';
 import MicIcon from '@mui/icons-material/Mic';
+import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
+import VideocamIcon from '@mui/icons-material/Videocam';
 import {
   Avatar,
   Box,
   Button,
   Chip,
   CircularProgress,
-  Drawer,
   IconButton,
+  InputAdornment,
   List,
   ListItem,
   ListItemAvatar,
@@ -23,8 +27,7 @@ import {
   TextField,
   Typography,
   useMediaQuery,
-  useTheme,
-  InputAdornment,
+  useTheme
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -52,10 +55,6 @@ import ChatMessage from '../chat/ChatMessage';
 import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 import EmojiButton from '../EmojiButton';
 import EmojiPicker from '../EmojiPicker';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import CallIcon from '@mui/icons-material/Call';
-import VideocamIcon from '@mui/icons-material/Videocam';
-import SearchIcon from '@mui/icons-material/Search';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -1087,7 +1086,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         );
       });
 
-      setSuccess('Voice message sent!');
+      setSuccess(t('voice_message_sent'));
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
       console.error('❌ Voice message send failed:', err);
@@ -1130,7 +1129,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     } catch (err) {
       console.error('Failed to add reaction:', err);
-      setError('Failed to add reaction');
+      setError(t('failed_add_reaction'));
     }
   };
 
@@ -1160,7 +1159,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     } catch (err) {
       console.error('Failed to remove reaction:', err);
-      setError('Failed to remove reaction');
+      setError(t('failed_remove_reaction'));
     }
   };
 
@@ -1238,7 +1237,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       }
     } catch (err) {
       console.error('Upload error:', err);
-      setError('Failed to upload image');
+      setError(t('failed_upload_image'));
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setUploadingImage(false);
@@ -1249,11 +1248,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     const file = event.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
+      setError(t('select_image_file'));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError('Image size should be less than 5MB');
+      setError(t('image_too_large_5mb'));
       return;
     }
     const reader = new FileReader();
@@ -1286,10 +1285,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         } else {
           await deleteMessage(id);
         }
-        setSuccess(isImage ? 'Image deleted' : 'Message deleted');
+        setSuccess(isImage ? t('image_deleted') : t('message_deleted'));
         setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
-        setError('Failed to delete message');
+        setError(t('failed_delete_message'));
         setMessages(prev => [...prev, message]);
       }
     }
@@ -1431,7 +1430,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       } else if (err.response?.status === 403 && err.response?.data?.detail?.includes('Not friends')) {
         setError(`You are not friends with ${selectedFriend?.username || 'this user'}.`);
       } else {
-        setError('Failed to load messages');
+        setError(t('failed_load_messages'));
       }
       console.error(err);
     }
@@ -1599,7 +1598,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const sendTextMessage = async () => {
     if (selectedFriend && (blockStatus[selectedFriend.id] ||
       blockedUsers.some(user => user.id === selectedFriend.id))) {
-      setError(`Cannot send message to ${selectedFriend.username}. They are blocked.`);
+      setError(t(`cannot_send_blocked ${selectedFriend.username}`));
       return;
     }
     const content = newMessage.trim();
@@ -1718,10 +1717,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
       setForwardDialogOpen(false);
       setForwardingMessage(null);
-      setSuccess(`Message forwarded to ${friend.username}`);
+      setSuccess(t(`message_forwarded ${friend.username}`));
       setTimeout(() => setSuccess(null), 2000);
     } catch (err) {
-      setError('Failed to forward message');
+      setError(t('failed_forward_message'));
     }
   };
 
@@ -1842,11 +1841,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       // Use the REAL ID to edit
       await editMessage(realMessageId, newContent);
 
-      setSuccess("Message edited successfully");
+      setSuccess(t("message_edited"));
       setTimeout(() => setSuccess(null), 2000);
     } catch (err) {
       console.error("Edit failed:", err);
-      setError("Failed to edit message");
+      setError(t("failed_edit_message"));
 
       // Revert on error - more robust revert
       setMessages((prev) =>
@@ -1915,10 +1914,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             onClick={(e) => e.stopPropagation()}
           >
             <Typography variant="h6" gutterBottom>
-              Delete {messageToDelete.message.message_type === 'image' ? 'Image' : 'Message'}?
+              {t('delete')} {messageToDelete.message.message_type === 'image' ? 'Image' : 'Message'}?
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              This action cannot be undone.
+              {t('irreversible_action')}.
             </Typography>
             {messageToDelete.message.message_type === 'image' && (
               <Box sx={{ mb: 2, textAlign: 'center' }}>
@@ -1934,7 +1933,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 onClick={() => setDeleteConfirmOpen(false)}
                 variant="outlined"
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 onClick={confirmDelete}
@@ -1942,7 +1941,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 color="error"
                 disabled={isDeleting}
               >
-                {isDeleting ? "Deleting..." : "Delete"}
+                {isDeleting ? "Deleting..." : t('delete')}
               </Button>
             </Box>
           </Box>
@@ -2231,7 +2230,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         <Typography>Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}</Typography>
                       </Box>
                       <Button variant="contained" color="inherit" size="small" startIcon={<StopIcon />} onClick={stopRecording}>
-                        Stop
+                        {t('stop')}
                       </Button>
                     </Box>
                   )}
@@ -2243,9 +2242,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         <Typography>{voiceSending ? 'Sending...' : `Recorded • ${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')}`}</Typography>
                       </Box>
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button variant="outlined" size="small" onClick={cancelRecording} disabled={voiceSending}>Cancel</Button>
+                        <Button variant="outlined" size="small" onClick={cancelRecording} disabled={voiceSending}>{t('cancel')}</Button>
                         <Button variant="contained" size="small" onClick={sendVoiceMessage} disabled={voiceSending || isUploadingVoice} startIcon={isUploadingVoice ? <CircularProgress size={16} /> : <SendIcon />}>
-                          {isUploadingVoice ? 'Sending...' : 'Send'}
+                          {isUploadingVoice ? 'Sending...' : t('send')}
                         </Button>
                       </Box>
                     </Box>
@@ -2266,7 +2265,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   <TextField
                     fullWidth
                     size="small"
-                    placeholder={!selectedFriend ? 'Select a friend...' : 'Aa...'}
+                    placeholder={!selectedFriend ? t('select_friend') : t('type_message')}
                     value={newMessage}
                     onChange={handleInputChange}
                     onKeyPress={(e) => {
@@ -2357,7 +2356,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <ChatIcon sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
               <Typography variant="h6" color="text.secondary">
-                Choose a friend to start chatting
+                {t('Choose a friend to start chatting')}
               </Typography>
             </Box>
           </Box>
