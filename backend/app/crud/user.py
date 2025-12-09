@@ -20,7 +20,7 @@ def create(db: Session, user_in: UserCreate) -> User:
         username=user_in.username, 
         email=user_in.email, 
         password_hash=hashed,
-        is_verified=True  # ✅ CRITICAL: Set this to False by default
+        is_verified=False  # ✅ CRITICAL: Set this to False by default
     )
     db.add(user)
     db.commit()
