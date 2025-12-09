@@ -1,4 +1,4 @@
-import { Card, Box, Typography } from "@mui/material";
+import { Card, Box, Typography, Avatar } from "@mui/material";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import { useEffect, useRef } from "react";
@@ -46,7 +46,7 @@ const Video = ({ stream, muted }) => {
   );
 };
 
-const VideoCard = ({ stream, userName }) => {
+const VideoCard = ({ stream, userName, avatarUrl }) => {
   if (!stream) {
     return (
       <Card
@@ -135,11 +135,27 @@ const VideoCard = ({ stream, userName }) => {
             borderRadius: 1,
             color: "white",
             fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
           }}
         >
-          {userName}
+          {userName !== "You" && (
+            <Avatar
+              src={avatarUrl || ""}
+              alt={userName || "profile img"}
+              sx={{
+                width: 25, height: 25, fontSize: 12
+              }}
+            >
+              {userName.charAt(0) || "P"}
+            </Avatar>
+          )}
+
+          <Typography>{userName}</Typography>
         </Box>
       )}
+
     </Card>
   );
 };

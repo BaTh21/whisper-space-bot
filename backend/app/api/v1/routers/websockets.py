@@ -1157,6 +1157,7 @@ async def websocket_group_chat(
                         "action": "call_request",
                         "from_user": current_user.id,
                         "username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
                         "call_type": call_type
                     })
                     continue
@@ -1190,6 +1191,7 @@ async def websocket_group_chat(
                         "action": "call_request",
                         "from_user": current_user.id,
                         "username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
                         "call_type": "voice"
                     })
                     continue
@@ -1201,6 +1203,7 @@ async def websocket_group_chat(
                         "action": "call_accepted",
                         "from_user": current_user.id,
                         "username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
                     })
                     
                     total_accepted = manager.get_total_accepted(chat_id)
@@ -1215,6 +1218,7 @@ async def websocket_group_chat(
                         "action": "call_rejected",
                         "from_user": current_user.id,
                         "username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
                     })
                     continue
 
@@ -1223,6 +1227,7 @@ async def websocket_group_chat(
                         "action": "call_join",
                         "user_id": current_user.id,
                         "username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
                     }, exclude={websocket})
                     continue
                 
@@ -1245,6 +1250,7 @@ async def websocket_group_chat(
                         "action": "call_offer",
                         "from_user": current_user.id,
                         "username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
                         "sdp": sdp
                     })
                     continue
@@ -1254,6 +1260,7 @@ async def websocket_group_chat(
                         "action": "call_answer",
                         "from_user": current_user.id,
                         "username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
                         "sdp": sdp
                     })
                     continue

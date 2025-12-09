@@ -96,6 +96,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const pendingOffers = useRef({});           // userId -> SDP
   const pendingAnswers = useRef({});          // userId -> SDP
   const usernamesRef = useRef({});
+  const avatarRef = useRef({});
 
   console.log("streams", remoteStreams)
   console.log("online users", onlineUsers)
@@ -466,7 +467,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "call_join":
         console.log("CALL JOIN DATA:", data);
-        handleNewUserJoined(data.user_id, data.username);
+        handleNewUserJoined(data.user_id, data.username, data.avatar_url);
         break;
 
       case "call_offer":
@@ -863,8 +864,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallingOpen(true);
   };
 
-  const handleIncomingCall = async ({ from_user, username, call_type }) => {
+  const handleIncomingCall = async ({ from_user, username, avatar_url, call_type }) => {
     usernamesRef.current[from_user] = username;
+    avatarRef.current[from_user] = avatar_url;
 
     const isAudioOnly = call_type === "voice";
 
@@ -897,7 +899,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     await getOrCreatePeer(caller);
   };
 
-  const handleCallAcceptedByUser = async ({ from_user, username }) => {
+  const handleCallAcceptedByUser = async ({ from_user }) => {
     
     await getLocalStream();
     const pc = await getOrCreatePeer(from_user);
@@ -912,10 +914,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }));
   };
 
-  const handleNewUserJoined = async (newUserId, username) => {
+  const handleNewUserJoined = async (newUserId, username, avatar_url) => {
     if (newUserId === user.id) return;
 
     usernamesRef.current[newUserId] = username;
+    avatarRef.current[newUserId] = avatar_url;
 
     console.log("username", username);
 
@@ -933,9 +936,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }));
   };
 
-  const handleReceiveOffer = async ({ from_user, username, sdp }) => {
+  const handleReceiveOffer = async ({ from_user, username, avatar_url, sdp }) => {
     usernamesRef.current[from_user] = username;
-    
+    avatarRef.current[from_user] = avatar_url;
+
     await getLocalStream();
     await getOrCreatePeer(from_user);
 
@@ -1859,6 +1863,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
           ))
         )}
         usernames={usernamesRef.current}
+        avatars={avatarRef.current}
         onLocal={localStreamRef.current}
         peersRef={peersRef}
         status={callStatus}
