@@ -1170,7 +1170,7 @@ async def websocket_group_chat(
                     
                     ## auto close if no one accepted
                     async def auto_close_no_accept(chat_id, db):
-                        await asyncio.sleep(20)
+                        await asyncio.sleep(30)
                         if manager.get_total_accepted(chat_id) == 0:
                             await manager.end_group_call(chat_id, db)
 
@@ -1219,7 +1219,7 @@ async def websocket_group_chat(
                     
                     ## auto close if no one accepted
                     async def auto_close_no_accept(chat_id, db):
-                        await asyncio.sleep(20)
+                        await asyncio.sleep(30)
                         if manager.get_total_accepted(chat_id) == 0:
                             await manager.end_group_call(chat_id, db)
 
@@ -1241,10 +1241,6 @@ async def websocket_group_chat(
                         "action": "total_accepted",
                         "total": total_accepted
                     })
-
-                    if total_accepted < 1:
-                        await manager.end_group_call(chat_id, db)
-                        continue
 
                     if total_accepted > 1 and chat_id not in manager.call_timers:
                         manager.call_timers[chat_id] = asyncio.create_task(

@@ -473,7 +473,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "call_answer":
         handleReceiveAnswer(data);
-        setCallStatus("In Call");
         break;
 
       case "call_ice":
@@ -864,7 +863,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       }
     });
 
-    setCallStatus("Voice Calling…");
+    setCallStatus("Calling…");
     setCallingOpen(true);
   };
 
@@ -880,6 +879,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     if (from_user !== user.id) {
       setIncomingCall({ userId: from_user, username: username });
     }
+
+    setCallStatus("Calling");
   };
 
   const handleAcceptCall = async () => {
@@ -916,6 +917,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       to_user: from_user,
       sdp: offer
     }));
+
+    setCallStatus("In Call");
   };
 
   const handleNewUserJoined = async (newUserId, username, avatar_url) => {
@@ -923,8 +926,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
     usernamesRef.current[newUserId] = username;
     avatarRef.current[newUserId] = avatar_url;
-
-    console.log("username", username);
 
     await getLocalStream();
 

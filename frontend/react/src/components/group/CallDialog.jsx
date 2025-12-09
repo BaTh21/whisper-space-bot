@@ -31,7 +31,7 @@ const CallDialog = ({
   open,
   remoteStreams,
   usernames = {},
-  avatars ={},
+  avatars = {},
   onLocal,
   onCancel,
   status,
@@ -41,6 +41,30 @@ const CallDialog = ({
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
+
+  const [seconds, setSeconds] = useState(30);
+
+  useEffect(() => {
+    if (!open || status === "In Call") {
+      return;
+    }
+
+    setSeconds(30);
+
+    const timer = setInterval(() => {
+      setSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          onCancel();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [open, onCancel]);
+
   const [pipPos, setPipPos] = useState({
     x: window.innerWidth - 220, // 200px width + 20px margin from right
     y: 20                        // 20px from top
@@ -139,6 +163,7 @@ const CallDialog = ({
           bgcolor: "black"
         }}
       >
+
         <Box
           sx={{
             width: "100%",
@@ -269,7 +294,7 @@ const CallDialog = ({
         </Box>
 
         {status && (
-          <Typography
+          <Box
             sx={{
               position: "fixed",
               top: 20,
@@ -279,9 +304,23 @@ const CallDialog = ({
               zIndex: 30
             }}
           >
-            {status}
-          </Typography>
+            <Typography
+              sx={{ fontSize: 26 }}
+            >
+              {status}
+            </Typography>
+            {open && status !== "In Call" && (
+              <Typography
+                sx={{
+                  fontSize: 18
+                }}
+              >
+                Call will end in {seconds}s
+              </Typography>
+            )}
+          </Box>
         )}
+
       </Box>
     </Dialog>
   );
