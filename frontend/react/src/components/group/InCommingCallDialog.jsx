@@ -2,7 +2,7 @@ import { Typography, Box, IconButton, Modal } from "@mui/material";
 import LocalPhoneIcon from '@mui/icons-material/LocalPhone';
 import CloseIcon from '@mui/icons-material/Close';
 
-export const IncomingCallDialog = ({ open, fromUserId, isAudioOnly, onAccept, onReject }) => (
+export const IncomingCallDialog = ({ open, fromUserId, username, isAudioOnly, onAccept, onReject }) => (
   <Modal
     open={open}
     sx={{
@@ -37,7 +37,7 @@ export const IncomingCallDialog = ({ open, fromUserId, isAudioOnly, onAccept, on
             fontSize: 20,
             color: 'white'
           }}
-        >User {fromUserId} is calling you</Typography>
+        >{username} is calling you</Typography>
         <Typography sx={{ color: 'white' }}>
           {isAudioOnly ? "Incoming Voice Call" : "Incoming Video Call"}
         </Typography>

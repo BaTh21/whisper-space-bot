@@ -30,6 +30,7 @@ const getRowsByCount = (count) => {
 const CallDialog = ({
   open,
   remoteStreams,
+  usernames = {},
   onLocal,
   onCancel,
   status,
@@ -53,7 +54,9 @@ const CallDialog = ({
 
   console.log("remote streams", remoteStreams);
   console.log("local streams", onLocal);
+  console.log("local usernames", usernames);
 
+  const entries = Object.entries(remoteStreams || {});
   const rows = getRowsByCount(totalAccepted);
 
   const toggleMute = () => {
@@ -153,15 +156,19 @@ const CallDialog = ({
             overflow: "hidden",
           }}
         >
-          {!isAudioOnly && rows.map((row, rIndex) => (
+          {rows.map((row, rIndex) => (
             <Box key={rIndex} sx={{ flex: 1, display: "flex", justifyContent: "center", gap: "6px", height: 120 }}>
-              {row.map((idx, cIndex) => {
-                const stream = streams[idx];
+              {row.map((idx) => {
+                const entry = entries[idx];
+                if (!entry) return null;
+
+                const [userId, stream] = entry;
+
                 return (
                   <VideoCard
-                    key={idx}
-                    stream={stream || null}
-                    userName={stream?.id || `User ${idx + 1}`}
+                    key={stream.id}
+                    stream={stream}
+                    userName={usernames[userId] || `User ${idx + 1}`}
                   />
                 );
               })}

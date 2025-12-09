@@ -95,6 +95,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [callStatus, setCallStatus] = useState(null);
   const pendingOffers = useRef({});           // userId -> SDP
   const pendingAnswers = useRef({});          // userId -> SDP
+  const usernamesRef = useRef({});
 
   console.log("streams", remoteStreams)
   console.log("online users", onlineUsers)
@@ -464,7 +465,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         break;
 
       case "call_join":
-        handleNewUserJoined(data.user_id);
+        console.log("CALL JOIN DATA:", data);
+        handleNewUserJoined(data.user_id, data.username);
         break;
 
       case "call_offer":
@@ -861,14 +863,16 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallingOpen(true);
   };
 
-  const handleIncomingCall = async ({ from_user, call_type }) => {
+  const handleIncomingCall = async ({ from_user, username, call_type }) => {
+    usernamesRef.current[from_user] = username;
+
     const isAudioOnly = call_type === "voice";
 
     await getLocalStream(isAudioOnly);
     await getOrCreatePeer(from_user);
 
     if (from_user !== user.id) {
-      setIncomingCall({ userId: from_user });
+      setIncomingCall({ userId: from_user, username: username });
     }
   };
 
@@ -893,7 +897,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     await getOrCreatePeer(caller);
   };
 
-  const handleCallAcceptedByUser = async ({ from_user }) => {
+  const handleCallAcceptedByUser = async ({ from_user, username }) => {
+    
     await getLocalStream();
     const pc = await getOrCreatePeer(from_user);
 
@@ -907,8 +912,13 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }));
   };
 
-  const handleNewUserJoined = async (newUserId) => {
+  const handleNewUserJoined = async (newUserId, username) => {
     if (newUserId === user.id) return;
+
+    usernamesRef.current[newUserId] = username;
+
+    console.log("username", username);
+
     await getLocalStream();
 
     const pc = await getOrCreatePeer(newUserId);
@@ -923,7 +933,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }));
   };
 
-  const handleReceiveOffer = async ({ from_user, sdp }) => {
+  const handleReceiveOffer = async ({ from_user, username, sdp }) => {
+    usernamesRef.current[from_user] = username;
+    
     await getLocalStream();
     await getOrCreatePeer(from_user);
 
@@ -1466,6 +1478,41 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                 </Box>
                               )}
 
+                              {message.call_content && (
+                                <Box
+                                  sx={{
+                                    bgcolor: isOwn ? 'primary.main' : 'white',
+                                    color: isOwn ? 'white' : 'text.primary',
+                                    p: 2,
+                                    borderRadius: 3,
+                                    boxShadow: 1,
+                                    wordBreak: 'break-word',
+                                    transition: 'all 0.2s',
+                                  }}
+                                >
+                                  <Typography
+                                    variant="body2"
+                                    onClick={(e) => openSecondMenu(e, message.id)}
+                                  >
+                                    {message.call_content}
+                                  </Typography>
+                                  <Button
+                                    variant='outlined'
+                                    color={isOwn ? 'white' : 'text.primary'}
+                                    sx={{
+                                      width: '100%',
+                                      borderRadius: 3,
+                                      boxShadow: 1,
+                                      wordBreak: 'break-word',
+                                      transition: 'all 0.2s',
+                                      mt: 1
+                                    }}
+                                  >
+                                    Join Now
+                                  </Button>
+                                </Box>
+                              )}
+
                               {message.content && (
                                 <Typography
                                   variant="body2"
@@ -1811,6 +1858,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
             stream && stream.getTracks().length > 0
           ))
         )}
+        usernames={usernamesRef.current}
         onLocal={localStreamRef.current}
         peersRef={peersRef}
         status={callStatus}
@@ -1820,6 +1868,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <IncomingCallDialog
         open={!!incomingCall}
         fromUserId={incomingCall?.userId}
+        username={incomingCall?.username}
         isAudioOnly={incomingCall?.isAudioOnly}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}

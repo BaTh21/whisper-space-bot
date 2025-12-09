@@ -1130,18 +1130,66 @@ async def websocket_group_chat(
                 
                 if action == "call_start":
                     call_type = data.get("call_type")
+                    
+                    system_msg = GroupMessage(
+                        group_id=group_id,
+                        sender_id=current_user.id,
+                        call_content=f"{current_user.username} started a {call_type} call",
+                        message_type="system"
+                    )
+                    db.add(system_msg)
+                    db.commit()
+                    db.refresh(system_msg)
+                    
+                    await manager.broadcast(chat_id, {
+                        "id": system_msg.id,
+                        "sender": {
+                            "id": current_user.id,
+                            "username": current_user.username,
+                            "avatar_url": current_user.avatar_url,
+                        },
+                        "call_content": system_msg.content,
+                        "message_type": "system",
+                        "created_at": to_local_iso(system_msg.created_at, tz_offset_hours=7),
+                    })
+                    
                     await manager.broadcast(chat_id, {
                         "action": "call_request",
                         "from_user": current_user.id,
+                        "username": current_user.username,
                         "call_type": call_type
                     })
                     continue
                 
                 if action == "call_start_voice":
                     call_type = "voice"
+                    
+                    system_msg = GroupMessage(
+                        group_id=group_id,
+                        sender_id=current_user.id,
+                        call_content=f"{current_user.username} started a {call_type} call",
+                        message_type="system"
+                    )
+                    db.add(system_msg)
+                    db.commit()
+                    db.refresh(system_msg)
+                    
+                    await manager.broadcast(chat_id, {
+                        "id": system_msg.id,
+                        "sender": {
+                            "id": current_user.id,
+                            "username": current_user.username,
+                            "avatar_url": current_user.avatar_url,
+                        },
+                        "call_content": system_msg.content,
+                        "message_type": "system",
+                        "created_at": to_local_iso(system_msg.created_at, tz_offset_hours=7),
+                    })
+                    
                     await manager.broadcast(chat_id, {
                         "action": "call_request",
                         "from_user": current_user.id,
+                        "username": current_user.username,
                         "call_type": "voice"
                     })
                     continue
@@ -1151,7 +1199,8 @@ async def websocket_group_chat(
                     
                     await manager.send_to_user(chat_id, to_user, {
                         "action": "call_accepted",
-                        "from_user": current_user.id
+                        "from_user": current_user.id,
+                        "username": current_user.username,
                     })
                     
                     total_accepted = manager.get_total_accepted(chat_id)
@@ -1164,14 +1213,16 @@ async def websocket_group_chat(
                 if action == "call_reject":
                     await manager.send_to_user(chat_id, to_user, {
                         "action": "call_rejected",
-                        "from_user": current_user.id
+                        "from_user": current_user.id,
+                        "username": current_user.username,
                     })
                     continue
 
                 if action == "call_join":
                     await manager.broadcast(chat_id,{
                         "action": "call_join",
-                        "user_id": current_user.id
+                        "user_id": current_user.id,
+                        "username": current_user.username,
                     }, exclude={websocket})
                     continue
                 
@@ -1193,6 +1244,7 @@ async def websocket_group_chat(
                     await manager.send_to_user(chat_id, to_user, {
                         "action": "call_offer",
                         "from_user": current_user.id,
+                        "username": current_user.username,
                         "sdp": sdp
                     })
                     continue
@@ -1201,6 +1253,7 @@ async def websocket_group_chat(
                     await manager.send_to_user(chat_id, to_user, {
                         "action": "call_answer",
                         "from_user": current_user.id,
+                        "username": current_user.username,
                         "sdp": sdp
                     })
                     continue

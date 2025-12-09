@@ -183,6 +183,7 @@ class GroupMessageOut(BaseModel):
     forwarded_by: Optional[AuthorResponse] = None
     group_id: int
     content: Optional[str] = None
+    call_content: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     file_url: Optional[str] = None
