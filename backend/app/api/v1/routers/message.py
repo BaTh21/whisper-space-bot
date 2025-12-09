@@ -55,7 +55,7 @@ import whisper
 import asyncio
 
 # Load Whisper model (base/tiny recommended on Render)
-model = whisper.load_model("tiny")
+model = whisper.load_model("tiny", device="cpu")
 @router.post("/transcribe")
 async def transcribe(file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
