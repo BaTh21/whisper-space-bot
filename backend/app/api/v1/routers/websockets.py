@@ -1129,12 +1129,11 @@ async def websocket_group_chat(
                     continue
                 
                 if action == "call_start":
-                    call_type = data.get("call_type")
                     
                     system_msg = GroupMessage(
                         group_id=group_id,
                         sender_id=current_user.id,
-                        call_content=f"{current_user.username} started a {call_type} call",
+                        call_content=f"{current_user.username} started a video call",
                         message_type="system"
                     )
                     db.add(system_msg)
@@ -1165,7 +1164,7 @@ async def websocket_group_chat(
                         "from_user": current_user.id,
                         "username": current_user.username,
                         "avatar_url": current_user.avatar_url,
-                        "call_type": call_type
+                        "call_type": "video"
                     })
                     
                     ## auto close if no one accepted
@@ -1178,12 +1177,11 @@ async def websocket_group_chat(
                     continue
                 
                 if action == "call_start_voice":
-                    call_type = "voice"
                     
                     system_msg = GroupMessage(
                         group_id=group_id,
                         sender_id=current_user.id,
-                        call_content=f"{current_user.username} started a {call_type} call",
+                        call_content=f"{current_user.username} started a voice call",
                         message_type="system"
                     )
                     db.add(system_msg)
@@ -1284,7 +1282,8 @@ async def websocket_group_chat(
                     timer = manager.call_timers.pop(chat_id, None)
                     if timer:
                         timer.cancel()
-
+                    
+                    
                     if total_accepted <= 1:
                         await manager.end_group_call(chat_id, db)
                     continue
@@ -1396,7 +1395,7 @@ async def websocket_group_chat(
 async def auto_end_call(chat_id: str, db):
     from app.services.ws_manager_group import manager
     
-    await asyncio.sleep(20)
+    await asyncio.sleep(30)
 
     total = manager.get_total_accepted(chat_id)
 

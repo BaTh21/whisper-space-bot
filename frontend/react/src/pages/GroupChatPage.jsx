@@ -46,7 +46,6 @@ import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
-import { toast } from 'react-toastify';
 
 const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
@@ -98,10 +97,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const pendingAnswers = useRef({});          // userId -> SDP
   const usernamesRef = useRef({});
   const avatarRef = useRef({});
-
-  console.log("streams", remoteStreams)
-  console.log("online users", onlineUsers)
-  console.log("total accepted", totalAccepted);
 
   const toggleDiary = () => {
     setShowDiaries(prev => !prev);
@@ -765,17 +760,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   };
 
   const getOrCreatePeer = async (userId) => {
-    if (!localStreamRef.current) {
-      if (!localStreamRef.current) {
-        throw new Error("Local stream must be created before peer!");
-      }
-
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current);
-      });
-
-    }
-
     let pc = peersRef.current[userId];
     if (pc && pc.signalingState !== "closed") return pc;
 
@@ -783,9 +767,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
-    localStreamRef.current.getTracks().forEach(track => {
-      pc.addTrack(track, localStreamRef.current);
-    });
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current);
+      });
+    }
 
     pc.ontrack = (event) => {
       console.log("TRACK RECEIVED:", event.track.kind, event.track.enabled);
@@ -848,20 +834,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     wsRef.current.send(JSON.stringify({
       action: "call_start_voice"
     }));
-
-    onlineUsers.forEach(async (uid) => {
-      if (uid !== user.id) {
-        const pc = await getOrCreatePeer(uid);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        wsRef.current.send(JSON.stringify({
-          action: "call_offer",
-          to_user: uid,
-          sdp: pc.localDescription
-        }));
-      }
-    });
 
     setCallStatus("Calling…");
     setCallingOpen(true);
@@ -1548,8 +1520,13 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                       transition: 'all 0.2s',
                                       mt: 1
                                     }}
+                                    disabled={message.updated_at}
                                   >
-                                    Join Now
+                                    {message.call_content && message.updated_at ? (
+                                      "Call End"
+                                    ) : (
+                                      "Join Now"
+                                    )}
                                   </Button>
                                 </Box>
                               )}
@@ -1896,7 +1873,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <CallDialog
         open={callingOpen}
         onCancel={handleCancelCall}
-        isAudioOnly={callStatus?.includes("Voice")}
+        isAudioOnly={incomingCall?.isAudioOnly}
         remoteStreams={Object.fromEntries(
           Object.entries(remoteStreams).filter(([uid, stream]) => (
             stream && stream.getTracks().length > 0

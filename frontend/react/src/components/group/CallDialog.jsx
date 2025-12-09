@@ -44,6 +44,8 @@ const CallDialog = ({
 
   const [seconds, setSeconds] = useState(30);
 
+  console.log("status", isAudioOnly);
+
   useEffect(() => {
     if (!open || status === "In Call") {
       return;
@@ -72,11 +74,6 @@ const CallDialog = ({
   const pipRef = useRef(null);
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
-
-  console.log("remote streams", remoteStreams);
-  console.log("local streams", onLocal);
-  console.log("local usernames", usernames);
-  console.log("local avatar", avatars);
 
   const entries = Object.entries(remoteStreams || {});
   const rows = getRowsByCount(totalAccepted);
