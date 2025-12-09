@@ -35,30 +35,68 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
     )
 
 @router.post("/register", response_model=BaseResponse)
-async def register(user_in: UserCreate, 
-                   background_tasks: BackgroundTasks,
-                   db: Session = Depends(get_db), 
-                   ):
-    user_by_email = db.query(User).filter(User.email == user_in.email).first()
-    if user_by_email:
+async def register(
+    user_in: UserCreate, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db), 
+):
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"📝 Registration attempt for: {user_in.email}")
+    
+    # Check existing users
+    existing_email = db.query(User).filter(User.email == user_in.email).first()
+    if existing_email:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, 
-            detail="Email already registered")
+            detail="Email already registered"
+        )
     
-    user_by_username = db.query(User).filter(User.username == user_in.username).first()
-    if user_by_username:
+    existing_username = db.query(User).filter(User.username == user_in.username).first()
+    if existing_username:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, 
-            detail="Username already registered")
+            detail="Username already taken"
+        )
     
+    # Generate 6-digit code
     code = "".join(random.choices("0123456789", k=6))
     
+    # Create user
     new_user = create(db, user_in)
+    
+    # Store verification code
     create_verification_code(db, new_user.id, code)
     
-    background_tasks.add_task(send_verification_email, user_in.email, code)
+    # Send email IMMEDIATELY (for reliability)
+    from app.services.email import send_verification_email_sync
     
-    return BaseResponse(msg="Verification code sent")
+    logger.info(f"📤 Sending verification code to {user_in.email}")
+    email_sent = send_verification_email_sync(user_in.email, code)
+    
+    # Debug output
+    print(f"\n{'='*60}")
+    print(f"VERIFICATION EMAIL:")
+    print(f"To: {user_in.email}")
+    print(f"Code: {code}")
+    print(f"Sent: {'✅ SUCCESS' if email_sent else '❌ FAILED'}")
+    print(f"{'='*60}\n")
+    
+    if email_sent:
+        return BaseResponse(
+            msg="✅ Verification code sent to your email",
+            data={"email": user_in.email}
+        )
+    else:
+        # Still return success but warn user
+        return BaseResponse(
+            msg="⚠️ Account created but email may have failed. Please try login/resend.",
+            data={"email": user_in.email, "code": code}  # Include code for testing
+        )
+
+
+
 
 
 @router.post("/verify-code", response_model=Token)
@@ -168,3 +206,17 @@ async def resend_verification(email: str, db: Session = Depends(get_db)):
         )
     
     return BaseResponse(msg="Verification code sent")
+
+@router.post("/test-email")
+async def test_email(email: str):
+    """Test endpoint to check email functionality"""
+    code = "123456"
+    success = await send_verification_email(email, code)
+    
+    if success:
+        return {"message": f"Test email sent to {email}", "code": code}
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send test email. Check server logs."
+        )
