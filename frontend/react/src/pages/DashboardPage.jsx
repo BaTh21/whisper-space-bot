@@ -181,6 +181,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
             <FeedTab
               diaries={diaries}
               profile={profile}
+              groups={groups} 
               onNewDiary={() => setDiaryDialogOpen(true)}
               setError={setError}
               setSuccess={setSuccess}

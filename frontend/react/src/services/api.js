@@ -430,6 +430,27 @@ export const createDiaryForGroup = async (groupId, data) => {
   }
 };
 
+export const getDiaryById = async (diaryId) => {
+  try {
+    const response = await api.get(`/api/v1/diaries/${diaryId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Get diary by ID error:", error.response?.data);
+    
+    // If 404, return null instead of throwing
+    if (error.response?.status === 404) {
+      console.log(`Diary ${diaryId} not found or not accessible`);
+      return null;
+    }
+    
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to fetch diary"
+    );
+  }
+};
+
 export const updateDiaryById = async (diaryId, data) => {
   try {
     const res = await api.patch(`/api/v1/diaries/${diaryId}`, data, {
@@ -524,6 +545,20 @@ export const commentOnDiary = async (diaryId, content) => {
       error.response?.data?.detail ||
       error.response?.data?.msg ||
       "Failed to add comment"
+    );
+  }
+};
+
+export const getDiaryForEdit = async (diaryId) => {
+  try {
+    const response = await api.get(`/api/v1/diaries/${diaryId}/edit`);
+    return response.data;
+  } catch (error) {
+    console.error("Get diary for edit error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to fetch diary for editing"
     );
   }
 };

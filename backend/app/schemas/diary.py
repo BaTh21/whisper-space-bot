@@ -82,6 +82,11 @@ class DiaryCommentOut(TimestampMixin):
 class DiaryUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    share_type: Optional[ShareTypeInput] = None
+    group_ids: Optional[List[int]] = None
+    
+    class Config:
+        use_enum_values = True
     
 class CommentUpdate(BaseModel):
     content: str
