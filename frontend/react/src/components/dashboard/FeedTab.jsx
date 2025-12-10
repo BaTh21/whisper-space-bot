@@ -246,8 +246,9 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
       }));
       setCommentTexts(prev => ({ ...prev, [diaryId]: '' }));
       setSuccess('Comment added successfully');
-    } catch (err) {
-      setError(err.message || 'Failed to add comment');
+      setTimeout(() => {
+        setSuccess('');
+      }, 2000);
     } finally {
       setCommentLoading(prev => ({ ...prev, [diaryId]: false }));
     }
