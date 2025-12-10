@@ -462,6 +462,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         handleNewUserJoined(data.user_id, data.username, data.avatar_url);
         break;
 
+      case "call_new_peer":
+        handleSendOfferToNewPeer(data.new_user_id);
+        break;
+
       case "call_offer":
         handleReceiveOffer(data)
         break;
@@ -849,7 +853,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     await getOrCreatePeer(from_user);
 
     if (from_user !== user.id) {
-      setIncomingCall({ userId: from_user, username: username });
+      setIncomingCall({ userId: from_user, username: username, avatar_url: avatar_url });
     }
 
     setCallStatus("Calling");
@@ -874,6 +878,31 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallingOpen(true);
 
     await getOrCreatePeer(caller);
+  };
+
+  const handleJoinCall = async () => {
+    await getLocalStream();
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_join"
+    }));
+
+    setCallStatus("In Call");
+    setCallingOpen(true);
+
+    for (const uid of Array.from(onlineUsers)) {
+      if (uid === user.id) continue;
+
+      const pc = await getOrCreatePeer(uid);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      wsRef.current.send(JSON.stringify({
+        action: "call_offer",
+        to_user: uid,
+        sdp: offer
+      }));
+    }
   };
 
   const handleCallAcceptedByUser = async ({ from_user }) => {
@@ -940,6 +969,24 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       action: "call_answer",
       to_user: from_user,
       sdp: answer
+    }));
+  };
+
+  const handleSendOfferToNewPeer = async (userId) => {
+    if (userId === user.id) return;
+
+    await getLocalStream();
+    const pc = await getOrCreatePeer(userId);
+
+    if (pc.signalingState !== "stable") return;
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    wsRef.current.send(JSON.stringify({
+      action: "call_offer",
+      to_user: userId,
+      sdp: offer
     }));
   };
 
@@ -1025,14 +1072,18 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
   const handleCallEnded = (data) => {
 
-    const msg = {
-      id: data.call_message_id ?? `system-${Date.now()}`,
-      message_type: "system",
-      content: `Call ended at ${new Date(data.ended_at).toLocaleTimeString()}`,
-      created_at: new Date().toISOString(),
-    };
-
-    setMessages(prev => [...prev, msg]);
+    setMessages(prev =>
+      prev.map(m =>
+        m.id === data.call_message_id
+          ? {
+            ...m,
+            call_content: data.call_content,
+            can_join: false,
+            updated_at: new Date().toISOString()
+          }
+          : m
+      )
+    );
 
     Object.values(peersRef.current).forEach(pc => {
       pc.getSenders().forEach(s => s.track?.stop());
@@ -1259,12 +1310,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
                   const isForwarded = !!message?.forwarded_by;
 
-                  // const isOwn = isForwarded
-                  //   ? message?.forwarded_by?.id === user?.id
-                  //   : message.sender?.id === user?.id;
-
                   const isOwn = message.sender?.id === user?.id;
-
 
                   return (
                     <Box
@@ -1502,15 +1548,16 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                     wordBreak: 'break-word',
                                     transition: 'all 0.2s',
                                   }}
-                                  onClick={(e) => openSecondMenu(e, message.id)}
                                 >
                                   <Typography
                                     variant="body2"
+                                    onClick={(e) => openSecondMenu(e, message.id)}
                                   >
                                     {message.call_content}
                                   </Typography>
+
                                   <Button
-                                    variant='outlined'
+                                    variant="outlined"
                                     color={isOwn ? 'white' : 'text.primary'}
                                     sx={{
                                       width: '100%',
@@ -1521,12 +1568,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                       mt: 1
                                     }}
                                     disabled={message.updated_at}
+                                    onClick={() => !message.updated_at && handleJoinCall()}
                                   >
-                                    {message.call_content && message.updated_at ? (
-                                      "Call End"
-                                    ) : (
-                                      "Join Now"
-                                    )}
+                                    Join Now
                                   </Button>
                                 </Box>
                               )}
@@ -1889,9 +1933,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       <IncomingCallDialog
         open={!!incomingCall}
-        fromUserId={incomingCall?.userId}
         username={incomingCall?.username}
-        isAudioOnly={incomingCall?.isAudioOnly}
+        avatar={incomingCall?.avatar_url}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
       />

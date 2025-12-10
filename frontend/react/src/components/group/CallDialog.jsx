@@ -44,8 +44,6 @@ const CallDialog = ({
 
   const [seconds, setSeconds] = useState(30);
 
-  console.log("status", isAudioOnly);
-
   useEffect(() => {
     if (!open || status === "In Call") {
       return;

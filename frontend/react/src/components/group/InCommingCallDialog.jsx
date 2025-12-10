@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { Typography, Box, IconButton, Modal } from "@mui/material";
+import { Typography, Box, IconButton, Modal, Avatar } from "@mui/material";
 import LocalPhoneIcon from '@mui/icons-material/LocalPhone';
 import CloseIcon from '@mui/icons-material/Close';
 
 export const IncomingCallDialog = ({
   open,
-  fromUserId,
   username,
-  isAudioOnly,
+  avatar,
   onAccept,
   onReject
 }) => {
@@ -59,9 +58,20 @@ export const IncomingCallDialog = ({
             display: 'flex',
             alignItems: 'center',
             flexDirection: 'column',
+            justifyContent: 'center',
             gap: 1
           }}
         >
+          <Avatar
+            sx={{
+              width: 50,
+              height: 50
+            }}
+            src={avatar}
+            alt={username}
+          >
+            (username?.[0] || "P").toUpperCase()
+          </Avatar>
           <Typography sx={{ fontSize: 26, color: 'white' }}>
             {username} is calling you
           </Typography>

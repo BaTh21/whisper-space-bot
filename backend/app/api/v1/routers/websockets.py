@@ -1144,6 +1144,10 @@ async def websocket_group_chat(
                         "start_message_id": system_msg.id,
                         "start_time": datetime.utcnow(),
                         "end_time": None,
+                        "can_join": True,
+                        "starter_id": current_user.id,
+                        "starter_name": current_user.username,
+                        "call_type": "video"
                     }
                     
                     await manager.broadcast(chat_id, {
@@ -1155,6 +1159,7 @@ async def websocket_group_chat(
                             "avatar_url": current_user.avatar_url,
                         },
                         "call_content": system_msg.call_content,
+                        "can_join": True,
                         "message_type": "system",
                         "created_at": to_local_iso(system_msg.created_at, tz_offset_hours=7),
                     })
@@ -1192,6 +1197,10 @@ async def websocket_group_chat(
                         "start_message_id": system_msg.id,
                         "start_time": datetime.utcnow(),
                         "end_time": None,
+                        "can_join": True,
+                        "starter_id": current_user.id,
+                        "starter_name": current_user.username,
+                        "call_type": "voice"
                     }
                     
                     await manager.broadcast(chat_id, {
@@ -1203,6 +1212,7 @@ async def websocket_group_chat(
                             "avatar_url": current_user.avatar_url,
                         },
                         "call_content": system_msg.call_content,
+                        "can_join": True,
                         "message_type": "system",
                         "created_at": to_local_iso(system_msg.created_at, tz_offset_hours=7),
                     })
@@ -1256,12 +1266,27 @@ async def websocket_group_chat(
                     continue
 
                 if action == "call_join":
+                    manager.mark_user_accepted(chat_id, current_user.id)
+                    
                     await manager.broadcast(chat_id,{
                         "action": "call_join",
                         "user_id": current_user.id,
                         "username": current_user.username,
                         "avatar_url": current_user.avatar_url,
                     }, exclude={websocket})
+                    
+                    await manager.broadcast(chat_id, {
+                        "action": "call_new_peer",
+                        "new_user_id": current_user.id,
+                        "username": current_user.username,
+                        "avatar_url": current_user.avatar_url
+                    }, exclude={websocket})
+                    
+                    total_accepted = manager.get_total_accepted(chat_id)
+                    await manager.broadcast(chat_id, {
+                        "action": "total_accepted",
+                        "total": total_accepted
+                    })
                     continue
                 
                 if action == "call_leave":
@@ -1283,8 +1308,7 @@ async def websocket_group_chat(
                     if timer:
                         timer.cancel()
                     
-                    
-                    if total_accepted <= 1:
+                    if total_accepted < 1:
                         await manager.end_group_call(chat_id, db)
                     continue
                 
@@ -1399,7 +1423,7 @@ async def auto_end_call(chat_id: str, db):
 
     total = manager.get_total_accepted(chat_id)
 
-    if total <= 1:
+    if total < 1:
         await manager.end_group_call(chat_id, db)
 
     manager.call_timers.pop(chat_id, None)

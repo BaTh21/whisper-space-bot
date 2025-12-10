@@ -104,27 +104,33 @@ class WebSocketManager:
     
     async def end_group_call(self, chat_id: str, db):
         session = manager.group_call_sessions.get(chat_id)
-
         if not session:
             return
 
         end_time = datetime.utcnow()
-
         message_id = session.get("start_message_id")
 
         if message_id:
             msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
             if msg:
-                msg.call_content = f"Call ended at {end_time.strftime('%H:%M:%S')}"
+                starter = session.get("starter_name", "Someone")
+                call_type = session.get("call_type", "call")
+
+                type_text = "video call" if call_type == "video" else "voice call"
+
+                msg.call_content = f"{starter} ended the {type_text}"
                 db.commit()
 
         await manager.broadcast(chat_id, {
             "action": "call_end",
             "call_message_id": message_id,
+            "call_content": msg.call_content,
+            "can_join": False,
             "ended_at": to_local_iso(end_time, tz_offset_hours=7),
         })
 
         manager.group_call_accepts.pop(chat_id, None)
         manager.group_call_sessions.pop(chat_id, None)
+
 
 manager = WebSocketManager()
