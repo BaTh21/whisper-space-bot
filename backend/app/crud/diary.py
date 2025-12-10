@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.diary import Diary, ShareType
 from app.models.diary_comment import DiaryComment
 from app.models.diary_like import DiaryLike
@@ -9,7 +9,6 @@ from typing import List, Optional
 from app.models.friend import Friend, FriendshipStatus
 from app.models.group_member import GroupMember
 from sqlalchemy import or_, and_, select
-from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from datetime import datetime
 from app.models.group import Group
@@ -113,7 +112,7 @@ def get_visible(db: Session, user_id: int) -> List[Diary]:
                     Diary.share_type == ShareType.group,
                     Diary.id.in_(select(subq_group_diaries.c.diary_id))
                 ),
-                Diary.user_id == user_id
+                Diary.user_id == user_id  # User can always see their own diaries
             )
         )
         .order_by(Diary.created_at.desc())
@@ -128,17 +127,15 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
     if diary.is_deleted:
         return False
     
-    # DEBUG: Add logging
-    print(f"🔍 can_view check - Diary #{diary.id}: share_type={diary.share_type}, owner={diary.user_id}, viewer={user_id}")
+    # CREATOR CAN ALWAYS VIEW THEIR OWN DIARY
+    if diary.user_id == user_id:
+        return True
     
     if diary.share_type == ShareType.public:
-        print(f"✅ Public diary - allowing access")
         return True
     
     if diary.share_type == ShareType.personal:
-        can_see = diary.user_id == user_id
-        print(f"🔐 Personal diary - owner check: {can_see}")
-        return can_see
+        return False  # Only creator can view, already handled above
     
     if diary.share_type == ShareType.friends:
         # Check if users are friends
@@ -149,7 +146,6 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
             ),
             Friend.status == FriendshipStatus.accepted
         ).first() is not None
-        print(f"👥 Friends diary - are friends: {is_friend}")
         return is_friend
     
     if diary.share_type == ShareType.group:
@@ -161,10 +157,7 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
         # Remove duplicates
         group_ids = list(set(group_ids))
         
-        print(f"🏢 Group diary - group IDs: {group_ids}")
-        
         if not group_ids:
-            print(f"❌ No groups associated with this diary")
             return False
         
         # Check if user is member of any of these groups
@@ -172,11 +165,8 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
             GroupMember.group_id.in_(group_ids),
             GroupMember.user_id == user_id
         ).first() is not None
-        
-        print(f"👤 Is user member of any group: {is_member}")
         return is_member
     
-    print(f"❓ Unknown share type: {diary.share_type}")
     return False
 
 def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_user_id: int):
@@ -191,13 +181,10 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
     
     update_data = diary_data.dict(exclude_unset=True, exclude_none=True)
     
-    print(f"📝 Update data received for diary #{diary_id}: {update_data}")
-    
     # Handle share_type update
     if 'share_type' in update_data:
         try:
             share_type_value = update_data['share_type']
-            print(f"🔄 Converting share_type: {share_type_value} (type: {type(share_type_value)})")
             
             # Handle different input types
             if isinstance(share_type_value, str):
@@ -207,10 +194,7 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
             else:
                 diary.share_type = ShareType(str(share_type_value).lower())
                 
-            print(f"✅ Share type updated to: {diary.share_type}")
-                
         except (ValueError, AttributeError) as e:
-            print(f"❌ Error converting share_type: {e}")
             available_values = [t.value for t in ShareType]
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -220,38 +204,30 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
     # Handle title and content updates
     if 'title' in update_data:
         diary.title = update_data['title']
-        print(f"📝 Title updated to: {update_data['title']}")
     
     if 'content' in update_data:
         diary.content = update_data['content']
-        print(f"📝 Content updated")
     
     # Handle group_ids if share_type is group
     if 'group_ids' in update_data:
         if diary.share_type == ShareType.group:
             # Remove existing group associations
             db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
-            print(f"🗑️ Removed existing group associations")
             
             # Add new group associations
             for group_id in update_data['group_ids']:
                 diary_group = DiaryGroup(diary_id=diary_id, group_id=group_id)
                 db.add(diary_group)
-                print(f"➕ Added group association: {group_id}")
-        else:
-            # If share_type is not group, ignore group_ids
-            print(f"⚠️ Ignoring group_ids because share_type is {diary.share_type}, not 'group'")
+        # If share_type is not group, ignore group_ids
     
     diary.updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(diary)
-    
-    print(f"✅ Diary #{diary.id} updated successfully")
     return diary
 
 def delete_diary(db: Session, diary_id: int, current_user_id: int):
-    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Diary not found")
@@ -272,10 +248,14 @@ def delete_diary(db: Session, diary_id: int, current_user_id: int):
     return {"detail": "Diary has been permanently deleted"}
 
 def share_diary(db: Session, diary_id: int, diary_data: DiaryShare, current_user_id: int):
-    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Diary not found")
+    
+    if diary.user_id != current_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only diary owner can share this diary")
     
     shared_groups = []
     for group_id in diary_data.group_ids:
@@ -308,7 +288,7 @@ def share_diary(db: Session, diary_id: int, diary_data: DiaryShare, current_user
 def delete_share(db: Session, share_id: int, current_user_id: int):
     share = db.query(DiaryGroup).filter(DiaryGroup.id == share_id).first()
     if not share:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,  # FIXED: removed extra .status
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Share not found")
         
     if share.shared_by != current_user_id:
@@ -327,7 +307,6 @@ def create_comment(db: Session, diary_id: int, user_id: int, content: str) -> Di
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                            detail="Diary not found")
     
-    # Create the comment
     comment = DiaryComment(
         diary_id=diary_id, 
         user_id=user_id, 
@@ -336,30 +315,13 @@ def create_comment(db: Session, diary_id: int, user_id: int, content: str) -> Di
     )
     db.add(comment)
     db.commit()
-    
-    # IMPORTANT: Refresh and load user relationship
     db.refresh(comment)
     
-    # Force load the user relationship
-    comment = (
-        db.query(DiaryComment)
-        .options(joinedload(DiaryComment.user))  # Load user relationship
-        .filter(DiaryComment.id == comment.id)
-        .first()
-    )
-    
-    if not comment or not comment.user:
-        print(f"⚠️ Warning: User relationship not loaded for comment #{comment.id}")
-        # Try alternative method
-        from app.models.user import User
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            # Manually attach user to comment
-            comment.user = user
-        else:
-            print(f"❌ User not found with ID: {user_id}")
+    # Load user relationship
+    comment = db.query(DiaryComment).options(joinedload(DiaryComment.user)).filter(DiaryComment.id == comment.id).first()
     
     return comment
+
 
 def create_like(db: Session, diary_id: int, user_id: int) -> None:
     # Check if diary exists and is not deleted
@@ -396,6 +358,7 @@ def get_diary_comments(db: Session, diary_id: int) -> List[DiaryComment]:
         .order_by(DiaryComment.created_at.asc())
         .all()
     )
+
 def get_diary_likes_count(db: Session, diary_id: int) -> int:
     # Check if diary exists and is not deleted
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
