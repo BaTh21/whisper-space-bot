@@ -10,7 +10,7 @@ from app.models.friend import Friend, FriendshipStatus
 from app.models.group_member import GroupMember
 from sqlalchemy import or_, and_, select
 from fastapi import HTTPException, status
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.group import Group
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
@@ -19,7 +19,9 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
         title=diary_in.title,
         content=diary_in.content,
         share_type=ShareType(diary_in.share_type),
-        is_deleted=False 
+        is_deleted=False,
+        created_at=datetime.now(timezone.utc),  
+        updated_at=datetime.now(timezone.utc)
     )
     db.add(diary)
     db.flush()
@@ -53,7 +55,7 @@ def create_diary_for_group(db: Session, group_id: int, diary_data: CreateDiaryFo
         title=diary_data.title,
         content=diary_data.content,
         share_type=ShareType.group,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         user_id=current_user_id,
         is_deleted=False
     )
@@ -220,7 +222,7 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
                 db.add(diary_group)
         # If share_type is not group, ignore group_ids
     
-    diary.updated_at = datetime.utcnow()
+    diary.updated_at = datetime.now(timezone.utc)
     
     db.commit()
     db.refresh(diary)
@@ -311,7 +313,7 @@ def create_comment(db: Session, diary_id: int, user_id: int, content: str) -> Di
         diary_id=diary_id, 
         user_id=user_id, 
         content=content,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     db.add(comment)
     db.commit()

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict, field_serializer, validator
 from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
-from datetime import datetime
+from datetime import datetime, timezone  
 
 ShareTypeInput = Literal["public", "friends", "group", "personal"]
 ShareTypeOutput = str
@@ -65,15 +65,18 @@ class DiaryOut(TimestampMixin):
     shared_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
-    @field_serializer('created_at', 'updated_at', 'shared_at')
-    def serialize_dates(self, v: Optional[datetime], _info) -> Optional[str]:
-        if v is None:
+    @field_serializer('created_at', 'updated_at')
+    def serialize_dates(self, dt: Optional[datetime], _info) -> Optional[str]:
+        if dt is None:
             return None
-        # Always return ISO format with 'Z' (UTC)
-        if v.tzinfo is None:
-            # Naive datetime - assume UTC
-            return v.isoformat() + 'Z'
-        return v.isoformat()
+        # Always return ISO 8601 with UTC timezone
+        if dt.tzinfo is None:
+            # If naive datetime, format as UTC
+            return dt.isoformat() + 'Z'
+        else:
+            # If timezone-aware, convert to UTC then format
+            utc_dt = dt.astimezone(timezone.utc)
+            return utc_dt.isoformat().replace('+00:00', 'Z')
 
 
 class DiaryCommentCreate(BaseModel):
