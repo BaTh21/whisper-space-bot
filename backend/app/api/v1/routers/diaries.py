@@ -126,7 +126,9 @@ def update_diary_by_id(diary_id: int,
 def delete_diary_by_id(diary_id: int,
                        db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)):
-    return delete_diary(db, diary_id, current_user.id)
+    delete_diary(db, diary_id, current_user.id)
+    return None
+
 
 @router.post("/{diary_id}/share", response_model=DiaryOut)
 def share_diary_by_id(diary_id: int,

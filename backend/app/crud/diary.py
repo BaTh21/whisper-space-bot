@@ -52,6 +52,7 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
         title=diary_in.title,
         content=diary_in.content,
         share_type=ShareType(diary_in.share_type),
+        is_deleted=False 
     )
     db.add(diary)
     db.flush()
@@ -206,9 +207,16 @@ def delete_diary(db: Session, diary_id: int, current_user_id: int):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Only creator can delete this diary")
 
+    # HARD DELETE: Remove from database
     db.delete(diary)
+    
+    # Optional: Also delete related comments and likes
+    db.query(DiaryComment).filter(DiaryComment.diary_id == diary_id).delete()
+    db.query(DiaryLike).filter(DiaryLike.diary_id == diary_id).delete()
+    db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
+    
     db.commit()
-    return {"detail": "Diary has been deleted"}
+    return {"detail": "Diary has been permanently deleted"}
 
 def share_diary(db: Session, diary_id: int, diary_data: DiaryShare, current_user_id: int):
     diary = db.query(Diary).filter(Diary.id == diary_id).first()
