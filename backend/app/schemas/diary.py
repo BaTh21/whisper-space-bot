@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, validator
+from pydantic import BaseModel, ConfigDict, field_serializer, validator
 from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime
@@ -58,13 +58,22 @@ class DiaryOut(TimestampMixin):
     likes: Optional[list[DiaryLikeResponse]] = None
     comments: Optional[list[CommentResponse]] = None
     is_deleted: Optional[bool] = None,
-    
+    created_at: datetime
     shared_id: Optional[int] = None
     is_shared: Optional[bool] = None
     shared_by: Optional[CreatorResponse] = None
     shared_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+    @field_serializer('created_at', 'updated_at', 'shared_at')
+    def serialize_dates(self, v: Optional[datetime], _info) -> Optional[str]:
+        if v is None:
+            return None
+        # Always return ISO format with 'Z' (UTC)
+        if v.tzinfo is None:
+            # Naive datetime - assume UTC
+            return v.isoformat() + 'Z'
+        return v.isoformat()
 
 
 class DiaryCommentCreate(BaseModel):
@@ -78,6 +87,11 @@ class DiaryCommentOut(TimestampMixin):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+    @field_serializer('created_at')
+    def serialize_created_at(self, v: datetime, _info) -> str:
+        if v.tzinfo is None:
+            return v.isoformat() + 'Z'
+        return v.isoformat()
     
 class DiaryUpdate(BaseModel):
     title: Optional[str] = None

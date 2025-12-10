@@ -1,7 +1,7 @@
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
+from datetime import datetime
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count, update_diary, delete_diary, create_diary_for_group, delete_comment, update_comment, share_diary, delete_share
@@ -253,16 +253,22 @@ def comment_on_diary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diary = get_by_id(db, diary_id)
-    if not diary or not can_view(db, diary, current_user.id):
+    # First, check if diary exists
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    
+    if not diary:
+        raise HTTPException(status_code=404, detail="Diary not found")
+    
+    # Allow creator to always comment on own diary
+    if diary.user_id == current_user.id:
+        # Continue to create comment
+        pass
+    elif not can_view(db, diary, current_user.id):
         raise HTTPException(status_code=404, detail="Diary not found or not visible")
 
     comment = create_comment(db, diary_id, current_user.id, comment_in.content)
     
-    # Load the user relationship
-    db.refresh(comment)
-    
-    # Create user response object
+    # Create user response from current_user
     user_response = CreatorResponse(
         id=current_user.id,
         username=current_user.username,
@@ -272,21 +278,31 @@ def comment_on_diary(
     return DiaryCommentOut(
         id=comment.id,
         diary_id=comment.diary_id,
-        user=user_response,  # CORRECT: Use 'user' not 'author'
+        user=user_response,
         content=comment.content,
         created_at=comment.created_at if comment.created_at else datetime.utcnow()
     )
+
 @router.get("/{diary_id}/comments", response_model=List[DiaryCommentOut])
 def get_diary_comments_endpoint(
     diary_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diary = get_by_id(db, diary_id)
-    if not diary or not can_view(db, diary, current_user.id):
+    # First, check if diary exists
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    
+    if not diary:
+        raise HTTPException(404, "Diary not found")
+    
+    # Allow creator to always view comments (even if share_type is "friends")
+    if diary.user_id == current_user.id:
+        # Continue to load comments
+        pass
+    elif not can_view(db, diary, current_user.id):
         raise HTTPException(404, "Diary not found or not visible")
     
-    # Use joinedload to include user data
+    # Load comments with user relationship
     comments = (
         db.query(DiaryComment)
         .options(joinedload(DiaryComment.user))
@@ -297,17 +313,31 @@ def get_diary_comments_endpoint(
     
     comment_list = []
     for comment in comments:
-        # Create user response
-        user_response = CreatorResponse(
-            id=comment.user.id,
-            username=comment.user.username,
-            avatar_url=comment.user.avatar_url
-        )
+        # Ensure user is loaded
+        if not comment.user:
+            # Manually load user if needed
+            from app.models.user import User
+            user = db.query(User).filter(User.id == comment.user_id).first()
+            comment.user = user
+        
+        if comment.user:
+            user_response = CreatorResponse(
+                id=comment.user.id,
+                username=comment.user.username,
+                avatar_url=comment.user.avatar_url
+            )
+        else:
+            # Fallback
+            user_response = CreatorResponse(
+                id=0,
+                username="Unknown",
+                avatar_url=None
+            )
         
         comment_list.append(DiaryCommentOut(
             id=comment.id,
             diary_id=comment.diary_id,
-            user=user_response,  # CORRECT: Use 'user' not 'author'
+            user=user_response,
             content=comment.content,
             created_at=comment.created_at if comment.created_at else datetime.utcnow()
         ))
@@ -349,8 +379,17 @@ def get_diary_likes_count_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diary = get_by_id(db, diary_id)
-    if not diary or not can_view(db, diary, current_user.id):
+    # First, check if diary exists
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    
+    if not diary:
+        raise HTTPException(404, "Diary not found")
+    
+    # Allow creator to always view likes (even if share_type is "friends")
+    if diary.user_id == current_user.id:
+        # Continue to count likes
+        pass
+    elif not can_view(db, diary, current_user.id):
         raise HTTPException(404, "Diary not found or not visible")
     
     likes_count = get_diary_likes_count(db, diary_id)

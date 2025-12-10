@@ -1,4 +1,4 @@
-//dashboard/FeedTab.jsx
+// dashboard/FeedTab.jsx
 import {
   Article as ArticleIcon,
   Cancel as CancelIcon,
@@ -67,6 +67,15 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+  // Normalize diaries to ensure groups is always an array
+  const normalizedDiaries = diaries.map(diary => ({
+    ...diary,
+    groups: Array.isArray(diary.groups) ? diary.groups : []
+  }));
+
+  // Normalize groups prop
+  const normalizedGroups = Array.isArray(groups) ? groups : [];
+
   const handleDeleteClick = (diaryId, diaryTitle) => {
     setDiaryToDelete({ id: diaryId, title: diaryTitle });
     setDeleteDialogOpen(true);
@@ -103,36 +112,36 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   };
 
   const handleEditClick = async (diary) => {
-  try {
-    // Try to fetch full diary data if needed
-    const fullDiary = await getDiaryById(diary.id);
-    
-    if (fullDiary) {
-      // Use fetched data
+    try {
+      // Try to fetch full diary data if needed
+      const fullDiary = await getDiaryById(diary.id);
+
+      if (fullDiary) {
+        // Use fetched data
+        setEditingDiary(diary.id);
+        setEditTitle(fullDiary.title || '');
+        setEditContent(fullDiary.content || '');
+        setEditShareType(fullDiary.share_type || '');
+        setEditGroupIds(Array.isArray(fullDiary.groups) ? fullDiary.groups.map(g => g.id) : []);
+      } else {
+        // Fall back to existing feed data
+        console.log('Using existing feed data for editing');
+        setEditingDiary(diary.id);
+        setEditTitle(diary.title || '');
+        setEditContent(diary.content || '');
+        setEditShareType(diary.share_type || '');
+        setEditGroupIds(Array.isArray(diary.groups) ? diary.groups.map(g => g.id) : []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch diary details:', err);
+      // Use existing data if fetch fails
       setEditingDiary(diary.id);
-      setEditTitle(fullDiary.title);
-      setEditContent(fullDiary.content);
-      setEditShareType(fullDiary.share_type);
-      setEditGroupIds(fullDiary.groups?.map(g => g.id) || []);
-    } else {
-      // Fall back to existing feed data
-      console.log('Using existing feed data for editing');
-      setEditingDiary(diary.id);
-      setEditTitle(diary.title);
-      setEditContent(diary.content);
-      setEditShareType(diary.share_type);
-      setEditGroupIds(diary.groups?.map(g => g.id) || []);
+      setEditTitle(diary.title || '');
+      setEditContent(diary.content || '');
+      setEditShareType(diary.share_type || '');
+      setEditGroupIds(Array.isArray(diary.groups) ? diary.groups.map(g => g.id) : []);
     }
-  } catch (err) {
-    console.error('Failed to fetch diary details:', err);
-    // Use existing data if fetch fails
-    setEditingDiary(diary.id);
-    setEditTitle(diary.title);
-    setEditContent(diary.content);
-    setEditShareType(diary.share_type);
-    setEditGroupIds(diary.groups?.map(g => g.id) || []);
-  }
-};
+  };
 
   const handleEditCancel = () => {
     setEditingDiary(null);
@@ -143,7 +152,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     setEditLoading(false);
   };
 
-const handleEditSave = async (diaryId) => {
+  const handleEditSave = async (diaryId) => {
     if (!editTitle.trim() || !editContent.trim()) {
       setError('Title and content are required');
       return;
@@ -177,7 +186,7 @@ const handleEditSave = async (diaryId) => {
 
       const response = await updateDiaryById(diaryId, updateData);
       console.log('✅ Update successful:', response);
-      
+
       setSuccess('Diary updated successfully');
       setTimeout(() => {
         setSuccess('');
@@ -352,7 +361,7 @@ const handleEditSave = async (diaryId) => {
         </Button>
       </Box>
 
-      {diaries.length === 0 ? (
+      {normalizedDiaries.length === 0 ? (
         <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
           {t('no_diaries_yet')}
         </Typography>
@@ -367,7 +376,7 @@ const handleEditSave = async (diaryId) => {
             msOverflowStyle: 'none',
           }}
         >
-          {diaries.map((diary) => (
+          {normalizedDiaries.map((diary) => (
             <Card key={diary.id} sx={{
               p: { xs: 2, sm: 3 },
               mb: 2,
@@ -428,7 +437,7 @@ const handleEditSave = async (diaryId) => {
                             onChange={(e) => setEditGroupIds(e.target.value)}
                             disabled={editLoading}
                           >
-                            {groups?.map((group) => (
+                            {normalizedGroups.map((group) => (
                               <MenuItem key={group.id} value={group.id}>
                                 {group.name}
                               </MenuItem>
@@ -483,11 +492,11 @@ const handleEditSave = async (diaryId) => {
                 </Box>
 
                 <Box
-                  sx={{ 
+                  sx={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1
-                   }}
+                  }}
                 >
                   {editingDiary !== diary.id && (
                     <>
@@ -649,7 +658,7 @@ const handleEditSave = async (diaryId) => {
                                   height: { xs: 28, sm: 32 },
                                   fontSize: { xs: '0.7rem', sm: '0.8rem' }
                                 }}>
-                                  {comment.author?.username?.charAt(0)?.toUpperCase() || 'U'}
+                                  {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
                                 </Avatar>
                               </ListItemAvatar>
                               <ListItemText
@@ -661,7 +670,7 @@ const handleEditSave = async (diaryId) => {
                                     gap: { xs: 0.5, sm: 1 }
                                   }}>
                                     <Typography variant="body2" component="span" fontWeight="600" color='green'>
-                                      {comment.author?.username || `User ${comment.user_id}`}
+                                      {comment.user?.username || `User ${comment.user_id}`}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
                                       {formatCambodiaTime(comment.created_at)}
