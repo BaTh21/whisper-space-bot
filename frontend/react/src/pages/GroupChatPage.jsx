@@ -46,6 +46,7 @@ import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
+import CallTopBar from '../components/group/CallTopBar';
 
 const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
@@ -463,6 +464,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         break;
 
       case "call_new_peer":
+        setCallStatus("In Call");
         handleSendOfferToNewPeer(data.new_user_id);
         break;
 
@@ -778,18 +780,15 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
 
     pc.ontrack = (event) => {
-      console.log("TRACK RECEIVED:", event.track.kind, event.track.enabled);
       let stream = remoteStreamsRef.current[userId];
-      if (!stream) stream = new MediaStream();
 
-      if (event.track) {
-        stream.addTrack(event.track);
-      }
-      if (event.streams?.[0]) {
-        event.streams[0].getTracks().forEach(t => stream.addTrack(t));
+      if (!stream) {
+        stream = new MediaStream();
+        remoteStreamsRef.current[userId] = stream;
       }
 
-      remoteStreamsRef.current[userId] = stream;
+      stream.addTrack(event.track);
+
       setRemoteStreams({ ...remoteStreamsRef.current });
     };
 
@@ -947,7 +946,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     avatarRef.current[from_user] = avatar_url;
 
     await getLocalStream();
-    await getOrCreatePeer(from_user);
 
     const pc = await getOrCreatePeer(from_user);
 
@@ -960,9 +958,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    if (pendingAnswers.current[from_user]) {
-      await pc.setRemoteDescription(new RTCSessionDescription(pendingAnswers.current[from_user]));
-      delete pendingAnswers.current[from_user];
+    if (pendingCandidates.current[from_user]) {
+      for (const c of pendingCandidates.current[from_user]) {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      }
+      delete pendingCandidates.current[from_user];
     }
 
     wsRef.current.send(JSON.stringify({
@@ -970,6 +970,18 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       to_user: from_user,
       sdp: answer
     }));
+
+    if (pendingOffers.current[from_user]) {
+      const pending = pendingOffers.current[from_user];
+      delete pendingOffers.current[from_user];
+
+      await handleReceiveOffer({
+        from_user,
+        username,
+        avatar_url,
+        sdp: pending
+      });
+    }
   };
 
   const handleSendOfferToNewPeer = async (userId) => {
@@ -1000,6 +1012,13 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
 
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+    if (pendingCandidates.current[from_user]) {
+      for (const c of pendingCandidates.current[from_user]) {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      }
+      delete pendingCandidates.current[from_user];
+    }
   };
 
   const pendingCandidates = useRef({});
@@ -1007,7 +1026,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const handleNewIceCandidate = async ({ from_user, candidate }) => {
     const pc = peersRef.current[from_user];
 
-    if (!pc || !pc.remoteDescription) {
+    if (!pc) return;
+
+    if (!pc.remoteDescription) {
       if (!pendingCandidates.current[from_user]) {
         pendingCandidates.current[from_user] = [];
       }
@@ -1015,7 +1036,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       return;
     }
 
-    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+      console.warn("ICE add failed", e);
+    }
   };
 
   const handleUserLeave = (userId) => {
@@ -1929,6 +1954,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         peersRef={peersRef}
         status={callStatus}
         totalAccepted={totalAccepted}
+        onConfirm={() => setCallingOpen(false)}
       />
 
       <IncomingCallDialog
@@ -1938,6 +1964,22 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
       />
+
+      <CallTopBar
+        callStatus={callStatus}
+        isVoice={incomingCall?.call_type === "voice"}
+        localStream={localStreamRef.current}
+        onToggleMic={() => {
+          localStreamRef.current?.getAudioTracks().forEach(t => (t.enabled = !t.enabled));
+        }}
+        onToggleCamera={() => {
+          localStreamRef.current?.getVideoTracks().forEach(t => (t.enabled = !t.enabled));
+        }}
+        onLeave={handleCancelCall}
+        onConfirm={() => setCallingOpen(true)}
+        onAccept={handleAcceptCall}
+      />
+
     </Box >
 
   );

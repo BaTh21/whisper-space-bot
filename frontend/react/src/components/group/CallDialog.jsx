@@ -12,6 +12,7 @@ import VideocamIcon from "@mui/icons-material/Videocam";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import CloseIcon from "@mui/icons-material/Close";
 import VideoCard from './VideoCard';
+import ZoomInMapIcon from '@mui/icons-material/ZoomInMap';
 
 const getRowsByCount = (count) => {
   if (count === 0) return [];
@@ -37,7 +38,8 @@ const CallDialog = ({
   status,
   peersRef,
   totalAccepted,
-  isAudioOnly = false
+  isAudioOnly = false,
+  onConfirm
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -93,7 +95,10 @@ const CallDialog = ({
 
     Object.values(peersRef.current).forEach(pc => {
       const sender = pc.getSenders().find(s => s.track?.kind === "video");
-      if (sender) sender.replaceTrack(track);
+
+      if (sender) {
+        sender.replaceTrack(track.enabled ? track : null);
+      }
     });
   };
 
@@ -299,6 +304,22 @@ const CallDialog = ({
               zIndex: 30
             }}
           >
+            <IconButton
+              color="white"
+              sx={{
+                position: 'fixed',
+                top: 10,
+                right: 10,
+                zIndex: 1300,
+                color: 'white',
+                '&:hover': {
+                  transform: 'scale 1.1'
+                }
+              }}
+              onClick={onConfirm}
+            >
+              <ZoomInMapIcon />
+            </IconButton>
             <Typography
               sx={{ fontSize: 26 }}
             >
