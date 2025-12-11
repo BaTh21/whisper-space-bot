@@ -85,6 +85,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [showDiaries, setShowDiaries] = useState(false);
   const [totalAccepted, setTotalAccepted] = useState(null);
+  const [voiceCall, setVoiceCall] = useState(false);
 
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
@@ -554,6 +555,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       setCallStatus(null);
       setCallingOpen(false);
+      setVoiceCall(false);
 
       setTimeout(setupWebSocket, 3000);
     };
@@ -839,6 +841,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }));
 
     setCallStatus("Calling…");
+    setVoiceCall(true);
     setCallingOpen(true);
   };
 
@@ -846,7 +849,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     usernamesRef.current[from_user] = username;
     avatarRef.current[from_user] = avatar_url;
 
-    const isAudioOnly = call_type === "voice";
+    let isAudioOnly;
+
+    if (isAudioOnly = call_type === "voice"){
+      setVoiceCall(true);
+    }
 
     await getLocalStream(isAudioOnly);
     await getOrCreatePeer(from_user);
@@ -1084,6 +1091,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     remoteStreamsRef.current = {};
     setRemoteStreams({});
     setCallStatus(null);
+    setVoiceCall(false);
     setCallingOpen(false);
   };
 
@@ -1125,6 +1133,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setRemoteStreams({});
 
     setCallStatus(null);
+    setVoiceCall(false);
     setCallingOpen(false);
     setIncomingCall(null);
   };
@@ -1942,7 +1951,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <CallDialog
         open={callingOpen}
         onCancel={handleCancelCall}
-        isAudioOnly={incomingCall?.isAudioOnly}
+        isAudioOnly={voiceCall}
         remoteStreams={Object.fromEntries(
           Object.entries(remoteStreams).filter(([uid, stream]) => (
             stream && stream.getTracks().length > 0

@@ -216,6 +216,7 @@ async def handle_forward_message(
             forwarded_at=datetime.utcnow(),
             parent_message_id=original.parent_message_id,
             content=original.content,
+            call_content=original.call_content,
             file_url=original.file_url,
             voice_url=original.voice_url,
             public_id=original.public_id,
@@ -232,6 +233,7 @@ async def handle_forward_message(
             "id": new_msg.id,
             "group_id": group_id,
             "content": new_msg.content,
+            "call_content": new_msg.call_content,
             "sender": {
                 "id": user.id,
                 "username": user.username,
@@ -254,7 +256,8 @@ async def handle_forward_message(
             } if original.parent_message_id else None,
             "file_url": new_msg.file_url,
             "voice_url": new_msg.voice_url,
-            "created_at": to_local_iso(new_msg.created_at, tz_offset_hours=7)
+            "created_at": to_local_iso(new_msg.created_at, tz_offset_hours=7),
+            "updated_at": to_local_iso(new_msg.created_at, tz_offset_hours=7)
         }
 
         await manager.broadcast(chat_id, msg_out)

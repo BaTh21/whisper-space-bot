@@ -1173,7 +1173,7 @@ async def websocket_group_chat(
                     })
                     
                     ## auto close if no one accepted
-                    async def auto_close_no_accept(chat_id, db):
+                    async def auto_close_no_accept(chat_id: str, db):
                         await asyncio.sleep(30)
                         if manager.get_total_accepted(chat_id) == 0:
                             await manager.end_group_call(chat_id, db)
@@ -1226,7 +1226,7 @@ async def websocket_group_chat(
                     })
                     
                     ## auto close if no one accepted
-                    async def auto_close_no_accept(chat_id, db):
+                    async def auto_close_no_accept(chat_id: str, db):
                         await asyncio.sleep(30)
                         if manager.get_total_accepted(chat_id) == 0:
                             await manager.end_group_call(chat_id, db)

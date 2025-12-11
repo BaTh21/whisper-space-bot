@@ -12,24 +12,28 @@ const Video = ({ stream, muted }) => {
     const el = ref.current;
     if (!el || !stream) return;
 
-    el.srcObject = stream;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
 
-    const tryPlay = () => {
-      el.muted = muted;          // USE the prop correctly
-      el.volume = muted ? 0 : 1;
+    el.muted = muted;
+    el.volume = muted ? 0 : 1;
 
-      el.play().catch(err => console.log("play() failed", err));
-    };
+    el.play().catch(err => {
+      if (err.name !== "AbortError") console.warn("play failed", err);
+    });
 
-    el.addEventListener("loadedmetadata", tryPlay);
-    tryPlay();
-
-    return () => {
-      el.pause();
-      el.srcObject = null;
-      el.removeEventListener("loadedmetadata", tryPlay);
-    };
   }, [stream, muted]);
+
+  useEffect(() => {
+    return () => {
+      const el = ref.current;
+      if (el) {
+        el.pause();
+        el.srcObject = null;
+      }
+    };
+  }, []);
 
   if (isAudioOnly) {
     return <audio ref={ref} autoPlay playsInline />;
