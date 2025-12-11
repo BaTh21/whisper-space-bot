@@ -1140,7 +1140,7 @@ async def websocket_group_chat(
                     db.commit()
                     db.refresh(system_msg)
                     
-                    manager.group_call_sessions[chat_id] = {
+                    manager.group_call_sessions[chat_id] =   {
                         "start_message_id": system_msg.id,
                         "start_time": datetime.utcnow(),
                         "end_time": None,
@@ -1268,6 +1268,16 @@ async def websocket_group_chat(
                 if action == "call_join":
                     manager.mark_user_accepted(chat_id, current_user.id)
                     
+                    session = manager.group_call_sessions.get(chat_id)
+                    if session:
+                        await websocket.send_json({
+                            "action": "call_info",
+                            "call_type": session.get("call_type", "video"),   # "video" | "voice"
+                            "is_audio_only": session.get("call_type") == "voice",
+                            "starter_id": session.get("starter_id"),
+                            "starter_name": session.get("starter_name"),
+                        })
+                    
                     await manager.broadcast(chat_id,{
                         "action": "call_join",
                         "user_id": current_user.id,
@@ -1304,6 +1314,30 @@ async def websocket_group_chat(
                         "total": total_accepted
                     })
                     
+                    session = manager.group_call_sessions.get(chat_id)
+                    if session:
+                        starter_id = session.get("starter_id")
+                        message_id = session.get("start_message_id")
+                        if message_id:
+                            msg = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
+                            if msg and current_user.id == starter_id:
+                                call_type = session.get("call_type", "call")
+                                type_text = "video call" if call_type == "video" else "voice call"
+                                starter_name = session.get("starter_name", "Someone")
+
+                                msg.call_content = f"{starter_name} ended the {type_text}"
+                                msg.updated_at = datetime.utcnow()
+                                db.commit()
+
+                                # Broadcast call end immediately
+                                await manager.broadcast(chat_id, {
+                                    "action": "call_end",
+                                    "call_message_id": message_id,
+                                    "call_content": msg.call_content,
+                                    "can_join": False,
+                                    "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7)
+                                })
+
                     timer = manager.call_timers.pop(chat_id, None)
                     if timer:
                         timer.cancel()

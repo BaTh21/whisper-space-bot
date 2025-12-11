@@ -118,6 +118,7 @@ class WebSocketManager:
                 call_type = session.get("call_type", "call")
                 type_text = "video call" if call_type == "video" else "voice call"
                 msg.call_content = f"{starter} ended the {type_text}"
+                msg.updated_at = end_time
                 db.commit()
 
         await self.broadcast(chat_id, {
@@ -125,7 +126,7 @@ class WebSocketManager:
             "call_message_id": message_id,
             "call_content": msg.call_content if msg else None,
             "can_join": False,
-            "ended_at": to_local_iso(end_time, tz_offset_hours=7),
+            "updated_at": to_local_iso(end_time, tz_offset_hours=7),
         })
 
         self.group_call_accepts.pop(chat_id, None)

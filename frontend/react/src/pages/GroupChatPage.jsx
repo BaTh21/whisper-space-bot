@@ -46,7 +46,6 @@ import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
-import CallTopBar from '../components/group/CallTopBar';
 
 const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
@@ -86,12 +85,12 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [showDiaries, setShowDiaries] = useState(false);
   const [totalAccepted, setTotalAccepted] = useState(null);
   const [voiceCall, setVoiceCall] = useState(false);
+  const [activeCallMessageId, setActiveCallMessageId] = useState(null);
 
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
   const [callPopupOpen, setCallPopupOpen] = useState(false);
-  const [callingOpen, setCallingOpen] = useState(false);
-  const [secondCallingOpen, setSecondCallingOpen] = useState(false);
+  const [callingOpen, setCallingOpen] = useState(true);
   const remoteStreamsRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
@@ -439,6 +438,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "new_message":
         setMessages(prev => [...prev, data]);
+
+        if (data.message_type === "call") {
+          setActiveCallMessageId(data.id);
+        }
         break;
 
       case "forward_to_groups":
@@ -453,6 +456,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         break;
 
       case "call_request":
+        setActiveCallMessageId(data.call_message_id);
         handleIncomingCall(data);
         break;
 
@@ -463,6 +467,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       case "call_join":
         console.log("CALL JOIN DATA:", data);
         handleNewUserJoined(data.user_id, data.username, data.avatar_url);
+        if (data.call_message_id) {
+          setActiveCallMessageId(data.call_message_id);
+        }
         break;
 
       case "call_new_peer":
@@ -485,8 +492,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       case "call_leave":
         handleUserLeave(data.user_id);
 
-        if (Object.keys(peersRef.current).length <= 1) {
-          console.log("Waiting for server to auto-end call…");
+        if (Object.keys(peersRef.current).length < 1) {
+          setCallingOpen(false);
         }
         break;
 
@@ -496,6 +503,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "call_end":
         handleCallEnded(data);
+        break;
+
+      case "call_info":
+        setVoiceCall(data.is_audio_only);
+        setCallType(data.call_type);
         break;
 
       default:
@@ -556,7 +568,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       setCallStatus(null);
       setCallingOpen(false);
-      setSecondCallingOpen(false);
       setVoiceCall(false);
 
       setTimeout(setupWebSocket, 3000);
@@ -817,23 +828,22 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       action: "call_start"
     }));
 
-    onlineUsers.forEach(async (uid) => {
-      if (uid !== user.id) {
-        const pc = await getOrCreatePeer(uid);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
+    // onlineUsers.forEach(async (uid) => {
+    //   if (uid !== user.id) {
+    //     const pc = await getOrCreatePeer(uid);
+    //     const offer = await pc.createOffer();
+    //     await pc.setLocalDescription(offer);
 
-        wsRef.current.send(JSON.stringify({
-          action: "call_offer",
-          to_user: uid,
-          sdp: pc.localDescription
-        }));
-      }
-    });
+    //     wsRef.current.send(JSON.stringify({
+    //       action: "call_offer",
+    //       to_user: uid,
+    //       sdp: pc.localDescription
+    //     }));
+    //   }
+    // });
 
     setCallStatus("Calling...");
     setCallingOpen(true);
-    setSecondCallingOpen(true);
   };
 
   const handleStartVoiceCall = async () => {
@@ -846,7 +856,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus("Calling…");
     setVoiceCall(true);
     setCallingOpen(true);
-    setSecondCallingOpen(true);
   };
 
   const handleIncomingCall = async ({ from_user, username, avatar_url, call_type }) => {
@@ -886,7 +895,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setIncomingCall(null);
     setCallStatus("In Call");
     setCallingOpen(true);
-    setSecondCallingOpen(true);
 
     await getOrCreatePeer(caller);
   };
@@ -901,19 +909,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus("In Call");
     setCallingOpen(true);
 
-    for (const uid of Array.from(onlineUsers)) {
-      if (uid === user.id) continue;
+    // for (const uid of Array.from(onlineUsers)) {
+    //   if (uid === user.id) continue;
 
-      const pc = await getOrCreatePeer(uid);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+    //   const pc = await getOrCreatePeer(uid);
+    //   const offer = await pc.createOffer();
+    //   await pc.setLocalDescription(offer);
 
-      wsRef.current.send(JSON.stringify({
-        action: "call_offer",
-        to_user: uid,
-        sdp: offer
-      }));
-    }
+    //   wsRef.current.send(JSON.stringify({
+    //     action: "call_offer",
+    //     to_user: uid,
+    //     sdp: offer
+    //   }));
+    // }
   };
 
   const handleCallAcceptedByUser = async ({ from_user }) => {
@@ -1076,6 +1084,21 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const handleCancelCall = () => {
     wsRef.current.send(JSON.stringify({ action: "call_leave" }));
 
+    if (activeCallMessageId) {
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === activeCallMessageId
+            ? {
+              ...m,
+              call_content: "Call ended",
+              can_join: false,
+              updated_at: new Date().toISOString()
+            }
+            : m
+        )
+      );
+    }
+
     setCallStatus("Ending call...");
 
     Object.values(peersRef.current).forEach(pc => {
@@ -1098,7 +1121,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus(null);
     setVoiceCall(false);
     setCallingOpen(false);
-    setSecondCallingOpen(false);
+
+    setActiveCallMessageId(null);
   };
 
   const handleRejectCall = () => {
@@ -1141,7 +1165,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus(null);
     setVoiceCall(false);
     setCallingOpen(false);
-    setSecondCallingOpen(true);
     setIncomingCall(null);
   };
 
@@ -1970,11 +1993,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         peersRef={peersRef}
         status={callStatus}
         totalAccepted={totalAccepted}
-        onConfirm={() => {
-          setCallingOpen(false);
-          setSecondCallingOpen(true);
-        }
-        }
       />
 
       <IncomingCallDialog
@@ -1983,25 +2001,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         avatar={incomingCall?.avatar_url}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
-      />
-
-      <CallTopBar
-        callStatus={secondCallingOpen}
-        isVoice={voiceCall}
-        localStream={localStreamRef.current}
-        onToggleMic={() => {
-          localStreamRef.current?.getAudioTracks().forEach(t => (t.enabled = !t.enabled));
-        }}
-        onToggleCamera={() => {
-          localStreamRef.current?.getVideoTracks().forEach(t => (t.enabled = !t.enabled));
-        }}
-        onLeave={handleCancelCall}
-        onConfirm={() => {
-          setCallingOpen(true);
-          setSecondCallingOpen(false);
-        }
-        }
-        onAccept={handleAcceptCall}
       />
 
     </Box >

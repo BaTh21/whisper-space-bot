@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Dialog,
   Box,
   Typography,
   IconButton,
+  Modal,
 } from "@mui/material";
 
 import MicOffIcon from "@mui/icons-material/MicOff";
@@ -39,12 +39,13 @@ const CallDialog = ({
   peersRef,
   totalAccepted,
   isAudioOnly = false,
-  onConfirm
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
 
   const [seconds, setSeconds] = useState(30);
+
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!open || status === "In Call") {
@@ -68,8 +69,8 @@ const CallDialog = ({
   }, [open, onCancel]);
 
   const [pipPos, setPipPos] = useState({
-    x: window.innerWidth - 220, // 200px width + 20px margin from right
-    y: 20                        // 20px from top
+    x: window.innerWidth - 220,
+    y: 20
   });
   const pipRef = useRef(null);
   const dragging = useRef(false);
@@ -84,27 +85,34 @@ const CallDialog = ({
     setIsMuted(!isMuted);
   };
 
-  const toggleVideo = () => {
+  const toggleVideo = async () => {
     if (!onLocal) return;
 
-    const [track] = onLocal.getVideoTracks();
-    if (!track) return;
+    const videoTrack = onLocal.getVideoTracks()[0];
 
-    track.enabled = !track.enabled;
-    setVideoEnabled(track.enabled);
+    if (isAudioOnly) {
+      Object.values(peersRef.current).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
+        if (sender) sender.replaceTrack(null);
+      });
 
-    Object.values(peersRef.current).forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === "video");
+      return;
+    }
 
-      if (sender) {
-        sender.replaceTrack(track.enabled ? track : null);
-      }
-    });
+    if (videoTrack) {
+      const enabled = videoTrack.enabled;
+      videoTrack.enabled = !enabled;
+      setVideoEnabled(videoTrack.enabled);
+
+      Object.values(peersRef.current).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
+        if (sender) sender.replaceTrack(videoTrack.enabled ? videoTrack : null);
+      });
+    }
   };
 
   const startDrag = (e) => {
     dragging.current = true;
-
     const rect = pipRef.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -140,90 +148,80 @@ const CallDialog = ({
   useEffect(() => {
     window.addEventListener("mousemove", duringDrag);
     window.addEventListener("mouseup", stopDrag);
-
     window.addEventListener("touchmove", duringDrag);
     window.addEventListener("touchend", stopDrag);
 
     return () => {
       window.removeEventListener("mousemove", duringDrag);
       window.removeEventListener("mouseup", stopDrag);
-
       window.removeEventListener("touchmove", duringDrag);
       window.removeEventListener("touchend", stopDrag);
     };
   }, []);
 
   return (
-    <Dialog open={open} onClose={onCancel} fullScreen>
+    <Modal
+      open={open}
+      onClose={onCancel}
+    >
       <Box
         sx={{
           width: "100%",
-          height: "100%",
+          height: collapsed ? "80px" : "100%",
           position: "relative",
-          bgcolor: "black"
+          bgcolor: "black",
+          transition: "height 0.3s ease",
+          overflow: "hidden",
+          backgroundColor: collapsed ? 'green' : 'grey'
         }}
       >
 
-        <Box
-          sx={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            gap: "6px",
-            padding: "6px",
-            boxSizing: "border-box",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            overflow: "hidden",
-          }}
-        >
-          {rows.map((row, rIndex) => (
-            <Box key={rIndex} sx={{ flex: 1, display: "flex", justifyContent: "center", gap: "6px", height: 120 }}>
-              {row.map((idx) => {
-                const entry = entries[idx];
-                if (!entry) return null;
+        {!collapsed && (
+          <Box
+            sx={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+              padding: "6px",
+              boxSizing: "border-box",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              overflow: "hidden",
+            }}
+          >
+            {rows.map((row, rIndex) => (
+              <Box key={rIndex} sx={{ flex: 1, display: "flex", justifyContent: "center", gap: "6px" }}>
+                {row.map((idx) => {
+                  const entry = entries[idx];
+                  if (!entry) return null;
 
-                const [userId, stream] = entry;
+                  const [userId, stream] = entry;
 
-                return (
-                  <VideoCard
-                    key={stream.id}
-                    stream={stream}
-                    userName={usernames[userId] || `User ${idx + 1}`}
-                    avatarUrl={avatars[userId] || `User ${idx + 1} img`}
-                  />
-                );
-              })}
-            </Box>
-          ))}
+                  return (
+                    <VideoCard
+                      key={stream.id}
+                      stream={stream}
+                      userName={usernames[userId] || `User ${idx + 1}`}
+                      avatarUrl={avatars[userId] || ""}
+                      isAudioOnly={isAudioOnly}
+                    />
+                  );
+                })}
+              </Box>
+            ))}
+          </Box>
+        )}
 
-          {totalAccepted === 0 && (
-            <Typography
-              variant="h5"
-              sx={{
-                color: "white",
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)"
-              }}
-            >
-              Waiting for others to join...
-            </Typography>
-          )}
-        </Box>
-
-        {onLocal && !isAudioOnly && (
+        {onLocal && !isAudioOnly && !collapsed && (
           <Box
             ref={pipRef}
             onMouseDown={startDrag}
             onTouchStart={startDrag}
             sx={{
               position: "fixed",
-              bottom: "unset",
-              right: "unset",
               left: pipPos.x,
               top: pipPos.y,
               width: 200,
@@ -238,60 +236,83 @@ const CallDialog = ({
               boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             }}
           >
-            <VideoCard stream={onLocal} userName="You" muted="You" />
+            <VideoCard stream={onLocal} userName="You" isAudioOnly={isAudioOnly} />
           </Box>
         )}
 
-        <Box
-          sx={{
-            position: "fixed",
-            bottom: 32,
-            width: "100%",
-            display: "flex",
-            justifyContent: "center",
-            gap: 4,
-            zIndex: 30
-          }}
-        >
-          <IconButton
-            onClick={toggleMute}
+        {!collapsed && (
+          <Box
             sx={{
-              backgroundColor: isMuted ? "secondary.main" : "primary.main",
-              color: "white",
-              "&:hover": {
-                backgroundColor: isMuted ? "#68102fff" : "#1a2f42ff"
-              }
+              position: "fixed",
+              bottom: 32,
+              width: "100%",
+              display: "flex",
+              justifyContent: "center",
+              gap: 4,
+              zIndex: 30
             }}
           >
-            {isMuted ? <MicOffIcon /> : <KeyboardVoiceIcon />}
-          </IconButton>
-
-          {!isAudioOnly && (
             <IconButton
-              onClick={toggleVideo}
+              onClick={toggleMute}
               sx={{
-                backgroundColor: videoEnabled ? "primary.main" : "secondary.main",
+                backgroundColor: isMuted ? "secondary.main" : "primary.main",
                 color: "white",
                 "&:hover": {
-                  backgroundColor: videoEnabled ? "#1a2f42ff" : "#68102fff"
+                  backgroundColor: isMuted ? "#68102fff" : "#1a2f42ff"
                 }
               }}
             >
-              {videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+              {isMuted ? <MicOffIcon /> : <KeyboardVoiceIcon />}
             </IconButton>
-          )}
 
-          <IconButton
-            onClick={onCancel}
+            {!isAudioOnly && (
+              <IconButton
+                onClick={toggleVideo}
+                sx={{
+                  backgroundColor: videoEnabled ? "primary.main" : "secondary.main",
+                  color: "white",
+                  "&:hover": {
+                    backgroundColor: videoEnabled ? "#1a2f42ff" : "#68102fff"
+                  }
+                }}
+              >
+                {videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+              </IconButton>
+            )}
+
+            <IconButton
+              onClick={onCancel}
+              sx={{
+                backgroundColor: "error.main",
+                color: "white",
+                "&:hover": { backgroundColor: "#b71c1c" }
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        )}
+
+        {!totalAccepted && !collapsed && (
+          <Box
             sx={{
-              backgroundColor: "error.main",
+              position: "absolute",
+              textAlign: "center",
               color: "white",
-              "&:hover": { backgroundColor: "#b71c1c" }
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              width: '100%',
+              height: '100%'
             }}
           >
-            <CloseIcon />
-          </IconButton>
-        </Box>
+            <Typography
+              sx={{
+                fontSize: 24
+              }}
+            >Waiting for other to join...</Typography>
+          </Box>
+        )}
 
         {status && (
           <Box
@@ -301,36 +322,30 @@ const CallDialog = ({
               width: "100%",
               textAlign: "center",
               color: "white",
-              zIndex: 30
+              zIndex: 40
             }}
           >
+
             <IconButton
-              color="white"
+              onClick={() => setCollapsed(!collapsed)}
               sx={{
                 position: 'fixed',
                 top: 10,
                 right: 10,
                 zIndex: 1300,
                 color: 'white',
-                '&:hover': {
-                  transform: 'scale 1.1'
-                }
+                '&:hover': { transform: 'scale(1.1)' }
               }}
-              onClick={onConfirm}
             >
               <ZoomInMapIcon />
             </IconButton>
-            <Typography
-              sx={{ fontSize: 26 }}
-            >
+
+            <Typography sx={{ fontSize: 22 }}>
               {status}
             </Typography>
+
             {open && status !== "In Call" && (
-              <Typography
-                sx={{
-                  fontSize: 18
-                }}
-              >
+              <Typography sx={{ fontSize: 16 }}>
                 Call will end in {seconds}s
               </Typography>
             )}
@@ -338,7 +353,7 @@ const CallDialog = ({
         )}
 
       </Box>
-    </Dialog>
+    </Modal>
   );
 };
 
