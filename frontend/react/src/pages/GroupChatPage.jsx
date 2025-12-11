@@ -91,6 +91,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const localStreamRef = useRef(null);
   const [callPopupOpen, setCallPopupOpen] = useState(false);
   const [callingOpen, setCallingOpen] = useState(false);
+  const [secondCallingOpen, setSecondCallingOpen] = useState(false);
   const remoteStreamsRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
@@ -555,6 +556,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       setCallStatus(null);
       setCallingOpen(false);
+      setSecondCallingOpen(false);
       setVoiceCall(false);
 
       setTimeout(setupWebSocket, 3000);
@@ -831,6 +833,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
     setCallStatus("Calling...");
     setCallingOpen(true);
+    setSecondCallingOpen(true);
   };
 
   const handleStartVoiceCall = async () => {
@@ -843,6 +846,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus("Calling…");
     setVoiceCall(true);
     setCallingOpen(true);
+    setSecondCallingOpen(true);
   };
 
   const handleIncomingCall = async ({ from_user, username, avatar_url, call_type }) => {
@@ -851,7 +855,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
     let isAudioOnly;
 
-    if (isAudioOnly = call_type === "voice"){
+    if (isAudioOnly = call_type === "voice") {
       setVoiceCall(true);
     }
 
@@ -882,6 +886,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setIncomingCall(null);
     setCallStatus("In Call");
     setCallingOpen(true);
+    setSecondCallingOpen(true);
 
     await getOrCreatePeer(caller);
   };
@@ -1093,6 +1098,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus(null);
     setVoiceCall(false);
     setCallingOpen(false);
+    setSecondCallingOpen(false);
   };
 
   const handleRejectCall = () => {
@@ -1135,6 +1141,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus(null);
     setVoiceCall(false);
     setCallingOpen(false);
+    setSecondCallingOpen(true);
     setIncomingCall(null);
   };
 
@@ -1963,7 +1970,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         peersRef={peersRef}
         status={callStatus}
         totalAccepted={totalAccepted}
-        onConfirm={() => setCallingOpen(false)}
+        onConfirm={() => {
+          setCallingOpen(false);
+          setSecondCallingOpen(true);
+        }
+        }
       />
 
       <IncomingCallDialog
@@ -1975,8 +1986,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       />
 
       <CallTopBar
-        callStatus={callStatus}
-        isVoice={incomingCall?.call_type === "voice"}
+        callStatus={secondCallingOpen}
+        isVoice={voiceCall}
         localStream={localStreamRef.current}
         onToggleMic={() => {
           localStreamRef.current?.getAudioTracks().forEach(t => (t.enabled = !t.enabled));
@@ -1985,7 +1996,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
           localStreamRef.current?.getVideoTracks().forEach(t => (t.enabled = !t.enabled));
         }}
         onLeave={handleCancelCall}
-        onConfirm={() => setCallingOpen(true)}
+        onConfirm={() => {
+          setCallingOpen(true);
+          setSecondCallingOpen(false);
+        }
+        }
         onAccept={handleAcceptCall}
       />
 

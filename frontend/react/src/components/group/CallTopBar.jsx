@@ -30,14 +30,12 @@ export default function CallTopBar({
     const [seconds, setSeconds] = useState(0);
 
     useEffect(() => {
-        if (callStatus !== "In Call") return;
-
         const timer = setInterval(() => {
             setSeconds(s => s + 1);
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [callStatus]);
+    }, []);
 
     const formatTime = () => {
         const m = Math.floor(seconds / 60);
