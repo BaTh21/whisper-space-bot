@@ -40,7 +40,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { commentOnDiary, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, updateDiaryById } from '../../services/api';
-import { formatCambodiaDate, formatCambodiaTime } from '../../utils/dateUtils';
+import { formatCambodiaDate } from '../../utils/dateUtils';
 
 const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, profile, groups }) => {
   const [expandedDiary, setExpandedDiary] = useState(null);
@@ -674,7 +674,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
                                       {comment.user?.username || `User ${comment.user_id}`}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                      {formatCambodiaTime(comment.created_at)}
+                                      {formatCambodiaDate(comment.created_at)}
                                     </Typography>
                                   </Box>
                                 }

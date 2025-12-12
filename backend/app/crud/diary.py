@@ -75,8 +75,8 @@ def get_by_id(db: Session, diary_id: int) -> Optional[Diary]:
     return db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
 
 def get_visible(db: Session, user_id: int) -> List[Diary]:
-    # Get IDs of friends
-    subq_friends = (
+    # Get IDs of friends (people I added as friends)
+    my_friends = (
         db.query(Friend.friend_id)
         .filter(
             Friend.user_id == user_id,
@@ -84,18 +84,39 @@ def get_visible(db: Session, user_id: int) -> List[Diary]:
         )
         .subquery()
     )
-
+    
+    # Get IDs of people who added me as friend
+    friends_of_me = (
+        db.query(Friend.user_id)
+        .filter(
+            Friend.friend_id == user_id,
+            Friend.status == FriendshipStatus.accepted
+        )
+        .subquery()
+    )
+    
+    # Combine both directions to get all mutual friends
+    all_friends_union = (
+        db.query(Friend.friend_id.label('friend_id'))
+        .filter(Friend.user_id == user_id, Friend.status == FriendshipStatus.accepted)
+        .union(
+            db.query(Friend.user_id.label('friend_id'))
+            .filter(Friend.friend_id == user_id, Friend.status == FriendshipStatus.accepted)
+        )
+        .subquery()
+    )
+    
     # Get IDs of groups the user is in
-    subq_groups = (
+    user_groups = (
         db.query(GroupMember.group_id)
         .filter(GroupMember.user_id == user_id)
         .subquery()
     )
 
     # Get diary IDs that belong to those groups
-    subq_group_diaries = (
+    group_diaries = (
         db.query(DiaryGroup.diary_id)
-        .filter(DiaryGroup.group_id.in_(select(subq_groups.c.group_id)))
+        .filter(DiaryGroup.group_id.in_(select(user_groups.c.group_id)))
         .subquery()
     )
 
@@ -105,16 +126,34 @@ def get_visible(db: Session, user_id: int) -> List[Diary]:
         .filter(
             Diary.is_deleted.is_(False),
             or_(
+                # Public diaries
                 Diary.share_type == ShareType.public,
+                
+                # Diaries shared with friends where I'm a friend of the diary owner
                 and_(
                     Diary.share_type == ShareType.friends,
-                    Diary.user_id.in_(select(subq_friends.c.friend_id))
+                    or_(
+                        # Diary owner added me as friend
+                        and_(
+                            Diary.user_id.in_(select(my_friends.c.friend_id)),
+                            Diary.user_id != user_id  # Exclude own diaries (handled below)
+                        ),
+                        # I added diary owner as friend
+                        and_(
+                            Diary.user_id.in_(select(friends_of_me.c.user_id)),
+                            Diary.user_id != user_id  # Exclude own diaries
+                        )
+                    )
                 ),
+                
+                # Group diaries where I'm a member
                 and_(
                     Diary.share_type == ShareType.group,
-                    Diary.id.in_(select(subq_group_diaries.c.diary_id))
+                    Diary.id.in_(select(group_diaries.c.diary_id))
                 ),
-                Diary.user_id == user_id  # User can always see their own diaries
+                
+                # My own diaries
+                Diary.user_id == user_id
             )
         )
         .order_by(Diary.created_at.desc())
@@ -140,13 +179,23 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
         return False  # Only creator can view, already handled above
     
     if diary.share_type == ShareType.friends:
-        # Check if users are friends
+        # Check if current user is a friend of the diary owner
+        # IMPORTANT: Check both directions of friendship
         is_friend = db.query(Friend).filter(
             or_(
-                and_(Friend.user_id == user_id, Friend.friend_id == diary.user_id),
-                and_(Friend.user_id == diary.user_id, Friend.friend_id == user_id)
-            ),
-            Friend.status == FriendshipStatus.accepted
+                # Diary owner added current user as friend
+                and_(
+                    Friend.user_id == diary.user_id,
+                    Friend.friend_id == user_id,
+                    Friend.status == FriendshipStatus.accepted
+                ),
+                # Current user added diary owner as friend
+                and_(
+                    Friend.user_id == user_id,
+                    Friend.friend_id == diary.user_id,
+                    Friend.status == FriendshipStatus.accepted
+                )
+            )
         ).first() is not None
         return is_friend
     
@@ -170,7 +219,6 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
         return is_member
     
     return False
-
 def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_user_id: int):
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
