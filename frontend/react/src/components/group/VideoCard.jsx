@@ -61,7 +61,6 @@ const Video = ({ stream, muted, isAudioOnly }) => {
 const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly, muted, voiceUi }) => {
   const videoTrack = stream?.getVideoTracks()[0];
 
-  const isMuted = muted;
   const videoEnabled = videoTrack ? videoTrack.enabled : false;
 
   const showVideo = videoEnabled && !isAudioOnly;

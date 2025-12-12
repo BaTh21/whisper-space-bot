@@ -86,17 +86,19 @@ const CallDialog = ({
 
   const toggleMute = () => {
     if (!onLocal) return;
-    toggleVoiceUi();
 
     const audioTrack = onLocal.getAudioTracks()[0];
     if (!audioTrack) return;
 
-    audioTrack.enabled = !audioTrack.enabled;
-    setIsMuted(!audioTrack.enabled);
+    const newEnabled = !audioTrack.enabled;
+    audioTrack.enabled = newEnabled;
+    setIsMuted(!newEnabled);
+
+    setVoiceEnabled(!newEnabled);
 
     Object.values(peersRef.current).forEach(pc => {
       const sender = pc.getSenders().find(s => s.track?.kind === "audio");
-      if (sender) sender.replaceTrack(audioTrack.enabled ? audioTrack : null);
+      if (sender) sender.replaceTrack(audioTrack);
     });
   };
 
@@ -241,7 +243,7 @@ const CallDialog = ({
               boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             }}
           >
-            <VideoCard stream={onLocal} userName="You" isAudioOnly={isAudioOnly} muted={true} voiceUi={voiceEnabled}/>
+            <VideoCard stream={onLocal} userName="You" isAudioOnly={isAudioOnly} muted={isMuted} voiceUi={isMuted} />
           </Box>
         )}
 

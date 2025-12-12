@@ -146,6 +146,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       group_ids: targetGroupIds
     }));
 
+    setMessages(prev => {
+      if (prev.some(m => m.id === message.id)) return prev;
+      return [...prev, message];
+    });
   };
 
   const handleScroll = (e) => {
@@ -738,7 +742,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     if (!localStreamRef.current) {
       localStreamRef.current = await navigator.mediaDevices.getUserMedia(
         isAudioOnly ? {
-          video: true,
+          video: false,
           audio: true
         } : {
           video: true,
