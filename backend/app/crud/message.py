@@ -257,7 +257,7 @@ async def handle_forward_message(
             "file_url": new_msg.file_url,
             "voice_url": new_msg.voice_url,
             "created_at": to_local_iso(new_msg.created_at, tz_offset_hours=7),
-            "updated_at": to_local_iso(new_msg.created_at, tz_offset_hours=7)
+            # "updated_at": to_local_iso(new_msg.created_at, tz_offset_hours=7)
         }
 
         await manager.broadcast(chat_id, msg_out)

@@ -145,11 +145,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       message_id: message.id,
       group_ids: targetGroupIds
     }));
-
-    setMessages(prev => {
-      if (prev.some(m => m.id === message.id)) return prev;
-      return [...prev, message];
-    });
   };
 
   const handleScroll = (e) => {
@@ -416,21 +411,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
       case "new_message":
         setMessages(prev => [...prev, data]);
-
-        if (data.message_type === "call") {
-          setActiveCallMessageId(data.id);
-        }
-        break;
-
-      case "forward_to_groups":
-        console.log(`Message ${data.message_id} forwarded to groups:`, data.forwarded_to);
-
-        setMessages(prev => {
-          if (!prev.some(msg => msg.id === data.id)) {
-            return [...prev, data];
-          }
-          return prev;
-        });
         break;
 
       case "call_request":
@@ -1344,13 +1324,14 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
               </Box>
             ) : (
               messages
+                .filter(Boolean)
                 .slice()
                 .sort((a, b) => new Date(a.created_at || a.temp_created_at) - new Date(b.created_at || b.temp_created_at))
                 .map((message) => {
                   const isEditing = editingMessageId === message.id;
                   const messageKey = message.id ?? message.temp_id;
 
-                  const isForwarded = !!message?.forwarded_by;
+                  const isForwarded = !!message.forwarded_by;
 
                   const isOwn = message.sender?.id === user?.id;
 
@@ -1436,11 +1417,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                     py: 1,
                                     borderLeft: "3px solid #1a73e8",
                                     borderRadius: 1,
-                                    // mb: 1
                                   }}
                                 >
                                   <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                                    Forwarded from {message?.forwarded_by?.id !== user?.id ?
+                                    Forwarded from {message.forwarded_by.id !== user?.id ?
                                       <Box
                                         sx={{
                                           display: 'flex',
@@ -1449,26 +1429,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                         }}
                                       >
                                         <Avatar
-                                          src={message?.forwarded_by?.avatar_url}
-                                          alt={message?.forwarded_by?.username || "author image"}
+                                          src={message.forwarded_by.avatar_url}
+                                          alt={message.forwarded_by.username || "author image"}
                                           sx={{
                                             width: 14,
                                             height: 14,
                                             mt: 0.3
                                           }}
-                                        >{message?.forwarded_by?.avatar_url?.charAt(0) || "U"}</Avatar>
-                                        {message?.forwarded_by?.username}
+                                        >{message.forwarded_by.avatar_url.charAt(0) || "U"}</Avatar>
+                                        {message.forwarded_by.username}
                                       </Box>
                                       :
                                       (" you")}
                                   </Typography>
-
-                                  {/* <Typography
-                                    variant="caption"
-                                    sx={{ color: "text.secondary", ml: 1 }}
-                                  >
-                                    by 
-                                  </Typography> */}
                                 </Box>
                               )}
 
