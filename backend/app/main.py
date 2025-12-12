@@ -72,3 +72,19 @@ def root():
 @app.get("/api/v1/health")
 def health_check():
     return {"status": "healthy", "message": "Whisper Space API is running"}
+
+@app.get("/api/v1/test-email")
+async def test_email_endpoint():
+    """Test email configuration"""
+    from app.services.email import send_verification_email_sync
+    test_email = "your-test-email@gmail.com"
+    code = "999999"
+    
+    try:
+        success = send_verification_email_sync(test_email, code)
+        if success:
+            return {"status": "success", "message": f"Test email sent to {test_email}"}
+        else:
+            return {"status": "error", "message": "Failed to send email"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

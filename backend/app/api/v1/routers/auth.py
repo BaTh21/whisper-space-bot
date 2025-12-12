@@ -1,3 +1,6 @@
+
+from datetime import datetime
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -7,10 +10,11 @@ from app.schemas.auth import Token, UserCreate, UserLogin, VerifyCodeRequest
 from app.core.database import get_db
 from app.crud.user import get_by_email, create, verify
 from app.crud.auth import create_verification_code, delete_code, get_valid_code, get_valid_refresh_token, revoke_refresh_token, store_refresh_token
-from app.services.email import send_verification_email
+from app.services.email import send_verification_email, send_verification_email_sync
 from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password
 from app.schemas.refresh_token import RefreshTokenRequest
 from app.models.user import User
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -35,31 +39,61 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
     )
 
 @router.post("/register", response_model=BaseResponse)
-async def register(user_in: UserCreate, 
-                   background_tasks: BackgroundTasks,
-                   db: Session = Depends(get_db), 
-                   ):
-    user_by_email = db.query(User).filter(User.email == user_in.email).first()
-    if user_by_email:
+async def register(
+    user_in: UserCreate, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db), 
+):
+    # Check existing users
+    existing_email = db.query(User).filter(User.email == user_in.email).first()
+    if existing_email:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, 
-            detail="Email already registered")
+            detail="Email already registered"
+        )
     
-    user_by_username = db.query(User).filter(User.username == user_in.username).first()
-    if user_by_username:
+    existing_username = db.query(User).filter(User.username == user_in.username).first()
+    if existing_username:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, 
-            detail="Username already registered")
+            detail="Username already taken"
+        )
     
+    # Generate 6-digit code
     code = "".join(random.choices("0123456789", k=6))
     
+    # Create user
     new_user = create(db, user_in)
+    
+    # Store verification code
     create_verification_code(db, new_user.id, code)
+    # Try to send email
+    email_sent = False
+    try:
+        email_sent = send_verification_email_sync(user_in.email, code)
+        print(f"📧 Email send attempt: {'✅ SUCCESS' if email_sent else '❌ FAILED'}")
+    except Exception as e:
+        print(f"❌ Email error: {e}")
+        # Still try background task
+        background_tasks.add_task(send_verification_email_sync, user_in.email, code)
     
-    background_tasks.add_task(send_verification_email, user_in.email, code)
+    # Write to log file (platform independent)
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "email_debug.log")
     
-    return BaseResponse(msg="Verification code sent")
-
+    if email_sent:
+        return BaseResponse(
+            success=True,
+            msg="Verification email sent! Please check your inbox.",
+            data={"email": user_in.email}
+        )
+    else:
+        return BaseResponse(
+            success=True,
+            msg="Registration complete! Check your email for verification code.",
+            data={"email": user_in.email}
+        )
 
 @router.post("/verify-code", response_model=Token)
 def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
@@ -168,3 +202,4 @@ async def resend_verification(email: str, db: Session = Depends(get_db)):
         )
     
     return BaseResponse(msg="Verification code sent")
+

@@ -1,61 +1,61 @@
-import { useState, useEffect } from 'react';
 import {
-    Box,
-    Typography,
-    Button,
-    Tabs,
-    Tab,
-    List,
-    ListItem,
-    ListItemAvatar,
-    ListItemText,
-    Avatar,
-    TextField,
-    Collapse,
-    CircularProgress,
-    Stack,
-    Paper,
-    Divider,
-    Menu,
-    MenuItem,
-    IconButton,
-    InputAdornment,
-    ListItemIcon,
-} from '@mui/material';
-import {
-    Favorite as FavoriteIcon,
     Comment as CommentIcon,
+    Favorite as FavoriteIcon,
 } from '@mui/icons-material';
-import ReplyIcon from '@mui/icons-material/Reply';
+import AddIcon from '@mui/icons-material/Add';
+import ClearIcon from "@mui/icons-material/Clear";
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import ReplyIcon from '@mui/icons-material/Reply';
+import SearchIcon from '@mui/icons-material/Search';
 import {
-    getGroupMembers,
-    getGroupDiaries,
-    likeDiary,
+    Avatar,
+    Box,
+    Button,
+    CircularProgress,
+    Collapse,
+    Divider,
+    IconButton,
+    InputAdornment,
+    List,
+    ListItem,
+    ListItemAvatar,
+    ListItemIcon,
+    ListItemText,
+    Menu,
+    MenuItem,
+    Paper,
+    Stack,
+    Tab,
+    Tabs,
+    TextField,
+    Typography,
+} from '@mui/material';
+import { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
+import { useAuth } from '../../context/AuthContext';
+import {
     commentOnDiary,
+    deleteCommentById,
+    deleteDiaryById,
+    deleteShareById,
     getDiaryComments,
     getGroupById,
-    removeGroupMember,
-    deleteDiaryById,
-    deleteCommentById,
-    deleteShareById
+    getGroupDiaries,
+    getGroupMembers,
+    likeDiary,
+    removeGroupMember
 } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
-import { useAuth } from '../../context/AuthContext';
-import DeleteDialog from '../dialogs/DeleteDialog';
-import UserProfileDialog from '../dialogs/UserProfileDialog';
-import DiaryDialog from '../dialogs/DiaryDialog';
-import { toast } from 'react-toastify';
-import SearchIcon from '@mui/icons-material/Search';
-import AddIcon from '@mui/icons-material/Add';
-import CreateDiaryForGroupDialog from '../dialogs/CreateDiaryForGroupDialog';
-import ClearIcon from "@mui/icons-material/Clear";
 import CommentUpdateDialog from '../dialogs/CommentUpdateDialog';
+import CreateDiaryForGroupDialog from '../dialogs/CreateDiaryForGroupDialog';
+import DeleteDialog from '../dialogs/DeleteDialog';
+import DiaryDialog from '../dialogs/DiaryDialog';
 import ShareDiaryDialog from '../dialogs/ShareDiaryDailog';
+import UserProfileDialog from '../dialogs/UserProfileDialog';
 
-const GroupSideComponent = ({groupId}) => {
+const GroupSideComponent = ({ groupId }) => {
     const [members, setMembers] = useState([]);
     const [diaries, setDiaries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -184,8 +184,9 @@ const GroupSideComponent = ({groupId}) => {
             }));
             setNewComment((prev) => ({ ...prev, [diaryId]: "" }));
             handleSuccess();
-        } catch (err) {
-            console.error("Failed to add comment:", err);
+            setTimeout(() => {
+                setSuccess('');
+            }, 2000);
         } finally {
             handleSuccess();
             setPostingComment((prev) => ({ ...prev, [diaryId]: false }));

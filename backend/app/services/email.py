@@ -1,76 +1,108 @@
-import aiosmtplib
-from email.message import EmailMessage
-from ..core.config import settings
-from datetime import datetime
-import resend
-async def send_verification_email(email: str, code: str):
-    message = EmailMessage()
-    message["From"] = settings.SMTP_FROM
-    message["To"] = email
-    message["Subject"] = "Whisper Space - Verify Your Email"
+import smtplib
+import logging
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from app.core.config import settings
 
-    # Plain-text fallback
-    message.set_content(f"Your verification code is: {code}")
+logger = logging.getLogger(__name__)
 
-    html_content = f"""
-    <html>
-      <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f2f3f7; margin: 0; padding: 0;">
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr>
-            <td align="center">
-              <table width="480" cellpadding="0" cellspacing="0" style="background-color: #ffffff; margin: 40px 0; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-                
-                <tr>
-                  <td style="text-align: center; padding-bottom: 20px;">
-                    <h2 style="color: #333333; margin: 0; font-size: 24px;">Verify Your Email</h2>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding: 10px 0; color: #555555; font-size: 16px;">
-                    <p>Hello,</p>
-                    <p>Thank you for signing up for Whisper Space. Use the verification code below to confirm your email address:</p>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td align="center" style="padding: 20px 0;">
-                    <div style="display: inline-block; font-size: 28px; font-weight: bold; color: #ffffff; background-color: #4a90e2; padding: 16px 32px; border-radius: 8px; letter-spacing: 2px;">
-                      {code}
-                    </div>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding: 10px 0; color: #555555; font-size: 14px; text-align: center;">
-                    <p>This code will expire in 10 minutes.</p>
-                    <p>If you did not request this email, you can safely ignore it.</p>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding-top: 30px; border-top: 1px solid #e0e0e0; text-align: center; color: #888888; font-size: 12px;">
-                    <p>© {datetime.now().year} Whisper Space. All rights reserved.</p>
-                  </td>
-                </tr>
-
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-    </html>
+def send_verification_email_sync(to_email: str, code: str) -> bool:
     """
-
-    message.add_alternative(html_content, subtype="html")
+    Simple and reliable email sending function
+    """
     try:
-      await aiosmtplib.send(
-          message,
-          hostname=settings.SMTP_HOST,
-          port=settings.SMTP_PORT,
-          use_tls=True,
-          username=settings.SMTP_USER,
-          password=settings.SMTP_PASS,
-      )
+        print(f"📧 Starting email send to: {to_email}")
+        
+        # Create message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = 'Verify Your Whisper Space Account'
+        msg['From'] = settings.SMTP_FROM
+        msg['To'] = to_email
+        
+        # Text version
+        text = f"""Whisper Space Verification
+
+Your verification code is: {code}
+
+Enter this code in the app to verify your email.
+
+This code will expire in 10 minutes.
+
+If you didn't request this, please ignore this email.
+"""
+        
+        # HTML version
+        html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 30px; background: #f8f9fa; border-radius: 10px;">
+        <h2 style="color: #333;">Whisper Space</h2>
+        <h3 style="color: #555;">Email Verification Required</h3>
+        
+        <p>Hello,</p>
+        
+        <p>Please use the following code to verify your email address:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <div style="
+                display: inline-block;
+                font-size: 32px;
+                font-weight: bold;
+                color: white;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 20px 40px;
+                border-radius: 8px;
+                letter-spacing: 5px;
+            ">
+                {code}
+            </div>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">
+            <strong>Note:</strong> This code expires in 10 minutes.
+        </p>
+        
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #888; font-size: 12px;">
+            <p>If you didn't create an account with Whisper Space, please ignore this email.</p>
+            <p>© 2024 Whisper Space</p>
+        </div>
+    </div>
+</body>
+</html>"""
+        
+        # Attach parts
+        msg.attach(MIMEText(text, 'plain'))
+        msg.attach(MIMEText(html, 'html'))
+        
+        # Send email
+        if settings.SMTP_PORT == 465:
+            # SSL
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
+                server.login(settings.SMTP_USER, settings.SMTP_PASS)
+                server.send_message(msg)
+                print(f"✅ Email sent via SSL to {to_email}")
+        else:
+            # TLS (587 or 2525)
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
+                server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASS)
+                server.send_message(msg)
+                print(f"✅ Email sent via TLS to {to_email}")
+        
+        return True
+        
+    except smtplib.SMTPAuthenticationError:
+        print(f"❌ SMTP Authentication failed for {settings.SMTP_USER}")
+        print("Please check your email password/API key")
+        return False
     except Exception as e:
-      print(f"Failed to send email to {email}: {e}")
+        print(f"❌ Failed to send email: {e}")
+        return False
+
+
+async def send_verification_email(to_email: str, code: str) -> bool:
+    """
+    Async wrapper
+    """
+    import asyncio
+    return await asyncio.to_thread(send_verification_email_sync, to_email, code)

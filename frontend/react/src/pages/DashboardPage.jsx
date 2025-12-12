@@ -181,6 +181,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
             <FeedTab
               diaries={diaries}
               profile={profile}
+              groups={groups} 
               onNewDiary={() => setDiaryDialogOpen(true)}
               setError={setError}
               setSuccess={setSuccess}
@@ -264,6 +265,9 @@ const DashboardPage = ({ defaultTab = 0 }) => {
           setDiaryDialogOpen(false);
           fetchDashboardData();
           setSuccess('Diary created successfully');
+          setTimeout(() => {
+            setSuccess('');
+          }, 2000);
         }}
         setError={setError}
       />
@@ -275,7 +279,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
           setGroups(prev => [...prev, newGroup]);
           setGroupDialogOpen(false);
           setSuccess('Group created successfully!');
-          fetchDashboardData(); 
+          fetchDashboardData();
         }}
         friends={friends}
       />

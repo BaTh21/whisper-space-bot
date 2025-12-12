@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
+from datetime import datetime
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count, update_diary, delete_diary, create_diary_for_group, delete_comment, update_comment, share_diary, delete_share
@@ -11,6 +12,7 @@ from app.models.diary import Diary
 from app.models.friend import Friend, FriendshipStatus
 from app.models.diary_like import DiaryLike
 from app.models.group_member import GroupMember
+from app.models.diary_comment import DiaryComment
 
 router = APIRouter()
 
@@ -45,12 +47,16 @@ def create_diary_endpoint(
 
     return DiaryOut(
         id=diary.id,
-        author={"id": current_user.id, "username": current_user.username},
+        author=CreatorResponse(
+            id=current_user.id,
+            username=current_user.username,
+            avatar_url=current_user.avatar_url
+        ),
         title=diary.title,
         content=diary.content,
         share_type=diary.share_type.value,
         groups=[
-            {"id": g.id, "name": g.name} for g in diary.groups
+            GroupResponse(id=g.id, name=g.name) for g in diary.groups
         ],
         likes=getattr(diary, "likes", 0),
         is_deleted=diary.is_deleted,
@@ -103,7 +109,7 @@ def get_feed(
                     user=CreatorResponse(
                         id=l.user.id,
                         username=l.user.username,
-                        avatar_url=d.author.avatar_url
+                        avatar_url=l.user.avatar_url
                     )
                 ) for l in d.likes
             ],
@@ -114,6 +120,99 @@ def get_feed(
         result.append(diary_out)
 
     return result
+
+@router.get("/{diary_id}", response_model=DiaryOut)
+def get_diary_by_id(
+    diary_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # First check if diary exists (even if deleted)
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    
+    if not diary:
+        raise HTTPException(status_code=404, detail="Diary not found")
+    
+    # Check if diary is deleted
+    if diary.is_deleted:
+        # Only allow creator to see deleted diary
+        if diary.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Diary not found")
+    
+    # Allow access if user is the creator OR can_view returns True
+    if diary.user_id == current_user.id:
+        # Creator can always view their own diary
+        pass
+    elif not can_view(db, diary, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to view this diary")
+    
+    return DiaryOut(
+        id=diary.id,
+        author=CreatorResponse(
+            id=diary.author.id,
+            username=diary.author.username,
+            avatar_url=diary.author.avatar_url
+        ),
+        title=diary.title,
+        content=diary.content,
+        share_type=diary.share_type.value,
+        groups=[GroupResponse(id=g.id, name=g.name) for g in diary.groups],
+        likes=[
+            DiaryLikeResponse(
+                id=l.id,
+                user=CreatorResponse(
+                    id=l.user.id,
+                    username=l.user.username,
+                    avatar_url=l.user.avatar_url
+                )
+            ) for l in diary.likes
+        ],
+        is_deleted=diary.is_deleted,
+        created_at=diary.created_at,
+        updated_at=diary.updated_at
+    )
+
+@router.get("/{diary_id}/edit", response_model=DiaryOut)
+def get_diary_for_edit(
+    diary_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get diary data for editing (only creator can access)"""
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    
+    if not diary:
+        raise HTTPException(status_code=404, detail="Diary not found")
+    
+    # Only creator can get diary for editing
+    if diary.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the creator can edit this diary")
+    
+    return DiaryOut(
+        id=diary.id,
+        author=CreatorResponse(
+            id=diary.author.id,
+            username=diary.author.username,
+            avatar_url=diary.author.avatar_url
+        ),
+        title=diary.title,
+        content=diary.content,
+        share_type=diary.share_type.value,
+        groups=[GroupResponse(id=g.id, name=g.name) for g in diary.groups],
+        likes=[
+            DiaryLikeResponse(
+                id=l.id,
+                user=CreatorResponse(
+                    id=l.user.id,
+                    username=l.user.username,
+                    avatar_url=l.user.avatar_url
+                )
+            ) for l in diary.likes
+        ],
+        is_deleted=diary.is_deleted,
+        created_at=diary.created_at,
+        updated_at=diary.updated_at
+    )
 
 @router.patch("/{diary_id}", response_model=DiaryOut)
 def update_diary_by_id(diary_id: int,
@@ -126,7 +225,9 @@ def update_diary_by_id(diary_id: int,
 def delete_diary_by_id(diary_id: int,
                        db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)):
-    return delete_diary(db, diary_id, current_user.id)
+    delete_diary(db, diary_id, current_user.id)
+    return None
+
 
 @router.post("/{diary_id}/share", response_model=DiaryOut)
 def share_diary_by_id(diary_id: int,
@@ -142,7 +243,8 @@ def delete_share_by_id(share_id: int,
                        db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)
                        ):
-    return delete_share(db, share_id, current_user.id)
+    delete_share(db, share_id, current_user.id)
+    return None
 
 @router.post("/{diary_id}/comment", response_model=DiaryCommentOut)
 def comment_on_diary(
@@ -151,21 +253,34 @@ def comment_on_diary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diary = get_by_id(db, diary_id)
-    if not diary or not can_view(db, diary, current_user.id):
+    # First, check if diary exists
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    
+    if not diary:
+        raise HTTPException(status_code=404, detail="Diary not found")
+    
+    # Allow creator to always comment on own diary
+    if diary.user_id == current_user.id:
+        # Continue to create comment
+        pass
+    elif not can_view(db, diary, current_user.id):
         raise HTTPException(status_code=404, detail="Diary not found or not visible")
 
     comment = create_comment(db, diary_id, current_user.id, comment_in.content)
     
+    # Create user response from current_user
+    user_response = CreatorResponse(
+        id=current_user.id,
+        username=current_user.username,
+        avatar_url=current_user.avatar_url
+    )
+    
     return DiaryCommentOut(
         id=comment.id,
         diary_id=comment.diary_id,
-        author=CreatorResponse(
-            id=current_user.id,
-            username=current_user.username
-        ),
+        user=user_response,
         content=comment.content,
-        created_at=comment.created_at.isoformat() if comment.created_at else None
+        created_at=comment.created_at if comment.created_at else datetime.utcnow()
     )
 
 @router.get("/{diary_id}/comments", response_model=List[DiaryCommentOut])
@@ -174,20 +289,57 @@ def get_diary_comments_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diary = get_by_id(db, diary_id)
-    # if not diary or not can_view(db, diary, current_user.id):
-    #     raise HTTPException(404, "Diary not found or not visible")
+    # First, check if diary exists
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
     
-    comments = get_diary_comments(db, diary_id)
+    if not diary:
+        raise HTTPException(404, "Diary not found")
+    
+    # Allow creator to always view comments (even if share_type is "friends")
+    if diary.user_id == current_user.id:
+        # Continue to load comments
+        pass
+    elif not can_view(db, diary, current_user.id):
+        raise HTTPException(404, "Diary not found or not visible")
+    
+    # Load comments with user relationship
+    comments = (
+        db.query(DiaryComment)
+        .options(joinedload(DiaryComment.user))
+        .filter(DiaryComment.diary_id == diary_id)
+        .order_by(DiaryComment.created_at.asc())
+        .all()
+    )
     
     comment_list = []
     for comment in comments:
+        # Ensure user is loaded
+        if not comment.user:
+            # Manually load user if needed
+            from app.models.user import User
+            user = db.query(User).filter(User.id == comment.user_id).first()
+            comment.user = user
+        
+        if comment.user:
+            user_response = CreatorResponse(
+                id=comment.user.id,
+                username=comment.user.username,
+                avatar_url=comment.user.avatar_url
+            )
+        else:
+            # Fallback
+            user_response = CreatorResponse(
+                id=0,
+                username="Unknown",
+                avatar_url=None
+            )
+        
         comment_list.append(DiaryCommentOut(
             id=comment.id,
             diary_id=comment.diary_id,
-            user=CreatorResponse(id=comment.user.id, username=comment.user.username, avatar_url=comment.user.avatar_url),
+            user=user_response,
             content=comment.content,
-            created_at=comment.created_at.isoformat() if comment.created_at else None
+            created_at=comment.created_at if comment.created_at else datetime.utcnow()
         ))
     
     return comment_list
@@ -205,7 +357,8 @@ def delete_comment_by_id(comment_id: int,
                          db: Session = Depends(get_db),
                          current_user: User = Depends(get_current_user)
                          ):
-    return delete_comment(db, comment_id, current_user.id)
+    delete_comment(db, comment_id, current_user.id)
+    return None
 
 @router.post("/{diary_id}/like")
 def like_diary_endpoint(
@@ -226,8 +379,17 @@ def get_diary_likes_count_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diary = get_by_id(db, diary_id)
-    if not diary or not can_view(db, diary, current_user.id):
+    # First, check if diary exists
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    
+    if not diary:
+        raise HTTPException(404, "Diary not found")
+    
+    # Allow creator to always view likes (even if share_type is "friends")
+    if diary.user_id == current_user.id:
+        # Continue to count likes
+        pass
+    elif not can_view(db, diary, current_user.id):
         raise HTTPException(404, "Diary not found or not visible")
     
     likes_count = get_diary_likes_count(db, diary_id)

@@ -867,19 +867,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     setCallStatus("In Call");
     setCallingOpen(true);
 
-    // for (const uid of Array.from(onlineUsers)) {
-    //   if (uid === user.id) continue;
+    for (const uid of Array.from(onlineUsers)) {
+      if (uid === user.id) continue;
 
-    //   const pc = await getOrCreatePeer(uid);
-    //   const offer = await pc.createOffer();
-    //   await pc.setLocalDescription(offer);
+      const pc = await getOrCreatePeer(uid);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-    //   wsRef.current.send(JSON.stringify({
-    //     action: "call_offer",
-    //     to_user: uid,
-    //     sdp: offer
-    //   }));
-    // }
+      wsRef.current.send(JSON.stringify({
+        action: "call_offer",
+        to_user: uid,
+        sdp: offer
+      }));
+    }
   };
 
   const handleCallAcceptedByUser = async ({ from_user }) => {
