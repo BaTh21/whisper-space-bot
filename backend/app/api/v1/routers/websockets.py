@@ -1014,12 +1014,12 @@ async def websocket_group_chat(
                     await manager.broadcast(chat_id, {
                         "action": "seen",
                         "message_id": message_id,
-                        "user_id": current_user.id,
+                        "user_id": current_user.id,                                   
                         "seen_at": to_local_iso(now, tz_offset_hours=7)
                     })
                     continue
 
-                if action == "forward_to_groups":
+                if action == "forward_to_groups": 
                     message_id = data.get("message_id")
                     target_group_ids = [int(g) for g in data.get("group_ids", [])]
                     target_group_ids = [gid for gid in target_group_ids if gid != group_id]
@@ -1338,6 +1338,7 @@ async def websocket_group_chat(
                                     "updated_at": to_local_iso(msg.updated_at, tz_offset_hours=7)
                                 })
 
+                    
                     timer = manager.call_timers.pop(chat_id, None)
                     if timer:
                         timer.cancel()

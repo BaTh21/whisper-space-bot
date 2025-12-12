@@ -146,11 +146,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       group_ids: targetGroupIds
     }));
 
-    setMessages(prev => {
-      if (prev.some(m => m.id === message.id)) return prev;
-      return [...prev, message];
-    });
-
   };
 
   const handleScroll = (e) => {
@@ -413,27 +408,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
               : msg
           )
         );
-        break;
-
-      case "voice_upload":
-        setMessages(prev => {
-          const updated = [...prev];
-          if (data.temp_id) {
-            const tempIndex = updated.findIndex(msg => msg.id === data.temp_id);
-            if (tempIndex !== -1) {
-              updated[tempIndex] = {
-                ...updated[tempIndex],
-                ...data,
-                is_temp: false,
-                uploading: false,
-                progress: 100
-              };
-              return updated;
-            }
-          }
-          updated.push({ ...data, is_temp: false, uploading: false, progress: 100 });
-          return updated;
-        });
         break;
 
       case "new_message":

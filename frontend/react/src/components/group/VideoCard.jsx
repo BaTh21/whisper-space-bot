@@ -17,14 +17,16 @@ const Video = ({ stream, muted, isAudioOnly }) => {
     el.muted = !!muted;
     el.volume = muted ? 0 : 1;
 
-    const playAudio = () => {
+    const playMedia = () => {
       el.play().catch(() => {
         setTimeout(() => el.play().catch(() => { }), 300);
       });
     };
 
-    playAudio();
+    playMedia();
   }, [stream, muted]);
+
+  console.log("AUDIO", isAudioOnly);
 
   if (isAudioOnly) {
     return (
@@ -33,7 +35,14 @@ const Video = ({ stream, muted, isAudioOnly }) => {
         autoPlay
         playsInline
         controls={false}
-        style={{ display: "none" }}
+        style={{
+          position: "absolute",
+          opacity: 0,
+          pointerEvents: "none",
+          width: 0,
+          height: 0
+        }}
+
       />
     );
   }
@@ -49,11 +58,10 @@ const Video = ({ stream, muted, isAudioOnly }) => {
   );
 };
 
-const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly }) => {
-  const audioTrack = stream?.getAudioTracks()[0];
+const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly, muted, voiceUi }) => {
   const videoTrack = stream?.getVideoTracks()[0];
 
-  const isMuted = audioTrack ? !audioTrack.enabled : true;
+  const isMuted = muted;
   const videoEnabled = videoTrack ? videoTrack.enabled : false;
 
   const showVideo = videoEnabled && !isAudioOnly;
@@ -74,8 +82,10 @@ const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly }) => {
         borderColor: "divider",
       }}
     >
-      {showVideo ? (
-        <Video stream={stream} muted={userName === "You"} isAudioOnly={isAudioOnly}/>
+      {isAudioOnly ? (
+        <Video stream={stream} muted={muted} isAudioOnly={true} />
+      ) : showVideo ? (
+        <Video stream={stream} muted={muted} isAudioOnly={false} />
       ) : (
         <Box
           sx={{
@@ -121,7 +131,7 @@ const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly }) => {
         </Box>
       )}
 
-      {isMuted && (
+      {voiceUi && (
         <Box
           sx={{
             position: "absolute",
@@ -166,18 +176,17 @@ const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly }) => {
         </Box>
       )}
 
-      {userName && showVideo && isAudioOnly && (
+      {isAudioOnly && (
         <Box
           sx={{
             position: "absolute",
-            bgcolor: "rgba(0,0,0,0.5)",
             px: 1,
             py: 0.5,
-            borderRadius: 1,
             color: "white",
             fontSize: 12,
             display: "flex",
             alignItems: "center",
+            flexDirection: 'column',
             justifyContent: 'center',
             gap: 1,
           }}
@@ -193,7 +202,7 @@ const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly }) => {
           )}
           <Typography
             sx={{
-              fontSize: 30
+              fontSize: 24
             }}
           >{userName}</Typography>
         </Box>

@@ -42,10 +42,15 @@ const CallDialog = ({
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
 
   const [seconds, setSeconds] = useState(30);
 
   const [collapsed, setCollapsed] = useState(false);
+
+  const toggleVoiceUi = () => {
+    setVoiceEnabled(prev => !prev);
+  }
 
   useEffect(() => {
     if (!open || status === "In Call") {
@@ -81,34 +86,33 @@ const CallDialog = ({
 
   const toggleMute = () => {
     if (!onLocal) return;
-    onLocal.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
-    setIsMuted(!isMuted);
+    toggleVoiceUi();
+
+    const audioTrack = onLocal.getAudioTracks()[0];
+    if (!audioTrack) return;
+
+    audioTrack.enabled = !audioTrack.enabled;
+    setIsMuted(!audioTrack.enabled);
+
+    Object.values(peersRef.current).forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === "audio");
+      if (sender) sender.replaceTrack(audioTrack.enabled ? audioTrack : null);
+    });
   };
 
-  const toggleVideo = async () => {
+  const toggleVideo = () => {
     if (!onLocal) return;
 
-    const videoTrack = onLocal.getVideoTracks()[0];
+    const track = onLocal.getVideoTracks()[0];
+    if (!track) return;
 
-    if (isAudioOnly) {
-      Object.values(peersRef.current).forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track?.kind === "video");
-        if (sender) sender.replaceTrack(null);
-      });
+    track.enabled = !track.enabled;
+    setVideoEnabled(track.enabled);
 
-      return;
-    }
-
-    if (videoTrack) {
-      const enabled = videoTrack.enabled;
-      videoTrack.enabled = !enabled;
-      setVideoEnabled(videoTrack.enabled);
-
-      Object.values(peersRef.current).forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track?.kind === "video");
-        if (sender) sender.replaceTrack(videoTrack.enabled ? videoTrack : null);
-      });
-    }
+    Object.values(peersRef.current).forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === "video");
+      if (sender) sender.replaceTrack(track);
+    });
   };
 
   const startDrag = (e) => {
@@ -207,6 +211,7 @@ const CallDialog = ({
                       userName={usernames[userId] || `User ${idx + 1}`}
                       avatarUrl={avatars[userId] || ""}
                       isAudioOnly={isAudioOnly}
+                      muted={false}
                     />
                   );
                 })}
@@ -236,7 +241,7 @@ const CallDialog = ({
               boxShadow: "0 0 10px rgba(0,0,0,0.5)",
             }}
           >
-            <VideoCard stream={onLocal} userName="You" isAudioOnly={isAudioOnly} />
+            <VideoCard stream={onLocal} userName="You" isAudioOnly={isAudioOnly} muted={true} voiceUi={voiceEnabled}/>
           </Box>
         )}
 
