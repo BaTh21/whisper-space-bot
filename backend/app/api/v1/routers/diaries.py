@@ -251,16 +251,20 @@ def get_diary_comments_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # First, check if diary exists
     diary = db.query(Diary).filter(Diary.id == diary_id).first()
     
     if not diary:
         raise HTTPException(404, "Diary not found")
     
+    # Allow creator to always view comments (even if share_type is "friends")
     if diary.user_id == current_user.id:
+        # Continue to load comments
         pass
     elif not can_view(db, diary, current_user.id):
         raise HTTPException(404, "Diary not found or not visible")
     
+    # Load ALL comments for this diary with user relationship
     comments = (
         db.query(DiaryComment)
         .options(joinedload(DiaryComment.user))
@@ -269,53 +273,70 @@ def get_diary_comments_endpoint(
         .all()
     )
     
-    def build_comment_tree(comments_list):
-        comment_dict = {}
-        root_comments = []
-        
-        for comment in comments_list:
-            comment_dict[comment.id] = {
-                'comment': comment,
-                'replies': []
-            }
-        
-        for comment in comments_list:
-            node = comment_dict[comment.id]
-            if comment.parent_id is None:
-                root_comments.append(node)
-            else:
-                if comment.parent_id in comment_dict:
-                    comment_dict[comment.parent_id]['replies'].append(node)
-        
-        def convert_node(node):
-            comment = node['comment']
-            user_response = CreatorResponse(
-                id=comment.user.id,
-                username=comment.user.username,
-                avatar_url=comment.user.avatar_url
-            ) if comment.user else CreatorResponse(
-                id=0,
-                username="Unknown",
-                avatar_url=None
-            )
-            
-            replies = [convert_node(reply) for reply in node['replies']]
-            
-            return DiaryCommentOut(
-                id=comment.id,
-                diary_id=comment.diary_id,
-                user=user_response,
-                content=comment.content,
-                images=comment.images if comment.images else None,
-                parent_id=comment.parent_id,
-                replies=replies if replies else None,
-                created_at=comment.created_at if comment.created_at else datetime.utcnow()
-            )
-        
-        return [convert_node(node) for node in root_comments]
+    # Get total count (including replies)
+    total_count = db.query(DiaryComment).filter(DiaryComment.diary_id == diary_id).count()
     
+    # Build nested comment tree
     comment_tree = build_comment_tree(comments)
     return comment_tree
+    
+    # Helper function to build nested comments
+def build_comment_tree(comments_list):
+    """Build nested comment tree with unlimited depth"""
+    # Create lookup dictionary
+    comment_map = {}
+    root_comments = []
+    
+    # First pass: create nodes for all comments
+    for comment in comments_list:
+        comment_map[comment.id] = {
+            'id': comment.id,
+            'comment': comment,
+            'children': []
+        }
+    
+    # Second pass: build tree
+    for comment in comments_list:
+        node = comment_map[comment.id]
+        if comment.parent_id is None:
+            root_comments.append(node)
+        else:
+            # Find parent and add this as child
+            parent_node = comment_map.get(comment.parent_id)
+            if parent_node:
+                parent_node['children'].append(node)
+            else:
+                # Orphan comment (parent not found or not loaded)
+                root_comments.append(node)
+    
+    # Convert to nested structure
+    def build_nested(node):
+        comment = node['comment']
+        user_response = CreatorResponse(
+            id=comment.user.id,
+            username=comment.user.username,
+            avatar_url=comment.user.avatar_url
+        ) if comment.user else CreatorResponse(
+            id=0,
+            username="Unknown",
+            avatar_url=None
+        )
+        
+        # Recursively build children
+        children = [build_nested(child) for child in node['children']]
+        
+        return DiaryCommentOut(
+            id=comment.id,
+            diary_id=comment.diary_id,
+            user=user_response,
+            content=comment.content,
+            images=comment.images if comment.images else None,
+            parent_id=comment.parent_id,
+            replies=children if children else None,
+            created_at=comment.created_at if comment.created_at else datetime.utcnow()
+        )
+    
+    return [build_nested(node) for node in root_comments]
 
 @router.put("/comments/{comment_id}", response_model=DiaryCommentOut)
 def update_comment_by_id(comment_id: int,
