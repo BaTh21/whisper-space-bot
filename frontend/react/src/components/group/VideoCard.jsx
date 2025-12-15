@@ -1,14 +1,15 @@
-import { Card, Box, Typography, Avatar, duration } from "@mui/material";
+import { Card, Box, Typography, Avatar } from "@mui/material";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
-import { useEffect, useRef } from "react";
+import { useEffect, forwardRef, useRef } from "react";
 
-const Video = ({ stream, muted, isAudioOnly }) => {
-  const ref = useRef(null);
+const Video = forwardRef(({ stream, muted, isAudioOnly }, ref) => {
 
   useEffect(() => {
     const el = ref.current;
     if (!el || !stream) return;
+
+    if (stream.getTracks().length === 0) return;
 
     if (el.srcObject !== stream) {
       el.srcObject = stream;
@@ -24,9 +25,7 @@ const Video = ({ stream, muted, isAudioOnly }) => {
     };
 
     playMedia();
-  }, [stream, muted]);
-
-  console.log("AUDIO", isAudioOnly);
+  }, [stream, muted, ref]);
 
   if (isAudioOnly) {
     return (
@@ -56,9 +55,10 @@ const Video = ({ stream, muted, isAudioOnly }) => {
       style={{ width: "100%", height: "100%", objectFit: "cover" }}
     />
   );
-};
+});
 
-const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly, muted, voiceUi }) => {
+const VideoCard = forwardRef(({ stream, userName, avatarUrl, isAudioOnly, muted, voiceUi }, ref) => {
+  const videoRef = useRef(null);
   const videoTrack = stream?.getVideoTracks()[0];
 
   const videoEnabled = videoTrack ? videoTrack.enabled : false;
@@ -80,11 +80,12 @@ const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly, muted, voiceUi })
         border: 1,
         borderColor: "divider",
       }}
+      ref={ref}
     >
       {isAudioOnly ? (
-        <Video stream={stream} muted={muted} isAudioOnly={true} />
+        <Video ref={videoRef} stream={stream} muted={muted} isAudioOnly={true} />
       ) : showVideo ? (
-        <Video stream={stream} muted={muted} isAudioOnly={false} />
+        <Video ref={videoRef} stream={stream} muted={muted} isAudioOnly={false} />
       ) : (
         <Box
           sx={{
@@ -208,6 +209,6 @@ const VideoCard = ({ stream, userName, avatarUrl, isAudioOnly, muted, voiceUi })
       )}
     </Card>
   );
-};
+})  ;
 
 export default VideoCard;

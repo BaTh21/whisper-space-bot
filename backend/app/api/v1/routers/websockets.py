@@ -34,37 +34,27 @@ async def handle_websocket_private(
 ):
     
     from app.services.websocket_manager import manager
-    """
-    WebSocket endpoint for real-time private chat with online/offline status tracking
-    """
+
     current_user = None
     heartbeat_task = None
     
     try:
-        # ✅ AUTHENTICATE USER via query params (for WebSocket)
         token = None
         
-        # 1. First try to get token from query params
         query_params = dict(websocket.query_params)
         if "token" in query_params:
             token = query_params["token"]
-            print(f"🔑 Token from query params: {token[:20]}...")
-        
-        # 2. If no token in query params, check headers
+            
         if not token:
             token_header = websocket.headers.get("Authorization")
             if token_header and token_header.startswith("Bearer "):
                 token = token_header.split(" ")[1]
-                print(f"🔑 Token from headers: {token[:20]}...")
-        
-        # 3. If still no token, wait for auth message
+
         if not token:
             try:
-                print("⏳ Waiting for auth message...")
                 data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
                 if data.get("type") == "auth" and data.get("token"):
                     token = data["token"]
-                    print(f"🔑 Token from auth message: {token[:20]}...")
                 else:
                     await websocket.close(code=4001, reason="Authentication required")
                     return
@@ -72,48 +62,34 @@ async def handle_websocket_private(
                 await websocket.close(code=4001, reason="Authentication timeout")
                 return
         
-        # Verify token
-        print("🔍 Verifying token...")
         payload = verify_token(token)
         if not payload:
-            print("❌ Token verification failed")
             await websocket.close(code=4001, reason="Invalid or expired token")
             return
         
-        # Get user ID from token
         raw_user_id = payload.get("sub")
         if not raw_user_id:
-            print("❌ Token missing sub claim")
             await websocket.close(code=4001, reason="Token missing sub")
             return
         
         try:
             user_id = int(raw_user_id)
         except (ValueError, TypeError):
-            print(f"❌ Invalid user ID in token: {raw_user_id}")
             await websocket.close(code=4001, reason="Invalid user ID in token")
             return
         
-        # Load user from DB
-        print(f"👤 Loading user with ID: {user_id}")
         current_user = db.query(User).filter(User.id == user_id).first()
         if not current_user:
-            print(f"❌ User not found with ID: {user_id}")
             await websocket.close(code=4001, reason="User not found")
             return
         
-        print(f"✅ User authenticated: {current_user.username} (ID: {current_user.id})")
-
-        # ✅ VALIDATE FRIENDSHIP
-        print(f"🤝 Checking friendship between {current_user.id} and {friend_id}")
         if not is_friend(db, current_user.id, friend_id):
             print(f"❌ Users {current_user.id} and {friend_id} are not friends")
             await websocket.close(code=4003, reason="Not friends")
             return
         
         await websocket.accept()
-        
-        # Send authentication success immediately
+
         await websocket.send_json({
             "type": "auth_success",
             "message": "Authenticated successfully",
@@ -121,7 +97,6 @@ async def handle_websocket_private(
             "username": current_user.username,
         })
         
-        # ✅ MARK EXISTING UNREAD MESSAGES AS SEEN ON CONNECTION
         unread_msgs = db.query(PrivateMessage).filter(
             PrivateMessage.receiver_id == current_user.id,
             PrivateMessage.sender_id == friend_id,
@@ -152,10 +127,8 @@ async def handle_websocket_private(
         
         chat_id = _chat_id(current_user.id, friend_id)
         
-        # ✅ CONNECT TO MANAGER
         await manager.connect(chat_id, websocket, user_id=current_user.id)
         
-        # ✅ HEARTBEAT FUNCTION
         async def send_heartbeat():
             try:
                 while True:
@@ -173,11 +146,8 @@ async def handle_websocket_private(
             except Exception as e:
                 print(f"Heartbeat error: {e}")
 
-        # ✅ START HEARTBEAT
         heartbeat_task = asyncio.create_task(send_heartbeat())
-        print(f"Started heartbeat for user {current_user.id}")
 
-        # ✅ MAIN MESSAGE LOOP
         while True:
             try:
                 raw_data = await asyncio.wait_for(
@@ -187,7 +157,6 @@ async def handle_websocket_private(
                 
                 await manager.update_user_activity(current_user.id)
                 
-                # Handle pong
                 if raw_data.strip():
                     try:
                         data = json.loads(raw_data)
@@ -197,7 +166,6 @@ async def handle_websocket_private(
                         if raw_data.strip() == "pong":
                             continue
 
-                # Parse data
                 try:
                     data = json.loads(raw_data) if raw_data.strip() else {}
                 except json.JSONDecodeError:
@@ -221,14 +189,9 @@ async def handle_websocket_private(
                         "error": "Message type is required"
                     })
                     continue
-
-                # === HANDLE MESSAGE TYPES ===
-
-                # ✅ TEXT/VOICE/FILE MESSAGE
+                
                 if msg_type == "message":
-                    # FIXED: Allow voice messages with Cloudinary URLs
                     if message_type == "voice":
-                        # For voice messages, content should be a Cloudinary URL
                         if not content or not content.startswith(('http://', 'https://')):
                             await websocket.send_json({
                                 "type": "error",
@@ -237,7 +200,6 @@ async def handle_websocket_private(
                             })
                             continue
                     elif message_type == "file":
-                        # For file messages, content should be a URL
                         if not content or not content.startswith(('http://', 'https://')):
                             await websocket.send_json({
                                 "type": "error",
@@ -246,7 +208,6 @@ async def handle_websocket_private(
                             })
                             continue
                     elif message_type == "image":
-                        # For image messages, content should be a URL
                         if not content or not content.startswith(('http://', 'https://')):
                             await websocket.send_json({
                                 "type": "error",
@@ -255,7 +216,6 @@ async def handle_websocket_private(
                             })
                             continue
                     else:
-                        # For text messages, validate content
                         if not content or not content.strip():
                             await websocket.send_json({
                                 "type": "error",
@@ -264,7 +224,6 @@ async def handle_websocket_private(
                             })
                             continue
                     
-                    # ✅ VALIDATE REPLY MESSAGE
                     if reply_to_id:
                         try:
                             replied_message = validate_reply_message(db, reply_to_id, current_user.id, friend_id)
@@ -284,7 +243,6 @@ async def handle_websocket_private(
                             continue
 
                     try:
-                        # Create message in DB
                         msg = create_private_message(
                             db=db,
                             sender_id=current_user.id,
@@ -296,7 +254,6 @@ async def handle_websocket_private(
                             file_size=file_size
                         )
 
-                        # ✅ RELOAD WITH ALL RELATIONSHIPS
                         full_msg = db.query(PrivateMessage).options(
                             joinedload(PrivateMessage.sender),
                             joinedload(PrivateMessage.receiver),
@@ -313,7 +270,6 @@ async def handle_websocket_private(
                             })
                             continue
 
-                        # ✅ PREPARE SEEN_BY INFORMATION
                         seen_by = []
                         if full_msg.seen_statuses:
                             for status in full_msg.seen_statuses:
@@ -324,7 +280,6 @@ async def handle_websocket_private(
                                     "seen_at": status.seen_at.isoformat() if status.seen_at else None
                                 })
 
-                        # ✅ PREPARE RESPONSE DATA
                         message_data = {
                             "type": "message",
                             "id": full_msg.id,
@@ -344,7 +299,6 @@ async def handle_websocket_private(
                             "seen_by": seen_by
                         }
 
-                        # ✅ ADD REPLY_TO DATA IF EXISTS
                         if full_msg.reply_to:
                             # Create compact reply preview (like Telegram)
                             reply_content = full_msg.reply_to.content or ""
@@ -390,9 +344,7 @@ async def handle_websocket_private(
                                 "seen_by": reply_seen_by
                             }
 
-                        # ✅ BROADCAST TO BOTH USERS
                         await manager.broadcast(chat_id, message_data)
-                        print(f"📢 Broadcast new message {full_msg.id} with reply: {full_msg.reply_to_id}")
 
                     except Exception as e:
                         print(f"Error sending message: {e}")
@@ -402,7 +354,6 @@ async def handle_websocket_private(
                             "temp_id": temp_id
                         })
 
-                # ✅ READ RECEIPTS (REAL-TIME)
                 elif msg_type == "read":
                     message_id = data.get("message_id")
                     if not message_id:
@@ -413,7 +364,6 @@ async def handle_websocket_private(
                         continue
 
                     try:
-                        # Mark message as read in database
                         success = mark_message_as_read(db, message_id, current_user.id)
                         
                         if success:
@@ -433,7 +383,6 @@ async def handle_websocket_private(
                                         "seen_at": status.seen_at.isoformat() if status.seen_at else None
                                     })
 
-                                # ✅ Broadcast message update
                                 broadcast_data = {
                                     "type": "message_updated",
                                     "message_id": message_id,
@@ -445,7 +394,6 @@ async def handle_websocket_private(
                                 }
                                 
                                 await manager.broadcast(chat_id, broadcast_data)
-                                print(f"📢 REAL-TIME SEEN: Broadcast seen status for message {message_id} by user {current_user.id}")
                                 
                         else:
                             await websocket.send_json({
@@ -460,7 +408,6 @@ async def handle_websocket_private(
                             "error": "Failed to process read receipt"
                         })
 
-                # ✅ TYPING INDICATORS
                 elif msg_type == "typing":
                     is_typing = data.get("is_typing", False)
                     try:
@@ -473,7 +420,6 @@ async def handle_websocket_private(
                     except Exception as e:
                         print(f"Error broadcasting typing: {e}")
 
-                # ✅ MESSAGE DELETION
                 elif msg_type == "delete":
                     message_id = data.get("message_id")
                     if not message_id:
@@ -520,7 +466,6 @@ async def handle_websocket_private(
                             "error": "Failed to delete message"
                         })
 
-                # ✅ MESSAGE EDITING
                 elif msg_type == "edit":
                     message_id = data.get("message_id")
                     new_content = data.get("new_content")
@@ -566,7 +511,6 @@ async def handle_websocket_private(
                             "error": "Failed to edit message"
                         })
 
-                # ✅ ONLINE STATUS REQUESTS
                 elif msg_type == "get_online_users":
                     # Send current online users for this chat
                     online_users = manager.get_online_users(chat_id)
@@ -576,7 +520,6 @@ async def handle_websocket_private(
                         "timestamp": datetime.utcnow().isoformat()
                     })
                     
-                # ✅ REACTIONS
                 elif msg_type == "reaction_add":
                     message_id = data.get("message_id")
                     emoji = data.get("emoji")
@@ -748,22 +691,153 @@ async def handle_websocket_private(
                             "type": "error",
                             "error": "Failed to forward message"
                         })
+                
+                elif msg_type == "call_start":
+                    call_type = data.get("call_type")
+                    friend_id = data.get("to_user")
+                    
+                    if not friend_id:
+                        await websocket.send_json({
+                            "type": "call_error",
+                            "error": "Missing call recipient"
+                        })
+                        continue
+                    
+                    if current_user.id == friend_id:
+                        await websocket.send_json({
+                            "type": "call_error",
+                            "error": "You cannot call yourself"
+                        })
+                        continue
 
-                # ✅ UNKNOWN MESSAGE TYPE
+                    if chat_id in manager.active_calls:
+                        await websocket.send_json({
+                            "type": "call_error",
+                            "error": "Call already in progress"
+                        })
+                        continue
+
+                    # Create call session
+                    timeout_task = asyncio.create_task(manager._auto_cancel_call(chat_id))
+
+                    system_msg = PrivateMessage(
+                        receiver_id=friend_id,
+                        sender_id=current_user.id,
+                        content=f"{current_user.username} started a video call",
+                        message_type="system"
+                    )
+                    db.add(system_msg)
+                    db.commit()
+                    db.refresh(system_msg)
+                    
+                    manager.active_calls[chat_id] = {
+                        "caller": current_user.id,
+                        "receiver": friend_id,
+                        "call_type": call_type,
+                        "status": "ringing",
+                        "timeout_task": timeout_task
+                    }
+                    
+                    await manager.broadcast(chat_id, {
+                        "type": "new_call_message",
+                        "message_id": system_msg.id,
+                        "sender": {
+                            "id": current_user.id,
+                            "username": current_user.username,
+                            "avatar": current_user.avatar_url
+                        },
+                        "content": system_msg.content,
+                        "created_at": datetime.utcnow().isoformat(),
+                        "message_type": "system"
+                    })
+
+                    await manager.broadcast(chat_id, {
+                        "type": "call_request",
+                        "call_type": call_type,
+                        "from_user": current_user.id,
+                        "sender_username": current_user.username,
+                        "avatar_url": current_user.avatar_url,
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+                    
+                elif msg_type == "call_offer":
+                    to_user = data.get("to_user")
+                    offer = data.get("offer")
+
+                    if not to_user or not offer:
+                        continue
+
+                    await manager.send_to_user(chat_id, to_user, {
+                        "type": "call_offer",
+                        "from_user": current_user.id,
+                        "username": current_user.username,
+                        "avatar": current_user.avatar_url,
+                        "offer": offer
+                    })
+                
+                elif msg_type == "call_answer":
+                    to_user = data.get("to_user")
+                    answer = data.get("answer")
+
+                    if not to_user or not answer:
+                        continue
+
+                    await manager.send_to_user(chat_id, to_user, {
+                        "type": "call_answer",
+                        "from_user": current_user.id,
+                        "username": current_user.username,
+                        "avatar": current_user.avatar_url,
+                        "answer": answer
+                    })
+                elif msg_type == "call_ice":
+                    to_user = data.get("to_user")
+                    candidate = data.get("candidate")
+
+                    if not to_user or not candidate:
+                        continue
+
+                    await manager.send_to_user(chat_id, to_user, {
+                        "type": "call_ice",
+                        "from_user": current_user.id,
+                        "candidate": candidate
+                    })
+
+                elif msg_type == "call_accept":
+                    call = manager.active_calls.get(chat_id)
+
+                    await manager.broadcast(chat_id, {
+                        "type": "call_accepted",
+                        "from_user": current_user.id,
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+
+                elif msg_type == "call_reject":
+                    call = manager.active_calls.get(chat_id)
+
+                    if not call:
+                        continue
+
+                    await manager._end_call(chat_id, "rejected", ended_by=current_user.id)
+
+                elif msg_type == "call_end":
+                    call = manager.active_calls.get(chat_id)
+
+                    if not call:
+                        continue
+
+                    await manager._end_call(chat_id, "ended", ended_by=current_user.id)
+
                 else:
                     await websocket.send_json({
                         "type": "error",
                         "error": f"Unknown message type: {msg_type}"
                     })
-                
 
             except asyncio.TimeoutError:
-                # ✅ HANDLE TIMEOUT (NORMAL - WAITING FOR MESSAGES)
                 print(f"Timeout waiting for message from user {current_user.id}")
-                continue  # Just continue waiting for messages
+                continue
                 
             except WebSocketDisconnect:
-                # ✅ CLIENT DISCONNECTED NORMALLY
                 print(f"User {current_user.id} disconnected from WebSocket")
                 break
                 
@@ -782,7 +856,6 @@ async def handle_websocket_private(
     except Exception as e:
         print(f"WebSocket connection error: {e}")
     finally:
-        # ✅ PROPER CLEANUP - ALWAYS EXECUTED
         try:
             if heartbeat_task:
                 heartbeat_task.cancel()
@@ -793,11 +866,11 @@ async def handle_websocket_private(
         except Exception as e:
             print(f"Error cancelling heartbeat: {e}")
 
-        # ✅ DISCONNECT FROM MANAGER (handles offline status automatically)
         if current_user:
             chat_id = _chat_id(current_user.id, friend_id)
             manager.disconnect(chat_id, websocket, user_id=current_user.id)
             print(f"User {current_user.id} fully disconnected from chat {chat_id}")        
+            
 @router.websocket("/notifications")
 async def websocket_notifications(websocket: WebSocket, db: Session = Depends(get_db)):
     """

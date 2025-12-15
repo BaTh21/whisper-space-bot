@@ -10,7 +10,7 @@ class WebSocketManager:
         self.online_users: Dict[str, Set[int]] = {}  # chat_id -> set of online user_ids
         self.user_chats: Dict[int, Set[str]] = {}  # user_id -> set of chat_ids they're connected to
         self.last_activity: Dict[int, datetime] = {}  # user_id -> last activity timestamp
-        self.active_connections: Dict[str, List[dict]] = {}
+        self.active_calls: Dict[str, dict] = {}
 
     async def _update_user_online_status_db(self, user_id: int, is_online: bool):
         """Update user online status in database"""
@@ -108,6 +108,11 @@ class WebSocketManager:
                 # If user has no more active chats, mark as offline
                 if not self.user_chats[user_id]:
                     asyncio.create_task(self._handle_user_offline(user_id))
+                    
+            if chat_id in self.active_calls:
+                if not self.active_calls[chat_id].get("ending"):
+                    self.active_calls[chat_id]["ending"] = True
+                    asyncio.create_task(self._end_call(chat_id, "user_disconnected", ended_by=user_id))
             
             print(f"📱 User {user_id} disconnected from chat {chat_id}")
 
@@ -321,12 +326,39 @@ class WebSocketManager:
             connections = self.active_connections[user_room]
             print(f"📢 Broadcasting to {user_room}, connections: {len(connections)}")
             
-            for connection_info in connections:
+            for websocket, info in self.active_connections[user_room].items():
                 try:
-                    await connection_info["websocket"].send_json(data)
+                    await websocket.send_json(data)
                     print(f"✅ Sent to user {user_room}")
                 except Exception as e:
                     print(f"❌ Error sending to user {user_room}: {e}")
         else:
             print(f"⚠️ User room {user_room} not found in active connections")
+            
+    async def _end_call(self, chat_id: str, reason: str, ended_by: Optional[int] = None):
+        """Cleanly end a call and notify both users."""
+        call = self.active_calls.get(chat_id)
+        if not call:
+            return
+
+        # Cancel timeout task if active
+        timeout_task = call.get("timeout_task")
+        if timeout_task and not timeout_task.done():
+            timeout_task.cancel()
+
+        await self.broadcast(chat_id, {
+            "type": "call_ended",
+            "reason": reason,
+            "ended_by": ended_by
+        })
+
+        del self.active_calls[chat_id]
+        
+    async def _auto_cancel_call(self, chat_id: str):
+        await asyncio.sleep(30)
+
+        call = self.active_calls.get(chat_id)
+        if call and call["status"] == "ringing":
+            await self._end_call(chat_id, "timeout")
+
 manager = WebSocketManager()

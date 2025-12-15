@@ -69,6 +69,7 @@ const ChatMessage = ({
     if (msg.message_type === 'voice') return 'voice';
     if (msg.message_type === 'file') return 'file';
     if (msg.message_type === 'text') return 'text';
+    if (msg.message_type === 'system') return 'system';
 
     const content = (msg.content || '').trim();
 
@@ -237,14 +238,6 @@ const ChatMessage = ({
   };
 
   const senderInfo = getSenderInfo();
-
-  const myAvatar = () => {
-    const url = profile?.avatar_url || profile?.avatar;
-    return {
-      avatar_url: getAvatarUrl ? getAvatarUrl(url) : url,
-      initial: getUserInitials?.(profile?.username) ?? (profile?.username?.[0] ?? 'M').toUpperCase(),
-    };
-  };
 
   const getMessageStatus = () => {
     if (!isMine) return 'sent';
@@ -463,6 +456,23 @@ const ChatMessage = ({
       </Box>
     );
   };
+
+  const renderCallMessage = () => {
+    <>
+      <Typography
+        variant="body2"
+        sx={{
+          wordBreak: 'break-word',
+          lineHeight: 1.4,
+          fontSize: '0.9rem',
+          mb: reactions.length > 0 ? 0.5 : 0
+        }}
+      >
+        {message.content}
+      </Typography>
+      <Button>Join Now</Button>
+    </>
+  }
 
   const renderOnlineStatus = () => {
     if (isMine || !friendOnlineStatus || !currentFriend) return null;
@@ -1022,7 +1032,7 @@ const ChatMessage = ({
             </Box>
           </Box>
         ) : (
-          <Box sx={{ position: 'relative' }}>
+          <Box sx={{ position: 'relative', width: 200 }}>
             {/* Message bubble */}
             <Box
               className="message-bubble"
@@ -1059,6 +1069,8 @@ const ChatMessage = ({
                 renderImageContent()
               ) : actualMessageType === 'voice' ? (
                 renderVoiceContent()
+              ) : actualMessageType === 'system' ? (
+                renderCallMessage()
               ) : (
                 <Typography
                   variant="body2"

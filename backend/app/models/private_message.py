@@ -9,6 +9,7 @@ class MessageType(enum.Enum):
     image = "image"
     file = "file"
     voice = "voice"
+    system = "system"
 
 class PrivateMessage(Base):
     __tablename__ = "private_messages"

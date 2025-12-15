@@ -70,7 +70,7 @@ export const IncomingCallDialog = ({
             src={avatar}
             alt={username}
           >
-            (username?.[0] || "P").toUpperCase()
+            {username?.charAt(0) || "U"}
           </Avatar>
           <Typography sx={{ fontSize: 26, color: 'white' }}>
             {username} is calling you

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -42,15 +42,10 @@ const CallDialog = ({
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(true);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
 
   const [seconds, setSeconds] = useState(30);
 
   const [collapsed, setCollapsed] = useState(false);
-
-  const toggleVoiceUi = () => {
-    setVoiceEnabled(prev => !prev);
-  }
 
   useEffect(() => {
     if (!open || status === "In Call") {
@@ -78,6 +73,8 @@ const CallDialog = ({
     y: 20
   });
   const pipRef = useRef(null);
+  const videoRefs = useRef({});
+
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
@@ -88,13 +85,16 @@ const CallDialog = ({
     if (!onLocal) return;
 
     const audioTrack = onLocal.getAudioTracks()[0];
-    if (!audioTrack) return;
+    if (!audioTrack) {
+      console.log("No audio track found");
+      return;
+    }
 
     const newEnabled = !audioTrack.enabled;
     audioTrack.enabled = newEnabled;
     setIsMuted(!newEnabled);
 
-    setVoiceEnabled(!newEnabled);
+    console.log("🎤 Audio enabled:", audioTrack.enabled);
 
     Object.values(peersRef.current).forEach(pc => {
       const sender = pc.getSenders().find(s => s.track?.kind === "audio");
@@ -106,10 +106,15 @@ const CallDialog = ({
     if (!onLocal) return;
 
     const track = onLocal.getVideoTracks()[0];
-    if (!track) return;
+    if (!track) {
+      console.log("No video track found");
+      return;
+    }
 
     track.enabled = !track.enabled;
     setVideoEnabled(track.enabled);
+
+    console.log("📹 Video enabled:", track.enabled);
 
     Object.values(peersRef.current).forEach(pc => {
       const sender = pc.getSenders().find(s => s.track?.kind === "video");
@@ -206,9 +211,14 @@ const CallDialog = ({
 
                   const [userId, stream] = entry;
 
+                  if (!videoRefs.current[userId]) {
+                    videoRefs.current[userId] = React.createRef();
+                  }
+
                   return (
                     <VideoCard
                       key={stream.id}
+                      ref={videoRefs.current[userId]}
                       stream={stream}
                       userName={usernames[userId] || `User ${idx + 1}`}
                       avatarUrl={avatars[userId] || ""}

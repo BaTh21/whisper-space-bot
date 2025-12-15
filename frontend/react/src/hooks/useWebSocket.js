@@ -1,4 +1,3 @@
-// src/hooks/useWebSocket.js
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export const useWebSocket = (url, options = {}) => {
@@ -31,7 +30,6 @@ export const useWebSocket = (url, options = {}) => {
   const connect = useCallback(() => {
     if (!isSubscribedRef.current || !url) return;
 
-    // Clear existing connection
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -44,7 +42,7 @@ export const useWebSocket = (url, options = {}) => {
       setReadyState(WebSocket.CONNECTING);
 
       ws.onopen = () => {
-        log('Connected successfully');
+        console.log('Connected successfully');
         setReadyState(WebSocket.OPEN);
         reconnectAttemptsRef.current = 0;
         
@@ -53,7 +51,6 @@ export const useWebSocket = (url, options = {}) => {
           reconnectTimeoutRef.current = null;
         }
 
-        // Setup heartbeat
         if (heartbeatInterval > 0) {
           heartbeatIntervalRef.current = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
@@ -69,7 +66,6 @@ export const useWebSocket = (url, options = {}) => {
         try {
           const data = JSON.parse(event.data);
           
-          // Ignore heartbeat responses
           if (data.type === 'heartbeat') return;
           
           log('Message received:', data);
@@ -84,7 +80,6 @@ export const useWebSocket = (url, options = {}) => {
         log('Connection closed:', event.code, event.reason);
         setReadyState(WebSocket.CLOSED);
         
-        // Clear heartbeat
         if (heartbeatIntervalRef.current) {
           clearInterval(heartbeatIntervalRef.current);
           heartbeatIntervalRef.current = null;
@@ -92,7 +87,6 @@ export const useWebSocket = (url, options = {}) => {
 
         if (onClose) onClose(event);
 
-        // Attempt to reconnect
         if (isSubscribedRef.current && shouldReconnect && event.code !== 1000) {
           if (reconnectAttemptsRef.current < maxReconnectAttempts) {
             const delay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current);
