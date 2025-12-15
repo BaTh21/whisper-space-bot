@@ -613,6 +613,10 @@ export const getDiaryForEdit = async (diaryId) => {
 export const getDiaryComments = async (diaryId) => {
   try {
     const response = await api.get(`/api/v1/diaries/${diaryId}/comments`);
+    // If backend returns both comments and count
+    if (response.data && typeof response.data === 'object' && 'comments' in response.data) {
+      return response.data.comments;
+    }
     return response.data;
   } catch (error) {
     console.error("Get diary comments error:", error.response?.data);

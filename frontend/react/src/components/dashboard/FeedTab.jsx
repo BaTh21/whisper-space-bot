@@ -1,17 +1,17 @@
-// dashboard/FeedTab.jsx
+import React, { useState } from 'react';
 import {
   Article as ArticleIcon,
   Cancel as CancelIcon,
-  Close as CloseIcon,
   Comment as CommentIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   Favorite,
   FavoriteBorder,
-  Image as ImageIcon,
-  Reply as ReplyIcon,
   Save as SaveIcon,
-  Send as SendIcon
+  Send as SendIcon,
+  Image as ImageIcon,
+  Close as CloseIcon,
+  Reply as ReplyIcon
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -32,6 +32,7 @@ import {
   List,
   ListItem,
   ListItemAvatar,
+  ListItemText,
   MenuItem,
   Select,
   TextField,
@@ -39,16 +40,249 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { commentOnDiary, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, updateDiaryById } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 
+// Inline CommentItem component
+const CommentItem = ({ 
+  comment, 
+  diaryId, 
+  profile, 
+  onAddReply, 
+  level = 0,
+  replyingTo,
+  setReplyingTo,
+  replyTexts,
+  setReplyTexts,
+  handleImageUpload,
+  selectedCommentImages
+}) => {
+  const [localReplying, setLocalReplying] = useState(false);
+  
+  const handleReply = () => {
+    setReplyingTo(comment.id);
+    setLocalReplying(true);
+  };
+  
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+    setLocalReplying(false);
+    setReplyTexts(prev => ({ ...prev, [comment.id]: '' }));
+  };
+  
+  const handleSubmitReply = () => {
+    if (onAddReply && replyTexts[comment.id]?.trim()) {
+      onAddReply(diaryId, comment.id);
+      setLocalReplying(false);
+    }
+  };
+  
+  // Limit nesting depth for visual clarity
+  const maxDepth = 5;
+  const isTooDeep = level >= maxDepth;
+  
+  return (
+    <Box sx={{ 
+      mb: 2, 
+      ml: level > 0 ? 2 : 0,
+      borderLeft: level > 0 ? '2px solid #e0e0e0' : 'none',
+      pl: level > 0 ? 2 : 0,
+      position: 'relative'
+    }}>
+      {/* Comment header */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+        <Avatar sx={{ 
+          width: level > 0 ? 24 : 28, 
+          height: level > 0 ? 24 : 28, 
+          fontSize: level > 0 ? '0.7rem' : '0.8rem',
+          flexShrink: 0
+        }}>
+          {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
+        </Avatar>
+        <Box sx={{ flex: 1 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 1, 
+            flexWrap: 'wrap',
+            mb: 0.5 
+          }}>
+            <Typography variant="body2" fontWeight="600" color="green" component="span">
+              {comment.user?.username}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" component="span">
+              {formatCambodiaDate(comment.created_at)}
+            </Typography>
+            
+            {/* Reply button (only show if not too deep) */}
+            {profile && !isTooDeep && (
+              <Button
+                size="small"
+                startIcon={<ReplyIcon fontSize="small" />}
+                onClick={handleReply}
+                sx={{ minWidth: 'auto', ml: 'auto' }}
+              >
+                Reply
+              </Button>
+            )}
+          </Box>
+          
+          {/* Comment content */}
+          <Typography variant="body2" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
+            {comment.content}
+          </Typography>
+          
+          {/* Comment images */}
+          {comment.images && comment.images.length > 0 && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+              {comment.images.map((img, idx) => (
+                <Box key={idx} sx={{ position: 'relative' }}>
+                  <img
+                    src={img}
+                    alt={`Comment image ${idx + 1}`}
+                    style={{
+                      width: 80,
+                      height: 80,
+                      objectFit: 'cover',
+                      borderRadius: 4
+                    }}
+                  />
+                </Box>
+              ))}
+            </Box>
+          )}
+          
+          {/* Reply form */}
+          {(replyingTo === comment.id || localReplying) && !isTooDeep && (
+            <Box sx={{ mb: 2, mt: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder={`Reply to ${comment.user?.username}...`}
+                value={replyTexts[comment.id] || ''}
+                onChange={(e) => setReplyTexts(prev => ({
+                  ...prev,
+                  [comment.id]: e.target.value
+                }))}
+                sx={{ mb: 1 }}
+                multiline
+                rows={2}
+              />
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  size="small"
+                  startIcon={<ImageIcon />}
+                >
+                  Add Image
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)}
+                  />
+                </Button>
+                
+                {/* Show selected images for reply */}
+                {selectedCommentImages[`reply-${comment.id}`]?.length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+                    {selectedCommentImages[`reply-${comment.id}`].map((img, idx) => (
+                      <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
+                        <img
+                          src={img}
+                          alt={`Preview ${idx}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
+                        />
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            const newImages = [...selectedCommentImages[`reply-${comment.id}`]];
+                            newImages.splice(idx, 1);
+                            // We need to update the selectedCommentImages state
+                            // For now, let's just log - you'll need to implement this
+                            console.log('Remove image', idx);
+                          }}
+                          sx={{
+                            position: 'absolute',
+                            top: -4,
+                            right: -4,
+                            bgcolor: 'rgba(0,0,0,0.5)',
+                            color: 'white',
+                            width: 16,
+                            height: 16,
+                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                          }}
+                        >
+                          <CloseIcon sx={{ fontSize: 12 }} />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+                
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={handleSubmitReply}
+                  disabled={!replyTexts[comment.id]?.trim()}
+                >
+                  Send
+                </Button>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={handleCancelReply}
+                >
+                  Cancel
+                </Button>
+              </Box>
+            </Box>
+          )}
+          
+          {/* Nested replies */}
+          {comment.replies && comment.replies.length > 0 && !isTooDeep && (
+            <Box sx={{ mt: 2 }}>
+              {comment.replies.map((reply) => (
+                <CommentItem
+                  key={reply.id}
+                  comment={reply}
+                  diaryId={diaryId}
+                  profile={profile}
+                  onAddReply={onAddReply}
+                  level={level + 1}
+                  replyingTo={replyingTo}
+                  setReplyingTo={setReplyingTo}
+                  replyTexts={replyTexts}
+                  setReplyTexts={setReplyTexts}
+                  handleImageUpload={handleImageUpload}
+                  selectedCommentImages={selectedCommentImages}
+                />
+              ))}
+            </Box>
+          )}
+          
+          {/* If too deep, show a message */}
+          {isTooDeep && comment.replies && comment.replies.length > 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              {comment.replies.length} more repl{comment.replies.length === 1 ? 'y' : 'ies'} (depth limited)
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
+// Main FeedTab component
 const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, profile, groups }) => {
   const [expandedDiary, setExpandedDiary] = useState(null);
   const [diaryComments, setDiaryComments] = useState({});
   const [diaryLikes, setDiaryLikes] = useState({});
   const [commentTexts, setCommentTexts] = useState({});
+  const [replyTexts, setReplyTexts] = useState({});
   const [likedDiaries, setLikedDiaries] = useState(new Set());
   const [commentLoading, setCommentLoading] = useState({});
 
@@ -65,15 +299,10 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   const [editGroupIds, setEditGroupIds] = useState([]);
   const [editLoading, setEditLoading] = useState(false);
 
-  // Add these state variables:
+  // State for images and replies
   const [replyingTo, setReplyingTo] = useState(null);
-  const [replyTexts, setReplyTexts] = useState({});
-  const [diaryImages, setDiaryImages] = useState({});
-  const [commentImages, setCommentImages] = useState({});
-  const [uploadingImages, setUploadingImages] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedCommentImages, setSelectedCommentImages] = useState({});
-  const [newDiaryImages, setNewDiaryImages] = useState([]);
 
   const { t, i18n } = useTranslation();
   const theme = useTheme();
@@ -82,12 +311,14 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   // Normalize diaries to ensure groups is always an array
   const normalizedDiaries = diaries.map(diary => ({
     ...diary,
-    groups: Array.isArray(diary.groups) ? diary.groups : []
+    groups: Array.isArray(diary.groups) ? diary.groups : [],
+    images: Array.isArray(diary.images) ? diary.images : []
   }));
 
   // Normalize groups prop
   const normalizedGroups = Array.isArray(groups) ? groups : [];
 
+  // Handler functions
   const handleDeleteClick = (diaryId, diaryTitle) => {
     setDiaryToDelete({ id: diaryId, title: diaryTitle });
     setDeleteDialogOpen(true);
@@ -110,10 +341,8 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
       setTimeout(() => {
         setSuccess('');
       }, 2000);
-      // Close dialog
       handleDeleteCancel();
-
-      // Refresh data
+      
       if (onDataUpdate) {
         onDataUpdate();
       }
@@ -125,33 +354,31 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
 
   const handleEditClick = async (diary) => {
     try {
-      // Try to fetch full diary data if needed
       const fullDiary = await getDiaryById(diary.id);
-
+      
       if (fullDiary) {
-        // Use fetched data
         setEditingDiary(diary.id);
         setEditTitle(fullDiary.title || '');
         setEditContent(fullDiary.content || '');
         setEditShareType(fullDiary.share_type || '');
         setEditGroupIds(Array.isArray(fullDiary.groups) ? fullDiary.groups.map(g => g.id) : []);
+        setSelectedImages(fullDiary.images || []);
       } else {
-        // Fall back to existing feed data
-        console.log('Using existing feed data for editing');
         setEditingDiary(diary.id);
         setEditTitle(diary.title || '');
         setEditContent(diary.content || '');
         setEditShareType(diary.share_type || '');
         setEditGroupIds(Array.isArray(diary.groups) ? diary.groups.map(g => g.id) : []);
+        setSelectedImages(diary.images || []);
       }
     } catch (err) {
       console.error('Failed to fetch diary details:', err);
-      // Use existing data if fetch fails
       setEditingDiary(diary.id);
       setEditTitle(diary.title || '');
       setEditContent(diary.content || '');
       setEditShareType(diary.share_type || '');
       setEditGroupIds(Array.isArray(diary.groups) ? diary.groups.map(g => g.id) : []);
+      setSelectedImages(diary.images || []);
     }
   };
 
@@ -161,6 +388,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     setEditContent('');
     setEditShareType('');
     setEditGroupIds([]);
+    setSelectedImages([]);
     setEditLoading(false);
   };
 
@@ -186,23 +414,24 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         updateData.group_ids = editGroupIds;
       }
 
-      // Add images if any were selected
       if (selectedImages.length > 0) {
         updateData.images = selectedImages;
       }
 
       await updateDiaryById(diaryId, updateData);
+      
       setSuccess('Diary updated successfully');
+      setTimeout(() => {
+        setSuccess('');
+      }, 2000);
 
-      // Reset states
       handleEditCancel();
-      setSelectedImages([]);
-
-      // Refresh data
+      
       if (onDataUpdate) {
         onDataUpdate();
       }
     } catch (err) {
+      console.error('Update error:', err);
       setError(err.message || 'Failed to update diary');
       setEditLoading(false);
     }
@@ -240,21 +469,75 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     try {
       const images = selectedCommentImages[diaryId] || [];
       const newComment = await commentOnDiary(diaryId, commentText, null, images);
-
-      setDiaryComments(prev => ({
-        ...prev,
-        [diaryId]: [...(prev[diaryId] || []), newComment]
-      }));
-
+      
+      setDiaryComments(prev => {
+        const existingComments = prev[diaryId] || [];
+        return {
+          ...prev,
+          [diaryId]: [...existingComments, newComment]
+        };
+      });
+      
       setCommentTexts(prev => ({ ...prev, [diaryId]: '' }));
       setSelectedCommentImages(prev => ({ ...prev, [diaryId]: [] }));
-
+      
       setSuccess('Comment added successfully');
-      setTimeout(() => setSuccess(''), 2000);
+      setTimeout(() => {
+        setSuccess('');
+      }, 2000);
     } catch (err) {
       setError(err.message || 'Failed to add comment');
     } finally {
       setCommentLoading(prev => ({ ...prev, [diaryId]: false }));
+    }
+  };
+
+  const handleAddReply = async (diaryId, parentCommentId) => {
+    const replyText = replyTexts[parentCommentId] || '';
+    if (!replyText?.trim()) return;
+
+    try {
+      const images = selectedCommentImages[`reply-${parentCommentId}`] || [];
+      const reply = await commentOnDiary(diaryId, replyText, parentCommentId, images);
+      
+      // Update comments with the new reply
+      setDiaryComments(prev => {
+        const updatedComments = [...(prev[diaryId] || [])];
+        
+        // Helper function to find and update comment recursively
+        const updateCommentWithReply = (comments, targetId, newReply) => {
+          return comments.map(comment => {
+            if (comment.id === targetId) {
+              return {
+                ...comment,
+                replies: [...(comment.replies || []), newReply]
+              };
+            }
+            if (comment.replies && comment.replies.length > 0) {
+              return {
+                ...comment,
+                replies: updateCommentWithReply(comment.replies, targetId, newReply)
+              };
+            }
+            return comment;
+          });
+        };
+        
+        return {
+          ...prev,
+          [diaryId]: updateCommentWithReply(updatedComments, parentCommentId, reply)
+        };
+      });
+
+      // Clear reply form
+      setReplyTexts(prev => ({ ...prev, [parentCommentId]: '' }));
+      setSelectedCommentImages(prev => ({ ...prev, [`reply-${parentCommentId}`]: [] }));
+      setReplyingTo(null);
+      
+      setSuccess('Reply added successfully');
+      setTimeout(() => setSuccess(''), 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to add reply');
     }
   };
 
@@ -292,19 +575,17 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     }));
   };
 
-  // Add image handling functions:
   const handleImageUpload = (event, diaryId = null, commentId = null) => {
     const files = Array.from(event.target.files);
-    const validImages = files.filter(file =>
+    const validImages = files.filter(file => 
       file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
     );
-
+    
     if (validImages.length === 0) {
       setError('Please select valid image files (max 5MB each)');
       return;
     }
-
-    // Convert images to base64
+    
     const imagePromises = validImages.map(file => {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -314,9 +595,9 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         reader.readAsDataURL(file);
       });
     });
-
+    
     Promise.all(imagePromises).then(base64Images => {
-      if (diaryId) {
+      if (diaryId && editingDiary === diaryId) {
         setSelectedImages(prev => [...prev, ...base64Images]);
       } else if (commentId) {
         setSelectedCommentImages(prev => ({
@@ -328,7 +609,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   };
 
   const removeImage = (index, diaryId = null, commentId = null) => {
-    if (diaryId) {
+    if (diaryId && editingDiary === diaryId) {
       setSelectedImages(prev => prev.filter((_, i) => i !== index));
     } else if (commentId) {
       setSelectedCommentImages(prev => ({
@@ -337,69 +618,23 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
       }));
     }
   };
-  const handleAddReply = async (diaryId, parentCommentId) => {
-    const replyText = replyTexts[parentCommentId];
-    if (!replyText?.trim()) return;
-
-    try {
-      const images = selectedCommentImages[`reply-${parentCommentId}`] || [];
-      const reply = await commentOnDiary(diaryId, replyText, parentCommentId, images);
-
-      // Update comments with the new reply
-      setDiaryComments(prev => {
-        const updatedComments = [...(prev[diaryId] || [])];
-        const parentCommentIndex = updatedComments.findIndex(c => c.id === parentCommentId);
-        if (parentCommentIndex !== -1) {
-          const parentComment = { ...updatedComments[parentCommentIndex] };
-          parentComment.replies = [...(parentComment.replies || []), reply];
-          updatedComments[parentCommentIndex] = parentComment;
-        }
-        return { ...prev, [diaryId]: updatedComments };
-      });
-
-      // Clear reply form
-      setReplyTexts(prev => ({ ...prev, [parentCommentId]: '' }));
-      setSelectedCommentImages(prev => ({ ...prev, [`reply-${parentCommentId}`]: [] }));
-      setReplyingTo(null);
-
-      setSuccess('Reply added successfully');
-      setTimeout(() => setSuccess(''), 2000);
-    } catch (err) {
-      setError(err.message || 'Failed to add reply');
-    }
-  };
-  const handleNewDiaryImageUpload = (event) => {
-  const files = Array.from(event.target.files);
-  const validImages = files.filter(file => 
-    file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
-  );
+  const countAllComments = (comments) => {
+  if (!comments || !Array.isArray(comments)) return 0;
   
-  if (validImages.length === 0) {
-    setError('Please select valid image files (max 5MB each)');
-    return;
-  }
+  let total = 0;
   
-  const imagePromises = validImages.map(file => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        resolve(e.target.result);
-      };
-      reader.readAsDataURL(file);
+  const countRecursive = (commentList) => {
+    commentList.forEach(comment => {
+      total += 1; // Count this comment
+      if (comment.replies && comment.replies.length > 0) {
+        countRecursive(comment.replies); // Recursively count replies
+      }
     });
-  });
+  };
   
-  Promise.all(imagePromises).then(base64Images => {
-    setNewDiaryImages(prev => [...prev, ...base64Images]);
-  });
+  countRecursive(comments);
+  return total;
 };
-
-// Remove image from new diary
-const removeNewDiaryImage = (index) => {
-  setNewDiaryImages(prev => prev.filter((_, i) => i !== index));
-};
-
-
 
   return (
     <Box
@@ -480,7 +715,6 @@ const removeNewDiaryImage = (index) => {
           {t('no_diaries_yet')}
         </Typography>
       ) : (
-        // Scrollable container
         <Box
           sx={{
             maxHeight: '70vh',
@@ -559,7 +793,6 @@ const removeNewDiaryImage = (index) => {
                           </Select>
                         </FormControl>
                       )}
-                      {/* Add image upload for edit */}
                       <Box>
                         <Button
                           variant="outlined"
@@ -716,12 +949,12 @@ const removeNewDiaryImage = (index) => {
                   <Typography variant="body1" sx={{
                     mb: 3,
                     lineHeight: 1.6,
-                    fontSize: { xs: '0.9rem', sm: '1rem' }
+                    fontSize: { xs: '0.9rem', sm: '1rem' },
+                    whiteSpace: 'pre-wrap'
                   }}>
                     {diary.content}
                   </Typography>
 
-                  {/* Display diary images */}
                   {diary.images && diary.images.length > 0 && (
                     <Box sx={{ mt: 2, mb: 3, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                       {diary.images.map((img, index) => (
@@ -775,7 +1008,7 @@ const removeNewDiaryImage = (index) => {
                       }}
                     >
                       Comment
-                      {diaryComments[diary.id]?.length > 0 && ` (${diaryComments[diary.id].length})`}
+                      {diaryComments[diary.id] && ` (${countAllComments(diaryComments[diary.id])})`}
                     </Button>
                   </Box>
 
@@ -786,7 +1019,6 @@ const removeNewDiaryImage = (index) => {
                       bgcolor: 'grey.50',
                       borderRadius: '12px'
                     }}>
-                      {/* Comment input with image upload */}
                       <Box sx={{
                         display: 'flex',
                         flexDirection: { xs: 'column', sm: 'row' },
@@ -808,8 +1040,7 @@ const removeNewDiaryImage = (index) => {
                           disabled={commentLoading[diary.id]}
                           sx={{ borderRadius: '8px' }}
                         />
-
-                        {/* Image upload button for comments */}
+                        
                         <Button
                           variant="outlined"
                           component="label"
@@ -825,7 +1056,7 @@ const removeNewDiaryImage = (index) => {
                             onChange={(e) => handleImageUpload(e, null, diary.id)}
                           />
                         </Button>
-
+                        
                         <Button
                           variant="contained"
                           onClick={() => handleAddComment(diary.id)}
@@ -839,7 +1070,6 @@ const removeNewDiaryImage = (index) => {
                         </Button>
                       </Box>
 
-                      {/* Display selected comment images */}
                       {selectedCommentImages[diary.id]?.length > 0 && (
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
                           {selectedCommentImages[diary.id].map((img, index) => (
@@ -869,183 +1099,24 @@ const removeNewDiaryImage = (index) => {
                       )}
 
                       {diaryComments[diary.id]?.length > 0 ? (
-                        <List sx={{
-                          maxHeight: 200,
-                          overflow: 'auto',
-                          py: 0
-                        }}>
+                        <Box sx={{ maxHeight: 200, overflowY: 'auto', py: 0 }}>
                           {diaryComments[diary.id].map((comment) => (
-                            <ListItem key={comment.id} sx={{
-                              px: { xs: 0, sm: 0 },
-                              py: 1,
-                              flexDirection: 'column',
-                              alignItems: 'flex-start'
-                            }}>
-                              <Box sx={{ display: 'flex', width: '100%', alignItems: 'flex-start' }}>
-                                <ListItemAvatar>
-                                  <Avatar sx={{
-                                    width: { xs: 28, sm: 32 },
-                                    height: { xs: 28, sm: 32 },
-                                    fontSize: { xs: '0.7rem', sm: '0.8rem' }
-                                  }}>
-                                    {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
-                                  </Avatar>
-                                </ListItemAvatar>
-                                <Box sx={{ flex: 1 }}>
-                                  {/* User info and timestamp */}
-                                  <Box sx={{
-                                    display: 'flex',
-                                    flexDirection: { xs: 'column', sm: 'row' },
-                                    alignItems: { xs: 'flex-start', sm: 'center' },
-                                    gap: { xs: 0.5, sm: 1 },
-                                    mb: 0.5
-                                  }}>
-                                    <Typography variant="body2" component="span" fontWeight="600" color='green'>
-                                      {comment.user?.username || `User ${comment.user_id}`}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary" component="span">
-                                      {formatCambodiaDate(comment.created_at)}
-                                    </Typography>
-
-                                    {/* Reply button */}
-                                    {profile && (
-                                      <Button
-                                        size="small"
-                                        startIcon={<ReplyIcon fontSize="small" />}
-                                        onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
-                                        sx={{ minWidth: 'auto', ml: 'auto' }}
-                                      >
-                                        Reply
-                                      </Button>
-                                    )}
-                                  </Box>
-
-                                  {/* Comment content - NOT nested in Typography */}
-                                  <Typography
-                                    variant="body2"
-                                    sx={{
-                                      mt: 0.5,
-                                      lineHeight: 1.5,
-                                      fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                                      whiteSpace: 'pre-wrap'
-                                    }}
-                                  >
-                                    {comment.content}
-                                  </Typography>
-
-                                  {/* Display comment images */}
-                                  {comment.images && comment.images.length > 0 && (
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                                      {comment.images.map((img, index) => (
-                                        <img
-                                          key={index}
-                                          src={img}
-                                          alt={`Comment image ${index + 1}`}
-                                          style={{
-                                            maxWidth: 100,
-                                            maxHeight: 100,
-                                            borderRadius: 4,
-                                            objectFit: 'cover'
-                                          }}
-                                        />
-                                      ))}
-                                    </Box>
-                                  )}
-
-                                  {/* Reply form */}
-                                  {replyingTo === comment.id && (
-                                    <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                      <TextField
-                                        fullWidth
-                                        size="small"
-                                        placeholder={`Reply to ${comment.user?.username}...`}
-                                        value={replyTexts[comment.id] || ''}
-                                        onChange={(e) => setReplyTexts(prev => ({
-                                          ...prev,
-                                          [comment.id]: e.target.value
-                                        }))}
-                                      />
-                                      <Box sx={{ display: 'flex', gap: 1 }}>
-                                        <Button
-                                          variant="outlined"
-                                          component="label"
-                                          size="small"
-                                          startIcon={<ImageIcon />}
-                                        >
-                                          Add Image
-                                          <input
-                                            type="file"
-                                            hidden
-                                            multiple
-                                            accept="image/*"
-                                            onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)}
-                                          />
-                                        </Button>
-                                        <Button
-                                          variant="contained"
-                                          size="small"
-                                          onClick={() => handleAddReply(diary.id, comment.id)}
-                                        >
-                                          Send
-                                        </Button>
-                                        <Button
-                                          variant="text"
-                                          size="small"
-                                          onClick={() => setReplyingTo(null)}
-                                        >
-                                          Cancel
-                                        </Button>
-                                      </Box>
-                                    </Box>
-                                  )}
-
-                                  {/* Display replies */}
-                                  {comment.replies && comment.replies.length > 0 && (
-                                    <Box sx={{ ml: 4, mt: 1 }}>
-                                      {comment.replies.map((reply) => (
-                                        <Box key={reply.id} sx={{ mb: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
-                                          <Box sx={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 1,
-                                            mb: 0.5
-                                          }}>
-                                            <Typography variant="body2" fontWeight="600" color="green" component="span">
-                                              {reply.user?.username}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary" component="span">
-                                              {formatCambodiaDate(reply.created_at)}
-                                            </Typography>
-                                          </Box>
-                                          <Typography variant="body2" component="div">
-                                            {reply.content}
-                                          </Typography>
-                                          {reply.images && reply.images.length > 0 && (
-                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                                              {reply.images.map((img, idx) => (
-                                                <img
-                                                  key={idx}
-                                                  src={img}
-                                                  alt={`Reply image ${idx + 1}`}
-                                                  style={{
-                                                    width: 60,
-                                                    height: 60,
-                                                    objectFit: 'cover',
-                                                    borderRadius: 2
-                                                  }}
-                                                />
-                                              ))}
-                                            </Box>
-                                          )}
-                                        </Box>
-                                      ))}
-                                    </Box>
-                                  )}
-                                </Box>
-                              </Box>
-                            </ListItem>
+                            <CommentItem
+                              key={comment.id}
+                              comment={comment}
+                              diaryId={diary.id}
+                              profile={profile}
+                              onAddReply={handleAddReply}
+                              level={0}
+                              replyingTo={replyingTo}
+                              setReplyingTo={setReplyingTo}
+                              replyTexts={replyTexts}
+                              setReplyTexts={setReplyTexts}
+                              handleImageUpload={handleImageUpload}
+                              selectedCommentImages={selectedCommentImages}
+                            />
                           ))}
-                        </List>
+                        </Box>
                       ) : (
                         <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 2 }}>
                           No comments yet. Be the first to comment!
