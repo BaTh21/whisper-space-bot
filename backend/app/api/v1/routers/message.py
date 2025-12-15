@@ -64,33 +64,3 @@ async def delete_voice_message_by_id(message_id: int,
                                      current_user: User = Depends(get_current_user)
                                      ):
     return await delete_voice_message(message_id, db, current_user.id)
-
-import whisper
-import os
-
-# Load Whisper model (base/tiny recommended on Render)
-model = whisper.load_model("tiny", device="cpu")
-@router.post("/transcribe")
-async def transcribe(file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    try:
-        temp_path = os.path.join(os.getcwd(), "temp_audio.mp3")
-        with open(temp_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-
-        # Verify file exists
-        if not os.path.exists(temp_path):
-            raise HTTPException(status_code=404, detail="Audio file not found after download")
-
-        # Load Whisper model (base/tiny recommended on Render)
-        model = whisper.load_model("base")
-
-        # Transcribe the audio
-        result = model.transcribe(temp_path)
-        return {"text": result["text"]}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Transcription error: {e}")
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
