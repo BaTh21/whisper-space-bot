@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, String, Text, Boolean, DateTime, ForeignKey, Integer
+from sqlalchemy import ARRAY, Column, Enum, String, Text, Boolean, DateTime, ForeignKey, Integer
 from app.models.base import Base
 from datetime import datetime, timezone  
 import enum
@@ -24,6 +24,7 @@ class Diary(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), 
                         onupdate=lambda: datetime.now(timezone.utc))
+    images = Column(ARRAY(String), nullable=True, default=list)
     
     author = relationship("User", back_populates="diaries")
     diary_groups = relationship("DiaryGroup", back_populates="diary", cascade="all, delete-orphan")

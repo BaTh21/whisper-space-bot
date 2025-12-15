@@ -533,11 +533,23 @@ export const likeDiary = async (diaryId) => {
   }
 };
 
-export const commentOnDiary = async (diaryId, content) => {
+export const commentOnDiary = async (diaryId, content, parentId = null, images = null) => {
   try {
-    const response = await api.post(`/api/v1/diaries/${diaryId}/comment`, {
+    const payload = {
       content,
-    });
+    };
+    
+    // Add parent_id if it exists (for replies)
+    if (parentId !== null) {
+      payload.parent_id = parentId;
+    }
+    
+    // Add images if they exist
+    if (images !== null && images.length > 0) {
+      payload.images = images;
+    }
+    
+    const response = await api.post(`/api/v1/diaries/${diaryId}/comment`, payload);
     return response.data;
   } catch (error) {
     console.error("Comment on diary error:", error.response?.data);
@@ -545,6 +557,41 @@ export const commentOnDiary = async (diaryId, content) => {
       error.response?.data?.detail ||
       error.response?.data?.msg ||
       "Failed to add comment"
+    );
+  }
+};
+export const updateComment = async (commentId, content, images = null) => {
+  try {
+    const payload = {
+      content,
+    };
+    
+    // Add images if they exist
+    if (images !== null && images.length > 0) {
+      payload.images = images;
+    }
+    
+    const response = await api.put(`/api/v1/diaries/comments/${commentId}`, payload);
+    return response.data;
+  } catch (error) {
+    console.error("Update comment error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to update comment"
+    );
+  }
+};
+export const getDiaryDetails = async (diaryId) => {
+  try {
+    const response = await api.get(`/api/v1/diaries/${diaryId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Get diary details error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to get diary details"
     );
   }
 };
@@ -569,13 +616,10 @@ export const getDiaryComments = async (diaryId) => {
     return response.data;
   } catch (error) {
     console.error("Get diary comments error:", error.response?.data);
-    if (error.response?.status === 404) {
-      return [];
-    }
     throw new Error(
       error.response?.data?.detail ||
       error.response?.data?.msg ||
-      "Failed to fetch comments"
+      "Failed to get comments"
     );
   }
 };
