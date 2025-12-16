@@ -566,7 +566,6 @@ export const updateComment = async (commentId, content, images = null) => {
       content,
     };
     
-    // Add images if they exist
     if (images !== null && images.length > 0) {
       payload.images = images;
     }
