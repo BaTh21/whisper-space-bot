@@ -126,6 +126,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   });
 
   console.log("streams", remoteStreams);
+  console.log("is audio", isAudioOnlyCall);
 
   useEffect(() => {
     const mobileStyles = `
@@ -563,19 +564,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           usernamesRef.current[data.from_user] = data.sender_username;
           avatarRef.current[data.from_user] = data.avatar;
         }
-        if (data.call_type === "voice") {
-          setIsAudioOnlyCall(true);
-        }
+        setIsAudioOnlyCall(data.call_type === "voice");
       }
 
       else if (type === "call_accepted") {
         setCallStatus("In Call");
 
         if (isCallerRef.current) {
-          startWebRTCForCall();
+          startWebRTCForCall(isAudioOnlyCall);
         }
-
-        return;
       }
 
       else if (type === "call_ice") {
@@ -602,7 +599,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         usernamesRef.current[data.from_user] = data.username;
         avatarRef.current[data.from_user] = data.avatar;
 
-        await getLocalStream(isAudioOnlyCall);
+        const audioOnly = data.call_type === "voice" || isAudioOnlyCall;
+        setIsAudioOnlyCall(audioOnly);
+
+        await getLocalStream(audioOnly);
         const pc = await getOrCreatePeer(fromUserId);
 
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -613,8 +613,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         sendWsMessage({
           type: "call_answer",
           to_user: fromUserId,
-          username: data.username,
-          avatar: data.avatar,
           answer
         });
       }
@@ -638,12 +636,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         }
       }
 
-      else if (type === "call_rejected") {
-
-        setCallStatus("Call rejected");
-        return;
-      }
-
       else if (type === "call_ended") {
 
         endWebRTC();
@@ -653,7 +645,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             ? "Call not answered"
             : "Call ended"
         );
+
+        setCallOpen(false);
         setIsAudioOnlyCall(false);
+        setIncomingCall({ open: false });
+        setTotalAccepted(0);
 
         return;
       }
@@ -1867,13 +1863,17 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     if (!localStreamRef.current) {
       localStreamRef.current = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: !isAudioOnly
+        video: isAudioOnly ? false : { facingMode: "user" }
       });
     }
     return localStreamRef.current;
   };
 
   const getOrCreatePeer = async (userId) => {
+    if (!localStreamRef.current) {
+      throw new Error("Local stream must exist before creating PeerConnection");
+    }
+
     let pc = peersRef.current[userId];
     if (pc && pc.signalingState !== "closed") return pc;
 
@@ -1881,11 +1881,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current);
-      });
-    }
+    localStreamRef.current.getTracks().forEach(track => {
+      pc.addTrack(track, localStreamRef.current);
+    });
 
     pc.ontrack = (event) => {
       let stream = remoteStreamsRef.current[userId];
@@ -1916,7 +1914,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     return pc;
   };
 
-  const startWebRTCForCall = async () => {
+  const startWebRTCForCall = async (isAudioOnlyCall) => {
     await getLocalStream(isAudioOnlyCall);
 
     const friendId = selectedFriend.id;
@@ -1928,7 +1926,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     sendWsMessage({
       type: "call_offer",
       to_user: friendId,
-      offer
+      offer,
+      call_type: isAudioOnlyCall ? "voice" : "video"
     });
   };
 
@@ -1961,9 +1960,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   };
 
   const handleStartVoiceCall = async () => {
+    isCallerRef.current = true;
+
     await getLocalStream(true);
 
-    sendWsMessage({ type: "call_start", call_type: "voice" });
+    sendWsMessage({ type: "call_start", call_type: "voice", to_user: selectedFriend.id });
 
     setIsAudioOnlyCall(true);
     setCallStatus("Calling...");
@@ -1996,11 +1997,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   };
 
   const handleCallEnd = () => {
-    sendWsMessage({ type: "call_end" });
+    sendWsMessage(
+      {
+        type: "call_end"
+      });
+    endWebRTC();
     setCallOpen(false);
-    setCallStatus("");
+    setCallStatus("Call ended");
     setRemoteStreams({});
     setTotalAccepted(0);
+    setIsAudioOnlyCall(false);
   }
 
   return (

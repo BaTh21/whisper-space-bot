@@ -772,7 +772,8 @@ async def handle_websocket_private(
                         "from_user": current_user.id,
                         "username": current_user.username,
                         "avatar": current_user.avatar_url,
-                        "offer": offer
+                        "offer": offer,
+                        "call_type": manager.active_calls[chat_id]["call_type"]
                     })
                 
                 elif msg_type == "call_answer":

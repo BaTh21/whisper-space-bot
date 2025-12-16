@@ -109,10 +109,10 @@ class WebSocketManager:
                 if not self.user_chats[user_id]:
                     asyncio.create_task(self._handle_user_offline(user_id))
                     
-            if chat_id in self.active_calls:
-                if not self.active_calls[chat_id].get("ending"):
-                    self.active_calls[chat_id]["ending"] = True
-                    asyncio.create_task(self._end_call(chat_id, "user_disconnected", ended_by=user_id))
+            # if chat_id in self.active_calls:
+            #     if not self.active_calls[chat_id].get("ending"):
+            #         self.active_calls[chat_id]["ending"] = True
+            #         asyncio.create_task(self._end_call(chat_id, "user_disconnected", ended_by=user_id))
             
             print(f"📱 User {user_id} disconnected from chat {chat_id}")
 
