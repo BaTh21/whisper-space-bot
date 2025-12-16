@@ -27,6 +27,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
+import ShortcutIcon from '@mui/icons-material/Shortcut';
 
 import EmojiButton from '../EmojiButton';
 import MessageReactions from '../MessageReactions';
@@ -49,7 +50,6 @@ const ChatMessage = ({
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
   const [avatarError, setAvatarError] = useState(false);
-  const [seenAvatarError, setSeenAvatarError] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -259,7 +259,7 @@ const ChatMessage = ({
       case 'delivered':
         return <DoneAllIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
       case 'seen':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: '#34B7F1' }} />;
+        return <DoneAllIcon sx={{ fontSize: '1rem', color: '#ffffffff' }} />;
       default:
         return null;
     }
@@ -302,7 +302,6 @@ const ChatMessage = ({
               border: '1px solid',
               borderColor: 'background.paper'
             }}
-            onError={() => setSeenAvatarError(true)}
           >
             {getUserInitials(reader.username)}
           </Avatar>
@@ -458,21 +457,34 @@ const ChatMessage = ({
   };
 
   const renderCallMessage = () => {
-    <>
-      <Typography
-        variant="body2"
-        sx={{
-          wordBreak: 'break-word',
-          lineHeight: 1.4,
-          fontSize: '0.9rem',
-          mb: reactions.length > 0 ? 0.5 : 0
-        }}
-      >
-        {message.content}
-      </Typography>
-      <Button>Join Now</Button>
-    </>
-  }
+    return (
+      <Box>
+        <Typography
+          variant="body2"
+          sx={{
+            wordBreak: 'break-word',
+            lineHeight: 1.4,
+            fontSize: '0.9rem',
+            mb: reactions.length > 0 ? 0.5 : 0
+          }}
+        >
+          {message.content}
+        </Typography>
+        <Button
+          variant="outlined"
+          size="small"
+          sx={{
+            width: '100%',
+            mt: 1
+          }}
+        // onClick={() => handleJoinCall(message)}
+        >
+          Join Now
+        </Button>
+      </Box>
+    );
+  };
+
 
   const renderOnlineStatus = () => {
     if (isMine || !friendOnlineStatus || !currentFriend) return null;
@@ -972,7 +984,6 @@ const ChatMessage = ({
             mr: 1,
             mt: 'auto',
             fontSize: '0.8rem',
-            bgcolor: 'primary.main',
             fontWeight: 'bold',
           }}
           imgProps={{ onError: () => setAvatarError(true) }}
@@ -1032,20 +1043,18 @@ const ChatMessage = ({
             </Box>
           </Box>
         ) : (
-          <Box sx={{ position: 'relative', width: 200 }}>
+          <Box sx={{ position: 'relative', width: '100%' }}>
             {/* Message bubble */}
             <Box
               className="message-bubble"
               sx={{
-                bgcolor: isMine ? '#0088cc' : '#f0f0f0',
+                bgcolor: isMine ? 'primary.main' : '#f0f0f0',
                 color: isMine ? 'white' : 'text.primary',
                 p: 1.4,
-                borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                borderRadius: isMine ? '18px 18px 4px 18px' : '4px 18px  18px 18px ',
                 position: 'relative',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                 transition: 'all 0.2s ease',
-                borderBottomLeftRadius: reactions.length > 0 ? '12px' : (isMine ? '4px' : '18px'),
-                borderBottomRightRadius: reactions.length > 0 ? '12px' : (isMine ? '18px' : '4px'),
                 '&:hover': {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                   '& .image-actions': {
@@ -1053,6 +1062,7 @@ const ChatMessage = ({
                   }
                 },
               }}
+              onClick={handleMenu}
             >
               {/* Forwarded badge */}
               {message.is_forwarded && (
@@ -1099,7 +1109,7 @@ const ChatMessage = ({
                     opacity: 0.7,
                     fontSize: '0.7rem',
                     lineHeight: 1,
-                    color: isMine ? 'rgba(255,255,255,0.8)' : 'text.secondary'
+                    color: isMine ? 'rgba(255, 255, 255, 1)' : 'text.secondary'
                   }}
                 >
                   {formatCambodiaTime(message.created_at)}
@@ -1130,38 +1140,8 @@ const ChatMessage = ({
                   />
                 </Box>
               )}
-
-              {/* Menu button */}
-              {showMenu && (
-                <IconButton
-                  size="small"
-                  onClick={handleMenu}
-                  className="message-actions"
-                  sx={{
-                    position: 'absolute',
-                    top: -8,
-                    right: isMine ? -8 : 'auto',
-                    left: isMine ? 'auto' : -8,
-                    bgcolor: isMine ? '#0088cc' : '#f0f0f0',
-                    color: isMine ? 'white' : 'text.primary',
-                    opacity: 1,
-                    pointerEvents: 'auto',
-                    transition: 'all 0.2s ease',
-                    width: 24,
-                    height: 24,
-                    zIndex: 10,
-                    '&:hover': {
-                      bgcolor: isMine ? '#0077b3' : '#e0e0e0',
-                      transform: 'scale(1.1)',
-                    },
-                  }}
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-              )}
             </Box>
-
-            {/* Floating reaction button for messages without reactions - ONLY for non-temp */}
+            
             {!message.is_temp && reactions.length === 0 && (
               <Box
                 sx={{
@@ -1194,7 +1174,7 @@ const ChatMessage = ({
         )}
 
         {/* Seen status */}
-        {renderSeenAvatar()}
+        {/* {renderSeenAvatar()} */}
 
         {/* Context menu */}
         {showMenu && (
@@ -1245,7 +1225,7 @@ const ChatMessage = ({
                 }
                 menuItems.push(
                   <MenuItem key="forward" onClick={handleForwardClick}>
-                    <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}
                   </MenuItem>,
                   <MenuItem
@@ -1260,7 +1240,7 @@ const ChatMessage = ({
               } else {
                 menuItems.push(
                   <MenuItem key="forward" onClick={handleForwardClick}>
-                    <ForwardIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}
                   </MenuItem>
                 );

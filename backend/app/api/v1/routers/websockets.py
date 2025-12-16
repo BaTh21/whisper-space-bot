@@ -1,7 +1,7 @@
 import asyncio
 import json
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -723,8 +723,9 @@ async def handle_websocket_private(
                     system_msg = PrivateMessage(
                         receiver_id=friend_id,
                         sender_id=current_user.id,
-                        content=f"{current_user.username} started a video call",
-                        message_type="system"
+                        content=f"{current_user.username} started a {call_type} call",
+                        message_type="system",
+                        created_at=datetime.now(timezone.utc)
                     )
                     db.add(system_msg)
                     db.commit()
@@ -747,7 +748,7 @@ async def handle_websocket_private(
                             "avatar": current_user.avatar_url
                         },
                         "content": system_msg.content,
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": system_msg.created_at.isoformat(),
                         "message_type": "system"
                     })
 
@@ -757,7 +758,7 @@ async def handle_websocket_private(
                         "from_user": current_user.id,
                         "sender_username": current_user.username,
                         "avatar_url": current_user.avatar_url,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": system_msg.created_at.isoformat()
                     })
                     
                 elif msg_type == "call_offer":

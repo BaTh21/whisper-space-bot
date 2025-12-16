@@ -125,64 +125,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     call_type: ""
   });
 
-  console.log("streams", remoteStreams);
-  console.log("is audio", isAudioOnlyCall);
-
-  useEffect(() => {
-    const mobileStyles = `
-    @media (max-width: 599px) {
-      .chat-container {
-        height: calc(100vh - 80px) !important;
-        min-height: 400px;
-      }
-      
-      .messages-area {
-        min-height: 200px;
-        max-height: calc(100vh - 200px) !important;
-        flex: 1;
-        overflow-y: auto;
-      }
-      
-      .input-area {
-        padding: 8px !important;
-        min-height: 60px;
-        position: sticky;
-        bottom: 0;
-        background: white;
-        border-top: 1px solid #e0e0e0;
-      }
-      
-      /* Ensure input field is visible */
-      .input-area .MuiTextField-root {
-        max-height: 44px;
-      }
-      
-      /* Make sure messages don't overflow */
-      .messages-area .message-bubble {
-        max-width: 85% !important;
-      }
-    }
-    
-    @media (max-width: 400px) {
-      .chat-container {
-        height: calc(100vh - 60px) !important;
-      }
-      
-      .messages-area {
-        max-height: calc(100vh - 180px) !important;
-      }
-    }
-  `;
-
-    const styleElement = document.createElement('style');
-    styleElement.textContent = mobileStyles;
-    document.head.appendChild(styleElement);
-
-    return () => {
-      document.head.removeChild(styleElement);
-    };
-  }, []);
-
   const mediaRecorderRef = useRef(null);
   const recordingIntervalRef = useRef(null);
   const audioBlobRef = useRef(null);
@@ -205,70 +147,47 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const handleWebSocketMessage = useCallback(
     async (data) => {
       const { type } = data;
-      console.log("📡 WebSocket received:", data);
-
-      if (type === "message" && data.sender_id) {
-        const isSenderBlocked = blockedUsers.some(user => user.id === data.sender_id);
-        if (isSenderBlocked) {
-          console.log(`⚠️ Ignoring message from blocked user ${data.sender_id}`);
-          return;
-        }
-      }
 
       if (type === "user_online") {
-        console.log('📱 User came online:', data.user_id);
         setOnlineUsers(prev => {
           const newSet = new Set(prev);
           newSet.add(data.user_id);
           return newSet;
         });
 
-        // Update last seen map
         setLastSeenMap(prev => ({
           ...prev,
           [data.user_id]: data.timestamp || new Date().toISOString()
         }));
 
-        // Show notification if this is the selected friend
         if (selectedFriend?.id === data.user_id) {
         }
-
-        return; // Don't process further
+        return;
 
       } else if (type === "user_offline") {
-        console.log('📱 User went offline:', data.user_id);
-
-        // Update online users set
         setOnlineUsers(prev => {
           const newSet = new Set(prev);
           newSet.delete(data.user_id);
           return newSet;
         });
 
-        // Update last seen map with offline timestamp
         const offlineTime = data.last_seen || data.timestamp || new Date().toISOString();
         setLastSeenMap(prev => ({
           ...prev,
           [data.user_id]: offlineTime
         }));
 
-        return; // Don't process further
+        return;
 
       } else if (type === "online_users") {
-        // Received list of online users in the chat
-        console.log('👥 Online users list:', data.user_ids);
         setOnlineUsers(new Set(data.user_ids || []));
-        return; // Don't process further
+        return;
       }
 
-      // === REACTION HANDLING ===
       if (type === "reaction_added") {
-        console.log('➕ Reaction added:', data);
-
         setMessages(prev => prev.map(msg => {
           if (msg.id === data.message_id) {
             const currentReactions = msg.reactions || [];
-            // Check if reaction already exists
             const exists = currentReactions.some(r => r.id === data.reaction.id);
             if (!exists) {
               return {
@@ -282,8 +201,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         return;
 
       } else if (type === "reaction_removed") {
-        console.log('➖ Reaction removed:', data);
-
         setMessages(prev => prev.map(msg => {
           if (msg.id === data.message_id) {
             const currentReactions = msg.reactions || [];
@@ -297,10 +214,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         return;
       }
 
-      // 1. New real message from server
-      if (type === "message") {
+      else if (
+        type === "new_call_message" ||
+        type === "message"
+      ) {
         const detectMessageType = (msgData) => {
-          // Use backend message_type first
+          if (msgData.message_type === "system") return "system";
           if (msgData.message_type === "image") return "image";
           if (msgData.message_type === "voice") return "voice";
           if (msgData.message_type === "file") return "file";
@@ -308,31 +227,25 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
           const content = msgData.content || "";
 
-          // Voice message detection for Cloudinary
           const isVoiceUrl =
-            content.includes('/voice_messages/') ||
+            content.includes("/voice_messages/") ||
             content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
-
+            (content.includes("cloudinary.com") && content.includes("/video/upload/"));
           if (isVoiceUrl) return "voice";
 
-          // Image detection
           const isImageUrl =
             content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
-
+            (content.includes("cloudinary.com") && content.includes("/image/upload/"));
           return isImageUrl ? "image" : "text";
         };
 
         const messageType = detectMessageType(data);
 
-        const content = data.content;
-
         const realMessage = {
           ...data,
           id: data.id,
           temp_id: data.temp_id || null,
-          content: content,
+          content: data.content,
           is_temp: false,
           message_type: messageType,
           sender: {
@@ -353,12 +266,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         setMessages((prev) => {
           let updated = [...prev];
 
-          // Replace temporary message if temp_id matches
           if (data.temp_id) {
             const tempIndex = updated.findIndex(
-              (m) =>
-                m.is_temp &&
-                (m.temp_id === data.temp_id || m.id === data.temp_id)
+              (m) => m.is_temp && (m.temp_id === data.temp_id || m.id === data.temp_id)
             );
 
             if (tempIndex !== -1) {
@@ -368,111 +278,22 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             }
           }
 
-          // Fallback: if no temp_id, avoid duplicates by real ID
           const exists = updated.some((m) => m.id === data.id);
-          if (!exists) {
-            updated.push(realMessage);
-          }
+          if (!exists) updated.push(realMessage);
 
           return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         });
-
-        // 2. REAL-TIME SEEN STATUS UPDATES - FIXED
-      } else if (type === "new_call_message") {
-        const detectMessageType = (msgData) => {
-          // Use backend message_type first
-          if (msgData.message_type === "image") return "image";
-          if (msgData.message_type === "voice") return "voice";
-          if (msgData.message_type === "file") return "file";
-          if (msgData.message_type === "text") return "text";
-
-          const content = msgData.content || "";
-
-          // Voice message detection for Cloudinary
-          const isVoiceUrl =
-            content.includes('/voice_messages/') ||
-            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
-
-          if (isVoiceUrl) return "voice";
-
-          // Image detection
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
-
-          return isImageUrl ? "image" : "text";
-        };
-
-        const messageType = detectMessageType(data);
-
-        const content = data.content;
-
-        const realMessage = {
-          ...data,
-          id: data.id,
-          temp_id: data.temp_id || null,
-          content: content,
-          is_temp: false,
-          message_type: messageType,
-          sender: {
-            id: data.sender_id,
-            username: data.sender_username,
-            avatar_url: getAvatarUrl(data.avatar_url),
-          },
-          is_read: data.is_read || false,
-          read_at: data.read_at || null,
-          seen_by: data.seen_by || [],
-          created_at: data.created_at,
-          updated_at: data.updated_at || data.created_at,
-          edited: !!data.updated_at && data.updated_at !== data.created_at,
-          voice_duration: data.voice_duration || 0,
-          file_size: data.file_size || 0,
-        };
-
-        setMessages((prev) => {
-          let updated = [...prev];
-
-          // Replace temporary message if temp_id matches
-          if (data.temp_id) {
-            const tempIndex = updated.findIndex(
-              (m) =>
-                m.is_temp &&
-                (m.temp_id === data.temp_id || m.id === data.temp_id)
-            );
-
-            if (tempIndex !== -1) {
-              tempToRealIdMap.current[data.temp_id] = data.id;
-              updated[tempIndex] = realMessage;
-              return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-            }
-          }
-
-          // Fallback: if no temp_id, avoid duplicates by real ID
-          const exists = updated.some((m) => m.id === data.id);
-          if (!exists) {
-            updated.push(realMessage);
-          }
-
-          return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        });
-
-      } else if (type === "read_receipt") {
-        console.log("👀 REAL-TIME: Read receipt received", data);
-
+      }
+      else if (type === "read_receipt") {
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id === data.message_id) {
               const currentSeenBy = msg.seen_by || [];
               const readerId = data.reader_id || data.user_id;
 
-              // Check if this user already marked as seen
               const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
 
               if (!alreadySeen && readerId) {
-                console.log(`✅ REAL-TIME: Marking message ${data.message_id} as seen by user ${readerId}`);
-
-                // Get reader info - IMPORTANT: Use friends list or selectedFriend
                 const reader = friends.find(f => f.id === readerId) || selectedFriend;
 
                 return {
@@ -495,10 +316,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           })
         );
 
-        // 3. Message updated with seen_by information
       } else if (type === "message_updated") {
-        console.log("🔄 Message updated with seen info:", data);
-
         setMessages((prev) =>
           prev.map((msg) => {
             const messageIdsToCheck = [
@@ -515,9 +333,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
               msg.id === data.id;
 
             if (matches) {
-              // If seen_by is provided, update it
               if (data.seen_by) {
-                console.log("👀 Updating seen_by for message:", msg.id);
                 return {
                   ...msg,
                   content: data.content || msg.content,
@@ -530,7 +346,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 };
               }
 
-              // Regular message update
               return {
                 ...msg,
                 content: data.content || msg.content,
@@ -543,11 +358,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           })
         );
 
-        // 4. Typing indicator
       } else if (type === "typing") {
         setFriendTyping(!!data.is_typing);
 
-        // 5. Message deleted
       } else if (type === "message_deleted") {
         setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
       }
@@ -2248,8 +2061,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   sx={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    px: { xs: 0.5, md: 2 },
-                    py: 1,
+                    px: { xs: 0.5, md: 4 },
+                    py: { xs: 1, md: 2 },
                     boxShadow: 1
                   }}>
                   <Box
@@ -2266,7 +2079,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     >
                       <ArrowBackIcon />
                     </IconButton>
-                    <Avatar src={getUserAvatar(selectedFriend)} />
+                    <Avatar
+                      src={getUserAvatar(selectedFriend)}
+                      sx={{
+                        width: { xs: 38, md: 44 },
+                        height: { xs: 38, md: 44 },
+                      }}
+                    />
                     <Box sx={{ ml: 1 }}>
                       <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
                       <Typography sx={{ display: { xs: 'block', md: 'none' } }} variant="caption" color="text.secondary">{status.text}</Typography>
@@ -2350,12 +2169,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
                 {/* Input Area */}
                 <Box className="input-area" sx={{
-                  p: { xs: 4, sm: 2 },
+                  p: { xs: 1, sm: 2 },
                   borderTop: 1,
                   borderColor: 'divider',
                   bgcolor: 'white',
                   display: 'flex',
-                  gap: { xs: 1, sm: 1.5 },
+                  gap: { xs: 0.5, sm: 1.5 },
                   alignItems: 'flex-end',
                   flexShrink: 0,
                   minHeight: { xs: '60px', sm: 'auto' }
