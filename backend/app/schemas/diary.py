@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, field_serializer, validator, Field
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Union
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
 
@@ -139,11 +139,12 @@ class DiaryCommentOut(TimestampMixin):
 class DiaryUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
-    share_type: Optional[ShareTypeInput] = None
+    share_type: Optional[Union[ShareTypeInput,str]] = None
     group_ids: Optional[List[int]] = None
     images: Optional[List[str]] = None
     
     class Config:
+        from_attributes = True
         use_enum_values = True
 
 class CommentUpdate(BaseModel):

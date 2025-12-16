@@ -453,14 +453,32 @@ export const getDiaryById = async (diaryId) => {
 
 export const updateDiaryById = async (diaryId, data) => {
   try {
+    console.log('API Call - Update Diary:', {
+      diaryId,
+      data: JSON.stringify(data, null, 2)
+    });
+    
     const res = await api.patch(`/api/v1/diaries/${diaryId}`, data, {
       headers: {
         "Content-Type": "application/json",
       },
     });
+    
+    console.log('API Response:', res.data);
     return res.data;
   } catch (error) {
-    throw new Error(error?.response?.data?.detail || "Failed to update diary");
+    console.error('API Error Details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      headers: error.response?.headers,
+      config: error.config
+    });
+    
+    const errorDetail = error?.response?.data?.detail;
+    console.error('Error detail from server:', errorDetail);
+    
+    throw new Error(errorDetail || "Failed to update diary");
   }
 };
 

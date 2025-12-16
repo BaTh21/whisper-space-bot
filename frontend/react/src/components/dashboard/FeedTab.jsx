@@ -8,6 +8,7 @@ import {
   Favorite,
   FavoriteBorder,
   Image as ImageIcon,
+  MoreVert as MoreVertIcon,
   Reply as ReplyIcon,
   Save as SaveIcon,
   Send as SendIcon
@@ -28,6 +29,7 @@ import {
   FormControl,
   IconButton,
   InputLabel,
+  Menu,
   MenuItem,
   Select,
   TextField,
@@ -288,7 +290,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   const [diaryToDelete, setDiaryToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // State for edit functionality
+  // State for diary edit functionality
   const [editingDiary, setEditingDiary] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
@@ -302,10 +304,20 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   const [editCommentImages, setEditCommentImages] = useState([]);
   const [editCommentLoading, setEditCommentLoading] = useState(false);
 
+  // State for comment delete dialog
+  const [commentDeleteDialogOpen, setCommentDeleteDialogOpen] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState(null);
+  const [commentDeleteLoading, setCommentDeleteLoading] = useState(false);
+
   // State for images and replies
   const [replyingTo, setReplyingTo] = useState(null);
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedCommentImages, setSelectedCommentImages] = useState({});
+
+  // State for dots menu
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+  const [selectedDiaryForMenu, setSelectedDiaryForMenu] = useState(null);
+  const menuOpen = Boolean(menuAnchorEl);
 
   const { t, i18n } = useTranslation();
   const theme = useTheme();
@@ -335,7 +347,32 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   // Normalize groups prop
   const normalizedGroups = Array.isArray(groups) ? groups : [];
 
-  // Handler functions
+  // Handler functions for dots menu
+  const handleMenuOpen = (event, diary) => {
+    event.stopPropagation();
+    setMenuAnchorEl(event.currentTarget);
+    setSelectedDiaryForMenu(diary);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+    setSelectedDiaryForMenu(null);
+  };
+
+  const handleEditDiaryClick = () => {
+    if (selectedDiaryForMenu) {
+      handleEditClick(selectedDiaryForMenu);
+    }
+    handleMenuClose();
+  };
+
+  const handleDeleteDiaryClick = () => {
+    if (selectedDiaryForMenu) {
+      handleDeleteClick(selectedDiaryForMenu.id, selectedDiaryForMenu.title);
+    }
+    handleMenuClose();
+  };
+
   const handleDeleteClick = (diaryId, diaryTitle) => {
     setDiaryToDelete({ id: diaryId, title: diaryTitle });
     setDeleteDialogOpen(true);
@@ -409,50 +446,81 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     setEditLoading(false);
   };
 
-  const handleEditSave = async (diaryId) => {
-    if (!editTitle.trim() || !editContent.trim()) {
-      setError('Title and content are required');
-      return;
+const handleEditSave = async (diaryId) => {
+  if (!editTitle.trim() || !editContent.trim()) {
+    setError('Title and content are required');
+    return;
+  }
+
+  setEditLoading(true);
+
+  try {
+    const updateData = {
+      title: editTitle.trim(),
+      content: editContent.trim(),
+    };
+    
+    // Add share_type if provided
+    if (editShareType && editShareType.trim() !== '') {
+      updateData.share_type = editShareType.toLowerCase().trim();
     }
-
-    setEditLoading(true);
-
-    try {
-      const updateData = {
-        title: editTitle.trim(),
-        content: editContent.trim(),
-      };
-
-      if (editShareType) {
-        updateData.share_type = editShareType;
-      }
-
-      if (editShareType === 'group') {
-        updateData.group_ids = editGroupIds;
-      }
-
-      if (selectedImages.length > 0) {
-        updateData.images = selectedImages;
-      }
-
-      await updateDiaryById(diaryId, updateData);
-
-      setSuccess('Diary updated successfully');
-      setTimeout(() => {
-        setSuccess('');
-      }, 2000);
-
-      handleEditCancel();
-
-      if (onDataUpdate) {
-        onDataUpdate();
-      }
-    } catch (err) {
-      console.error('Update error:', err);
-      setError(err.message || 'Failed to update diary');
-      setEditLoading(false);
+    
+    // Only add group_ids if share_type is 'group'
+    if (editShareType === 'group') {
+      updateData.group_ids = editGroupIds || [];
     }
-  };
+    
+    // Handle images smartly:
+    // 1. If no images selected, send empty array to remove images
+    // 2. If images are base64, send them
+    // 3. If images are URLs, don't send (they already exist)
+    
+    const hasBase64Images = selectedImages.some(img => 
+      img && typeof img === 'string' && 
+      img.startsWith('data:image/') && 
+      img.includes('base64,')
+    );
+    
+    const hasUrlImages = selectedImages.some(img => 
+      img && typeof img === 'string' && 
+      (img.startsWith('http://') || img.startsWith('https://'))
+    );
+    
+    if (selectedImages.length === 0) {
+      // User removed all images
+      updateData.images = [];
+    } else if (hasBase64Images) {
+      // Has new base64 images
+      const base64Images = selectedImages.filter(img => 
+        img && typeof img === 'string' && 
+        img.startsWith('data:image/') && 
+        img.includes('base64,')
+      );
+      updateData.images = base64Images;
+    }
+    // If only URL images and no base64, don't send images field
+    // (they're already saved on server)
+    
+    console.log('Final update data:', updateData);
+    
+    await updateDiaryById(diaryId, updateData);
+
+    setSuccess('Diary updated successfully');
+    setTimeout(() => {
+      setSuccess('');
+    }, 2000);
+
+    handleEditCancel();
+
+    if (onDataUpdate) {
+      onDataUpdate();
+    }
+  } catch (err) {
+    console.error('Update error:', err);
+    setError(err.message || 'Failed to update diary');
+    setEditLoading(false);
+  }
+};
 
   const handleLikeDiary = async (diaryId) => {
     try {
@@ -590,49 +658,118 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     }));
   };
 
-  const handleImageUpload = (event, diaryId = null, commentId = null) => {
-    const files = Array.from(event.target.files);
-    const validImages = files.filter(file =>
-      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
-    );
+const handleImageUpload = (event, diaryId = null, commentId = null) => {
+  const files = Array.from(event.target.files);
+  
+  // Validate files
+  const validImages = files.filter(file => {
+    const isValidType = file.type.startsWith('image/');
+    const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
+    return isValidType && isValidSize;
+  });
 
-    if (validImages.length === 0) {
-      setError('Please select valid image files (max 5MB each)');
-      return;
-    }
+  if (validImages.length === 0) {
+    setError('Please select valid image files (JPG, PNG, GIF, max 5MB each)');
+    return;
+  }
 
-    const imagePromises = validImages.map(file => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          resolve(e.target.result);
-        };
-        reader.readAsDataURL(file);
-      });
+  if (validImages.length > 10) {
+    setError('You can upload maximum 10 images at once');
+    return;
+  }
+
+  console.log(`Processing ${validImages.length} image(s)...`);
+
+  // Convert each file to base64
+  const imagePromises = validImages.map((file, index) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        console.log(`Image ${index + 1} converted to base64, size: ${Math.round(e.target.result.length / 1024)}KB`);
+        resolve({
+          data: e.target.result, // Base64 string
+          name: file.name,
+          type: file.type,
+          size: file.size
+        });
+      };
+      
+      reader.onerror = (error) => {
+        console.error(`Error reading file ${file.name}:`, error);
+        reject(new Error(`Failed to read image: ${file.name}`));
+      };
+      
+      reader.readAsDataURL(file); // Convert to base64
     });
+  });
 
-    Promise.all(imagePromises).then(base64Images => {
+  Promise.all(imagePromises)
+    .then(imageResults => {
+      const base64Images = imageResults.map(result => result.data);
+      
+      console.log(`Successfully converted ${base64Images.length} image(s) to base64`);
+      
       if (diaryId && editingDiary === diaryId) {
+        // For diary editing: add new images to existing ones
         setSelectedImages(prev => [...prev, ...base64Images]);
+        console.log(`Added ${base64Images.length} image(s) to diary edit`);
       } else if (commentId) {
+        // For comment replies
         setSelectedCommentImages(prev => ({
           ...prev,
           [commentId]: [...(prev[commentId] || []), ...base64Images]
         }));
+        console.log(`Added ${base64Images.length} image(s) to comment ${commentId}`);
+      } else if (diaryId) {
+        // For new comments on diary
+        setSelectedCommentImages(prev => ({
+          ...prev,
+          [diaryId]: [...(prev[diaryId] || []), ...base64Images]
+        }));
+        console.log(`Added ${base64Images.length} image(s) to diary ${diaryId} comment`);
       }
+      
+      // Clear the file input so same files can be selected again
+      event.target.value = '';
+    })
+    .catch(err => {
+      console.error('Error processing images:', err);
+      setError(err.message || 'Failed to process images');
     });
-  };
+};
 
-  const removeImage = (index, diaryId = null, commentId = null) => {
-    if (diaryId && editingDiary === diaryId) {
-      setSelectedImages(prev => prev.filter((_, i) => i !== index));
-    } else if (commentId) {
-      setSelectedCommentImages(prev => ({
+const removeImage = (index, diaryId = null, commentId = null) => {
+  if (diaryId && editingDiary === diaryId) {
+    // Remove image from diary edit
+    setSelectedImages(prev => {
+      const newImages = [...prev];
+      newImages.splice(index, 1);
+      console.log(`Removed image at index ${index}, ${newImages.length} images remaining`);
+      return newImages;
+    });
+  } else if (commentId) {
+    // Remove image from comment
+    setSelectedCommentImages(prev => {
+      const newImages = [...(prev[commentId] || [])];
+      newImages.splice(index, 1);
+      return {
         ...prev,
-        [commentId]: prev[commentId].filter((_, i) => i !== index)
-      }));
-    }
-  };
+        [commentId]: newImages
+      };
+    });
+  } else if (diaryId) {
+    // Remove image from new comment
+    setSelectedCommentImages(prev => {
+      const newImages = [...(prev[diaryId] || [])];
+      newImages.splice(index, 1);
+      return {
+        ...prev,
+        [diaryId]: newImages
+      };
+    });
+  }
+};
 
   const countAllComments = (comments) => {
     if (!comments || !Array.isArray(comments)) return 0;
@@ -728,8 +865,24 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     }
   };
 
+  // Handle comment delete dialog
+  const handleCommentDeleteClick = (commentId) => {
+    setCommentToDelete(commentId);
+    setCommentDeleteDialogOpen(true);
+  };
+
+  const handleCommentDeleteCancel = () => {
+    setCommentDeleteDialogOpen(false);
+    setCommentToDelete(null);
+    setCommentDeleteLoading(false);
+  };
+
   // Handle delete comment
   const handleDeleteComment = async (commentId) => {
+    if (!commentId) return;
+
+    setCommentDeleteLoading(true);
+
     try {
       // Find which diary this comment belongs to
       let targetDiaryId = null;
@@ -783,6 +936,10 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
       setError(err.message || 'Failed to delete comment');
+    } finally {
+      setCommentDeleteLoading(false);
+      setCommentDeleteDialogOpen(false);
+      setCommentToDelete(null);
     }
   };
 
@@ -806,9 +963,33 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     const [localEditText, setLocalEditText] = useState(comment.content);
     const [localEditImages, setLocalEditImages] = useState(comment.images || []);
     const [localReplyText, setLocalReplyText] = useState('');
+    const [commentMenuAnchorEl, setCommentMenuAnchorEl] = useState(null);
+    const commentMenuOpen = Boolean(commentMenuAnchorEl);
 
     // Check if current user is the comment owner
     const isCommentOwner = profile && comment.user?.id === profile.id;
+
+    const handleCommentMenuOpen = (event) => {
+      event.stopPropagation();
+      setCommentMenuAnchorEl(event.currentTarget);
+    };
+
+    const handleCommentMenuClose = () => {
+      setCommentMenuAnchorEl(null);
+    };
+
+    const handleCommentEdit = () => {
+      setEditingCommentId(comment.id);
+      setLocalEditText(comment.content);
+      setLocalEditImages(comment.images || []);
+      setLocalEditing(true);
+      handleCommentMenuClose();
+    };
+
+    const handleCommentDelete = () => {
+      handleCommentDeleteClick(comment.id);
+      handleCommentMenuClose();
+    };
 
     const handleReply = () => {
       setReplyingTo(comment.id);
@@ -827,13 +1008,6 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         setLocalReplying(false);
         setLocalReplyText('');
       }
-    };
-
-    const handleEdit = () => {
-      setEditingCommentId(comment.id);
-      setLocalEditText(comment.content);
-      setLocalEditImages(comment.images || []);
-      setLocalEditing(true);
     };
 
     const handleCancelEdit = () => {
@@ -858,12 +1032,6 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         setError(err.message || 'Failed to update comment');
       } finally {
         setEditLoading(false);
-      }
-    };
-
-    const handleDelete = () => {
-      if (window.confirm('Are you sure you want to delete this comment?')) {
-        handleDeleteComment(comment.id);
       }
     };
 
@@ -939,28 +1107,32 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
                 <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
                   <IconButton
                     size="small"
-                    onClick={handleEdit}
+                    onClick={handleCommentMenuOpen}
                     sx={{
                       minWidth: 'auto',
                       p: 0.5,
-                      color: 'primary.main'
+                      color: 'text.secondary'
                     }}
-                    title="Edit"
+                    title="More options"
                   >
-                    <EditIcon fontSize="small" />
+                    <MoreVertIcon fontSize="small" />
                   </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={handleDelete}
-                    sx={{
-                      minWidth: 'auto',
-                      p: 0.5,
-                      color: 'error.main'
-                    }}
-                    title="Delete"
+
+                  {/* Comment menu */}
+                  <Menu
+                    anchorEl={commentMenuAnchorEl}
+                    open={commentMenuOpen}
+                    onClose={handleCommentMenuClose}
                   >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                    <MenuItem onClick={handleCommentEdit}>
+                      <EditIcon fontSize="small" sx={{ mr: 1 }} />
+                      Edit
+                    </MenuItem>
+                    <MenuItem onClick={handleCommentDelete}>
+                      <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
+                      <Typography color="error">Delete</Typography>
+                    </MenuItem>
+                  </Menu>
                 </Box>
               )}
 
@@ -1226,7 +1398,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         overflow: 'hidden',
       }}
     >
-      {/* Delete Confirmation Dialog */}
+      {/* Diary Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
         onClose={handleDeleteCancel}
@@ -1238,7 +1410,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         </DialogTitle>
         <DialogContent>
           <DialogContentText id="delete-dialog-description">
-            Are you sure you want to delete the diary "{diaryToDelete?.title}"?
+            Are you sure you want to delete the diary "{diaryToDelete?.title}"? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -1260,6 +1432,57 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Comment Delete Confirmation Dialog */}
+      <Dialog
+        open={commentDeleteDialogOpen}
+        onClose={handleCommentDeleteCancel}
+        aria-labelledby="comment-delete-dialog-title"
+        aria-describedby="comment-delete-dialog-description"
+      >
+        <DialogTitle id="comment-delete-dialog-title">
+          Delete Comment
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="comment-delete-dialog-description">
+            Are you sure you want to delete this comment? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCommentDeleteCancel}
+            color="primary"
+            disabled={commentDeleteLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => handleDeleteComment(commentToDelete)}
+            color="error"
+            variant="contained"
+            disabled={commentDeleteLoading}
+            startIcon={commentDeleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
+          >
+            {commentDeleteLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diary Options Menu */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={menuOpen}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEditDiaryClick}>
+          <EditIcon fontSize="small" sx={{ mr: 1 }} />
+          Edit
+        </MenuItem>
+        <MenuItem onClick={handleDeleteDiaryClick}>
+          <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
+          <Typography color="error">Delete</Typography>
+        </MenuItem>
+      </Menu>
 
       <Box
         sx={{
@@ -1489,37 +1712,21 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
                         }}
                       />
 
+                      {/* Dots menu button - Only show for diary owner */}
                       {profile && diary.author?.id === profile.id && (
-                        <>
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleEditClick(diary)}
-                            sx={{
-                              backgroundColor: 'rgba(33, 150, 243, 0.1)',
-                              '&:hover': {
-                                backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                              }
-                            }}
-                            title="Edit diary"
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleDeleteClick(diary.id, diary.title)}
-                            sx={{
-                              backgroundColor: 'rgba(244, 67, 54, 0.1)',
-                              '&:hover': {
-                                backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                              }
-                            }}
-                            title="Delete diary"
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleMenuOpen(e, diary)}
+                          sx={{
+                            color: 'text.secondary',
+                            '&:hover': {
+                              backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                            }
+                          }}
+                          title="More options"
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
                       )}
                     </>
                   )}

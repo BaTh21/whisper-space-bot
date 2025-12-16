@@ -236,19 +236,24 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
         else:
             diary.images = []
     
-    # Handle share_type update
+    # Handle share_type update - FIXED
     if 'share_type' in update_data:
-        try:
-            share_type_value = update_data['share_type']
-            
-            if isinstance(share_type_value, str):
+        share_type_value = update_data['share_type']
+        
+        # If it's already a ShareType enum, get its value
+        if isinstance(share_type_value, ShareType):
+            diary.share_type = share_type_value
+        # If it's a string, convert to ShareType
+        elif isinstance(share_type_value, str):
+            try:
                 diary.share_type = ShareType(share_type_value.lower())
-            elif hasattr(share_type_value, 'value'):
-                diary.share_type = ShareType(share_type_value.value.lower())
-            else:
-                diary.share_type = ShareType(str(share_type_value).lower())
-            
-        except (ValueError, AttributeError) as e:
+            except ValueError:
+                available_values = [t.value for t in ShareType]
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid share_type. Must be one of: {available_values}"
+                )
+        else:
             available_values = [t.value for t in ShareType]
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
