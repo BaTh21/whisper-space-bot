@@ -12,11 +12,12 @@ const api = axios.create({
 // Add auth token to requests
 api.interceptors.request.use((config) => {
   // Try all possible token locations
-  const token = localStorage.getItem("access_token") || 
-                localStorage.getItem("accessToken") ||
-                sessionStorage.getItem("access_token") || 
-                sessionStorage.getItem("accessToken");
-  
+  const token =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("accessToken") ||
+    sessionStorage.getItem("access_token") ||
+    sessionStorage.getItem("accessToken");
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -28,7 +29,7 @@ let isRefreshing = false;
 let failedQueue = [];
 
 const processQueue = (error, token = null) => {
-  failedQueue.forEach(prom => {
+  failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
     } else {
@@ -42,30 +43,34 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
+
     // Only handle 401 errors and not retry requests
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      
+
       try {
-        const refreshToken = localStorage.getItem("refresh_token") || 
-                            localStorage.getItem("refreshToken");
-        
+        const refreshToken =
+          localStorage.getItem("refresh_token") ||
+          localStorage.getItem("refreshToken");
+
         if (!refreshToken) {
           throw new Error("No refresh token available");
         }
 
         // Use a new axios instance to avoid infinite loops
-        const refreshResponse = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
+        const refreshResponse = await axios.post(
+          `${BASE_URL}/api/v1/auth/refresh`,
+          {
+            refresh_token: refreshToken,
+          }
+        );
 
         const { access_token, refresh_token } = refreshResponse.data;
 
         // Store tokens consistently
         localStorage.setItem("access_token", access_token);
         localStorage.setItem("accessToken", access_token); // For compatibility
-        
+
         if (refresh_token) {
           localStorage.setItem("refresh_token", refresh_token);
           localStorage.setItem("refreshToken", refresh_token); // For compatibility
@@ -73,13 +78,12 @@ api.interceptors.response.use(
 
         // Update the original request with new token
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        
+
         // Retry the original request
         return api(originalRequest);
-        
       } catch (refreshError) {
         console.error("Token refresh failed:", refreshError);
-        
+
         // Clear all tokens
         localStorage.removeItem("access_token");
         localStorage.removeItem("accessToken");
@@ -87,16 +91,18 @@ api.interceptors.response.use(
         localStorage.removeItem("refreshToken");
         sessionStorage.removeItem("access_token");
         sessionStorage.removeItem("accessToken");
-        
+
         // Redirect to login if not already there
-        if (!window.location.pathname.includes('/login')) {
+        if (!window.location.pathname.includes("/login")) {
           window.location.href = "/login";
         }
-        
-        return Promise.reject(new Error("Session expired. Please login again."));
+
+        return Promise.reject(
+          new Error("Session expired. Please login again.")
+        );
       }
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -108,11 +114,15 @@ export const login = async (data) => {
     formData.append("username", data.email);
     formData.append("password", data.password);
 
-    const response = await axios.post(`${BASE_URL}/api/v1/auth/login`, formData, {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    });
+    const response = await axios.post(
+      `${BASE_URL}/api/v1/auth/login`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
 
     // Store tokens with consistent naming
     const tokens = {
@@ -153,10 +163,7 @@ export const register = async (data) => {
     const response = await api.post(`/api/v1/auth/register`, data);
     return response.data;
   } catch (error) {
-
-    const errorMessage =
-      error.response?.data?.detail ||
-      "Registration failed";
+    const errorMessage = error.response?.data?.detail || "Registration failed";
 
     throw new Error(errorMessage);
   }
@@ -170,8 +177,8 @@ export const verifyCode = async (data) => {
     console.error("Verify code error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Verification failed"
+        error.response?.data?.msg ||
+        "Verification failed"
     );
   }
 };
@@ -185,8 +192,8 @@ export const getMe = async () => {
     console.error("Get me error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to fetch profile"
+        error.response?.data?.msg ||
+        "Failed to fetch profile"
     );
   }
 };
@@ -199,8 +206,8 @@ export const updateMe = async (data) => {
     console.error("Update me error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to update profile"
+        error.response?.data?.msg ||
+        "Failed to update profile"
     );
   }
 };
@@ -374,9 +381,9 @@ export const getFriends = async () => {
 
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.message ||
-      error.response?.data?.msg ||
-      "Failed to fetch friends"
+        error.response?.data?.message ||
+        error.response?.data?.msg ||
+        "Failed to fetch friends"
     );
   }
 };
@@ -389,8 +396,8 @@ export const getPendingRequests = async () => {
     console.error("Get pending requests error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to fetch pending requests"
+        error.response?.data?.msg ||
+        "Failed to fetch pending requests"
     );
   }
 };
@@ -399,8 +406,6 @@ export const acceptFriendRequest = async (requesterId) => {
   const response = await api.post(`/api/v1/friends/accept/${requesterId}`, {});
   return response.data;
 };
-
-
 
 // Diary endpoints
 export const createDiary = async (data) => {
@@ -411,8 +416,8 @@ export const createDiary = async (data) => {
     console.error("Create diary error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to create diary"
+        error.response?.data?.msg ||
+        "Failed to create diary"
     );
   }
 };
@@ -436,17 +441,17 @@ export const getDiaryById = async (diaryId) => {
     return response.data;
   } catch (error) {
     console.error("Get diary by ID error:", error.response?.data);
-    
+
     // If 404, return null instead of throwing
     if (error.response?.status === 404) {
       console.log(`Diary ${diaryId} not found or not accessible`);
       return null;
     }
-    
+
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to fetch diary"
+        error.response?.data?.msg ||
+        "Failed to fetch diary"
     );
   }
 };
@@ -493,10 +498,11 @@ export const deleteShareById = async (shareId) => {
     await api.delete(`/api/v1/diaries/share/${shareId}`);
     return true;
   } catch (error) {
-    const errorMessage = error.response?.data?.detail || "Failed to remove share";
+    const errorMessage =
+      error.response?.data?.detail || "Failed to remove share";
     throw new Error(errorMessage);
   }
-}
+};
 
 export const getFeed = async () => {
   try {
@@ -506,8 +512,8 @@ export const getFeed = async () => {
     console.error("Get feed error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to fetch feed"
+        error.response?.data?.msg ||
+        "Failed to fetch feed"
     );
   }
 };
@@ -527,8 +533,8 @@ export const likeDiary = async (diaryId) => {
 
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to like diary"
+        error.response?.data?.msg ||
+        "Failed to like diary"
     );
   }
 };
@@ -543,8 +549,8 @@ export const commentOnDiary = async (diaryId, content) => {
     console.error("Comment on diary error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to add comment"
+        error.response?.data?.msg ||
+        "Failed to add comment"
     );
   }
 };
@@ -557,8 +563,8 @@ export const getDiaryForEdit = async (diaryId) => {
     console.error("Get diary for edit error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to fetch diary for editing"
+        error.response?.data?.msg ||
+        "Failed to fetch diary for editing"
     );
   }
 };
@@ -574,8 +580,8 @@ export const getDiaryComments = async (diaryId) => {
     }
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to fetch comments"
+        error.response?.data?.msg ||
+        "Failed to fetch comments"
     );
   }
 };
@@ -617,8 +623,8 @@ export const getDiaryLikes = async (diaryId) => {
     }
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to fetch likes"
+        error.response?.data?.msg ||
+        "Failed to fetch likes"
     );
   }
 };
@@ -634,8 +640,8 @@ export const createGroup = async (data) => {
     console.error("Create group error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to create group"
+        error.response?.data?.msg ||
+        "Failed to create group"
     );
   }
 };
@@ -651,9 +657,9 @@ export const getUserGroups = async () => {
     );
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      error.message ||
-      "Failed to fetch groups"
+        error.response?.data?.msg ||
+        error.message ||
+        "Failed to fetch groups"
     );
   }
 };
@@ -669,9 +675,9 @@ export const getGroupById = async (groupId) => {
     );
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      error.message ||
-      "Failed to fetch groups"
+        error.response?.data?.msg ||
+        error.message ||
+        "Failed to fetch groups"
     );
   }
 };
@@ -687,9 +693,9 @@ export const updateGroupById = async (groupId, data) => {
     );
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      error.message ||
-      "Failed to update groups"
+        error.response?.data?.msg ||
+        error.message ||
+        "Failed to update groups"
     );
   }
 };
@@ -743,8 +749,8 @@ export const joinGroup = async (groupId) => {
     console.error("Join group error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to join group"
+        error.response?.data?.msg ||
+        "Failed to join group"
     );
   }
 };
@@ -756,9 +762,9 @@ export const getGroupMessageSeen = async (messageId) => {
   } catch (error) {
     throw new Error(
       error.response?.data?.detail || "Failed tp get seen messages"
-    )
+    );
   }
-}
+};
 
 // Group Invites - SINGLE FUNCTION (removed duplicates)
 export const getPendingGroupInvites = async () => {
@@ -821,8 +827,8 @@ export const createGroupWithInvites = async (data, inviteeIds = []) => {
 
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to create group"
+        error.response?.data?.msg ||
+        "Failed to create group"
     );
   }
 };
@@ -850,27 +856,30 @@ export const sendPrivateMessage = async (friendId, data) => {
     console.error("Send private message error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to send message"
+        error.response?.data?.msg ||
+        "Failed to send message"
     );
   }
 };
 
 export const forwardMessage = async (friendId, messageData) => {
   try {
-    console.log('📤 Forwarding message to:', friendId, 'Data:', messageData);
+    console.log("📤 Forwarding message to:", friendId, "Data:", messageData);
 
     // Use the exact same payload without modification
     // Let the backend handle the validation
-    const response = await api.post(`/api/v1/chats/private/${friendId}`, messageData);
+    const response = await api.post(
+      `/api/v1/chats/private/${friendId}`,
+      messageData
+    );
 
-    console.log('✅ Forward successful:', response.data);
+    console.log("✅ Forward successful:", response.data);
     return response.data;
   } catch (error) {
     console.error("❌ Forward message error:", {
       status: error.response?.status,
       data: error.response?.data,
-      detail: error.response?.data?.detail
+      detail: error.response?.data?.detail,
     });
 
     throw error;
@@ -878,58 +887,8 @@ export const forwardMessage = async (friendId, messageData) => {
 };
 
 export const getPrivateChat = async (friendId) => {
-  try {
-    const response = await api.get(`/api/v1/chats/private/${friendId}`);
-    
-    // Handle backend blocking response
-    if (response.data && typeof response.data === 'object') {
-      // If backend returns object with blocked property
-      if (response.data.blocked === true) {
-        throw new Error(`User is blocked: ${response.data.message || 'Cannot load messages'}`);
-      }
-      
-      // If backend returns messages array
-      if (Array.isArray(response.data.messages)) {
-        return response.data.messages;
-      }
-    }
-    
-    // Default: assume response is array of messages
-    const messages = Array.isArray(response.data) ? response.data : [];
-    
-    return messages.map((msg) => ({
-      id: msg.id || Date.now() + Math.random(),
-      sender_id: msg.sender_id,
-      receiver_id: msg.receiver_id,
-      content: msg.content || "",
-      message_type: msg.message_type || "text",
-      is_read: msg.is_read || false,
-      created_at: msg.created_at || new Date().toISOString(),
-      seen_by: msg.seen_by || [],
-      voice_duration: msg.voice_duration || 0,
-      file_size: msg.file_size || 0,
-    }));
-  } catch (error) {
-    console.error("Get private chat error:", error.response?.data);
-    
-    // Handle blocking errors
-    if (error.response?.status === 403 && 
-        (error.response?.data?.detail?.includes('blocked') || 
-         error.response?.data?.message?.includes('blocked'))) {
-      throw new Error(`User is blocked: ${error.response.data.detail || error.response.data.message}`);
-    }
-
-    if (error.response?.status === 404) {
-      console.log("Chat endpoint not found, returning empty array");
-      return [];
-    }
-
-    throw new Error(
-      error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to load messages"
-    );
-  }
+  const response = await api.get(`/api/v1/chats/private/${friendId}`);
+  return response.data;
 };
 
 export const getGroupMessage = async (groupId) => {
@@ -984,12 +943,12 @@ export const uploadVoiceMessage = async (groupId, file) => {
     formData,
     {
       headers: {
-        "Content-Type": "multipart/form-data"
-      }
+        "Content-Type": "multipart/form-data",
+      },
     }
   );
   return response.data;
-}
+};
 
 export const getGroupMembers = async (groupId, search = "") => {
   try {
@@ -1002,8 +961,8 @@ export const getGroupMembers = async (groupId, search = "") => {
     console.error("Get members error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to load members"
+        error.response?.data?.msg ||
+        "Failed to load members"
     );
   }
 };
@@ -1015,8 +974,8 @@ export const removeGroupMember = async (groupId, memberId) => {
     console.error("Remove members error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to remove members"
+        error.response?.data?.msg ||
+        "Failed to remove members"
     );
   }
 };
@@ -1028,8 +987,8 @@ export const leaveGroupById = async (groupId) => {
     console.error("Leave error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to leave group"
+        error.response?.data?.msg ||
+        "Failed to leave group"
     );
   }
 };
@@ -1046,8 +1005,8 @@ export const getGroupDiaries = async (groupId, search = "") => {
     console.error("Get group diaries error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to load group feed"
+        error.response?.data?.msg ||
+        "Failed to load group feed"
     );
   }
 };
@@ -1175,13 +1134,13 @@ export const checkBlockedStatus = async (userId) => {
       return {
         current_user_has_blocked: false,
         target_user_has_blocked: false,
-        is_blocked: false
+        is_blocked: false,
       };
     }
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to check blocked status"
+        error.response?.data?.msg ||
+        "Failed to check blocked status"
     );
   }
 };
@@ -1223,19 +1182,19 @@ export const getBlockedUsers = async () => {
 
 export const markMessagesAsRead = async (messageIds) => {
   try {
-    console.log('📤 Marking messages as read:', messageIds);
+    console.log("📤 Marking messages as read:", messageIds);
 
-    const response = await api.post('/api/v1/chats/messages/read', {
-      message_ids: messageIds
+    const response = await api.post("/api/v1/chats/messages/read", {
+      message_ids: messageIds,
     });
 
-    console.log('✅ Mark as read successful:', response.data);
+    console.log("✅ Mark as read successful:", response.data);
     return response.data;
   } catch (error) {
     console.error("Mark messages as read error:", {
       status: error.response?.status,
       data: error.response?.data,
-      messageIds: messageIds
+      messageIds: messageIds,
     });
 
     // If endpoint doesn't exist, return success anyway for UX
@@ -1251,8 +1210,8 @@ export const markMessagesAsRead = async (messageIds) => {
 
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to mark messages as read"
+        error.response?.data?.msg ||
+        "Failed to mark messages as read"
     );
   }
 };
@@ -1270,18 +1229,19 @@ export const getMessageSeenStatus = async (messageId) => {
 
     // If endpoint doesn't exist, return empty array
     if (error.response?.status === 404) {
-      console.log("Get message seen status endpoint not found, returning empty array");
+      console.log(
+        "Get message seen status endpoint not found, returning empty array"
+      );
       return [];
     }
 
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to get message seen status"
+        error.response?.data?.msg ||
+        "Failed to get message seen status"
     );
   }
 };
-
 
 export const respondToGroupInvite = async (inviteId, action) => {
   console.log(`Simulating ${action} for group invite:`, inviteId);
@@ -1362,20 +1322,24 @@ export const getPublicNote = async (shareToken) => {
 export const uploadImage = async (friendId, file) => {
   try {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
-    const response = await api.post(`/api/v1/chats/private/${friendId}/upload`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post(
+      `/api/v1/chats/private/${friendId}/upload`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
     return response.data;
   } catch (error) {
     console.error("Upload image error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Upload failed"
+        error.response?.data?.msg ||
+        "Upload failed"
     );
   }
 };
@@ -1383,60 +1347,67 @@ export const uploadImage = async (friendId, file) => {
 export const sendImageMessage = async (friendId, imageUrl) => {
   try {
     const formData = new FormData();
-    formData.append('image_url', imageUrl);
-    formData.append('message_type', 'image');
+    formData.append("image_url", imageUrl);
+    formData.append("message_type", "image");
 
-    const response = await api.post(`/api/v1/chats/private/${friendId}/image`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post(
+      `/api/v1/chats/private/${friendId}/image`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
     return response.data;
   } catch (error) {
     console.error("Send image message error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to send image message"
+        error.response?.data?.msg ||
+        "Failed to send image message"
     );
   }
 };
 
 export const deleteImageMessage = async (messageId) => {
   try {
-    const response = await api.delete(`/api/v1/chats/private/image/${messageId}`);
+    const response = await api.delete(
+      `/api/v1/chats/private/image/${messageId}`
+    );
     return response.data;
   } catch (error) {
     console.error("Delete image message error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to delete image message"
+        error.response?.data?.msg ||
+        "Failed to delete image message"
     );
   }
 };
 
-
 export const deleteAvatar = async () => {
   try {
-    const response = await api.delete('/api/v1/avatars/delete');
+    const response = await api.delete("/api/v1/avatars/delete");
     return response.data;
   } catch (error) {
-    console.error('Delete avatar error:', {
+    console.error("Delete avatar error:", {
       status: error.response?.status,
       data: error.response?.data,
-      url: '/api/v1/avatars/delete'
+      url: "/api/v1/avatars/delete",
     });
-    
+
     // Provide more helpful error message
     if (error.response?.status === 404) {
-      throw new Error('Avatar delete endpoint not found. Please check the API endpoint.');
+      throw new Error(
+        "Avatar delete endpoint not found. Please check the API endpoint."
+      );
     }
-    
+
     throw new Error(
-      error.response?.data?.detail || 
-      error.response?.data?.message || 
-      'Failed to delete avatar'
+      error.response?.data?.detail ||
+        error.response?.data?.message ||
+        "Failed to delete avatar"
     );
   }
 };
@@ -1449,19 +1420,23 @@ export const getMessageInfo = async (messageId) => {
     console.error("Get message info error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to get message info"
+        error.response?.data?.msg ||
+        "Failed to get message info"
     );
   }
 };
 
 export const sendVoiceMessage = async (friendId, formData) => {
-  const response = await api.post(`/api/v1/chats/private/${friendId}/voice`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-    timeout: 30000,
-  });
+  const response = await api.post(
+    `/api/v1/chats/private/${friendId}/voice`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      timeout: 30000,
+    }
+  );
   return response.data;
 };
 
@@ -1478,17 +1453,22 @@ export const getFriendsOnlineStatus = async () => {
 
 // Get batch online status for multiple users
 export const getBatchOnlineStatus = async (userIds) => {
-  const response = await api.post(`/api/v1/chat/users/online-status/batch`, { user_ids: userIds });
+  const response = await api.post(`/api/v1/chat/users/online-status/batch`, {
+    user_ids: userIds,
+  });
   return response.data;
 };
 
 // Add reaction to message
 export const addReactionToMessage = async (messageId, reactionData) => {
   try {
-    const response = await api.post(`/api/v1/messages/${messageId}/reactions`, reactionData);
+    const response = await api.post(
+      `/api/v1/messages/${messageId}/reactions`,
+      reactionData
+    );
     return response.data;
   } catch (error) {
-    console.error('Error adding reaction:', error);
+    console.error("Error adding reaction:", error);
     throw error;
   }
 };
@@ -1496,10 +1476,12 @@ export const addReactionToMessage = async (messageId, reactionData) => {
 // Remove reaction from message
 export const removeReactionFromMessage = async (messageId, reactionId) => {
   try {
-    const response = await api.delete(`/api/v1/messages/${messageId}/reactions/${reactionId}`);
+    const response = await api.delete(
+      `/api/v1/messages/${messageId}/reactions/${reactionId}`
+    );
     return response.data;
   } catch (error) {
-    console.error('Error removing reaction:', error);
+    console.error("Error removing reaction:", error);
     throw error;
   }
 };
@@ -1507,10 +1489,12 @@ export const removeReactionFromMessage = async (messageId, reactionId) => {
 // Get message reactions
 export const getMessageReactions = async (messageId, params = {}) => {
   try {
-    const response = await api.get(`/api/v1/messages/${messageId}/reactions`, { params });
+    const response = await api.get(`/api/v1/messages/${messageId}/reactions`, {
+      params,
+    });
     return response.data;
   } catch (error) {
-    console.error('Error getting reactions:', error);
+    console.error("Error getting reactions:", error);
     throw error;
   }
 };
@@ -1518,10 +1502,12 @@ export const getMessageReactions = async (messageId, params = {}) => {
 // Get reaction summary
 export const getReactionSummary = async (messageId) => {
   try {
-    const response = await api.get(`/api/v1/messages/${messageId}/reactions/summary`);
+    const response = await api.get(
+      `/api/v1/messages/${messageId}/reactions/summary`
+    );
     return response.data;
   } catch (error) {
-    console.error('Error getting reaction summary:', error);
+    console.error("Error getting reaction summary:", error);
     throw error;
   }
 };
@@ -1529,10 +1515,12 @@ export const getReactionSummary = async (messageId) => {
 // Batch get reactions
 export const getBatchReactions = async (messageIds) => {
   try {
-    const response = await api.post('/api/v1/messages/reactions/batch', { message_ids: messageIds });
+    const response = await api.post("/api/v1/messages/reactions/batch", {
+      message_ids: messageIds,
+    });
     return response.data;
   } catch (error) {
-    console.error('Error getting batch reactions:', error);
+    console.error("Error getting batch reactions:", error);
     throw error;
   }
 };
@@ -1543,131 +1531,133 @@ export const getPendingFriendRequests = async () => {
 };
 
 export const declineFriendRequest = async (requesterId) => {
-    const response = await api.delete(`/api/v1/friends/decline/${requesterId}`);
-    return response.data;
+  const response = await api.delete(`/api/v1/friends/decline/${requesterId}`);
+  return response.data;
 };
 
 export const checkTokenValidity = () => {
-    try {
-        const token = localStorage.getItem("access_token") || 
-                     localStorage.getItem("accessToken");
-        
-        if (!token) return { valid: false, reason: "No token found" };
-        
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const expiryTime = payload.exp * 1000;
-        const currentTime = Date.now();
-        
-        const valid = expiryTime > currentTime;
-        const expiresIn = expiryTime - currentTime;
-        
-        return {
-            valid,
-            expiresIn,
-            expiryTime: new Date(expiryTime),
-            willExpireSoon: expiresIn < 5 * 60 * 1000 // 5 minutes
-        };
-    } catch (error) {
-        return { valid: false, reason: "Invalid token format" };
-    }
+  try {
+    const token =
+      localStorage.getItem("access_token") ||
+      localStorage.getItem("accessToken");
+
+    if (!token) return { valid: false, reason: "No token found" };
+
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const expiryTime = payload.exp * 1000;
+    const currentTime = Date.now();
+
+    const valid = expiryTime > currentTime;
+    const expiresIn = expiryTime - currentTime;
+
+    return {
+      valid,
+      expiresIn,
+      expiryTime: new Date(expiryTime),
+      willExpireSoon: expiresIn < 5 * 60 * 1000, // 5 minutes
+    };
+  } catch (error) {
+    return { valid: false, reason: "Invalid token format" };
+  }
 };
 
 export const refreshTokenIfNeeded = async () => {
-    const tokenCheck = checkTokenValidity();
-    
-    // If token is valid and not expiring soon, no need to refresh
-    if (tokenCheck.valid && !tokenCheck.willExpireSoon) {
-        return { success: true, message: 'Token is valid' };
+  const tokenCheck = checkTokenValidity();
+
+  // If token is valid and not expiring soon, no need to refresh
+  if (tokenCheck.valid && !tokenCheck.willExpireSoon) {
+    return { success: true, message: "Token is valid" };
+  }
+
+  console.log("🔄 Token needs refresh:", tokenCheck.reason || "Expiring soon");
+
+  const refreshToken =
+    localStorage.getItem("refresh_token") ||
+    localStorage.getItem("refreshToken");
+
+  if (!refreshToken) {
+    console.error("❌ No refresh token available");
+    return { success: false, error: "No refresh token" };
+  }
+
+  try {
+    // Use a fresh axios instance to avoid interceptor loops
+    const refreshApi = axios.create({
+      baseURL: BASE_URL,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    const response = await refreshApi.post("/api/v1/auth/refresh", {
+      refresh_token: refreshToken,
+    });
+
+    const { access_token, refresh_token } = response.data;
+
+    // Store new tokens
+    localStorage.setItem("access_token", access_token);
+    localStorage.setItem("accessToken", access_token);
+
+    if (refresh_token) {
+      localStorage.setItem("refresh_token", refresh_token);
+      localStorage.setItem("refreshToken", refresh_token);
     }
-    
-    console.log('🔄 Token needs refresh:', tokenCheck.reason || 'Expiring soon');
-    
-    const refreshToken = localStorage.getItem("refresh_token") || 
-                        localStorage.getItem("refreshToken");
-    
-    if (!refreshToken) {
-        console.error('❌ No refresh token available');
-        return { success: false, error: 'No refresh token' };
-    }
-    
-    try {
-        // Use a fresh axios instance to avoid interceptor loops
-        const refreshApi = axios.create({
-            baseURL: BASE_URL,
-            headers: {
-                "Content-Type": "application/json",
-            },
-        });
-        
-        const response = await refreshApi.post("/api/v1/auth/refresh", {
-            refresh_token: refreshToken,
-        });
-        
-        const { access_token, refresh_token } = response.data;
-        
-        // Store new tokens
-        localStorage.setItem("access_token", access_token);
-        localStorage.setItem("accessToken", access_token);
-        
-        if (refresh_token) {
-            localStorage.setItem("refresh_token", refresh_token);
-            localStorage.setItem("refreshToken", refresh_token);
-        }
-        
-        console.log('✅ Token refreshed successfully');
-        return { 
-            success: true, 
-            access_token,
-            refresh_token 
-        };
-    } catch (error) {
-        console.error('❌ Token refresh failed:', error);
-        return { 
-            success: false, 
-            error: error.response?.data?.detail || 'Refresh failed' 
-        };
-    }
+
+    console.log("✅ Token refreshed successfully");
+    return {
+      success: true,
+      access_token,
+      refresh_token,
+    };
+  } catch (error) {
+    console.error("❌ Token refresh failed:", error);
+    return {
+      success: false,
+      error: error.response?.data?.detail || "Refresh failed",
+    };
+  }
 };
 
 export const ensureValidToken = async () => {
-    const tokenCheck = checkTokenValidity();
-    
-    if (!tokenCheck.valid) {
-        console.log('❌ Token invalid:', tokenCheck.reason);
-        
-        // Try to refresh token if we have a refresh token
-        const refreshToken = localStorage.getItem("refresh_token") || 
-                            localStorage.getItem("refreshToken");
-        
-        if (refreshToken) {
-            try {
-                const response = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, {
-                    refresh_token: refreshToken,
-                });
-                
-                const { access_token, refresh_token } = response.data;
-                
-                localStorage.setItem("access_token", access_token);
-                localStorage.setItem("accessToken", access_token);
-                
-                if (refresh_token) {
-                    localStorage.setItem("refresh_token", refresh_token);
-                    localStorage.setItem("refreshToken", refresh_token);
-                }
-                
-                console.log('✅ Token refreshed successfully');
-                return true;
-            } catch (error) {
-                console.error('❌ Token refresh failed:', error);
-                return false;
-            }
-        }
-        
-        return false;
-    }
-    
-    return true;
-};
+  const tokenCheck = checkTokenValidity();
 
+  if (!tokenCheck.valid) {
+    console.log("❌ Token invalid:", tokenCheck.reason);
+
+    // Try to refresh token if we have a refresh token
+    const refreshToken =
+      localStorage.getItem("refresh_token") ||
+      localStorage.getItem("refreshToken");
+
+    if (refreshToken) {
+      try {
+        const response = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, {
+          refresh_token: refreshToken,
+        });
+
+        const { access_token, refresh_token } = response.data;
+
+        localStorage.setItem("access_token", access_token);
+        localStorage.setItem("accessToken", access_token);
+
+        if (refresh_token) {
+          localStorage.setItem("refresh_token", refresh_token);
+          localStorage.setItem("refreshToken", refresh_token);
+        }
+
+        console.log("✅ Token refreshed successfully");
+        return true;
+      } catch (error) {
+        console.error("❌ Token refresh failed:", error);
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  return true;
+};
 
 export default api;

@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 import ShortcutIcon from '@mui/icons-material/Shortcut';
+import CallIcon from '@mui/icons-material/Call';
 
 import EmojiButton from '../EmojiButton';
 import MessageReactions from '../MessageReactions';
@@ -45,6 +46,7 @@ const ChatMessage = ({
   onAddReaction,
   onRemoveReaction,
   onLoadReactions,
+  onCallBack
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -265,75 +267,6 @@ const ChatMessage = ({
     }
   };
 
-  const renderSeenAvatar = () => {
-    if (!isMine) return null;
-    const reader = currentFriend;
-    if (!reader) return null;
-
-    const hasSeen = Array.isArray(message.seen_by) &&
-      message.seen_by.some(s => s.user_id === reader.id);
-
-    if (hasSeen) {
-
-      return (
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          mt: 0.5,
-          gap: 0.5,
-          minHeight: 20
-        }}>
-          <Typography
-            variant="caption"
-            sx={{
-              fontSize: '0.7rem',
-              color: 'text.secondary',
-              fontWeight: 500
-            }}
-          >
-            Seen
-          </Typography>
-          <Avatar
-            src={getAvatarUrl(reader.avatar_url)}
-            sx={{
-              width: 16,
-              height: 16,
-              border: '1px solid',
-              borderColor: 'background.paper'
-            }}
-          >
-            {getUserInitials(reader.username)}
-          </Avatar>
-        </Box>
-      );
-    }
-
-    if (message.is_read && !hasSeen) {
-      return (
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          mt: 0.5
-        }}>
-          <Typography
-            variant="caption"
-            sx={{
-              fontSize: '0.7rem',
-              color: 'text.secondary',
-              fontWeight: 500
-            }}
-          >
-            Delivered
-          </Typography>
-        </Box>
-      );
-    }
-
-    return null;
-  };
-
   const renderVoiceContent = () => {
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -465,26 +398,42 @@ const ChatMessage = ({
             wordBreak: 'break-word',
             lineHeight: 1.4,
             fontSize: '0.9rem',
-            mb: reactions.length > 0 ? 0.5 : 0
+            mb: reactions.length > 0 ? 0.5 : 0,
+            color: isMine ? 'white' : 'text.primary'
           }}
         >
           {message.content}
         </Typography>
+
         <Button
           variant="outlined"
           size="small"
           sx={{
             width: '100%',
-            mt: 1
+            mt: 1,
+            color: isMine ? 'white' : 'primary.dark',
+            borderColor: isMine ? 'white' : 'primary.dark',
+            '&:hover': {
+              borderColor: isMine ? 'white' : 'primary.dark',
+              backgroundColor: isMine ? 'rgba(255,255,255,0.1)' : undefined
+            }
           }}
-        // onClick={() => handleJoinCall(message)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCallBack()
+          }}
         >
-          Join Now
+          <CallIcon
+            sx={{
+              fontSize: 18,
+              mr: 0.5
+            }}
+          />
+          Call Back
         </Button>
       </Box>
     );
   };
-
 
   const renderOnlineStatus = () => {
     if (isMine || !friendOnlineStatus || !currentFriend) return null;
@@ -1118,7 +1067,6 @@ const ChatMessage = ({
                 {isMine && renderTick()}
               </Box>
 
-              {/* Reactions - ONLY for non-temp messages */}
               {!message.is_temp && reactions.length > 0 && (
                 <Box
                   sx={{
@@ -1127,6 +1075,7 @@ const ChatMessage = ({
                     borderTop: '1px solid',
                     borderColor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                   }}
+                  onClick={(e) => { e.stopPropagation() }}
                 >
                   <MessageReactions
                     messageId={message.id}
@@ -1141,42 +1090,9 @@ const ChatMessage = ({
                 </Box>
               )}
             </Box>
-            
-            {!message.is_temp && reactions.length === 0 && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  right: isMine ? -12 : 'auto',
-                  left: isMine ? 'auto' : -12,
-                  transform: 'translateY(-50%)',
-                  opacity: 0,
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    opacity: 1,
-                    transform: 'translateY(-50%) scale(1.05)'
-                  }
-                }}
-              >
-                <MessageReactions
-                  messageId={message.id}
-                  reactions={reactions}
-                  currentUserId={profile?.id}
-                  onAddReaction={handleAddReaction}
-                  onRemoveReaction={handleRemoveReaction}
-                  showAddButton={true}
-                  size="small"
-                  isMine={isMine}
-                />
-              </Box>
-            )}
           </Box>
         )}
 
-        {/* Seen status */}
-        {/* {renderSeenAvatar()} */}
-
-        {/* Context menu */}
         {showMenu && (
           <Menu
             anchorEl={anchorEl}
@@ -1224,6 +1140,20 @@ const ChatMessage = ({
                   );
                 }
                 menuItems.push(
+                  <MenuItem
+                    key="react"
+                  >
+                    <MessageReactions
+                      messageId={message.id}
+                      reactions={reactions}
+                      currentUserId={profile?.id}
+                      onAddReaction={handleAddReaction}
+                      onRemoveReaction={handleRemoveReaction}
+                      showAddButton={true}
+                      size="small"
+                      isMine={isMine}
+                    />
+                  </MenuItem>,
                   <MenuItem key="forward" onClick={handleForwardClick}>
                     <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}
@@ -1239,6 +1169,19 @@ const ChatMessage = ({
                 );
               } else {
                 menuItems.push(
+                  <MenuItem
+                    key="react">
+                    <MessageReactions
+                      messageId={message.id}
+                      reactions={reactions}
+                      currentUserId={profile?.id}
+                      onAddReaction={handleAddReaction}
+                      onRemoveReaction={handleRemoveReaction}
+                      showAddButton={true}
+                      size="small"
+                      isMine={isMine}
+                    />
+                  </MenuItem>,
                   <MenuItem key="forward" onClick={handleForwardClick}>
                     <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}

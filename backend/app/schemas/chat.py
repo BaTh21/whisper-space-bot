@@ -7,7 +7,7 @@ from pydantic import validator, field_validator
 
 from app.models.private_message import MessageType
 
-MessageTypeInput = Literal["text", "image", "file", "voice"]
+MessageTypeInput = Literal["text", "image", "file", "voice", "system"]
 
 class MessageCreate(BaseModel):
     content: str
@@ -65,7 +65,7 @@ class MessageOut(TimestampMixin):
     sender_id: int
     receiver_id: int
     content: str
-    message_type: str
+    message_type: MessageTypeInput  
     is_read: bool = False
     reply_to_id: Optional[int] = None
     reply_to: Optional["MessageOut"] = None
@@ -74,64 +74,11 @@ class MessageOut(TimestampMixin):
     created_at: str 
     is_forwarded: Optional[bool] = False
     original_sender: Optional[str] = None
-    # ADD THESE TWO FIELDS
     sender_username: Optional[str] = None
     receiver_username: Optional[str] = None
     voice_duration: Optional[float] = None  # ADDED
     file_size: Optional[int] = None  # ADDED
     seen_by: List[MessageSeenByUser] = []
-
-    @classmethod
-    def from_orm(cls, obj):
-        data = super().from_orm(obj)
-        if obj.reply_to:
-            data.reply_to = cls.from_orm(obj.reply_to)
-        # Add username data when using from_orm
-        if hasattr(obj, 'sender') and obj.sender:
-            data.sender_username = obj.sender.username
-        if hasattr(obj, 'receiver') and obj.receiver:
-            data.receiver_username = obj.receiver.username
-            
-        # ADD THIS: Populate seen_by information
-        if hasattr(obj, 'seen_statuses'):
-            data.seen_by = [
-                MessageSeenByUser(
-                    user_id=status.user.id,
-                    username=status.user.username,
-                    avatar_url=status.user.avatar_url,
-                    seen_at=status.seen_at.isoformat() if status.seen_at else None
-                )
-                for status in obj.seen_statuses
-            ]
-        return data
-    
-    @staticmethod
-    def _truncate_reply_content(replied_message) -> str:
-        """Truncate reply content like Telegram does"""
-        content = replied_message.content or ""
-        
-        # Handle different message types
-        if replied_message.message_type == MessageType.voice:
-            return "🎤 Voice message"
-        elif replied_message.message_type == MessageType.image:
-            return "🖼️ Photo"
-        elif replied_message.message_type == MessageType.file:
-            return "📎 File"
-        
-        # Truncate text content
-        if len(content) > 100:
-            return content[:100] + "..."
-        return content
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_encoders={
-            datetime: lambda dt: (
-                dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None
-                else dt.astimezone(timezone.utc)
-            ).isoformat().replace("+00:00", "Z")
-        }
-    )
     
 class AuthorResponse(BaseModel):
     id: int

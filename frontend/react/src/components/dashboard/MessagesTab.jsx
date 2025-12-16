@@ -82,6 +82,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const emojiButtonRef = useRef(null);
   const [showFriend, setShowFriend] = useState(false);
 
+  console.log("message", messages);
+
   const toggleShowFriend = () => {
     setShowFriend(prev => !prev);
   }
@@ -215,7 +217,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       }
 
       else if (
-        type === "new_call_message" ||
         type === "message"
       ) {
         const detectMessageType = (msgData) => {
@@ -282,6 +283,37 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           if (!exists) updated.push(realMessage);
 
           return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        });
+      }
+      else if (type === "new_call_message") {
+        const realMessage = {
+          id: data.message_id,
+          content: data.content,
+          message_type: "system",
+          is_temp: false,
+          temp_id: null,
+          sender_id: data.sender_id,
+          sender: {
+            id: data.sender.id,
+            username: data.sender.username,
+            avatar_url: getAvatarUrl(data.sender.avatar_url),
+          },
+          created_at: data.created_at,
+          updated_at: data.created_at,
+          edited: false,
+          is_read: true,
+          read_at: new Date().toISOString(),
+          seen_by: [],
+        };
+
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === data.message_id);
+          if (!exists) {
+            return [...prev, realMessage].sort(
+              (a, b) => new Date(a.created_at) - new Date(b.created_at)
+            );
+          }
+          return prev;
         });
       }
       else if (type === "read_receipt") {
@@ -1207,6 +1239,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           if (message.message_type === 'voice') return 'voice';
           if (message.message_type === 'file') return 'file';
           if (message.message_type === 'text') return 'text';
+          if (message.message_type === 'system') return 'system';
 
           const content = message.content || '';
 
@@ -1800,6 +1833,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setCallStatus("In Call");
   };
 
+  const handleJoinCall = () => {
+
+  }
+
   const handleRejectCall = () => {
     setIncomingCall(prev => ({ ...prev, open: false }));
 
@@ -2162,6 +2199,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         currentFriend={selectedFriend}
                         getAvatarUrl={getAvatarUrl}
                         getUserInitials={getUserInitials}
+                        onCallBack={handleStartCall}
                       />
                     ))
                   )}
@@ -2181,29 +2219,62 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 }}>
                   {/* Recording UI */}
                   {isRecording && (
-                    <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: 'error.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'white', animation: 'pulse 1.5s infinite' }} />
-                        <Typography>Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}</Typography>
-                      </Box>
-                      <Button variant="contained" color="inherit" size="small" startIcon={<StopIcon />} onClick={stopRecording}>
-                        {t('stop')}
-                      </Button>
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 80,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        bgcolor: 'primary.main',
+                        color: 'white',
+                        px: 3,
+                        py: 1.5,
+                        borderRadius: '999px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        boxShadow: 4,
+                        zIndex: 10
+                      }}
+                    >
+                      <MicIcon />
+                      <Typography fontWeight={500}>
+                        {Math.floor(recordingTime / 60)}:
+                        {(recordingTime % 60).toString().padStart(2, '0')}
+                      </Typography>
+                      <IconButton onClick={stopRecording} sx={{ color: 'white' }}>
+                        <StopIcon sx={{color: 'white'}}/>
+                      </IconButton>
                     </Box>
                   )}
 
                   {audioUrl && !isRecording && (
-                    <Box sx={{ position: 'absolute', bottom: '100%', left: 0, right: 0, bgcolor: voiceSending ? 'grey.500' : 'success.main', color: 'white', p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <MicIcon />
-                        <Typography>{voiceSending ? 'Sending...' : `Recorded • ${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')}`}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button variant="outlined" size="small" onClick={cancelRecording} disabled={voiceSending}>{t('cancel')}</Button>
-                        <Button variant="contained" size="small" onClick={sendVoiceMessage} disabled={voiceSending || isUploadingVoice} startIcon={isUploadingVoice ? <CircularProgress size={16} /> : <SendIcon />}>
-                          {isUploadingVoice ? 'Sending...' : t('send')}
-                        </Button>
-                      </Box>
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 80,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        bgcolor: 'primary.main',
+                        color: 'white',
+                        px: 3,
+                        py: 1.5,
+                        borderRadius: '999px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        boxShadow: 4,
+                        zIndex: 10
+                      }}
+                    >
+                      <MicIcon />
+                      <Typography variant="body2">
+                        {Math.floor(recordingTime / 60)}:
+                        {(recordingTime % 60).toString().padStart(2, '0')}
+                      </Typography>
+                      <IconButton size="small" onClick={cancelRecording}>
+                        <CloseIcon fontSize="small" sx={{color: 'white'}}/>
+                      </IconButton>
                     </Box>
                   )}
 
@@ -2284,14 +2355,41 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   )}
 
                   {imagePreview && (
-                    <Box sx={{ position: 'relative' }}>
-                      <img src={imagePreview} alt="Preview" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: '8px' }} />
-                      <IconButton size="small" onClick={handleRemoveImagePreview}
-                        sx={{ position: 'absolute', top: -8, right: -8, bgcolor: 'error.main', color: 'white' }}>
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 72,
+                        left: 0,
+                        right: 0,
+                        bgcolor: 'white',
+                        p: 2,
+                        borderTopLeftRadius: 16,
+                        borderTopRightRadius: 16,
+                        boxShadow: 6,
+                        zIndex: 10
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography fontWeight={600}>Image Preview</Typography>
+                        <IconButton onClick={handleRemoveImagePreview}>
+                          <CloseIcon />
+                        </IconButton>
+                      </Box>
+
+                      <Box sx={{ mt: 2, textAlign: 'center' }}>
+                        <img
+                          src={imagePreview}
+                          alt="Preview"
+                          style={{
+                            maxWidth: {xs: 100, md: '80%'},
+                            maxHeight: 200,
+                            borderRadius: 12
+                          }}
+                        />
+                      </Box>
                     </Box>
                   )}
+
                 </Box>
               </>
             )}

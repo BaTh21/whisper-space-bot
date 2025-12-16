@@ -742,6 +742,7 @@ async def handle_websocket_private(
                     await manager.broadcast(chat_id, {
                         "type": "new_call_message",
                         "message_id": system_msg.id,
+                        "sender_id": current_user.id,
                         "sender": {
                             "id": current_user.id,
                             "username": current_user.username,

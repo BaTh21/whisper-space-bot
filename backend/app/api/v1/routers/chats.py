@@ -108,139 +108,86 @@ async def mark_messages_as_read_batch(
         db.rollback()
         raise HTTPException(500, f"Failed to mark messages as read: {str(e)}")
 
-# Get private chat messages
 @router.get("/private/{friend_id}", response_model=List[MessageOut])
 async def get_private_chat(
     friend_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get private chat messages between current user and friend with Telegram-style replies
-    with blocked user filtering
-    """
-    try:
-        # Check if current user has blocked the friend
-        if is_blocked(db, current_user.id, friend_id):
-            # User has blocked this friend, return empty messages
-            return []
-        
-        # Check if friend has blocked current user
-        if is_blocked_by(db, current_user.id, friend_id):
-            # Friend has blocked current user, return empty messages
-            return []
-        
-        # Verify friendship (optional - you might want to remove this for blocked users)
-        # Only check friendship if not blocked
-        if not is_friend(db, current_user.id, friend_id):
-            raise HTTPException(status_code=403, detail="Not friends")
+    if is_blocked(db, current_user.id, friend_id) or is_blocked_by(db, current_user.id, friend_id):
+        return []
 
-        # FIXED: Query with proper relationship loading for replies
-        messages = db.query(PrivateMessage).options(
+    if not is_friend(db, current_user.id, friend_id):
+        raise HTTPException(status_code=403, detail="Not friends")
+
+    messages = (
+        db.query(PrivateMessage)
+        .options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),  # Load sender of replied message
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-        ).filter(
+        )
+        .filter(
             ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
             ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
-        ).order_by(PrivateMessage.created_at.asc()).all()
+        )
+        .order_by(PrivateMessage.created_at.asc())
+        .all()
+    )
 
-        result = []
-        for msg in messages:
-            # Seen by users for main message
-            seen_by = [
-                MessageSeenByUser(
-                    user_id=status.user.id,
-                    username=status.user.username,
-                    avatar_url=status.user.avatar_url,
-                    seen_at=status.seen_at.isoformat() if status.seen_at else None
-                )
-                for status in getattr(msg, "seen_statuses", [])
-            ]
+    result: list[MessageOut] = []
 
-            # FIXED: Reply handling with proper null checks
-            reply_to_out = None
-            reply_preview = None
-            
-            if msg.reply_to:  # This should now work with the fixed relationship
-                reply = msg.reply_to
+    for msg in messages:
+        seen_by = [
+            MessageSeenByUser(
+                user_id=s.user.id,
+                username=s.user.username,
+                avatar_url=s.user.avatar_url,
+                seen_at=s.seen_at.isoformat() if s.seen_at else None
+            )
+            for s in msg.seen_statuses
+        ]
 
-                # Build reply_to message (simplified to avoid recursion)
-                reply_to_out = MessageOut(
-                    id=reply.id,
-                    sender_id=reply.sender_id,
-                    receiver_id=reply.receiver_id,
-                    content=reply.content,
-                    message_type=reply.message_type.value,
-                    is_read=reply.is_read,
-                    read_at=reply.read_at.isoformat() if reply.read_at else None,
-                    delivered_at=reply.delivered_at.isoformat() if reply.delivered_at else None,
-                    reply_to=None,  # avoid infinite recursion
-                    reply_to_id=reply.reply_to_id,  # Add this
-                    is_forwarded=reply.is_forwarded,
-                    original_sender=reply.original_sender,
-                    created_at=reply.created_at.isoformat(),
-                    sender_username=getattr(reply.sender, "username", None),
-                    receiver_username=getattr(reply.receiver, "username", None),
-                    voice_duration=reply.voice_duration,
-                    file_size=reply.file_size,
-                    seen_by=[]  # Simplified to avoid complex nested queries
-                )
+        reply_to_out = None
+        reply_preview = None
 
-                # Build reply preview
-                content_preview = reply.content or ""
-                if reply.message_type == MessageType.voice:
-                    content_preview = "🎤 Voice message"
-                elif reply.message_type == MessageType.image:
-                    content_preview = "🖼️ Photo"
-                elif reply.message_type == MessageType.file:
-                    content_preview = "📎 File"
-                elif len(content_preview) > 100:
-                    content_preview = content_preview[:100] + "..."
+        if msg.reply_to:
+            reply = msg.reply_to
 
-                reply_preview = ReplyPreview(
-                    id=reply.id,
-                    sender_username=getattr(reply.sender, "username", "Unknown"),
-                    content=content_preview,
-                    message_type=reply.message_type.value,
-                    voice_duration=reply.voice_duration,
-                    file_size=reply.file_size
-                )
-
-            # Build main message output
-            msg_out = MessageOut(
-                id=msg.id,
-                sender_id=msg.sender_id,
-                receiver_id=msg.receiver_id,
-                content=msg.content,
-                message_type=msg.message_type.value,
-                is_read=msg.is_read,
-                read_at=msg.read_at.isoformat() if msg.read_at else None,
-                delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,
-                reply_to_id=msg.reply_to_id,  # Make sure this is included
-                reply_to=reply_to_out,
-                reply_preview=reply_preview,
-                is_forwarded=msg.is_forwarded,
-                original_sender=msg.original_sender,
-                created_at=msg.created_at.isoformat(),
-                sender_username=getattr(msg.sender, "username", None),
-                receiver_username=getattr(msg.receiver, "username", None),
-                voice_duration=msg.voice_duration,
-                file_size=msg.file_size,
-                seen_by=seen_by
+            reply_to_out = MessageOut(
+                id=reply.id,
+                sender_id=reply.sender_id,
+                receiver_id=reply.receiver_id,
+                content=reply.content,
+                message_type=serialize_message_type(reply.message_type),  # ✅ FIXED
+                is_read=reply.is_read,
+                read_at=reply.read_at.isoformat() if reply.read_at else None,
+                delivered_at=reply.delivered_at.isoformat() if reply.delivered_at else None,
+                reply_to=None,
+                reply_to_id=reply.reply_to_id,
+                is_forwarded=reply.is_forwarded,
+                original_sender=reply.original_sender,
+                created_at=reply.created_at.isoformat(),
+                sender_username=getattr(reply.sender, "username", None),
+                receiver_username=getattr(reply.receiver, "username", None),
+                voice_duration=reply.voice_duration,
+                file_size=reply.file_size,
+                seen_by=[]
             )
 
-            result.append(msg_out)
+            reply_preview = build_reply_preview(reply)
 
-        return result
+        result.append(
+            build_message_out(
+                msg=msg,
+                reply_to=reply_to_out,
+                reply_preview=reply_preview,
+                seen_by=seen_by
+            )
+        )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get chat messages: {str(e)}")
-
-
+    return result
 
 # Send text message
 @router.post("/private/{friend_id}", response_model=MessageOut)
@@ -1220,3 +1167,57 @@ async def get_batch_online_status(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get batch status: {str(e)}")
+    
+def serialize_message_type(message_type: MessageType | None) -> str:
+    return message_type.value if message_type else MessageType.text.value
+
+
+def build_reply_preview(reply: PrivateMessage) -> ReplyPreview:
+    if reply.message_type == MessageType.voice:
+        content = "🎤 Voice message"
+    elif reply.message_type == MessageType.image:
+        content = "🖼️ Photo"
+    elif reply.message_type == MessageType.file:
+        content = "📎 File"
+    else:
+        content = reply.content or ""
+        if len(content) > 100:
+            content = content[:100] + "..."
+
+    return ReplyPreview(
+        id=reply.id,
+        sender_username=getattr(reply.sender, "username", "Unknown"),
+        content=content,
+        message_type=serialize_message_type(reply.message_type),
+        voice_duration=reply.voice_duration,
+        file_size=reply.file_size
+    )
+
+
+def build_message_out(
+    msg: PrivateMessage,
+    reply_to: MessageOut | None,
+    reply_preview: ReplyPreview | None,
+    seen_by: list
+) -> MessageOut:
+    return MessageOut(
+        id=msg.id,
+        sender_id=msg.sender_id,
+        receiver_id=msg.receiver_id,
+        content=msg.content,
+        message_type=serialize_message_type(msg.message_type),
+        is_read=msg.is_read,
+        read_at=msg.read_at.isoformat() if msg.read_at else None,
+        delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,
+        reply_to_id=msg.reply_to_id,
+        reply_to=reply_to,
+        reply_preview=reply_preview,
+        is_forwarded=msg.is_forwarded,
+        original_sender=msg.original_sender,
+        created_at=msg.created_at.isoformat(),
+        sender_username=getattr(msg.sender, "username", None),
+        receiver_username=getattr(msg.receiver, "username", None),
+        voice_duration=msg.voice_duration,
+        file_size=msg.file_size,
+        seen_by=seen_by
+    )
