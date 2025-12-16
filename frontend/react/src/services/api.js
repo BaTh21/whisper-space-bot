@@ -458,14 +458,61 @@ export const getDiaryById = async (diaryId) => {
 
 export const updateDiaryById = async (diaryId, data) => {
   try {
+    console.log('=== UPDATE DIARY API CALL ===');
+    console.log('Diary ID:', diaryId);
+    console.log('Request Data:', {
+      ...data,
+      imagesPreview: data.images ? 
+        `Array of ${data.images.length} images, first: ${data.images[0]?.substring(0, 50)}...` : 
+        'No images'
+    });
+    
     const res = await api.patch(`/api/v1/diaries/${diaryId}`, data, {
       headers: {
         "Content-Type": "application/json",
       },
     });
+    
+    console.log('=== UPDATE SUCCESS ===');
+    console.log('Response:', res.data);
     return res.data;
   } catch (error) {
-    throw new Error(error?.response?.data?.detail || "Failed to update diary");
+    console.log('=== UPDATE ERROR ===');
+    console.log('Status:', error.response?.status);
+    console.log('Status Text:', error.response?.statusText);
+    console.log('Response Data:', error.response?.data);
+    console.log('Request Config:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      data: JSON.parse(error.config?.data || '{}'),
+      headers: error.config?.headers
+    });
+    
+    // Extract detailed error message
+    let errorMessage = "Failed to update diary";
+    const errorData = error.response?.data;
+    
+    if (errorData) {
+      if (typeof errorData === 'string') {
+        errorMessage = errorData;
+      } else if (errorData.detail) {
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          // Handle Pydantic validation errors
+          errorMessage = errorData.detail.map(err => 
+            `${err.loc?.join('.') || 'unknown'}: ${err.msg}`
+          ).join(', ');
+        } else if (typeof errorData.detail === 'object') {
+          errorMessage = JSON.stringify(errorData.detail);
+        }
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      }
+    }
+    
+    console.log('Parsed Error Message:', errorMessage);
+    throw new Error(errorMessage);
   }
 };
 
@@ -539,11 +586,23 @@ export const likeDiary = async (diaryId) => {
   }
 };
 
-export const commentOnDiary = async (diaryId, content) => {
+export const commentOnDiary = async (diaryId, content, parentId = null, images = null) => {
   try {
-    const response = await api.post(`/api/v1/diaries/${diaryId}/comment`, {
+    const payload = {
       content,
-    });
+    };
+    
+    // Add parent_id if it exists (for replies)
+    if (parentId !== null) {
+      payload.parent_id = parentId;
+    }
+    
+    // Add images if they exist
+    if (images !== null && images.length > 0) {
+      payload.images = images;
+    }
+    
+    const response = await api.post(`/api/v1/diaries/${diaryId}/comment`, payload);
     return response.data;
   } catch (error) {
     console.error("Comment on diary error:", error.response?.data);
@@ -551,6 +610,40 @@ export const commentOnDiary = async (diaryId, content) => {
       error.response?.data?.detail ||
         error.response?.data?.msg ||
         "Failed to add comment"
+    );
+  }
+};
+export const updateComment = async (commentId, content, images = null) => {
+  try {
+    const payload = {
+      content,
+    };
+    
+    if (images !== null && images.length > 0) {
+      payload.images = images;
+    }
+    
+    const response = await api.put(`/api/v1/diaries/comments/${commentId}`, payload);
+    return response.data;
+  } catch (error) {
+    console.error("Update comment error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to update comment"
+    );
+  }
+};
+export const getDiaryDetails = async (diaryId) => {
+  try {
+    const response = await api.get(`/api/v1/diaries/${diaryId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Get diary details error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+      error.response?.data?.msg ||
+      "Failed to get diary details"
     );
   }
 };
@@ -572,16 +665,17 @@ export const getDiaryForEdit = async (diaryId) => {
 export const getDiaryComments = async (diaryId) => {
   try {
     const response = await api.get(`/api/v1/diaries/${diaryId}/comments`);
+    // If backend returns both comments and count
+    if (response.data && typeof response.data === 'object' && 'comments' in response.data) {
+      return response.data.comments;
+    }
     return response.data;
   } catch (error) {
     console.error("Get diary comments error:", error.response?.data);
-    if (error.response?.status === 404) {
-      return [];
-    }
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch comments"
+      error.response?.data?.msg ||
+      "Failed to get comments"
     );
   }
 };
