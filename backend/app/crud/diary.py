@@ -221,64 +221,116 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                            detail="Only creator can edit this diary")
     
-    update_data = diary_data.dict(exclude_unset=True, exclude_none=True)
+    update_dict = diary_data.dict(exclude_unset=True, exclude_none=True)
     
-    # Handle images update
-    if 'images' in update_data:
-        # Clean up old images from Cloudinary
-        if diary.images:
-            image_service_sync.cleanup_images(diary.images)
+    # Handle images update - FIXED VERSION
+    if 'images' in update_dict:
+        print(f"Processing images update. Input: {update_dict['images']}")
         
-        # Save new images
-        if update_data['images']:
-            image_urls = image_service_sync.save_multiple_images(update_data['images'], is_diary=True)
-            diary.images = image_urls
-        else:
+        # If images is an empty list, remove all images
+        if update_dict['images'] == []:
+            print("Clearing all images")
+            if diary.images:
+                image_service_sync.cleanup_images(diary.images)
             diary.images = []
+        elif update_dict['images']:
+            # We have new images to process
+            # Separate URLs (already uploaded) from base64 (need upload)
+            existing_urls = []
+            base64_images = []
+            
+            for img in update_dict['images']:
+                if img.startswith(('http://', 'https://')):
+                    existing_urls.append(img)
+                elif img.startswith('data:image/'):
+                    base64_images.append(img)
+                else:
+                    # Try to handle plain base64
+                    try:
+                        base64.b64decode(img, validate=True)
+                        base64_images.append(f"data:image/jpeg;base64,{img}")
+                    except:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid image format: {img[:50]}..."
+                        )
+            
+            print(f"Image analysis - URLs: {len(existing_urls)}, Base64: {len(base64_images)}")
+            
+            # Clean up old images that are not in existing_urls
+            if diary.images:
+                images_to_remove = [old_img for old_img in diary.images 
+                                   if old_img not in existing_urls]
+                if images_to_remove:
+                    print(f"Cleaning up {len(images_to_remove)} old images")
+                    image_service_sync.cleanup_images(images_to_remove)
+            
+            # Upload new base64 images
+            new_urls = []
+            if base64_images:
+                print(f"Uploading {len(base64_images)} new images")
+                try:
+                    new_urls = image_service_sync.save_multiple_images(base64_images, is_diary=True)
+                    print(f"Uploaded to URLs: {new_urls}")
+                except Exception as e:
+                    print(f"Error uploading images: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Failed to upload images: {str(e)}"
+                    )
+            
+            # Combine existing URLs with new URLs
+            diary.images = existing_urls + new_urls
+            print(f"Final image URLs: {diary.images}")
+    # If 'images' key is not in update_dict, we don't change the images at all
     
-    # Handle share_type update - FIXED
-    if 'share_type' in update_data:
-        share_type_value = update_data['share_type']
+    # Handle share_type update
+    if 'share_type' in update_dict:
+        share_type_value = update_dict['share_type']
         
-        # If it's already a ShareType enum, get its value
-        if isinstance(share_type_value, ShareType):
-            diary.share_type = share_type_value
-        # If it's a string, convert to ShareType
-        elif isinstance(share_type_value, str):
-            try:
+        try:
+            if isinstance(share_type_value, str):
                 diary.share_type = ShareType(share_type_value.lower())
-            except ValueError:
+            else:
                 available_values = [t.value for t in ShareType]
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid share_type. Must be one of: {available_values}"
                 )
-        else:
+        except ValueError as e:
             available_values = [t.value for t in ShareType]
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid share_type. Must be one of: {available_values}"
             )
     
-    if 'title' in update_data:
-        diary.title = update_data['title']
+    if 'title' in update_dict:
+        diary.title = update_dict['title']
     
-    if 'content' in update_data:
-        diary.content = update_data['content']
+    if 'content' in update_dict:
+        diary.content = update_dict['content']
     
-    if 'group_ids' in update_data:
+    # Handle group_ids if share_type is group
+    if 'group_ids' in update_dict:
         if diary.share_type == ShareType.group:
             db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
             
-            for group_id in update_data['group_ids']:
+            for group_id in update_dict['group_ids']:
                 diary_group = DiaryGroup(diary_id=diary_id, group_id=group_id)
                 db.add(diary_group)
     
     diary.updated_at = datetime.now(timezone.utc)
     
-    db.commit()
-    db.refresh(diary)
-    return diary
+    try:
+        db.commit()
+        db.refresh(diary)
+        return diary
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}"
+        )
 
 def delete_diary(db: Session, diary_id: int, current_user_id: int):
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
