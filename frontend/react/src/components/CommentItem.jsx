@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import { Close as CloseIcon, Image as ImageIcon, Reply as ReplyIcon } from '@mui/icons-material';
 import {
-  Box,
-  Typography,
-  Avatar,
-  Button,
-  TextField,
-  IconButton
+    Avatar,
+    Box,
+    Button,
+    IconButton,
+    TextField,
+    Typography
 } from '@mui/material';
-import { Reply as ReplyIcon, Image as ImageIcon, Close as CloseIcon } from '@mui/icons-material';
+import { useState } from 'react';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 
 const CommentItem = ({ 
@@ -21,7 +21,9 @@ const CommentItem = ({
   replyTexts,
   setReplyTexts,
   handleImageUpload,
-  selectedCommentImages
+  selectedCommentImages,
+  setError,
+  setSuccess 
 }) => {
   const [localReplying, setLocalReplying] = useState(false);
   

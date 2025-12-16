@@ -1,17 +1,16 @@
-import React, { useState } from 'react';
 import {
   Article as ArticleIcon,
   Cancel as CancelIcon,
+  Close as CloseIcon,
   Comment as CommentIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   Favorite,
   FavoriteBorder,
-  Save as SaveIcon,
-  Send as SendIcon,
   Image as ImageIcon,
-  Close as CloseIcon,
-  Reply as ReplyIcon
+  Reply as ReplyIcon,
+  Save as SaveIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -29,10 +28,6 @@ import {
   FormControl,
   IconButton,
   InputLabel,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   MenuItem,
   Select,
   TextField,
@@ -40,16 +35,17 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { commentOnDiary, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, updateDiaryById } from '../../services/api';
+import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, updateComment, updateDiaryById } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 
-// Inline CommentItem component
-const CommentItem = ({ 
-  comment, 
-  diaryId, 
-  profile, 
-  onAddReply, 
+// Simple CommentItem component without edit/delete
+const CommentItem = ({
+  comment,
+  diaryId,
+  profile,
+  onAddReply,
   level = 0,
   replyingTo,
   setReplyingTo,
@@ -59,32 +55,32 @@ const CommentItem = ({
   selectedCommentImages
 }) => {
   const [localReplying, setLocalReplying] = useState(false);
-  
+
   const handleReply = () => {
     setReplyingTo(comment.id);
     setLocalReplying(true);
   };
-  
+
   const handleCancelReply = () => {
     setReplyingTo(null);
     setLocalReplying(false);
     setReplyTexts(prev => ({ ...prev, [comment.id]: '' }));
   };
-  
+
   const handleSubmitReply = () => {
     if (onAddReply && replyTexts[comment.id]?.trim()) {
       onAddReply(diaryId, comment.id);
       setLocalReplying(false);
     }
   };
-  
+
   // Limit nesting depth for visual clarity
   const maxDepth = 5;
   const isTooDeep = level >= maxDepth;
-  
+
   return (
-    <Box sx={{ 
-      mb: 2, 
+    <Box sx={{
+      mb: 2,
       ml: level > 0 ? 2 : 0,
       borderLeft: level > 0 ? '2px solid #e0e0e0' : 'none',
       pl: level > 0 ? 2 : 0,
@@ -92,21 +88,21 @@ const CommentItem = ({
     }}>
       {/* Comment header */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
-        <Avatar sx={{ 
-          width: level > 0 ? 24 : 28, 
-          height: level > 0 ? 24 : 28, 
+        <Avatar sx={{
+          width: level > 0 ? 24 : 28,
+          height: level > 0 ? 24 : 28,
           fontSize: level > 0 ? '0.7rem' : '0.8rem',
           flexShrink: 0
         }}>
           {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
         </Avatar>
         <Box sx={{ flex: 1 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 1, 
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
             flexWrap: 'wrap',
-            mb: 0.5 
+            mb: 0.5
           }}>
             <Typography variant="body2" fontWeight="600" color="green" component="span">
               {comment.user?.username}
@@ -114,7 +110,7 @@ const CommentItem = ({
             <Typography variant="caption" color="text.secondary" component="span">
               {formatCambodiaDate(comment.created_at)}
             </Typography>
-            
+
             {/* Reply button (only show if not too deep) */}
             {profile && !isTooDeep && (
               <Button
@@ -127,12 +123,12 @@ const CommentItem = ({
               </Button>
             )}
           </Box>
-          
+
           {/* Comment content */}
           <Typography variant="body2" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
             {comment.content}
           </Typography>
-          
+
           {/* Comment images */}
           {comment.images && comment.images.length > 0 && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
@@ -152,7 +148,7 @@ const CommentItem = ({
               ))}
             </Box>
           )}
-          
+
           {/* Reply form */}
           {(replyingTo === comment.id || localReplying) && !isTooDeep && (
             <Box sx={{ mb: 2, mt: 1 }}>
@@ -185,7 +181,7 @@ const CommentItem = ({
                     onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)}
                   />
                 </Button>
-                
+
                 {/* Show selected images for reply */}
                 {selectedCommentImages[`reply-${comment.id}`]?.length > 0 && (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
@@ -201,9 +197,10 @@ const CommentItem = ({
                           onClick={() => {
                             const newImages = [...selectedCommentImages[`reply-${comment.id}`]];
                             newImages.splice(idx, 1);
-                            // We need to update the selectedCommentImages state
-                            // For now, let's just log - you'll need to implement this
-                            console.log('Remove image', idx);
+                            setSelectedCommentImages(prev => ({
+                              ...prev,
+                              [`reply-${comment.id}`]: newImages
+                            }));
                           }}
                           sx={{
                             position: 'absolute',
@@ -222,7 +219,7 @@ const CommentItem = ({
                     ))}
                   </Box>
                 )}
-                
+
                 <Button
                   variant="contained"
                   size="small"
@@ -241,7 +238,7 @@ const CommentItem = ({
               </Box>
             </Box>
           )}
-          
+
           {/* Nested replies */}
           {comment.replies && comment.replies.length > 0 && !isTooDeep && (
             <Box sx={{ mt: 2 }}>
@@ -263,7 +260,7 @@ const CommentItem = ({
               ))}
             </Box>
           )}
-          
+
           {/* If too deep, show a message */}
           {isTooDeep && comment.replies && comment.replies.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
@@ -299,6 +296,12 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   const [editGroupIds, setEditGroupIds] = useState([]);
   const [editLoading, setEditLoading] = useState(false);
 
+  // Comment edit state
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  const [editCommentImages, setEditCommentImages] = useState([]);
+  const [editCommentLoading, setEditCommentLoading] = useState(false);
+
   // State for images and replies
   const [replyingTo, setReplyingTo] = useState(null);
   const [selectedImages, setSelectedImages] = useState([]);
@@ -307,6 +310,20 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Handle unhandled promise rejections
+  useEffect(() => {
+    const handleUnhandledRejection = (event) => {
+      console.error('Unhandled Promise Rejection:', event.reason);
+      event.preventDefault();
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   // Normalize diaries to ensure groups is always an array
   const normalizedDiaries = diaries.map(diary => ({
@@ -342,7 +359,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         setSuccess('');
       }, 2000);
       handleDeleteCancel();
-      
+
       if (onDataUpdate) {
         onDataUpdate();
       }
@@ -355,7 +372,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
   const handleEditClick = async (diary) => {
     try {
       const fullDiary = await getDiaryById(diary.id);
-      
+
       if (fullDiary) {
         setEditingDiary(diary.id);
         setEditTitle(fullDiary.title || '');
@@ -419,14 +436,14 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
       }
 
       await updateDiaryById(diaryId, updateData);
-      
+
       setSuccess('Diary updated successfully');
       setTimeout(() => {
         setSuccess('');
       }, 2000);
 
       handleEditCancel();
-      
+
       if (onDataUpdate) {
         onDataUpdate();
       }
@@ -469,7 +486,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     try {
       const images = selectedCommentImages[diaryId] || [];
       const newComment = await commentOnDiary(diaryId, commentText, null, images);
-      
+
       setDiaryComments(prev => {
         const existingComments = prev[diaryId] || [];
         return {
@@ -477,10 +494,10 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
           [diaryId]: [...existingComments, newComment]
         };
       });
-      
+
       setCommentTexts(prev => ({ ...prev, [diaryId]: '' }));
       setSelectedCommentImages(prev => ({ ...prev, [diaryId]: [] }));
-      
+
       setSuccess('Comment added successfully');
       setTimeout(() => {
         setSuccess('');
@@ -492,18 +509,17 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
     }
   };
 
-  const handleAddReply = async (diaryId, parentCommentId) => {
-    const replyText = replyTexts[parentCommentId] || '';
+  const handleAddReply = async (diaryId, parentCommentId, replyText) => {
     if (!replyText?.trim()) return;
 
     try {
       const images = selectedCommentImages[`reply-${parentCommentId}`] || [];
       const reply = await commentOnDiary(diaryId, replyText, parentCommentId, images);
-      
+
       // Update comments with the new reply
       setDiaryComments(prev => {
         const updatedComments = [...(prev[diaryId] || [])];
-        
+
         // Helper function to find and update comment recursively
         const updateCommentWithReply = (comments, targetId, newReply) => {
           return comments.map(comment => {
@@ -522,7 +538,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
             return comment;
           });
         };
-        
+
         return {
           ...prev,
           [diaryId]: updateCommentWithReply(updatedComments, parentCommentId, reply)
@@ -530,10 +546,9 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
       });
 
       // Clear reply form
-      setReplyTexts(prev => ({ ...prev, [parentCommentId]: '' }));
       setSelectedCommentImages(prev => ({ ...prev, [`reply-${parentCommentId}`]: [] }));
       setReplyingTo(null);
-      
+
       setSuccess('Reply added successfully');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
@@ -577,15 +592,15 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
 
   const handleImageUpload = (event, diaryId = null, commentId = null) => {
     const files = Array.from(event.target.files);
-    const validImages = files.filter(file => 
+    const validImages = files.filter(file =>
       file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
     );
-    
+
     if (validImages.length === 0) {
       setError('Please select valid image files (max 5MB each)');
       return;
     }
-    
+
     const imagePromises = validImages.map(file => {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -595,7 +610,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
         reader.readAsDataURL(file);
       });
     });
-    
+
     Promise.all(imagePromises).then(base64Images => {
       if (diaryId && editingDiary === diaryId) {
         setSelectedImages(prev => [...prev, ...base64Images]);
@@ -618,23 +633,590 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
       }));
     }
   };
+
   const countAllComments = (comments) => {
-  if (!comments || !Array.isArray(comments)) return 0;
-  
-  let total = 0;
-  
-  const countRecursive = (commentList) => {
-    commentList.forEach(comment => {
-      total += 1; // Count this comment
-      if (comment.replies && comment.replies.length > 0) {
-        countRecursive(comment.replies); // Recursively count replies
-      }
-    });
+    if (!comments || !Array.isArray(comments)) return 0;
+
+    let total = 0;
+
+    const countRecursive = (commentList) => {
+      commentList.forEach(comment => {
+        total += 1; // Count this comment
+        if (comment.replies && comment.replies.length > 0) {
+          countRecursive(comment.replies); // Recursively count replies
+        }
+      });
+    };
+
+    countRecursive(comments);
+    return total;
   };
-  
-  countRecursive(comments);
-  return total;
-};
+
+  // Handle edit comment
+  const handleEditComment = async (commentId, content, images = []) => {
+    try {
+      setEditCommentLoading(true);
+
+      // Find which diary this comment belongs to
+      let targetDiaryId = null;
+      for (const [diaryId, comments] of Object.entries(diaryComments)) {
+        const findComment = (commentList, id) => {
+          for (const comment of commentList) {
+            if (comment.id === id) return true;
+            if (comment.replies && comment.replies.length > 0) {
+              if (findComment(comment.replies, id)) return true;
+            }
+          }
+          return false;
+        };
+
+        if (findComment(comments, commentId)) {
+          targetDiaryId = diaryId;
+          break;
+        }
+      }
+
+      if (!targetDiaryId) {
+        setError('Comment not found');
+        return;
+      }
+
+      // Call the API to update comment
+      const updatedComment = await updateComment(commentId, content, images);
+
+      // Update the comments state
+      setDiaryComments(prev => {
+        const updatedComments = [...(prev[targetDiaryId] || [])];
+
+        // Helper function to update comment recursively
+        const updateCommentRecursive = (comments, targetId, updatedData) => {
+          return comments.map(comment => {
+            if (comment.id === targetId) {
+              return {
+                ...comment,
+                content: updatedData.content,
+                images: updatedData.images || [],
+                updated_at: updatedData.updated_at
+              };
+            }
+            if (comment.replies && comment.replies.length > 0) {
+              return {
+                ...comment,
+                replies: updateCommentRecursive(comment.replies, targetId, updatedData)
+              };
+            }
+            return comment;
+          });
+        };
+
+        return {
+          ...prev,
+          [targetDiaryId]: updateCommentRecursive(updatedComments, commentId, updatedComment)
+        };
+      });
+
+      setEditingCommentId(null);
+      setEditCommentText('');
+      setEditCommentImages([]);
+
+      setSuccess('Comment updated successfully');
+      setTimeout(() => setSuccess(''), 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to update comment');
+    } finally {
+      setEditCommentLoading(false);
+    }
+  };
+
+  // Handle delete comment
+  const handleDeleteComment = async (commentId) => {
+    try {
+      // Find which diary this comment belongs to
+      let targetDiaryId = null;
+      for (const [diaryId, comments] of Object.entries(diaryComments)) {
+        const findComment = (commentList, id) => {
+          for (const comment of commentList) {
+            if (comment.id === id) return true;
+            if (comment.replies && comment.replies.length > 0) {
+              if (findComment(comment.replies, id)) return true;
+            }
+          }
+          return false;
+        };
+
+        if (findComment(comments, commentId)) {
+          targetDiaryId = diaryId;
+          break;
+        }
+      }
+
+      if (!targetDiaryId) {
+        setError('Comment not found');
+        return;
+      }
+
+      // Call the API to delete comment
+      await deleteCommentById(commentId);
+
+      // Update the comments state
+      setDiaryComments(prev => {
+        const updatedComments = [...(prev[targetDiaryId] || [])];
+
+        // Helper function to remove comment recursively
+        const removeCommentRecursive = (comments, targetId) => {
+          return comments.filter(comment => {
+            if (comment.id === targetId) return false;
+            if (comment.replies && comment.replies.length > 0) {
+              comment.replies = removeCommentRecursive(comment.replies, targetId);
+            }
+            return true;
+          });
+        };
+
+        return {
+          ...prev,
+          [targetDiaryId]: removeCommentRecursive(updatedComments, commentId)
+        };
+      });
+
+      setSuccess('Comment deleted successfully');
+      setTimeout(() => setSuccess(''), 2000);
+    } catch (err) {
+      setError(err.message || 'Failed to delete comment');
+    }
+  };
+
+  // Enhanced CommentItemWithActions component with edit/delete
+  const CommentItemWithActions = ({
+    comment,
+    diaryId,
+    profile,
+    onAddReply,
+    level = 0,
+    replyingTo,
+    setReplyingTo,
+    replyTexts,
+    setReplyTexts,
+    handleImageUpload,
+    selectedCommentImages
+  }) => {
+    const [localReplying, setLocalReplying] = useState(false);
+    const [localEditing, setLocalEditing] = useState(false);
+    const [editLoading, setEditLoading] = useState(false);
+    const [localEditText, setLocalEditText] = useState(comment.content);
+    const [localEditImages, setLocalEditImages] = useState(comment.images || []);
+    const [localReplyText, setLocalReplyText] = useState('');
+
+    // Check if current user is the comment owner
+    const isCommentOwner = profile && comment.user?.id === profile.id;
+
+    const handleReply = () => {
+      setReplyingTo(comment.id);
+      setLocalReplying(true);
+    };
+
+    const handleCancelReply = () => {
+      setReplyingTo(null);
+      setLocalReplying(false);
+      setLocalReplyText('');
+    };
+
+    const handleSubmitReply = () => {
+      if (onAddReply && localReplyText?.trim()) {
+        onAddReply(diaryId, comment.id, localReplyText);
+        setLocalReplying(false);
+        setLocalReplyText('');
+      }
+    };
+
+    const handleEdit = () => {
+      setEditingCommentId(comment.id);
+      setLocalEditText(comment.content);
+      setLocalEditImages(comment.images || []);
+      setLocalEditing(true);
+    };
+
+    const handleCancelEdit = () => {
+      setEditingCommentId(null);
+      setLocalEditText(comment.content);
+      setLocalEditImages(comment.images || []);
+      setLocalEditing(false);
+    };
+
+    const handleSaveEdit = async () => {
+      if (!localEditText.trim()) {
+        setError('Comment cannot be empty');
+        return;
+      }
+
+      setEditLoading(true);
+      try {
+        await handleEditComment(comment.id, localEditText, localEditImages);
+        setEditingCommentId(null);
+        setLocalEditing(false);
+      } catch (err) {
+        setError(err.message || 'Failed to update comment');
+      } finally {
+        setEditLoading(false);
+      }
+    };
+
+    const handleDelete = () => {
+      if (window.confirm('Are you sure you want to delete this comment?')) {
+        handleDeleteComment(comment.id);
+      }
+    };
+
+    // Handle image upload for edit
+    const handleEditImageUpload = (event) => {
+      const files = Array.from(event.target.files);
+      const validImages = files.filter(file =>
+        file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
+      );
+
+      if (validImages.length === 0) {
+        setError('Please select valid image files (max 5MB each)');
+        return;
+      }
+
+      const imagePromises = validImages.map(file => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            resolve(e.target.result);
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(imagePromises).then(base64Images => {
+        setLocalEditImages(prev => [...prev, ...base64Images]);
+      });
+    };
+
+    const removeEditImage = (index) => {
+      setLocalEditImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+    // Limit nesting depth for visual clarity
+    const maxDepth = 5;
+    const isTooDeep = level >= maxDepth;
+
+    return (
+      <Box sx={{
+        mb: 2,
+        ml: level > 0 ? 2 : 0,
+        borderLeft: level > 0 ? '2px solid #e0e0e0' : 'none',
+        pl: level > 0 ? 2 : 0,
+        position: 'relative'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+          <Avatar sx={{
+            width: level > 0 ? 24 : 28,
+            height: level > 0 ? 24 : 28,
+            fontSize: level > 0 ? '0.7rem' : '0.8rem',
+            flexShrink: 0
+          }}>
+            {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
+          </Avatar>
+          <Box sx={{ flex: 1 }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              flexWrap: 'wrap',
+              mb: 0.5
+            }}>
+              <Typography variant="body2" fontWeight="600" color="green" component="span">
+                {comment.user?.username}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" component="span">
+                {formatCambodiaDate(comment.created_at)}
+              </Typography>
+
+              {/* Action buttons - Only show for comment owner */}
+              {isCommentOwner && editingCommentId !== comment.id && !localEditing && (
+                <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
+                  <IconButton
+                    size="small"
+                    onClick={handleEdit}
+                    sx={{
+                      minWidth: 'auto',
+                      p: 0.5,
+                      color: 'primary.main'
+                    }}
+                    title="Edit"
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={handleDelete}
+                    sx={{
+                      minWidth: 'auto',
+                      p: 0.5,
+                      color: 'error.main'
+                    }}
+                    title="Delete"
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              )}
+
+              {/* Reply button (only show if not too deep) */}
+              {profile && !isTooDeep && !isCommentOwner && editingCommentId !== comment.id && !localEditing && (
+                <Button
+                  size="small"
+                  startIcon={<ReplyIcon fontSize="small" />}
+                  onClick={handleReply}
+                  sx={{ minWidth: 'auto', ml: isCommentOwner ? 0 : 'auto' }}
+                >
+                  Reply
+                </Button>
+              )}
+            </Box>
+
+            {/* Edit mode */}
+            {(editingCommentId === comment.id || localEditing) && isCommentOwner ? (
+              <Box sx={{ mb: 2 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={localEditText}
+                  onChange={(e) => setLocalEditText(e.target.value)}
+                  sx={{ mb: 1 }}
+                  multiline
+                  rows={2}
+                  autoFocus
+                />
+
+                {/* Edit image upload */}
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    size="small"
+                    startIcon={<ImageIcon />}
+                  >
+                    Add Images
+                    <input
+                      type="file"
+                      hidden
+                      multiple
+                      accept="image/*"
+                      onChange={handleEditImageUpload}
+                    />
+                  </Button>
+
+                  {/* Show selected edit images */}
+                  {localEditImages.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+                      {localEditImages.map((img, idx) => (
+                        <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
+                          <img
+                            src={img}
+                            alt={`Edit preview ${idx}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => removeEditImage(idx)}
+                            sx={{
+                              position: 'absolute',
+                              top: -4,
+                              right: -4,
+                              bgcolor: 'rgba(0,0,0,0.5)',
+                              color: 'white',
+                              width: 16,
+                              height: 16,
+                              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                            }}
+                          >
+                            <CloseIcon sx={{ fontSize: 12 }} />
+                          </IconButton>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={handleSaveEdit}
+                    disabled={editLoading || !localEditText.trim()}
+                    startIcon={editLoading ? <CircularProgress size={16} /> : null}
+                  >
+                    {editLoading ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleCancelEdit}
+                    disabled={editLoading}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              <>
+                {/* Comment content */}
+                <Typography variant="body2" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
+                  {comment.content}
+                </Typography>
+
+                {/* Comment images */}
+                {comment.images && comment.images.length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                    {comment.images.map((img, idx) => (
+                      <Box key={idx} sx={{ position: 'relative' }}>
+                        <img
+                          src={img}
+                          alt={`Comment image ${idx + 1}`}
+                          style={{
+                            width: 80,
+                            height: 80,
+                            objectFit: 'cover',
+                            borderRadius: 4
+                          }}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </>
+            )}
+
+            {/* Reply form */}
+            {(replyingTo === comment.id || localReplying) && !isTooDeep && editingCommentId !== comment.id && !localEditing && (
+              <Box sx={{ mb: 2, mt: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder={`Reply to ${comment.user?.username}...`}
+                  value={localReplyText}
+                  onChange={(e) => setLocalReplyText(e.target.value)}
+                  sx={{ mb: 1 }}
+                  multiline
+                  rows={2}
+                  autoFocus
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmitReply();
+                    }
+                  }}
+                />
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    size="small"
+                    startIcon={<ImageIcon />}
+                  >
+                    Add Image
+                    <input
+                      type="file"
+                      hidden
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)}
+                    />
+                  </Button>
+
+                  {/* Show selected images for reply */}
+                  {selectedCommentImages[`reply-${comment.id}`]?.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+                      {selectedCommentImages[`reply-${comment.id}`].map((img, idx) => (
+                        <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
+                          <img
+                            src={img}
+                            alt={`Preview ${idx}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              const newImages = [...selectedCommentImages[`reply-${comment.id}`]];
+                              newImages.splice(idx, 1);
+                              setSelectedCommentImages(prev => ({
+                                ...prev,
+                                [`reply-${comment.id}`]: newImages
+                              }));
+                            }}
+                            sx={{
+                              position: 'absolute',
+                              top: -4,
+                              right: -4,
+                              bgcolor: 'rgba(0,0,0,0.5)',
+                              color: 'white',
+                              width: 16,
+                              height: 16,
+                              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                            }}
+                          >
+                            <CloseIcon sx={{ fontSize: 12 }} />
+                          </IconButton>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={handleSubmitReply}
+                    disabled={!localReplyText?.trim()}
+                  >
+                    Send
+                  </Button>
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={handleCancelReply}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              </Box>
+            )}
+
+            {/* Nested replies */}
+            {comment.replies && comment.replies.length > 0 && !isTooDeep && (
+              <Box sx={{ mt: 2 }}>
+                {comment.replies.map((reply) => (
+                  <CommentItemWithActions
+                    key={reply.id}
+                    comment={reply}
+                    diaryId={diaryId}
+                    profile={profile}
+                    onAddReply={onAddReply}
+                    level={level + 1}
+                    replyingTo={replyingTo}
+                    setReplyingTo={setReplyingTo}
+                    replyTexts={replyTexts}
+                    setReplyTexts={setReplyTexts}
+                    handleImageUpload={handleImageUpload}
+                    selectedCommentImages={selectedCommentImages}
+                  />
+                ))}
+              </Box>
+            )}
+
+            {/* If too deep, show a message */}
+            {isTooDeep && comment.replies && comment.replies.length > 0 && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                {comment.replies.length} more repl{comment.replies.length === 1 ? 'y' : 'ies'} (depth limited)
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      </Box>
+    );
+  };
 
   return (
     <Box
@@ -1040,7 +1622,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
                           disabled={commentLoading[diary.id]}
                           sx={{ borderRadius: '8px' }}
                         />
-                        
+
                         <Button
                           variant="outlined"
                           component="label"
@@ -1056,7 +1638,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
                             onChange={(e) => handleImageUpload(e, null, diary.id)}
                           />
                         </Button>
-                        
+
                         <Button
                           variant="contained"
                           onClick={() => handleAddComment(diary.id)}
@@ -1101,7 +1683,7 @@ const FeedTab = ({ diaries, onNewDiary, setError, setSuccess, onDataUpdate, prof
                       {diaryComments[diary.id]?.length > 0 ? (
                         <Box sx={{ maxHeight: 200, overflowY: 'auto', py: 0 }}>
                           {diaryComments[diary.id].map((comment) => (
-                            <CommentItem
+                            <CommentItemWithActions
                               key={comment.id}
                               comment={comment}
                               diaryId={diary.id}
