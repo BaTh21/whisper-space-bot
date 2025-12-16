@@ -453,9 +453,13 @@ export const getDiaryById = async (diaryId) => {
 
 export const updateDiaryById = async (diaryId, data) => {
   try {
-    console.log('API Call - Update Diary:', {
-      diaryId,
-      data: JSON.stringify(data, null, 2)
+    console.log('=== UPDATE DIARY API CALL ===');
+    console.log('Diary ID:', diaryId);
+    console.log('Request Data:', {
+      ...data,
+      imagesPreview: data.images ? 
+        `Array of ${data.images.length} images, first: ${data.images[0]?.substring(0, 50)}...` : 
+        'No images'
     });
     
     const res = await api.patch(`/api/v1/diaries/${diaryId}`, data, {
@@ -464,21 +468,46 @@ export const updateDiaryById = async (diaryId, data) => {
       },
     });
     
-    console.log('API Response:', res.data);
+    console.log('=== UPDATE SUCCESS ===');
+    console.log('Response:', res.data);
     return res.data;
   } catch (error) {
-    console.error('API Error Details:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      headers: error.response?.headers,
-      config: error.config
+    console.log('=== UPDATE ERROR ===');
+    console.log('Status:', error.response?.status);
+    console.log('Status Text:', error.response?.statusText);
+    console.log('Response Data:', error.response?.data);
+    console.log('Request Config:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      data: JSON.parse(error.config?.data || '{}'),
+      headers: error.config?.headers
     });
     
-    const errorDetail = error?.response?.data?.detail;
-    console.error('Error detail from server:', errorDetail);
+    // Extract detailed error message
+    let errorMessage = "Failed to update diary";
+    const errorData = error.response?.data;
     
-    throw new Error(errorDetail || "Failed to update diary");
+    if (errorData) {
+      if (typeof errorData === 'string') {
+        errorMessage = errorData;
+      } else if (errorData.detail) {
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          // Handle Pydantic validation errors
+          errorMessage = errorData.detail.map(err => 
+            `${err.loc?.join('.') || 'unknown'}: ${err.msg}`
+          ).join(', ');
+        } else if (typeof errorData.detail === 'object') {
+          errorMessage = JSON.stringify(errorData.detail);
+        }
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      }
+    }
+    
+    console.log('Parsed Error Message:', errorMessage);
+    throw new Error(errorMessage);
   }
 };
 

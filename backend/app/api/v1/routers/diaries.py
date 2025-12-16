@@ -169,38 +169,50 @@ def get_diary_by_id(
     )
 
 @router.patch("/{diary_id}", response_model=DiaryOut)
-def update_diary_by_id(diary_id: int,
-                       diary_data: DiaryUpdate,
-                       db: Session = Depends(get_db),
-                       current_user: User = Depends(get_current_user)):
-    diary = update_diary(db, diary_id, diary_data, current_user.id)
-    
-    return DiaryOut(
-        id=diary.id,
-        author=CreatorResponse(
-            id=diary.author.id,
-            username=diary.author.username,
-            avatar_url=diary.author.avatar_url
-        ),
-        title=diary.title,
-        content=diary.content,
-        share_type=diary.share_type.value,
-        groups=[GroupResponse(id=g.id, name=g.name) for g in diary.groups],
-        images=diary.images,
-        likes=[
-            DiaryLikeResponse(
-                id=l.id,
-                user=CreatorResponse(
-                    id=l.user.id,
-                    username=l.user.username,
-                    avatar_url=l.user.avatar_url
-                )
-            ) for l in diary.likes
-        ],
-        is_deleted=diary.is_deleted,
-        created_at=diary.created_at,
-        updated_at=diary.updated_at
-    )
+def update_diary_by_id(
+    diary_id: int,
+    diary_data: DiaryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        diary = update_diary(db, diary_id, diary_data, current_user.id)
+        
+        return DiaryOut(
+            id=diary.id,
+            author=CreatorResponse(
+                id=diary.author.id,
+                username=diary.author.username,
+                avatar_url=diary.author.avatar_url
+            ),
+            title=diary.title,
+            content=diary.content,
+            share_type=diary.share_type.value,
+            groups=[GroupResponse(id=g.id, name=g.name) for g in diary.groups],
+            images=diary.images,
+            likes=[
+                DiaryLikeResponse(
+                    id=l.id,
+                    user=CreatorResponse(
+                        id=l.user.id,
+                        username=l.user.username,
+                        avatar_url=l.user.avatar_url
+                    )
+                ) for l in diary.likes
+            ],
+            is_deleted=diary.is_deleted,
+            created_at=diary.created_at,
+            updated_at=diary.updated_at
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Log the actual error for debugging
+        print(f"Update diary error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
 
 @router.delete("/{diary_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_diary_by_id(diary_id: int,
