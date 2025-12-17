@@ -1110,6 +1110,23 @@ const ChatMessage = ({
             {(() => {
               const menuItems = [];
 
+              menuItems.push(
+                <MenuItem
+                  key="react"
+                >
+                  <MessageReactions
+                    messageId={message.id}
+                    reactions={reactions}
+                    currentUserId={profile?.id}
+                    onAddReaction={handleAddReaction}
+                    onRemoveReaction={handleRemoveReaction}
+                    showAddButton={true}
+                    size="small"
+                    isMine={isMine}
+                  />
+                </MenuItem>
+              );
+
               if (actualMessageType === 'image') {
                 menuItems.push(
                   <MenuItem key="view-full" onClick={handleViewFullImage}>
@@ -1139,25 +1156,18 @@ const ChatMessage = ({
                     </MenuItem>
                   );
                 }
+
+                if (actualMessageType !== 'system') {
+                  menuItems.push(
+                    <MenuItem key="forward" onClick={handleForwardClick}>
+                      <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
+                      {t('forward')}
+                    </MenuItem>,
+
+                  );
+                }
+
                 menuItems.push(
-                  <MenuItem
-                    key="react"
-                  >
-                    <MessageReactions
-                      messageId={message.id}
-                      reactions={reactions}
-                      currentUserId={profile?.id}
-                      onAddReaction={handleAddReaction}
-                      onRemoveReaction={handleRemoveReaction}
-                      showAddButton={true}
-                      size="small"
-                      isMine={isMine}
-                    />
-                  </MenuItem>,
-                  <MenuItem key="forward" onClick={handleForwardClick}>
-                    <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
-                    {t('forward')}
-                  </MenuItem>,
                   <MenuItem
                     key="delete"
                     onClick={handleDelete}
@@ -1167,7 +1177,8 @@ const ChatMessage = ({
                     {t('delete')}
                   </MenuItem>
                 );
-              } else {
+              }
+              else {
                 menuItems.push(
                   <MenuItem
                     key="react">

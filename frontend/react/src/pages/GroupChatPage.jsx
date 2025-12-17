@@ -46,6 +46,7 @@ import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
+import VoiceRecorder from '../components/group/VoiceRecorder';
 
 const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
@@ -86,6 +87,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [totalAccepted, setTotalAccepted] = useState(null);
   const [voiceCall, setVoiceCall] = useState(false);
   const [activeCallMessageId, setActiveCallMessageId] = useState(null);
+  const [recording, setRecording] = useState(false);
 
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
@@ -1855,47 +1857,55 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                         color: 'white',
                         borderRadius: 2,
                         '&:hover': {
-                          bgcolor: '#1E90FF'
+                          bgcolor: '#213e57ff'
                         }
                       }}
                       component="span">
                       <AttachFileIcon />
                     </IconButton>
                   </label>
-                  <VoiceRecordDialog
-                    onConfirm={handleUploadVoiceMessage}
-                  />
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    multiline
-                    maxRows={4}
-                    sx={{
-                      bgcolor: 'grey.100',
-                      borderRadius: 2,
-                      '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                  <VoiceRecorder
+                    onConfirm={(blob) => {
+                      handleUploadVoiceMessage(blob);
                     }}
+                    onRecordingChange={setRecording}
                   />
 
-                  <Button
-                    variant="contained"
-                    onClick={() => {
-                      if (file) {
-                        handleUploadFileMessage(groupId, file);
-                      }
-                      if (newMessage.trim()) {
-                        handleSendMessage();
-                      }
-                    }}
-                    disabled={!newMessage.trim() && !file}
-                    sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
-                  >
-                    <SendIcon />
-                  </Button>
+                  {!recording && (
+                    <>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder="Type a message..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        multiline
+                        maxRows={4}
+                        sx={{
+                          bgcolor: 'grey.100',
+                          borderRadius: 2,
+                          '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                        }}
+                      />
+
+                      <Button
+                        variant="contained"
+                        onClick={() => {
+                          if (file) {
+                            handleUploadFileMessage(groupId, file);
+                          }
+                          if (newMessage.trim()) {
+                            handleSendMessage();
+                          }
+                        }}
+                        disabled={!newMessage.trim() && !file}
+                        sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
+                      >
+                        <SendIcon />
+                      </Button>
+                    </>
+                  )}
                 </Box>
               </Box>
 
