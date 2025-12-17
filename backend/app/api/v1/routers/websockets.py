@@ -1484,6 +1484,7 @@ async def websocket_group_chat(
                     parent_msg_data = {
                         "id": parent.id,
                         "content": parent.content,
+                        "call_content": parent.call_content,
                         "file_url": parent.file_url,
                         "voice_url": parent.voice_url,
                         "sender": {
@@ -1504,6 +1505,7 @@ async def websocket_group_chat(
                     },
                     "group_id": msg.group_id,
                     "content": msg.content,
+                    "call_content": msg.call_content,
                     "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
                     "file_url": msg.file_url,
                     "voice_url": msg.voice_url,

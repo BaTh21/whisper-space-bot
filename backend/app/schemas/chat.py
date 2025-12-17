@@ -98,6 +98,7 @@ class ParentMessageResponse(BaseModel):
     id: int
     sender: AuthorResponse
     content: Optional[str] = None
+    call_content: Optional[str] = None
     file_url: Optional[str] = None
     voice_url: Optional[str] = None
     

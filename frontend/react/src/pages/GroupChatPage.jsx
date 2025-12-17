@@ -1472,6 +1472,44 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                       {message.parent_message.content}
                                     </Typography>
 
+                                    {message.parent_message.call_content && (
+                                      <Box
+                                        sx={{
+                                          bgcolor: isOwn ? 'primary.main' : 'white',
+                                          color: isOwn ? 'white' : 'text.primary',
+                                          p: 2,
+                                          borderRadius: 3,
+                                          boxShadow: 1,
+                                          wordBreak: 'break-word',
+                                          transition: 'all 0.2s',
+                                        }}
+                                      >
+                                        <Typography
+                                          variant="body2"
+                                          onClick={(e) => openSecondMenu(e, message.id)}
+                                        >
+                                          {message.parent_message.call_content}
+                                        </Typography>
+
+                                        <Button
+                                          variant="outlined"
+                                          color={isOwn ? 'white' : 'text.primary'}
+                                          sx={{
+                                            width: '100%',
+                                            borderRadius: 3,
+                                            boxShadow: 1,
+                                            wordBreak: 'break-word',
+                                            transition: 'all 0.2s',
+                                            mt: 1
+                                          }}
+                                          disabled={message.updated_at}
+                                          onClick={() => !message.updated_at && handleJoinCall()}
+                                        >
+                                          Join Now
+                                        </Button>
+                                      </Box>
+                                    )}
+
                                     {message.parent_message.voice_url && (
                                       <Box
                                         sx={{
@@ -1672,16 +1710,20 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                               <ReplyIcon /> Reply
                             </MenuItem>,
 
-                            <MenuItem
-                              key="forward"
-                              onClick={() => {
-                                setSelectedMessage(activeMessage);
-                                toggleDrawer();
-                                closeSecondMenu();
-                              }}
-                            >
-                              <ShortcutIcon /> Forward
-                            </MenuItem>,
+                            !activeMessage.call_content
+                              ? (
+                                <MenuItem
+                                  key="forward"
+                                  onClick={() => {
+                                    setSelectedMessage(activeMessage);
+                                    toggleDrawer();
+                                    closeSecondMenu();
+                                  }}
+                                >
+                                  <ShortcutIcon /> Forward
+                                </MenuItem>
+                              )
+                              : null,
 
                             activeMessage.content && activeMessage.sender?.id === user?.id
                               ? (
