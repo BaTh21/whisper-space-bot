@@ -82,8 +82,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const emojiButtonRef = useRef(null);
   const [showFriend, setShowFriend] = useState(false);
 
-  console.log("message", messages);
-
   const toggleShowFriend = () => {
     setShowFriend(prev => !prev);
   }
@@ -2005,19 +2003,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                       handleSelectFriend(friend);
                     }}
                     sx={{
-                      borderRadius: '12px',
+                      p: 1,
                       mb: 1,
-                      px: 2,
-                      width: '100%',
+                      borderRadius: '12px',
+                      boxShadow: 0,
                       backgroundColor: 'white',
-                      '&:hover': { bgcolor: 'action.hover' },
-                      '&.Mui-selected': {
-                        bgcolor: 'primary.light',
-                        color: 'primary.contrastText',
-                        '& .online-indicator': {
-                          borderColor: 'primary.contrastText'
-                        }
-                      },
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        transform: { xs: 'none', sm: 'translateY(-2px)' },
+                        boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
+                      }
                     }}
                   >
                     <ListItemAvatar sx={{ position: 'relative' }}>
@@ -2243,7 +2238,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         {(recordingTime % 60).toString().padStart(2, '0')}
                       </Typography>
                       <IconButton onClick={stopRecording} sx={{ color: 'white' }}>
-                        <StopIcon sx={{color: 'white'}}/>
+                        <StopIcon sx={{ color: 'white' }} />
                       </IconButton>
                     </Box>
                   )}
@@ -2273,7 +2268,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         {(recordingTime % 60).toString().padStart(2, '0')}
                       </Typography>
                       <IconButton size="small" onClick={cancelRecording}>
-                        <CloseIcon fontSize="small" sx={{color: 'white'}}/>
+                        <CloseIcon fontSize="small" sx={{ color: 'white' }} />
                       </IconButton>
                     </Box>
                   )}
@@ -2381,7 +2376,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                           src={imagePreview}
                           alt="Preview"
                           style={{
-                            maxWidth: {xs: 100, md: '80%'},
+                            maxWidth: { xs: 100, md: '80%' },
                             maxHeight: 200,
                             borderRadius: 12
                           }}

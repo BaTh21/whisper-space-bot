@@ -8,10 +8,7 @@ import {
   Forward as ForwardIcon,
   Image as ImageIcon,
   Schedule as LastSeenIcon,
-  MoreVert as MoreVertIcon,
   FiberManualRecord as OnlineIcon,
-  PlayArrow as PlayArrowIcon,
-  Stop as StopIcon,
   ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
 import {
@@ -32,6 +29,7 @@ import CallIcon from '@mui/icons-material/Call';
 
 import EmojiButton from '../EmojiButton';
 import MessageReactions from '../MessageReactions';
+import { VoiceMessagePlayer } from '../group/VoiceMessagePlayer';
 
 const ChatMessage = ({
   message,
@@ -54,9 +52,6 @@ const ChatMessage = ({
   const [avatarError, setAvatarError] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
   const [isEditing, setIsEditing] = useState(false);
   const [friendOnlineStatus, setFriendOnlineStatus] = useState(null);
@@ -143,41 +138,6 @@ const ChatMessage = ({
 
   const showMenu = true;
 
-  const handlePlayVoice = async (e) => {
-    e.stopPropagation();
-    if (!audioRef.current) return;
-
-    try {
-      if (isPlaying) {
-        audioRef.current.pause();
-        setIsPlaying(false);
-      } else {
-        await audioRef.current.play();
-        setIsPlaying(true);
-      }
-    } catch (err) {
-      console.error('Error playing voice message:', err);
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
-      setDuration(audioRef.current.duration || message.voice_duration || 0);
-    }
-  };
-
-  const handleEnded = () => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  };
-
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration || message.voice_duration || 0);
-    }
-  };
-
   const handleImageError = () => {
     setImageError(true);
   };
@@ -255,184 +215,16 @@ const ChatMessage = ({
   const renderTick = () => {
     switch (status) {
       case 'sending':
-        return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.5)' }} />;
+        return <DoneIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
       case 'sent':
-        return <DoneIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
+        return <DoneIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
       case 'delivered':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)' }} />;
+        return <DoneAllIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
       case 'seen':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: '#ffffffff' }} />;
+        return <DoneAllIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
       default:
         return null;
     }
-  };
-
-  const renderVoiceContent = () => {
-    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-    return (
-      <Box sx={{ mb: 1 }}>
-        <audio
-          ref={audioRef}
-          src={message.content}
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={handleEnded}
-          onLoadedMetadata={handleLoadedMetadata}
-          preload="metadata"
-        />
-
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            p: 1.5,
-            bgcolor: isMine ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)',
-            borderRadius: '16px',
-            border: '1px solid',
-            borderColor: isMine ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            maxWidth: '280px',
-            '&:hover': {
-              bgcolor: isMine ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.09)',
-              transform: 'translateY(-1px)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-            },
-          }}
-          onClick={handlePlayVoice}
-        >
-          <IconButton
-            size="small"
-            sx={{
-              bgcolor: isMine ? 'white' : 'primary.main',
-              color: isMine ? 'primary.main' : 'white',
-              width: 32,
-              height: 32,
-              '&:hover': {
-                bgcolor: isMine ? 'grey.100' : 'primary.dark',
-              },
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-            }}
-          >
-            {isPlaying ? <StopIcon /> : <PlayArrowIcon />}
-          </IconButton>
-
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 600,
-                mb: 0.5,
-                color: isMine ? 'white' : 'text.primary',
-                fontSize: '0.8rem',
-              }}
-            >
-              Voice message
-              <Box
-                component="span"
-                sx={{
-                  fontSize: '0.65rem',
-                  fontWeight: 'bold',
-                  bgcolor: 'rgba(255,255,255,0.2)',
-                  color: 'white',
-                  px: 0.8,
-                  py: 0.2,
-                  borderRadius: 1,
-                  letterSpacing: '0.5px',
-                }}
-              >
-                MP3
-              </Box>
-            </Typography>
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box
-                sx={{
-                  flex: 1,
-                  height: 4,
-                  bgcolor: isMine ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.12)',
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                  boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)',
-                }}
-              >
-                <Box
-                  sx={{
-                    height: '100%',
-                    width: `${progress}%`,
-                    bgcolor: isMine ? 'white' : 'primary.main',
-                    borderRadius: 3,
-                    transition: 'width 0.15s ease-out',
-                    boxShadow: '0 0 8px rgba(255,255,255,0.4)',
-                  }}
-                />
-              </Box>
-
-              <Typography
-                variant="caption"
-                sx={{
-                  fontWeight: 'bold',
-                  minWidth: 48,
-                  textAlign: 'right',
-                  color: isMine ? 'white' : 'text.primary',
-                  opacity: 0.9,
-                  fontSize: '0.75rem',
-                }}
-              >
-                {Math.floor(message.voice_duration || duration || 0)}s
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-    );
-  };
-
-  const renderCallMessage = () => {
-    return (
-      <Box>
-        <Typography
-          variant="body2"
-          sx={{
-            wordBreak: 'break-word',
-            lineHeight: 1.4,
-            fontSize: '0.9rem',
-            mb: reactions.length > 0 ? 0.5 : 0,
-            color: isMine ? 'white' : 'text.primary'
-          }}
-        >
-          {message.content}
-        </Typography>
-
-        <Button
-          variant="outlined"
-          size="small"
-          sx={{
-            width: '100%',
-            mt: 1,
-            color: isMine ? 'white' : 'primary.dark',
-            borderColor: isMine ? 'white' : 'primary.dark',
-            '&:hover': {
-              borderColor: isMine ? 'white' : 'primary.dark',
-              backgroundColor: isMine ? 'rgba(255,255,255,0.1)' : undefined
-            }
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCallBack()
-          }}
-        >
-          <CallIcon
-            sx={{
-              fontSize: 18,
-              mr: 0.5
-            }}
-          />
-          Call Back
-        </Button>
-      </Box>
-    );
   };
 
   const renderOnlineStatus = () => {
@@ -580,12 +372,12 @@ const ChatMessage = ({
   useEffect(() => {
     const styleElement = document.createElement('style');
     styleElement.textContent = `
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.6; }
-  100% { opacity: 1; }
-}
-`;
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+    `;
     document.head.appendChild(styleElement);
     return () => {
       document.head.removeChild(styleElement);
@@ -596,25 +388,21 @@ const ChatMessage = ({
     setReactions(message.reactions || []);
   }, [message.reactions]);
 
-  // Enhanced add reaction handler
   const handleAddReaction = async (emoji) => {
     if (onAddReaction) {
       try {
-        // Show immediate animation
         setShowReactionAnimation({
           emoji,
           type: 'add',
           timestamp: Date.now()
         });
 
-        // Clear animation after 1 second
         setTimeout(() => {
           setShowReactionAnimation(null);
         }, 1000);
 
         await onAddReaction(message.id, emoji);
 
-        // Play sound if available (optional)
         playReactionSound('add');
       } catch (err) {
         console.error('Failed to add reaction:', err);
@@ -622,132 +410,29 @@ const ChatMessage = ({
     }
   };
 
-  // Enhanced remove reaction handler
   const handleRemoveReaction = async (reactionId) => {
     if (onRemoveReaction) {
       try {
         const reactionToRemove = reactions.find(r => r.id === reactionId);
         if (reactionToRemove) {
-          // Show immediate animation
           setShowReactionAnimation({
             emoji: reactionToRemove.emoji,
             type: 'remove',
             timestamp: Date.now()
           });
 
-          // Clear animation after 1 second
           setTimeout(() => {
             setShowReactionAnimation(null);
           }, 1000);
         }
 
         await onRemoveReaction(message.id, reactionId);
-
-        // Play sound if available (optional)
         playReactionSound('remove');
       } catch (err) {
         console.error('Failed to remove reaction:', err);
       }
     }
   };
-
-  // Load reactions when component mounts - ONLY for non-temp messages
-  useEffect(() => {
-    // Check if this is a temp message
-    const isTempMessage = message.is_temp ||
-      (typeof message.id === 'string' && message.id.startsWith('temp-'));
-
-    // Only load reactions for real messages
-    if (onLoadReactions && message.id && !isTempMessage && !message.reactions) {
-      onLoadReactions(message.id);
-    }
-  }, [message.id, onLoadReactions, message.reactions, message.is_temp]);
-
-  // Animation for new reactions
-  useEffect(() => {
-    if (showReactionAnimation) {
-      const floatingAnimation = document.createElement('div');
-      floatingAnimation.className = 'floating-emoji';
-      floatingAnimation.innerHTML = showReactionAnimation.emoji;
-
-      const messageBubble = document.querySelector(`[data-message-id="${message.id}"] .message-bubble`);
-      if (messageBubble) {
-        const rect = messageBubble.getBoundingClientRect();
-        floatingAnimation.style.cssText = `
-          position: fixed;
-          font-size: 24px;
-          z-index: 9999;
-          pointer-events: none;
-          animation: floatUp 1s ease-out forwards;
-          left: ${rect.right - 30}px;
-          top: ${rect.top}px;
-        `;
-
-        document.body.appendChild(floatingAnimation);
-
-        setTimeout(() => {
-          if (floatingAnimation.parentNode) {
-            document.body.removeChild(floatingAnimation);
-          }
-        }, 1000);
-      }
-    }
-  }, [showReactionAnimation, message.id]);
-
-  // Sound effect helper
-  const playReactionSound = (type) => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const audio = new Audio();
-      audio.volume = 0.2;
-
-      if (type === 'add') {
-        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3';
-      } else if (type === 'remove') {
-        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3';
-      }
-
-      audio.play().catch(() => { });
-    } catch (error) { }
-  };
-
-  // Add CSS animations for reactions
-  useEffect(() => {
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-      @keyframes floatUp {
-        0% {
-          transform: translateY(0) scale(1);
-          opacity: 1;
-        }
-        50% {
-          transform: translateY(-30px) scale(1.2);
-          opacity: 0.8;
-        }
-        100% {
-          transform: translateY(-60px) scale(0.8);
-          opacity: 0;
-        }
-      }
-      
-      @keyframes reactionPop {
-        0% { transform: scale(0.5); opacity: 0; }
-        70% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-      
-      .floating-emoji {
-        will-change: transform, opacity;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-      }
-    `;
-    document.head.appendChild(styleElement);
-
-    return () => {
-      document.head.removeChild(styleElement);
-    };
-  }, []);
 
   const renderImageContent = () => (
     <Box sx={{ mb: 1, position: 'relative' }}>
@@ -761,10 +446,11 @@ const ChatMessage = ({
             justifyContent: 'center',
             bgcolor: 'grey.100',
             borderRadius: '8px',
-            border: '1px dashed',
-            borderColor: 'grey.300',
+            border: '1px solid primary.main',
             flexDirection: 'column',
-            gap: 1
+            gap: 1,
+            textAlign: isMine ? 'right' : 'left',
+            direction: isMine ? 'rtl' : 'ltr',
           }}
         >
           <ImageIcon sx={{ color: 'grey.400', fontSize: 40 }} />
@@ -790,7 +476,7 @@ const ChatMessage = ({
               cursor: 'pointer',
               objectFit: 'cover',
             }}
-            onClick={handleViewFullImage}
+            onClick={handleMenu}
           />
 
           <Box
@@ -830,8 +516,220 @@ const ChatMessage = ({
           </Box>
         </>
       )}
+
+      {!message.is_temp && reactions.length > 0 && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 10,
+            ...(isMine
+              ? { right: 10 }
+              : { left: 10 }),
+            borderColor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+          }}
+          onClick={(e) => { e.stopPropagation() }}
+        >
+          <MessageReactions
+            messageId={message.id}
+            reactions={reactions}
+            currentUserId={profile?.id}
+            onAddReaction={handleAddReaction}
+            onRemoveReaction={handleRemoveReaction}
+            showAddButton={true}
+            size="small"
+            isMine={isMine}
+          />
+        </Box>
+      )}
     </Box>
   );
+
+  const renderVoiceContent = () => {
+
+    return (
+      <VoiceMessagePlayer
+        url={message.content}
+        isOwn={isMine}
+        messageId={message.id}
+        reactions={reactions}
+        currentUserId={profile?.id}
+        onAddReaction={handleAddReaction}
+        onRemoveReaction={handleRemoveReaction}
+      />
+
+    );
+  };
+
+  const renderCallMessage = () => {
+    return (
+      <Box
+        sx={{
+          bgcolor: isMine ? 'primary.main' : 'white',
+          color: isMine ? 'white' : 'text.primary',
+          p: 2,
+          borderRadius: 3,
+          boxShadow: 1,
+          wordBreak: 'break-word',
+          transition: 'all 0.2s',
+        }}
+      >
+        <Typography
+          variant="body2"
+          sx={{
+            wordBreak: 'break-word',
+            lineHeight: 1.4,
+            fontSize: '0.9rem',
+            mb: reactions.length > 0 ? 0.5 : 0,
+            color: isMine ? 'white' : 'text.primary',
+          }}
+        >
+          {message.content}
+        </Typography>
+
+        <Button
+          variant="outlined"
+          size="small"
+          sx={{
+            width: '100%',
+            mt: 1,
+            color: isMine ? 'white' : 'primary.dark',
+            borderColor: isMine ? 'white' : 'primary.dark',
+            '&:hover': {
+              borderColor: isMine ? 'white' : 'primary.dark',
+              backgroundColor: isMine ? 'rgba(255,255,255,0.1)' : undefined
+            }
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCallBack()
+          }}
+        >
+          <CallIcon
+            sx={{
+              fontSize: 18,
+              mr: 0.5
+            }}
+          />
+          Call Back
+        </Button>
+        {!message.is_temp && reactions.length > 0 && (
+          <Box
+            sx={{
+              mt: 0.5,
+              pt: 0.5,
+              display: 'flex',
+              justifyContent: isMine ? 'flex-end' : 'flex-start',
+              borderColor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+            }}
+            onClick={(e) => { e.stopPropagation() }}
+          >
+            <MessageReactions
+              messageId={message.id}
+              reactions={reactions}
+              currentUserId={profile?.id}
+              onAddReaction={handleAddReaction}
+              onRemoveReaction={handleRemoveReaction}
+              showAddButton={true}
+              size="small"
+              isMine={isMine}
+            />
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
+  useEffect(() => {
+    const isTempMessage = message.is_temp ||
+      (typeof message.id === 'string' && message.id.startsWith('temp-'));
+
+    if (onLoadReactions && message.id && !isTempMessage && !message.reactions) {
+      onLoadReactions(message.id);
+    }
+  }, [message.id, onLoadReactions, message.reactions, message.is_temp]);
+
+  useEffect(() => {
+    if (showReactionAnimation) {
+      const floatingAnimation = document.createElement('div');
+      floatingAnimation.className = 'floating-emoji';
+      floatingAnimation.innerHTML = showReactionAnimation.emoji;
+
+      const messageBubble = document.querySelector(`[data-message-id="${message.id}"] .message-bubble`);
+      if (messageBubble) {
+        const rect = messageBubble.getBoundingClientRect();
+        floatingAnimation.style.cssText = `
+          position: fixed;
+          font-size: 24px;
+          z-index: 9999;
+          pointer-events: none;
+          animation: floatUp 1s ease-out forwards;
+          left: ${rect.right - 30}px;
+          top: ${rect.top}px;
+        `;
+
+        document.body.appendChild(floatingAnimation);
+
+        setTimeout(() => {
+          if (floatingAnimation.parentNode) {
+            document.body.removeChild(floatingAnimation);
+          }
+        }, 1000);
+      }
+    }
+  }, [showReactionAnimation, message.id]);
+
+  const playReactionSound = (type) => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const audio = new Audio();
+      audio.volume = 0.2;
+
+      if (type === 'add') {
+        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3';
+      } else if (type === 'remove') {
+        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3';
+      }
+
+      audio.play().catch(() => { });
+    } catch (error) { }
+  };
+
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      @keyframes floatUp {
+        0% {
+          transform: translateY(0) scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: translateY(-30px) scale(1.2);
+          opacity: 0.8;
+        }
+        100% {
+          transform: translateY(-60px) scale(0.8);
+          opacity: 0;
+        }
+      }
+      
+      @keyframes reactionPop {
+        0% { transform: scale(0.5); opacity: 0; }
+        70% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      
+      .floating-emoji {
+        will-change: transform, opacity;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+      }
+    `;
+    document.head.appendChild(styleElement);
+
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   return (
     <Box
@@ -996,21 +894,6 @@ const ChatMessage = ({
             {/* Message bubble */}
             <Box
               className="message-bubble"
-              sx={{
-                bgcolor: isMine ? 'primary.main' : '#f0f0f0',
-                color: isMine ? 'white' : 'text.primary',
-                p: 1.4,
-                borderRadius: isMine ? '18px 18px 4px 18px' : '4px 18px  18px 18px ',
-                position: 'relative',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  '& .image-actions': {
-                    opacity: 1
-                  }
-                },
-              }}
               onClick={handleMenu}
             >
               {/* Forwarded badge */}
@@ -1031,17 +914,49 @@ const ChatMessage = ({
               ) : actualMessageType === 'system' ? (
                 renderCallMessage()
               ) : (
-                <Typography
-                  variant="body2"
+                <Box
                   sx={{
-                    wordBreak: 'break-word',
-                    lineHeight: 1.4,
-                    fontSize: '0.9rem',
-                    mb: reactions.length > 0 ? 0.5 : 0
+                    bgcolor: isMine ? 'primary.main' : 'white',
+                    p: 2,
+                    borderRadius: 3,
+                    boxShadow: 1,
                   }}
                 >
-                  {message.content}
-                </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: isMine ? 'white' : 'text.primary',
+                      wordBreak: 'break-word',
+                      transition: 'all 0.2s',
+                      textAlign: isMine ? 'right' : 'left',
+                    }}
+                  >
+                    {message.content}
+                  </Typography>
+                  {!message.is_temp && reactions.length > 0 && (
+                    <Box
+                      sx={{
+                        mt: 0.5,
+                        pt: 0.5,
+                        display: 'flex',
+                        justifyContent: isMine ? 'flex-end' : 'flex-start',
+                        borderColor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                      }}
+                      onClick={(e) => { e.stopPropagation() }}
+                    >
+                      <MessageReactions
+                        messageId={message.id}
+                        reactions={reactions}
+                        currentUserId={profile?.id}
+                        onAddReaction={handleAddReaction}
+                        onRemoveReaction={handleRemoveReaction}
+                        showAddButton={true}
+                        size="small"
+                        isMine={isMine}
+                      />
+                    </Box>
+                  )}
+                </Box>
               )}
 
               {/* Time + tick */}
@@ -1049,8 +964,9 @@ const ChatMessage = ({
                 display: 'flex',
                 justifyContent: 'flex-end',
                 alignItems: 'center',
-                mt: reactions.length > 0 ? 0.5 : 1,
-                gap: 0.5
+                mt: 0.5,
+                gap: 0.5,
+                alignItems: 'center'
               }}>
                 <Typography
                   variant="caption"
@@ -1058,7 +974,8 @@ const ChatMessage = ({
                     opacity: 0.7,
                     fontSize: '0.7rem',
                     lineHeight: 1,
-                    color: isMine ? 'rgba(255, 255, 255, 1)' : 'text.secondary'
+                    color: 'text.secondary',
+                    mt: 0.25
                   }}
                 >
                   {formatCambodiaTime(message.created_at)}
@@ -1067,28 +984,6 @@ const ChatMessage = ({
                 {isMine && renderTick()}
               </Box>
 
-              {!message.is_temp && reactions.length > 0 && (
-                <Box
-                  sx={{
-                    mt: 0.5,
-                    pt: 0.5,
-                    borderTop: '1px solid',
-                    borderColor: isMine ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                  }}
-                  onClick={(e) => { e.stopPropagation() }}
-                >
-                  <MessageReactions
-                    messageId={message.id}
-                    reactions={reactions}
-                    currentUserId={profile?.id}
-                    onAddReaction={handleAddReaction}
-                    onRemoveReaction={handleRemoveReaction}
-                    showAddButton={true}
-                    size="small"
-                    isMine={isMine}
-                  />
-                </Box>
-              )}
             </Box>
           </Box>
         )}
@@ -1180,19 +1075,6 @@ const ChatMessage = ({
               }
               else {
                 menuItems.push(
-                  <MenuItem
-                    key="react">
-                    <MessageReactions
-                      messageId={message.id}
-                      reactions={reactions}
-                      currentUserId={profile?.id}
-                      onAddReaction={handleAddReaction}
-                      onRemoveReaction={handleRemoveReaction}
-                      showAddButton={true}
-                      size="small"
-                      isMine={isMine}
-                    />
-                  </MenuItem>,
                   <MenuItem key="forward" onClick={handleForwardClick}>
                     <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}
