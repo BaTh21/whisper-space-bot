@@ -1,4 +1,3 @@
-import React, { useEffect, useState } from 'react';
 import {
   Article as ArticleIcon,
   Cancel as CancelIcon,
@@ -12,9 +11,12 @@ import {
   MoreVert as MoreVertIcon,
   Reply as ReplyIcon,
   Save as SaveIcon,
-  Send as SendIcon
+  ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import {
+  Alert,
   Avatar,
   Box,
   Button,
@@ -32,14 +34,15 @@ import {
   InputLabel,
   Menu,
   MenuItem,
+  Modal,
   Select,
   Snackbar,
-  Alert,
   TextField,
   Typography,
   useMediaQuery,
   useTheme
 } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, updateComment, updateDiaryById } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
@@ -80,7 +83,8 @@ const CommentItemWithActions = ({
   selectedCommentImages,
   setSelectedCommentImages,
   onEditComment,
-  onDeleteComment
+  onDeleteComment,
+  onImageClick
 }) => {
   const [localReplying, setLocalReplying] = useState(false);
   const [localEditing, setLocalEditing] = useState(false);
@@ -279,6 +283,8 @@ const CommentItemWithActions = ({
                           src={img}
                           alt={`Edit ${idx}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
+                          onClick={() => onImageClick && onImageClick(img)}
+                          className="clickable-image"
                         />
                         <IconButton
                           size="small"
@@ -327,18 +333,24 @@ const CommentItemWithActions = ({
                 {comment.content}
               </Typography>
               {comment.images && comment.images.length > 0 && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
                   {comment.images.map((img, idx) => (
                     <Box key={idx} sx={{ position: 'relative' }}>
                       <img
                         src={img}
                         alt={`Comment ${idx + 1}`}
                         style={{
-                          width: 80,
-                          height: 80,
+                          width: 50,
+                          height: 50,
                           objectFit: 'cover',
-                          borderRadius: 4
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          transition: 'transform 0.2s'
                         }}
+                        onClick={() => onImageClick && onImageClick(img)}
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        className="clickable-image"
                       />
                     </Box>
                   ))}
@@ -390,6 +402,8 @@ const CommentItemWithActions = ({
                           src={img}
                           alt={`Reply preview ${idx}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
+                          onClick={() => onImageClick && onImageClick(img)}
+                          className="clickable-image"
                         />
                         <IconButton
                           size="small"
@@ -452,6 +466,7 @@ const CommentItemWithActions = ({
                   setSelectedCommentImages={setSelectedCommentImages}
                   onEditComment={onEditComment}
                   onDeleteComment={onDeleteComment}
+                  onImageClick={onImageClick}
                 />
               ))}
             </Box>
@@ -505,6 +520,12 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   // State to force re-render of images
   const [imageUpdateTrigger, setImageUpdateTrigger] = useState(0);
 
+  // Image viewer state
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState('');
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [currentImages, setCurrentImages] = useState([]);
+
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -530,6 +551,33 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
       return;
     }
     setSnackbarOpen(false);
+  };
+
+  // Image viewer functions
+  const openImageViewer = (images, index = 0) => {
+    setCurrentImages(images);
+    setSelectedImage(images[index]);
+    setSelectedImageIndex(index);
+    setImageViewerOpen(true);
+  };
+
+  const handleImageViewerClose = () => {
+    setImageViewerOpen(false);
+    setSelectedImage('');
+    setSelectedImageIndex(0);
+    setCurrentImages([]);
+  };
+
+  const handlePrevImage = () => {
+    const newIndex = selectedImageIndex > 0 ? selectedImageIndex - 1 : currentImages.length - 1;
+    setSelectedImage(currentImages[newIndex]);
+    setSelectedImageIndex(newIndex);
+  };
+
+  const handleNextImage = () => {
+    const newIndex = selectedImageIndex < currentImages.length - 1 ? selectedImageIndex + 1 : 0;
+    setSelectedImage(currentImages[newIndex]);
+    setSelectedImageIndex(newIndex);
   };
 
   // Image upload handler
@@ -590,16 +638,10 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
   // Remove image - FIXED VERSION
   const removeImage = (indexToRemove, diaryId = null, commentId = null) => {
-    console.log('Removing image at index:', indexToRemove);
-    
     if (diaryId && editingDiary === diaryId) {
       // For diary edit images - Create a NEW array reference
       setEditImages(current => {
         const newImages = current.filter((_, index) => index !== indexToRemove);
-        console.log('Images after removal:', {
-          before: current.length,
-          after: newImages.length
-        });
         return newImages;
       });
       
@@ -699,11 +741,6 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
       
       // Reset image update trigger
       setImageUpdateTrigger(0);
-      
-      console.log('Edit mode started with:', {
-        images: fullDiary.images?.length || 0,
-        diaryId: diary.id
-      });
     } catch (err) {
       console.error('Failed to fetch diary:', err);
       // Fallback to provided data
@@ -748,11 +785,6 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
       // Always send images array - empty array means remove all images
       updateData.images = editImages;
-
-      console.log('Sending update with:', {
-        imagesCount: editImages.length,
-        images: editImages
-      });
 
       await updateDiaryById(diaryId, updateData);
       showMessage('Diary updated successfully');
@@ -989,6 +1021,97 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', overflow: 'hidden' }}>
+      {/* Image Viewer Modal */}
+      <Modal
+        open={imageViewerOpen}
+        onClose={handleImageViewerClose}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          outline: 'none'
+        }}
+      >
+        <Box sx={{
+          position: 'relative',
+          maxWidth: '90vw',
+          maxHeight: '90vh',
+          outline: 'none'
+        }}>
+          <img
+            src={selectedImage}
+            alt="Full size view"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+              borderRadius: 8
+            }}
+          />
+          {currentImages.length > 1 && (
+            <>
+              <IconButton
+                onClick={handlePrevImage}
+                sx={{
+                  position: 'absolute',
+                  left: 16,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+              <IconButton
+                onClick={handleNextImage}
+                sx={{
+                  position: 'absolute',
+                  right: 16,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                }}
+              >
+                <ArrowForwardIcon />
+              </IconButton>
+              <Typography
+                sx={{
+                  position: 'absolute',
+                  bottom: 16,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  color: 'white',
+                  px: 2,
+                  py: 0.5,
+                  borderRadius: 2,
+                  fontSize: '0.875rem'
+                }}
+              >
+                {selectedImageIndex + 1} / {currentImages.length}
+              </Typography>
+            </>
+          )}
+          <IconButton
+            onClick={handleImageViewerClose}
+            sx={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              bgcolor: 'rgba(0,0,0,0.5)',
+              color: 'white',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </Modal>
+
       {/* Snackbar for notifications */}
       <Snackbar
         open={snackbarOpen}
@@ -1163,19 +1286,19 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                         </Button>
                       </Box>
                       
-                      {/* Image Preview for Edit - FIXED with re-render trigger */}
+                      {/* Image Preview for Edit - Compact Grid */}
                       {editImages.length > 0 && (
                         <Box 
                           key={`image-preview-${editImages.length}-${imageUpdateTrigger}`}
-                          sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '8px' }}
+                          sx={{ mt: 2 }}
                         >
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                             Images ({editImages.length} / 10)
                           </Typography>
                           <Box sx={{ 
-                            display: 'flex', 
-                            flexWrap: 'wrap', 
-                            gap: 1.5,
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
+                            gap: 1,
                             mt: 1 
                           }}>
                             {editImages.map((img, index) => (
@@ -1183,47 +1306,77 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                 key={`edit-img-${diary.id}-${index}-${img.substring(0, 20)}`}
                                 sx={{ 
                                   position: 'relative',
-                                  border: '1px solid',
-                                  borderColor: 'divider',
-                                  borderRadius: '8px',
-                                  overflow: 'hidden'
+                                  borderRadius: '6px',
+                                  overflow: 'hidden',
+                                  aspectRatio: '1',
+                                  '&:hover .image-overlay': {
+                                    opacity: 1
+                                  }
                                 }}
                               >
                                 <img
                                   src={img}
                                   alt={`Image ${index + 1}`}
                                   style={{
-                                    width: 100,
-                                    height: 100,
+                                    width: '100%',
+                                    height: '100%',
                                     objectFit: 'cover',
-                                    display: 'block'
+                                    cursor: 'pointer'
                                   }}
+                                  onClick={() => openImageViewer(editImages, index)}
                                 />
                                 
-                                {/* Remove Button */}
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    removeImage(index, diary.id);
-                                  }}
-                                  sx={{
-                                    position: 'absolute',
-                                    top: 4,
-                                    right: 4,
-                                    bgcolor: 'error.main',
-                                    color: 'white',
-                                    width: 28,
-                                    height: 28,
-                                    '&:hover': {
-                                      bgcolor: 'error.dark'
-                                    }
-                                  }}
-                                  size="small"
-                                >
-                                  <CloseIcon sx={{ fontSize: 16 }} />
-                                </IconButton>
+                                {/* Image Overlay */}
+                                <Box className="image-overlay" sx={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  bgcolor: 'rgba(0,0,0,0.5)',
+                                  opacity: 0,
+                                  transition: 'opacity 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 0.5
+                                }}>
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeImage(index, diary.id);
+                                    }}
+                                    sx={{
+                                      bgcolor: 'error.main',
+                                      color: 'white',
+                                      width: 28,
+                                      height: 28,
+                                      '&:hover': {
+                                        bgcolor: 'error.dark'
+                                      }
+                                    }}
+                                    size="small"
+                                  >
+                                    <CloseIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                  <IconButton
+                                    onClick={() => openImageViewer(editImages, index)}
+                                    sx={{
+                                      bgcolor: 'primary.main',
+                                      color: 'white',
+                                      width: 28,
+                                      height: 28,
+                                      '&:hover': {
+                                        bgcolor: 'primary.dark'
+                                      }
+                                    }}
+                                    size="small"
+                                  >
+                                    <ZoomInIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Box>
                                 
-                                {/* Image Number */}
+                                {/* Image Number Badge */}
                                 <Box
                                   sx={{
                                     position: 'absolute',
@@ -1232,12 +1385,13 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                     bgcolor: 'rgba(0, 0, 0, 0.6)',
                                     color: 'white',
                                     borderRadius: '50%',
-                                    width: 24,
-                                    height: 24,
+                                    width: 20,
+                                    height: 20,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '0.75rem'
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600
                                   }}
                                 >
                                   {index + 1}
@@ -1312,26 +1466,71 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
               {/* Diary Content */}
               {editingDiary !== diary.id && (
                 <>
-                  <Typography variant="body1" sx={{ mb: 3, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {diary.content}
                   </Typography>
 
-                  {/* Diary Images */}
+                  {/* Diary Images - Compact Grid View */}
                   {diary.images && diary.images.length > 0 && (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
-                      {diary.images.map((img, index) => (
-                        <img
-                          key={index}
-                          src={img}
-                          alt={`Diary ${index + 1}`}
-                          style={{
-                            maxWidth: '100%',
-                            maxHeight: 300,
-                            borderRadius: 8,
-                            objectFit: 'cover'
-                          }}
-                        />
-                      ))}
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        {diary.images.length} {diary.images.length === 1 ? 'image' : 'images'}
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: {
+                          xs: 'repeat(2, 1fr)',
+                          sm: 'repeat(3, 1fr)',
+                          md: 'repeat(4, 1fr)'
+                        },
+                        gap: 1
+                      }}>
+                        {diary.images.map((img, index) => (
+                          <Box
+                            key={index}
+                            sx={{
+                              position: 'relative',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              aspectRatio: '1',
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s',
+                              '&:hover': {
+                                transform: 'scale(1.02)',
+                                '& .image-overlay': {
+                                  opacity: 1
+                                }
+                              }
+                            }}
+                            onClick={() => openImageViewer(diary.images, index)}
+                          >
+                            <img
+                              src={img}
+                              alt={`Diary ${index + 1}`}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                              }}
+                            />
+                            <Box className="image-overlay" sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              bgcolor: 'rgba(0,0,0,0.3)',
+                              opacity: 0,
+                              transition: 'opacity 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <ZoomInIcon sx={{ color: 'white', fontSize: 32 }} />
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
                     </Box>
                   )}
 
@@ -1442,12 +1641,9 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                         </Box>
                       </Box>
 
-                      {/* Selected Images Preview for Comments */}
+                      {/* Selected Images Preview for Comments - Compact */}
                       {selectedCommentImages[diary.id]?.length > 0 && (
                         <Box sx={{ 
-                          display: 'flex', 
-                          flexWrap: 'wrap', 
-                          gap: 1, 
                           mb: 2,
                           p: 1,
                           bgcolor: 'background.paper',
@@ -1455,38 +1651,52 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                           border: '1px solid',
                           borderColor: 'divider'
                         }}>
-                          {selectedCommentImages[diary.id].map((img, index) => (
-                            <Box key={index} sx={{ position: 'relative' }}>
-                              <img
-                                src={img}
-                                alt={`Preview ${index}`}
-                                style={{ 
-                                  width: 80, 
-                                  height: 80, 
-                                  objectFit: 'cover', 
-                                  borderRadius: 6 
-                                }}
-                              />
-                              <IconButton
-                                size="small"
-                                onClick={() => removeImage(index, null, diary.id)}
-                                sx={{
-                                  position: 'absolute',
-                                  top: -8,
-                                  right: -8,
-                                  bgcolor: 'error.main',
-                                  color: 'white',
-                                  width: 24,
-                                  height: 24,
-                                  '&:hover': { 
-                                    bgcolor: 'error.dark' 
-                                  }
-                                }}
-                              >
-                                <CloseIcon sx={{ fontSize: 14 }} />
-                              </IconButton>
-                            </Box>
-                          ))}
+                          <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                            Selected images ({selectedCommentImages[diary.id].length})
+                          </Typography>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            flexWrap: 'wrap', 
+                            gap: 0.5
+                          }}>
+                            {selectedCommentImages[diary.id].map((img, index) => (
+                              <Box key={index} sx={{ 
+                                position: 'relative',
+                                width: 50,
+                                height: 50,
+                                borderRadius: 4,
+                                overflow: 'hidden'
+                              }}>
+                                <img
+                                  src={img}
+                                  alt={`Preview ${index}`}
+                                  style={{ 
+                                    width: '100%', 
+                                    height: '100%', 
+                                    objectFit: 'cover'
+                                  }}
+                                />
+                                <IconButton
+                                  size="small"
+                                  onClick={() => removeImage(index, null, diary.id)}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: -4,
+                                    right: -4,
+                                    bgcolor: 'error.main',
+                                    color: 'white',
+                                    width: 20,
+                                    height: 20,
+                                    '&:hover': { 
+                                      bgcolor: 'error.dark' 
+                                    }
+                                  }}
+                                >
+                                  <CloseIcon sx={{ fontSize: 12 }} />
+                                </IconButton>
+                              </Box>
+                            ))}
+                          </Box>
                         </Box>
                       )}
 
@@ -1524,6 +1734,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                               onDeleteComment={handleCommentDeleteClick}
                               replyingTo={replyingTo}
                               setReplyingTo={setReplyingTo}
+                              onImageClick={(img) => openImageViewer([img])}
                             />
                           ))}
                         </Box>
