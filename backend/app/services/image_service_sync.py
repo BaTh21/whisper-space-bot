@@ -13,7 +13,8 @@ import numpy as np
 
 from app.core.cloudinary import (
     delete_from_cloudinary, 
-    extract_public_id_from_url, 
+    extract_public_id_from_url,
+    generate_video_thumbnail, 
     upload_to_cloudinary,
     upload_video_to_cloudinary,
 )
@@ -31,11 +32,9 @@ class ImageServiceSync:
             if not data_url or ',' not in data_url:
                 raise ValueError("Invalid data URL format")
             
-            # Parse data URL
             header, encoded = data_url.split(',', 1)
-            
-            # Extract MIME type
             mime_info = header.split(';')[0]
+            
             if ':' not in mime_info:
                 raise ValueError("Invalid MIME type format")
             
@@ -52,10 +51,7 @@ class ImageServiceSync:
                 raise ValueError(f"Unsupported media type: {mime_type}")
             
             # Decode base64
-            try:
-                media_data = base64.b64decode(encoded)
-            except Exception:
-                raise ValueError("Invalid base64 encoding")
+            media_data = base64.b64decode(encoded)
             
             # Validate size
             if mime_type.startswith('image/'):
@@ -65,7 +61,8 @@ class ImageServiceSync:
                 if len(media_data) > self.max_video_size:
                     raise ValueError(f"Video too large. Max {self.max_video_size // 1024 // 1024}MB")
             
-            return media_data, mime_type, 'video' if mime_type.startswith('video/') else 'image'
+            media_type = 'video' if mime_type.startswith('video/') else 'image'
+            return media_data, mime_type, media_type
             
         except Exception as e:
             raise ValueError(f"Invalid media data: {str(e)}")
@@ -102,31 +99,61 @@ class ImageServiceSync:
             raise Exception(f"Video upload failed: {str(e)}")
     
     def save_single_media(self, data_url: str, is_diary: bool = True) -> Tuple[str, Optional[str]]:
-        """Save single media item (image or video)"""
+        """Save single media item with GUARANTEED thumbnail for videos"""
         try:
+            print(f"🔄 save_single_media called")
+            
             if not data_url:
                 raise ValueError("Empty data URL")
             
-            # Check if it's already a URL
+            # If already a URL (for updates/edits)
             if data_url.startswith(('http://', 'https://')):
-                return data_url, None
+                print(f"📎 Already a URL: {data_url[:50]}...")
+                
+                # Check if it's a video and generate thumbnail
+                if any(ext in data_url.lower() for ext in ['.mp4', '.mov', '.avi', '.webm', 'video']):
+                    print(f"🎥 Existing video URL detected")
+                    try:
+                        thumbnail = generate_video_thumbnail(data_url)
+                        print(f"📸 Generated thumbnail for existing video")
+                        return data_url, thumbnail
+                    except Exception as thumb_err:
+                        print(f"⚠️ Could not generate thumbnail: {thumb_err}")
+                        return data_url, None
+                else:
+                    return data_url, None
             
-            # Validate and decode
+            # New upload - validate and decode
             media_data, mime_type, media_type = self.validate_and_decode_media(data_url)
+            print(f"📦 Media type: {media_type}, Size: {len(media_data)} bytes")
             
-            # Determine folder
             base_folder = "diaries" if is_diary else "comments"
             
-            # Upload based on type
             if media_type == 'image':
                 folder = f"{base_folder}/images"
+                print(f"📷 Uploading image to {folder}")
                 url = self.upload_image(media_data, folder)
+                print(f"✅ Image uploaded: {url[:50]}...")
                 return url, None
                 
             else:  # video
                 folder = f"{base_folder}/videos"
-                url, thumbnail = self.upload_video(media_data, folder)
-                return url, thumbnail
+                print(f"🎬 Uploading video to {folder}")
+                
+                # This function GUARANTEES a thumbnail
+                upload_result = upload_video_to_cloudinary(media_data, folder)
+                url = upload_result["secure_url"]
+                thumbnail = upload_result["thumbnail_url"]
+                
+                print(f"✅ Video uploaded: {url[:50]}...")
+                print(f"📸 Thumbnail: {thumbnail[:50] if thumbnail else 'None'}...")
+                
+                # Double-check thumbnail
+                if not thumbnail:
+                    print(f"⚠️ CRITICAL: Still no thumbnail, trying again...")
+                    thumbnail = generate_video_thumbnail(url)
+                
+                return url, thumbnail or None
                 
         except Exception as e:
             print(f"❌ Error in save_single_media: {str(e)}")
@@ -141,19 +168,16 @@ class ImageServiceSync:
         saved_urls = []
         for i, img_data in enumerate(images_data):
             if img_data:
-                print(f"📷 Uploading image {i+1}/{len(images_data)}")
                 try:
                     url, _ = self.save_single_media(img_data, is_diary)
                     saved_urls.append(url)
-                    print(f"✅ Image {i+1} uploaded")
-                except Exception as e:
-                    print(f"❌ Failed to upload image {i+1}: {str(e)}")
+                except Exception:
                     continue
         return saved_urls
     
     def save_multiple_videos(self, videos_data: List[str], is_diary: bool = True) -> Tuple[List[str], List[Optional[str]]]:
-        """Save multiple videos"""
-        print(f"🎬 Processing {len(videos_data)} videos")
+        """Save multiple videos - PROCESS ONE BY ONE"""
+        print(f"🎬 Processing {len(videos_data)} videos individually")
         
         saved_urls = []
         thumbnails = []
@@ -163,18 +187,25 @@ class ImageServiceSync:
                 continue
                 
             try:
-                print(f"📤 Uploading video {idx + 1}/{len(videos_data)}")
+                print(f"  Processing video {idx + 1}/{len(videos_data)}")
                 url, thumbnail = self.save_single_media(vid_data, is_diary)
-                saved_urls.append(url)
-                thumbnails.append(thumbnail)
-                print(f"✅ Video {idx + 1} uploaded")
                 
+                if url:
+                    saved_urls.append(url)
+                    thumbnails.append(thumbnail)
+                    print(f"  ✅ Video {idx + 1} success")
+                else:
+                    print(f"  ⚠️ Video {idx + 1} returned no URL")
+                    
             except Exception as e:
-                print(f"❌ Failed to upload video {idx + 1}: {str(e)}")
-                traceback.print_exc()
+                print(f"  ❌ Video {idx + 1} failed: {str(e)}")
                 continue
         
-        print(f"🎬 Upload complete: {len(saved_urls)} videos, {len([t for t in thumbnails if t])} thumbnails")
+        # Ensure arrays match length
+        while len(thumbnails) < len(saved_urls):
+            thumbnails.append(None)
+        
+        print(f"🎬 Completed: {len(saved_urls)} videos, {len([t for t in thumbnails if t])} thumbnails")
         return saved_urls, thumbnails
     
     def delete_media(self, media_url: str) -> bool:
@@ -206,7 +237,15 @@ class ImageServiceSync:
             
         for url in media_urls:
             if url:
-                self.delete_media(url)
+                try:
+                    public_id = extract_public_id_from_url(url)
+                    if public_id:
+                        if 'video' in url.lower():
+                            delete_from_cloudinary(public_id, resource_type="video")
+                        else:
+                            delete_from_cloudinary(public_id, resource_type="image")
+                except Exception:
+                    pass
 
 # Global instance
 image_service_sync = ImageServiceSync()

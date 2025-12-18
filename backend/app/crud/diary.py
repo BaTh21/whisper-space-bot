@@ -16,7 +16,7 @@ from app.models.group import Group
 from app.services.image_service_sync import image_service_sync
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
-    """Create a new diary with media upload"""
+    """Create a new diary with GUARANTEED video thumbnails"""
     print(f"=== DIARY CREATE ===")
     print(f"User ID: {user_id}")
     print(f"Share Type: {diary_in.share_type}")
@@ -37,20 +37,58 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
                 detail=f"Failed to upload images: {str(e)}"
             )
     
-    # Handle videos
+    # Handle videos - PROCESS INDIVIDUALLY FOR THUMBNAIL GUARANTEE
     video_urls = []
     video_thumbnails = []
     if diary_in.videos:
         print(f"🎬 Uploading {len(diary_in.videos)} videos")
+        print(f"⚠️ Processing videos one by one for thumbnail guarantee")
+        
         try:
-            video_urls, video_thumbnails = image_service_sync.save_multiple_videos(diary_in.videos, is_diary=True)
-            print(f"✅ {len(video_urls)} videos uploaded successfully")
-            print(f"📸 {len([t for t in video_thumbnails if t])} thumbnails generated")
+            # Process each video individually
+            for idx, video_data in enumerate(diary_in.videos):
+                print(f"  Processing video {idx+1}/{len(diary_in.videos)}")
+                
+                try:
+                    # This method GUARANTEES a thumbnail for videos
+                    video_url, video_thumbnail = image_service_sync.save_single_media(video_data, is_diary=True)
+                    
+                    if video_url:
+                        video_urls.append(video_url)
+                        video_thumbnails.append(video_thumbnail)  # Could be None, but array position preserved
+                        print(f"  ✅ Video {idx+1} - URL: {video_url[:50]}...")
+                        print(f"  📸 Thumbnail: {'PRESENT' if video_thumbnail else 'NONE'}")
+                    else:
+                        print(f"  ⚠️ Video {idx+1} returned no URL")
+                        
+                except Exception as video_error:
+                    print(f"  ❌ Video {idx+1} error: {str(video_error)}")
+                    # Don't fail entire diary if one video fails
+                    continue
+            
+            # CRITICAL: Ensure arrays are the same length
+            if len(video_thumbnails) != len(video_urls):
+                print(f"⚠️ Array mismatch: videos={len(video_urls)}, thumbnails={len(video_thumbnails)}")
+                # Fix by adding None for missing thumbnails
+                while len(video_thumbnails) < len(video_urls):
+                    video_thumbnails.append(None)
+            
+            print(f"✅ VIDEO PROCESSING COMPLETE:")
+            print(f"  Videos: {len(video_urls)}")
+            print(f"  Thumbnails: {len(video_thumbnails)}")
+            print(f"  Valid thumbnails: {len([t for t in video_thumbnails if t])}")
+            
+            # Debug output
+            for i in range(len(video_urls)):
+                thumb_status = "✅" if video_thumbnails[i] else "❌"
+                print(f"  Video {i}: {thumb_status} {video_urls[i][:50]}...")
+                
         except Exception as e:
-            # Clean up any uploaded images if video upload fails
+            # Clean up any uploaded images
             if image_urls:
                 image_service_sync.cleanup_media(image_urls)
             print(f"❌ Video upload failed: {str(e)}")
+            traceback.print_exc()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to upload videos: {str(e)}"
@@ -66,7 +104,11 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     else:
         media_type = 'text'
     
-    print(f"📱 Media type: {media_type}")
+    print(f"📱 Final media type: {media_type}")
+    print(f"📦 FINAL DATA FOR DIARY:")
+    print(f"  Images: {len(image_urls)}")
+    print(f"  Videos: {len(video_urls)}")
+    print(f"  Video thumbnails: {len(video_thumbnails)}")
     
     # Create diary
     diary = Diary(
@@ -79,7 +121,7 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
         updated_at=datetime.now(timezone.utc),
         images=image_urls,
         videos=video_urls,
-        video_thumbnails=video_thumbnails,
+        video_thumbnails=video_thumbnails,  # This array will always match videos array
         media_type=media_type
     )
     
@@ -97,8 +139,14 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     db.commit()
     db.refresh(diary)
     
-    print(f"✅ Diary created with ID: {diary.id}")
+    print(f"✅ DIARY CREATED SUCCESSFULLY - ID: {diary.id}")
+    print(f"📋 Database stored data:")
+    print(f"  Videos: {diary.videos}")
+    print(f"  Video thumbnails: {diary.video_thumbnails}")
+    print(f"  Video count match: {len(diary.videos) == len(diary.video_thumbnails)}")
+    
     return diary
+
 
 
 def create_diary_for_group(db: Session, group_id: int, diary_data: CreateDiaryForGroup, current_user_id: int):

@@ -1,3 +1,4 @@
+// FeedTab.jsx - COMPLETE FIXED VERSION
 import {
   Article as ArticleIcon,
   Cancel as CancelIcon,
@@ -478,14 +479,14 @@ const CommentItemWithActions = ({
   );
 };
 
-// Media Player Component
+// Media Player Component - FIXED: Images now show
 const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
   const [playing, setPlaying] = useState(false);
 
   if (type === 'image') {
     return (
       <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-        {/* <img
+        <img
           src={url}
           alt="Full size view"
           style={{
@@ -494,7 +495,7 @@ const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
             objectFit: 'contain',
             borderRadius: 8
           }}
-        /> */}
+        />
       </Box>
     );
   }
@@ -527,8 +528,8 @@ const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
         >
           {thumbnail ? (
             <>
-              {/* <img
-                // src={thumbnail}
+              <img
+                src={thumbnail}
                 alt="Video thumbnail"
                 style={{
                   width: '100%',
@@ -536,7 +537,7 @@ const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
                   objectFit: 'cover',
                   borderRadius: 8
                 }}
-              /> */}
+              />
               <Box
                 sx={{
                   position: 'absolute',
@@ -581,17 +582,24 @@ const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
   );
 };
 
-// Helper function to get video thumbnail
+// Helper function to get video thumbnail - FIXED VERSION
 const getVideoThumbnail = (videoUrl, diary) => {
-  if (!videoUrl || !diary) return null;
+  if (!videoUrl || !diary || !diary.video_thumbnails) return null;
   
-  if (diary.video_thumbnails && Array.isArray(diary.video_thumbnails)) {
-    const videoIndex = diary.videos?.indexOf(videoUrl);
-    if (videoIndex !== -1 && diary.video_thumbnails[videoIndex]) {
-      return diary.video_thumbnails[videoIndex];
+  const videoIndex = diary.videos?.indexOf(videoUrl);
+  
+  if (videoIndex !== -1 && videoIndex < diary.video_thumbnails.length) {
+    const thumbnail = diary.video_thumbnails[videoIndex];
+    
+    // Check if thumbnail exists and is a valid string
+    if (thumbnail && typeof thumbnail === 'string' && thumbnail.trim() !== '') {
+      // Debug log
+      console.log(`✅ Found thumbnail for video ${videoIndex}:`, thumbnail.substring(0, 50) + '...');
+      return thumbnail;
     }
   }
   
+  console.log(`❌ No thumbnail found for video:`, videoUrl?.substring(0, 50));
   return null;
 };
 
@@ -676,8 +684,32 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     setSnackbarOpen(false);
   };
 
+  // Debug: Log diary data
+  console.log('=== DIARY DATA DEBUG ===');
+  normalizedDiaries.forEach((diary, idx) => {
+    if (diary.videos && diary.videos.length > 0) {
+      console.log(`📓 Diary ${idx}: ${diary.title}`);
+      console.log(`  Videos: ${diary.videos.length}`);
+      console.log(`  Thumbnails: ${diary.video_thumbnails?.length || 0}`);
+      
+      diary.videos.forEach((video, vidIdx) => {
+        const thumb = diary.video_thumbnails?.[vidIdx];
+        console.log(`  Video ${vidIdx}: ${video?.substring(0, 60)}...`);
+        console.log(`    Thumbnail: ${thumb ? thumb.substring(0, 60) + '...' : 'NULL/EMPTY'}`);
+        console.log(`    Thumbnail type: ${typeof thumb}`);
+      });
+    }
+  });
+
   // Media viewer functions
   const openMediaViewer = (mediaList, thumbnails = [], index = 0, type = 'image') => {
+    console.log('📺 Opening media viewer:', {
+      mediaListCount: mediaList.length,
+      thumbnailsCount: thumbnails.length,
+      index,
+      type
+    });
+    
     setCurrentMediaList(mediaList);
     setSelectedMedia(mediaList[index]);
     setSelectedMediaType(type);
@@ -686,6 +718,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     // Set thumbnail for videos
     if (type === 'video' && thumbnails[index]) {
       setSelectedThumbnail(thumbnails[index]);
+      console.log('📸 Set thumbnail for video:', thumbnails[index]?.substring(0, 50));
     } else {
       setSelectedThumbnail('');
     }
@@ -709,12 +742,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     
     // Update thumbnail for videos
     if (selectedMediaType === 'video') {
-      const diary = normalizedDiaries.find(d => d.videos?.includes(selectedMedia));
-      if (diary?.video_thumbnails?.[newIndex]) {
-        setSelectedThumbnail(diary.video_thumbnails[newIndex]);
-      } else {
-        setSelectedThumbnail('');
-      }
+      setSelectedThumbnail('');
     }
   };
 
@@ -725,12 +753,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     
     // Update thumbnail for videos
     if (selectedMediaType === 'video') {
-      const diary = normalizedDiaries.find(d => d.videos?.includes(selectedMedia));
-      if (diary?.video_thumbnails?.[newIndex]) {
-        setSelectedThumbnail(diary.video_thumbnails[newIndex]);
-      } else {
-        setSelectedThumbnail('');
-      }
+      setSelectedThumbnail('');
     }
   };
 
@@ -948,7 +971,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
       setEditShareType(fullDiary.share_type || '');
       setEditGroupIds(fullDiary.groups?.map(g => g.id) || []);
       
-      // Set media with fresh arrays - IMPORTANT: Use existing URLs, not re-upload
+      // Set media with fresh arrays
       setEditImages([...(fullDiary.images || [])]);
       setEditVideos([...(fullDiary.videos || [])]);
       
@@ -959,7 +982,6 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
       setMediaUpdateTrigger(0);
     } catch (err) {
       console.error('Failed to fetch diary:', err);
-      // Fallback to provided data
       setEditingDiary(diary.id);
       setEditTitle(diary.title || '');
       setEditContent(diary.content || '');
@@ -1245,17 +1267,29 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     }
   };
 
-  // Handle media click
+  // Handle media click - FIXED: Pass thumbnails for videos
   const handleMediaClick = (url, type = 'image') => {
+    console.log('🖱️ Media clicked:', { url: url?.substring(0, 50), type });
+    
     if (type === 'image') {
       openMediaViewer([url], [], 0, 'image');
     } else {
-      // For video, we need to find the thumbnail
+      // For video, find the diary and get thumbnail
       const diary = normalizedDiaries.find(d => d.videos?.includes(url));
       if (diary) {
         const videoIndex = diary.videos.indexOf(url);
-        const thumbnail = diary.video_thumbnails?.[videoIndex] || '';
-        openMediaViewer([url], [thumbnail], 0, 'video');
+        const thumbnails = diary.video_thumbnails || [];
+        const thumbnail = thumbnails[videoIndex] || '';
+        
+        console.log('🎬 Video clicked:', {
+          videoIndex,
+          thumbnail: thumbnail?.substring(0, 50),
+          thumbnailsCount: thumbnails.length
+        });
+        
+        openMediaViewer([url], thumbnails, 0, 'video');
+      } else {
+        openMediaViewer([url], [], 0, 'video');
       }
     }
   };
@@ -1762,6 +1796,10 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                           height: '100%',
                                           objectFit: 'cover'
                                         }}
+                                        onError={(e) => {
+                                          console.error(`❌ Failed to load thumbnail:`, thumbnail);
+                                          e.target.style.display = 'none';
+                                        }}
                                       />
                                       <Box
                                         sx={{
@@ -1799,6 +1837,21 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                       onClick={() => handleMediaClick(vid, 'video')}
                                     >
                                       <PlayArrowIcon sx={{ fontSize: 40, color: 'white', zIndex: 1 }} />
+                                      <Typography 
+                                        variant="caption" 
+                                        sx={{ 
+                                          position: 'absolute', 
+                                          bottom: 8, 
+                                          left: 8, 
+                                          color: 'white',
+                                          bgcolor: 'rgba(0,0,0,0.5)',
+                                          px: 1,
+                                          borderRadius: 1,
+                                          zIndex: 2
+                                        }}
+                                      >
+                                        No thumbnail
+                                      </Typography>
                                     </Box>
                                   )}
                                   
@@ -2016,7 +2069,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                     </Box>
                   )}
 
-                  {/* Diary Videos - Grid View */}
+                  {/* Diary Videos - Grid View - FIXED: Shows thumbnails */}
                   {diary.videos && diary.videos.length > 0 && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -2031,88 +2084,115 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                         },
                         gap: 2
                       }}>
-                        {diary.videos.map((video, index) => (
-                          <Box
-                            key={index}
-                            sx={{
-                              position: 'relative',
-                              borderRadius: '8px',
-                              overflow: 'hidden',
-                              aspectRatio: '16/9',
-                              bgcolor: '#000',
-                              cursor: 'pointer',
-                              transition: 'transform 0.2s',
-                              '&:hover': {
-                                transform: 'scale(1.02)',
-                                '& .media-overlay': {
-                                  opacity: 1
+                        {diary.videos.map((video, index) => {
+                          // Get thumbnail for this specific video
+                          const thumbnail = getVideoThumbnail(video, diary);
+                          
+                          console.log(`🎬 Rendering video ${index}:`, {
+                            video: video?.substring(0, 50),
+                            thumbnail: thumbnail?.substring(0, 50),
+                            hasThumbnail: !!thumbnail
+                          });
+                          
+                          return (
+                            <Box
+                              key={index}
+                              sx={{
+                                position: 'relative',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                aspectRatio: '16/9',
+                                bgcolor: '#000',
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s',
+                                '&:hover': {
+                                  transform: 'scale(1.02)',
+                                  '& .media-overlay': {
+                                    opacity: 1
+                                  }
                                 }
-                              }
-                            }}
-                            onClick={() => handleMediaClick(video, 'video')}
-                          >
-                            {/* Video Thumbnail */}
-                            {diary.video_thumbnails?.[index] ? (
-                              <Box></Box>
-                              // <img
-                              //   src={diary.video_thumbnails[index]}
-                              //   alt={`Video thumbnail ${index + 1}`}
-                              //   style={{
-                              //     width: '100%',
-                              //     height: '100%',
-                              //     objectFit: 'cover'
-                              //   }}
-                              // />
-                            ) : (
+                              }}
+                              onClick={() => handleMediaClick(video, 'video')}
+                            >
+                              {/* Video Thumbnail or Placeholder */}
+                              {thumbnail ? (
+                                <Box>
+                                  <img
+                                    src={thumbnail}
+                                    alt={`Video thumbnail ${index + 1}`}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover'
+                                    }}
+                                    onError={(e) => {
+                                      console.error(`❌ Failed to load thumbnail for video ${index}:`, thumbnail);
+                                      e.target.style.display = 'none';
+                                    }}
+                                  />
+                                </Box>
+                              ) : (
+                                <Box
+                                  sx={{
+                                    width: '100%',
+                                    height: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexDirection: 'column',
+                                    gap: 1
+                                  }}
+                                >
+                                  <VideocamIcon sx={{ fontSize: 48, color: '#666' }} />
+                                  <Typography 
+                                    variant="caption" 
+                                    sx={{ 
+                                      color: '#888',
+                                      textAlign: 'center'
+                                    }}
+                                  >
+                                    No thumbnail
+                                  </Typography>
+                                </Box>
+                              )}
+                              
+                              {/* Play Button Overlay */}
+                              <Box className="media-overlay" sx={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                bgcolor: thumbnail ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.5)',
+                                opacity: 0,
+                                transition: 'opacity 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                <PlayArrowIcon sx={{ color: 'white', fontSize: 48 }} />
+                              </Box>
+                              
+                              {/* Video Number Badge */}
                               <Box
                                 sx={{
-                                  width: '100%',
-                                  height: '100%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
+                                  position: 'absolute',
+                                  top: 8,
+                                  right: 8,
+                                  bgcolor: 'rgba(0,0,0,0.7)',
+                                  color: 'white',
+                                  px: 1,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  fontSize: '0.7rem',
+                                  fontWeight: 500
                                 }}
                               >
-                                <PlayArrowIcon sx={{ fontSize: 48, color: 'white' }} />
+                                {index + 1}
                               </Box>
-                            )}
-                            
-                            {/* Play Button Overlay */}
-                            <Box className="media-overlay" sx={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              bgcolor: 'rgba(0,0,0,0.3)',
-                              opacity: 0,
-                              transition: 'opacity 0.2s',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <PlayArrowIcon sx={{ color: 'white', fontSize: 48 }} />
                             </Box>
-                            
-                            {/* Video Badge */}
-                            <Box
-                              sx={{
-                                position: 'absolute',
-                                top: 8,
-                                right: 8,
-                                bgcolor: 'rgba(0,0,0,0.7)',
-                                color: 'white',
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: 1,
-                                fontSize: '0.7rem',
-                                fontWeight: 500
-                              }}
-                            >
-                              MP4
-                            </Box>
-                          </Box>
-                        ))}
+                          );
+                        })}
                       </Box>
                     </Box>
                   )}
