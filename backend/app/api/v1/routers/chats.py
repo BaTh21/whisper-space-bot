@@ -981,12 +981,86 @@ async def delete_message_forever_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to delete message: {str(e)}")
 
 # Get message info for deletion confirmation
-@router.get("/private/{message_id}/info")
-async def get_message_info(
-    message_id: int,
+@router.get("/private/{friend_id}", response_model=List[MessageOut])
+async def get_private_chat(
+    friend_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if is_blocked(db, current_user.id, friend_id) or is_blocked_by(db, current_user.id, friend_id):
+        return []
+
+    if not is_friend(db, current_user.id, friend_id):
+        raise HTTPException(status_code=403, detail="Not friends")
+
+    messages = (
+        db.query(PrivateMessage)
+        .options(
+            joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.receiver),
+            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
+        )
+        .filter(
+            ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
+            ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
+        )
+        .order_by(PrivateMessage.created_at.asc())
+        .all()
+    )
+
+    result = []
+
+    for msg in messages:
+        seen_by = [
+            MessageSeenByUser(
+                user_id=s.user.id,
+                username=s.user.username,
+                avatar_url=s.user.avatar_url,
+                seen_at=s.seen_at.isoformat() if s.seen_at else None
+            )
+            for s in msg.seen_statuses
+        ]
+
+        reply_to_out = None
+        reply_preview = None
+
+        if msg.reply_to:
+            reply_to_out = MessageOut(
+                id=msg.reply_to.id,
+                sender_id=msg.reply_to.sender_id,
+                receiver_id=msg.reply_to.receiver_id,
+                content=msg.reply_to.content,
+                message_type=serialize_message_type(msg.reply_to.message_type),
+                is_read=msg.reply_to.is_read,
+                read_at=msg.reply_to.read_at.isoformat() if msg.reply_to.read_at else None,
+                delivered_at=msg.reply_to.delivered_at.isoformat() if msg.reply_to.delivered_at else None,
+                reply_to=None,
+                reply_to_id=msg.reply_to.reply_to_id,
+                is_forwarded=msg.reply_to.is_forwarded,
+                original_sender=msg.reply_to.original_sender,
+                created_at=msg.reply_to.created_at.isoformat(),
+                sender_username=msg.reply_to.sender.username,
+                receiver_username=msg.reply_to.receiver.username,
+                voice_duration=msg.reply_to.voice_duration,
+                file_size=msg.reply_to.file_size,
+                seen_by=[]
+            )
+
+            reply_preview = build_reply_preview(msg.reply_to)
+
+        result.append(
+            build_message_out(
+                msg=msg,
+                reply_to=reply_to_out,
+                reply_preview=reply_preview,
+                seen_by=seen_by
+            )
+        )
+
+    return result
+
     """
     Get message information for deletion confirmation
     """
@@ -1204,20 +1278,28 @@ def build_message_out(
         id=msg.id,
         sender_id=msg.sender_id,
         receiver_id=msg.receiver_id,
-        content=msg.content,
+        content=msg.content or "",
         message_type=serialize_message_type(msg.message_type),
+
         is_read=msg.is_read,
         read_at=msg.read_at.isoformat() if msg.read_at else None,
         delivered_at=msg.delivered_at.isoformat() if msg.delivered_at else None,
+
         reply_to_id=msg.reply_to_id,
         reply_to=reply_to,
         reply_preview=reply_preview,
+
         is_forwarded=msg.is_forwarded,
         original_sender=msg.original_sender,
+
         created_at=msg.created_at.isoformat(),
+        updated_at=msg.updated_at.isoformat() if msg.updated_at else None,
+
         sender_username=getattr(msg.sender, "username", None),
         receiver_username=getattr(msg.receiver, "username", None),
+
         voice_duration=msg.voice_duration,
         file_size=msg.file_size,
         seen_by=seen_by
     )
+

@@ -5,9 +5,6 @@ import {
   Box,
   CircularProgress,
   Collapse,
-  Tab,
-  Tabs,
-  IconButton
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -163,6 +160,37 @@ const DashboardPage = ({ defaultTab = 0 }) => {
 
   return (
     <Layout onProfileClick={handleTabChange} setNewActiveTab={handleTabChange}>
+      <Collapse in={!!error}>
+        <Alert
+          severity="error"
+          sx={{
+            position: "fixed",
+            top: 20,
+            right: 20,
+            zIndex: 2000,
+            borderRadius: 2,
+          }}
+          onClose={() => setError(null)}
+        >
+          {error}
+        </Alert>
+      </Collapse>
+
+      <Collapse in={!!success}>
+        <Alert
+          severity="success"
+          sx={{
+            position: "fixed",
+            top: 20,
+            right: 20,
+            zIndex: 2000,
+            borderRadius: 2,
+          }}
+          onClose={() => setSuccess(null)}
+        >
+          {success}
+        </Alert>
+      </Collapse>
       <Box
         sx={{
           display: "flex",
@@ -181,7 +209,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
             <FeedTab
               diaries={diaries}
               profile={profile}
-              groups={groups} 
+              groups={groups}
               onNewDiary={() => setDiaryDialogOpen(true)}
               setError={setError}
               setSuccess={setSuccess}
@@ -298,37 +326,6 @@ const DashboardPage = ({ defaultTab = 0 }) => {
         setSuccess={setSuccess}
       />
 
-      <Collapse in={!!error}>
-        <Alert
-          severity="error"
-          sx={{
-            position: "fixed",
-            bottom: 20,
-            right: 20,
-            zIndex: 2000,
-            borderRadius: 2,
-          }}
-          onClose={() => setError(null)}
-        >
-          {error}
-        </Alert>
-      </Collapse>
-
-      <Collapse in={!!success}>
-        <Alert
-          severity="success"
-          sx={{
-            position: "fixed",
-            bottom: 20,
-            right: 20,
-            zIndex: 2000,
-            borderRadius: 2,
-          }}
-          onClose={() => setSuccess(null)}
-        >
-          {success}
-        </Alert>
-      </Collapse>
     </Layout>
   );
 };

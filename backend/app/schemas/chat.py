@@ -4,6 +4,7 @@ from typing import Literal, Optional, List
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
 from pydantic import validator, field_validator
+from pydantic import Field
 
 from app.models.private_message import MessageType
 
@@ -69,16 +70,18 @@ class MessageOut(TimestampMixin):
     is_read: bool = False
     reply_to_id: Optional[int] = None
     reply_to: Optional["MessageOut"] = None
+    reply_preview: Optional[ReplyPreview] = None
     read_at: Optional[str] = None  
     delivered_at: Optional[str] = None
     created_at: str 
+    updated_at: Optional[str] = None
     is_forwarded: Optional[bool] = False
     original_sender: Optional[str] = None
     sender_username: Optional[str] = None
     receiver_username: Optional[str] = None
     voice_duration: Optional[float] = None  # ADDED
     file_size: Optional[int] = None  # ADDED
-    seen_by: List[MessageSeenByUser] = []
+    seen_by: List[MessageSeenByUser] = Field(default_factory=list)
     
 class AuthorResponse(BaseModel):
     id: int

@@ -23,7 +23,7 @@ class PrivateMessage(Base):
     read_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
     reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
     is_forwarded = Column(Boolean, default=False)
     original_sender = Column(String(255), nullable=True)

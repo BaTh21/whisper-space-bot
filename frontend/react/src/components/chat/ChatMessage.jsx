@@ -21,11 +21,12 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 import ShortcutIcon from '@mui/icons-material/Shortcut';
 import CallIcon from '@mui/icons-material/Call';
+import ReplyIcon from '@mui/icons-material/Reply';
 
 import EmojiButton from '../EmojiButton';
 import MessageReactions from '../MessageReactions';
@@ -44,7 +45,8 @@ const ChatMessage = ({
   onAddReaction,
   onRemoveReaction,
   onLoadReactions,
-  onCallBack
+  onCallBack,
+  onReply
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -52,7 +54,6 @@ const ChatMessage = ({
   const [avatarError, setAvatarError] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const audioRef = useRef(null);
   const [isEditing, setIsEditing] = useState(false);
   const [friendOnlineStatus, setFriendOnlineStatus] = useState(null);
   const [lastSeenTime, setLastSeenTime] = useState(null);
@@ -891,12 +892,10 @@ const ChatMessage = ({
           </Box>
         ) : (
           <Box sx={{ position: 'relative', width: '100%' }}>
-            {/* Message bubble */}
             <Box
               className="message-bubble"
               onClick={handleMenu}
             >
-              {/* Forwarded badge */}
               {message.is_forwarded && (
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, opacity: 0.8 }}>
                   <ForwardIcon fontSize="small" sx={{ mr: 0.5, fontSize: '1rem' }} />
@@ -906,7 +905,40 @@ const ChatMessage = ({
                 </Box>
               )}
 
-              {/* Content */}
+              {message.reply_preview  && (
+                <Box
+                  sx={{
+                    bgcolor: "#e8f0fe",
+                    py: 1,
+                    px: 3,
+                    borderRadius: 1,
+                    display: 'flex',
+                    gap: 1,
+                    maxHeight: '10vh',
+                    maxWidth: 250,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontSize: 12, mt: 0.3 }}>
+                    Reply to
+                  </Typography>
+                  <Box
+                    sx={{
+                      opacity: 0.6,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                      {message.reply_preview.sender_username}
+                    </Typography>
+
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      {message.reply_preview.content}
+                    </Typography>
+
+                  </Box>
+                </Box>
+              )}
+
               {actualMessageType === 'image' ? (
                 renderImageContent()
               ) : actualMessageType === 'voice' ? (
@@ -959,7 +991,6 @@ const ChatMessage = ({
                 </Box>
               )}
 
-              {/* Time + tick */}
               <Box sx={{
                 display: 'flex',
                 justifyContent: 'flex-end',
@@ -1063,6 +1094,10 @@ const ChatMessage = ({
                 }
 
                 menuItems.push(
+                  <MenuItem key="reply" onClick={onReply}>
+                    <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    Reply
+                  </MenuItem>,
                   <MenuItem
                     key="delete"
                     onClick={handleDelete}
@@ -1075,6 +1110,10 @@ const ChatMessage = ({
               }
               else {
                 menuItems.push(
+                  <MenuItem key="reply" onClick={onReply}>
+                    <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    Reply
+                  </MenuItem>,
                   <MenuItem key="forward" onClick={handleForwardClick}>
                     <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}

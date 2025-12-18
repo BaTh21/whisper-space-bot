@@ -2,7 +2,6 @@ import {
   Chat as ChatIcon,
   Close as CloseIcon,
   EmojiEmotions as EmojiEmotionsIcon,
-  Image as ImageIcon,
   InsertEmoticon as InsertEmoticonIcon,
   Send as SendIcon
 } from '@mui/icons-material';
@@ -46,7 +45,6 @@ import {
   getPrivateChat,
   removeReactionFromMessage,
   sendImageMessage,
-  sendPrivateMessage,
   uploadImage
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
@@ -56,6 +54,7 @@ import EmojiPicker from '../EmojiPicker';
 import { IncomingCallDialog } from '../group/InCommingCallDialog';
 import CallDialog from '../group/CallDialog';
 import { useAuth } from '../../context/AuthContext';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -81,12 +80,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef(null);
   const [showFriend, setShowFriend] = useState(false);
-
-  const toggleShowFriend = () => {
-    setShowFriend(prev => !prev);
-  }
-
   const { t, i18n } = useTranslation();
+  const [isOnline, setIsOnline] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const [voiceSending, setVoiceSending] = useState(false);
@@ -94,6 +89,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [audioUrl, setAudioUrl] = useState(null);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [replyTo, setReplyTo] = useState(null);
 
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [lastSeenMap, setLastSeenMap] = useState({});
@@ -134,8 +130,24 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const tempToRealIdMap = useRef({});
+  const cancelReply = () => setReplyTo(null);
 
   const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
+
+  const handleReply = (message) => {
+    setReplyTo({
+      id: message.id,
+      content: message.content,
+      sender: message.sender,
+      message_type: message.message_type,
+      voice_duration: message.voice_duration,
+      file_size: message.file_size,
+    });
+  };
+
+  const toggleShowFriend = () => {
+    setShowFriend(prev => !prev);
+  }
 
   const getWsUrl = useCallback(() => {
     if (!selectedFriend) return null;
@@ -155,13 +167,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           return newSet;
         });
 
+        if (selectedFriend?.id === data.user_id) {
+          setIsOnline(true);
+        }
+
         setLastSeenMap(prev => ({
           ...prev,
           [data.user_id]: data.timestamp || new Date().toISOString()
         }));
-
-        if (selectedFriend?.id === data.user_id) {
-        }
         return;
 
       } else if (type === "user_offline") {
@@ -170,6 +183,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           newSet.delete(data.user_id);
           return newSet;
         });
+
+        if (selectedFriend.id === data.user_id) {
+          setIsOnline(false);
+        }
 
         const offlineTime = data.last_seen || data.timestamp || new Date().toISOString();
         setLastSeenMap(prev => ({
@@ -214,9 +231,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         return;
       }
 
-      else if (
-        type === "message"
-      ) {
+      else if (type === "message") {
         const detectMessageType = (msgData) => {
           if (msgData.message_type === "system") return "system";
           if (msgData.message_type === "image") return "image";
@@ -238,15 +253,19 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           return isImageUrl ? "image" : "text";
         };
 
+        if (data.temp_id) {
+          console.log("Temp message received from server:", data);
+        }
+
         const messageType = detectMessageType(data);
 
         const realMessage = {
-          ...data,
           id: data.id,
           temp_id: data.temp_id || null,
           content: data.content,
           is_temp: false,
           message_type: messageType,
+          sender_id: data.sender_id,
           sender: {
             id: data.sender_id,
             username: data.sender_username,
@@ -256,33 +275,34 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           read_at: data.read_at || null,
           seen_by: data.seen_by || [],
           created_at: data.created_at,
-          updated_at: data.updated_at || data.created_at,
-          edited: !!data.updated_at && data.updated_at !== data.created_at,
+          updated_at: data.updated_at || null,
+          edited_at: data.edited_at || null,
+          edited: !!data.edited_at,
           voice_duration: data.voice_duration || 0,
           file_size: data.file_size || 0,
+
+          reply_to_id: data.reply_to_id || null,
+          reply_preview: data.reply_preview || null,
+          reply_to: data.reply_to || null,
         };
 
         setMessages((prev) => {
-          let updated = [...prev];
-
+          const updated = [...prev];
           if (data.temp_id) {
-            const tempIndex = updated.findIndex(
-              (m) => m.is_temp && (m.temp_id === data.temp_id || m.id === data.temp_id)
-            );
-
+            const tempIndex = updated.findIndex(m => m.is_temp && m.temp_id === data.temp_id);
             if (tempIndex !== -1) {
               tempToRealIdMap.current[data.temp_id] = data.id;
               updated[tempIndex] = realMessage;
-              return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
             }
           }
 
-          const exists = updated.some((m) => m.id === data.id);
-          if (!exists) updated.push(realMessage);
-
+          if (!updated.some((m) => m.id === data.id)) {
+            updated.push(realMessage);
+          }
           return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         });
       }
+      
       else if (type === "new_call_message") {
         const realMessage = {
           id: data.message_id,
@@ -389,6 +409,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         );
 
       } else if (type === "typing") {
+        // toast.success("Your friend is typing");
         setFriendTyping(!!data.is_typing);
 
       } else if (type === "message_deleted") {
@@ -556,7 +577,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         const blockedUsersList = await getBlockedUsers();
         setBlockedUsers(blockedUsersList);
 
-        // Initialize block status for all friends
         const statusMap = {};
         blockedUsersList.forEach(user => {
           statusMap[user.id] = true;
@@ -570,7 +590,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     fetchBlockedUsers();
   }, []);
 
-  // Add this function to check if a specific user is blocked
   const checkIfUserIsBlocked = async (userId) => {
     try {
       const status = await checkBlockedStatus(userId);
@@ -580,167 +599,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       }));
       return status.is_blocked;
     } catch (error) {
-      console.error('Error checking blocked status:', error);
-      // Fallback to checking local blockedUsers list
       return blockedUsers.some(user => user.id === userId);
     }
   };
-
-  useEffect(() => {
-    if (!messagesContainerRef.current || !selectedFriend || !isConnected) return;
-
-    const container = messagesContainerRef.current;
-    let observedMessages = new Set();
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const messagesToMarkAsRead = [];
-
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const messageId = parseInt(entry.target.getAttribute('data-message-id'));
-            const isUnread = entry.target.getAttribute('data-is-unread') === 'true';
-            const isFriendMessage = entry.target.getAttribute('data-is-friend') === 'true';
-
-            if (messageId && isUnread && isFriendMessage && !observedMessages.has(messageId)) {
-              messagesToMarkAsRead.push(messageId);
-              observedMessages.add(messageId);
-            }
-          }
-        });
-
-        // Process messages to mark as read
-        if (messagesToMarkAsRead.length > 0) {
-          console.log(`👁️ Auto-marking ${messagesToMarkAsRead.length} messages as read:`, messagesToMarkAsRead);
-          messagesToMarkAsRead.forEach((messageId) => {
-            markMessageAsRead(messageId);
-          });
-        }
-      },
-      {
-        root: container,
-        rootMargin: '0px 0px -100px 0px', // Trigger when 100px from bottom
-        threshold: 0.8, // 80% visible
-      }
-    );
-
-    const markMessageAsRead = async (messageId) => {
-      try {
-        console.log(`📨 SENDING read receipt for message ${messageId}`);
-
-        // Send read receipt via WebSocket
-        const success = sendWsMessage({
-          type: 'read',
-          message_id: messageId,
-        });
-
-        if (!success) {
-          console.warn('❌ Failed to send WebSocket read receipt');
-          observedMessages.delete(messageId);
-          return;
-        }
-
-        // OPTIMISTIC UPDATE - Update UI immediately
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.id === messageId) {
-              const currentSeenBy = msg.seen_by || [];
-              const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-
-              if (!alreadySeen) {
-                console.log(`✅ OPTIMISTIC: Marking message ${messageId} as read`);
-                return {
-                  ...msg,
-                  is_read: true,
-                  read_at: new Date().toISOString(),
-                  seen_by: [
-                    ...currentSeenBy,
-                    {
-                      user_id: selectedFriend.id,
-                      username: selectedFriend.username,
-                      avatar_url: getUserAvatar(selectedFriend),
-                      seen_at: new Date().toISOString(),
-                    },
-                  ],
-                };
-              }
-            }
-            return msg;
-          })
-        );
-      } catch (error) {
-        console.error('❌ Failed to mark message as read:', error);
-        // Remove from observed so it can be retried
-        observedMessages.delete(messageId);
-      }
-    };
-
-    // Observe all unread friend messages
-    const unreadFriendMessages = container.querySelectorAll(
-      `[data-message-id][data-is-unread="true"][data-is-friend="true"]`
-    );
-
-    console.log(`👀 Observing ${unreadFriendMessages.length} unread messages`);
-    unreadFriendMessages.forEach((el) => {
-      observer.observe(el);
-    });
-
-    return () => {
-      observer.disconnect();
-      observedMessages.clear();
-    };
-  }, [messages, selectedFriend, isConnected, sendWsMessage, getUserAvatar]);
-
-  useEffect(() => {
-    if (selectedFriend && isConnected && messages.length > 0) {
-      // Find unread messages from friend
-      const unreadMessages = messages.filter(
-        msg => !msg.is_temp &&
-          !msg.is_read &&
-          msg.sender_id === selectedFriend.id
-      );
-
-      // Mark all as read
-      if (unreadMessages.length > 0) {
-        console.log(`📚 Marking ${unreadMessages.length} messages as read on chat open`);
-
-        unreadMessages.forEach(msg => {
-          sendWsMessage({
-            type: 'read',
-            message_id: msg.id,
-          });
-        });
-
-        // Optimistic update for all messages
-        setMessages(prev =>
-          prev.map(msg => {
-            if (!msg.is_temp && !msg.is_read && msg.sender_id === selectedFriend.id) {
-              const currentSeenBy = msg.seen_by || [];
-              const alreadySeen = currentSeenBy.some(s => s.user_id === selectedFriend.id);
-
-              if (!alreadySeen) {
-                return {
-                  ...msg,
-                  is_read: true,
-                  read_at: new Date().toISOString(),
-                  seen_by: [
-                    ...currentSeenBy,
-                    {
-                      user_id: selectedFriend.id,
-                      username: selectedFriend.username,
-                      avatar_url: getUserAvatar(selectedFriend),
-                      seen_at: new Date().toISOString(),
-                    },
-                  ],
-                };
-              }
-            }
-            return msg;
-          })
-        );
-      }
-    }
-  }, [selectedFriend, messages.length, isConnected, sendWsMessage, getUserAvatar]);
 
   const startRecording = async () => {
     if (!selectedFriend) {
@@ -915,10 +776,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setVoiceSending(true);
     setIsUploadingVoice(true);
 
-    // Define tempId FIRST
     const tempId = `temp-voice-${Date.now()}-${Math.random()}`;
 
-    // Create temp message with FULL sender info
     const tempMsg = {
       id: tempId,
       temp_id: tempId,
@@ -939,7 +798,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       _uniqueId: Date.now() + Math.random(),
     };
 
-    // Add optimistic temp message
     setMessages(prev => {
       const withoutTemp = prev.filter(msg => !msg.is_temp);
       return [...withoutTemp, tempMsg];
@@ -948,26 +806,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     try {
       const formData = new FormData();
 
-      // Use the blob directly - backend will handle format conversion
       formData.append('voice_file', blobToSend, `voice-${Date.now()}.webm`);
       formData.append('duration', recordingTime.toString());
 
-      // Optional: send temp_id to backend for WebSocket replacement
       if (tempId) {
         formData.append('temp_id', tempId);
       }
 
-      console.log('🎤 Sending voice message:', {
-        duration: recordingTime,
-        fileSize: blobToSend.size,
-        fileType: blobToSend.type
-      });
-
       const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
 
-      console.log('✅ Voice message sent successfully:', sentMessage);
-
-      // Replace temp message with real one
       setMessages(prev => {
         return prev.map(msg =>
           msg.id === tempId || msg.temp_id === tempId
@@ -986,10 +833,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       setSuccess(t('voice_message_sent'));
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
-      console.error('❌ Voice message send failed:', err);
       setError(err.message || 'Failed to send voice message');
 
-      // Remove temp message on error
       setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.temp_id !== tempId));
     } finally {
       setIsUploadingVoice(false);
@@ -1001,14 +846,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     try {
       const reaction = await addReactionToMessage(messageId, { emoji });
 
-      // Send WebSocket update
       sendWsMessage({
         type: 'reaction_add',
         message_id: messageId,
         emoji: emoji
       });
 
-      // Optimistic update
       setMessages(prev => prev.map(msg => {
         if (msg.id === messageId) {
           const currentReactions = msg.reactions || [];
@@ -1026,19 +869,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   };
 
-  // Remove reaction from message
   const handleRemoveReaction = async (messageId, reactionId) => {
     try {
       await removeReactionFromMessage(messageId, reactionId);
 
-      // Send WebSocket update
       sendWsMessage({
         type: 'reaction_remove',
         message_id: messageId,
         reaction_id: reactionId
       });
 
-      // Optimistic update
       setMessages(prev => prev.map(msg => {
         if (msg.id === messageId) {
           const currentReactions = msg.reactions || [];
@@ -1056,7 +896,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   };
 
-  // Load reactions for a message
   const loadMessageReactions = async (messageId) => {
     try {
       const response = await getMessageReactions(messageId);
@@ -1200,12 +1039,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     if (!selectedFriend || messages.length > 0) return;
 
     try {
-      // Check if user is blocked before loading messages
       const isBlocked = blockStatus[selectedFriend.id] ||
         await checkIfUserIsBlocked(selectedFriend.id);
 
       if (isBlocked) {
-        // Don't load messages if user is blocked
         setMessages([]);
         setError(`Cannot load messages. ${selectedFriend.username} is blocked.`);
         return;
@@ -1213,9 +1050,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
       const chatMessages = await getPrivateChat(selectedFriend.id);
 
-      // Check if backend returned blocked status
       if (Array.isArray(chatMessages) && chatMessages.length === 0) {
-        // Might be blocked, re-check status
         const recheckBlocked = await checkIfUserIsBlocked(selectedFriend.id);
         if (recheckBlocked) {
           setMessages([]);
@@ -1224,7 +1059,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         }
       }
 
-      // Filter out any messages from blocked users (additional safety)
       const filteredMessages = chatMessages.filter(msg => {
         const messageSenderId = msg.sender_id;
         return !blockedUsers.some(blockedUser => blockedUser.id === messageSenderId);
@@ -1232,7 +1066,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
       const enhanced = filteredMessages.map((msg) => {
         const detectMessageType = (message) => {
-          // Use backend message_type first
           if (message.message_type === 'image') return 'image';
           if (message.message_type === 'voice') return 'voice';
           if (message.message_type === 'file') return 'file';
@@ -1241,7 +1074,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
           const content = message.content || '';
 
-          // Voice message detection
           const isVoiceUrl =
             content.includes('/voice_messages/') ||
             content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
@@ -1249,7 +1081,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
           if (isVoiceUrl) return "voice";
 
-          // Image detection
           const isImageUrl =
             content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
             (content.includes('cloudinary.com') && content.includes('/image/upload/'));
@@ -1259,7 +1090,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
         const messageType = detectMessageType(msg);
 
-        // Use content directly - backend provides proper Cloudinary URL
         const content = msg.content;
 
         const sender = {
@@ -1299,13 +1129,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       });
 
       setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
-      setError(null); // Clear any previous errors
+      setError(null);
     } catch (err) {
-      // Check if error is about blocking
       if (err.message?.includes('blocked') || err.response?.data?.detail?.includes('blocked')) {
         setError(`Cannot load messages. ${selectedFriend?.username || 'User'} is blocked.`);
 
-        // Update blocked status
         if (selectedFriend) {
           setBlockStatus(prev => ({
             ...prev,
@@ -1322,7 +1150,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   };
 
   const handleSelectFriend = async (friend) => {
-    // Check if user is blocked - make this asynchronous
     const isBlocked = blockStatus[friend.id] || await checkIfUserIsBlocked(friend.id);
 
     if (isBlocked) {
@@ -1379,32 +1206,27 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   }, []);
 
-  // Add this effect to fetch online status on mount and set up interval
   useEffect(() => {
     updateFriendsOnlineStatus();
   }, [updateFriendsOnlineStatus]);
 
-  // Add this effect to handle real-time WebSocket status updates
   useEffect(() => {
     if (!isConnected || !selectedFriend) return;
 
     const handleStatusMessage = (data) => {
       if (data.type === 'user_online') {
-        console.log('📱 User came online:', data.user_id);
         setOnlineUsers(prev => {
           const newSet = new Set(prev);
           newSet.add(data.user_id);
           return newSet;
         });
 
-        // Show notification if this is the selected friend
         if (selectedFriend?.id === data.user_id) {
-          setSuccess(`${selectedFriend.username} is now online`);
+          setIsOnline(true);
           setTimeout(() => setSuccess(''), 2000);
         }
 
       } else if (data.type === 'user_offline') {
-        console.log('📱 User went offline:', data.user_id);
         setOnlineUsers(prev => {
           const newSet = new Set(prev);
           newSet.delete(data.user_id);
@@ -1416,7 +1238,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           [data.user_id]: data.last_seen || new Date().toISOString()
         }));
       } else if (data.type === 'online_users') {
-        // Received list of online users in the chat
         setOnlineUsers(new Set(data.user_ids || []));
       }
     };
@@ -1437,75 +1258,81 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   }, [isConnected, selectedFriend, getWsUrl]);
 
   const sendTextMessage = async () => {
-    if (selectedFriend && (blockStatus[selectedFriend.id] ||
-      blockedUsers.some(user => user.id === selectedFriend.id))) {
-      setError(t(`cannot_send_blocked ${selectedFriend.username}`));
-      return;
-    }
-    const content = newMessage.trim();
-    if (!content || !selectedFriend) return;
+    if (!newMessage.trim() || !selectedFriend) return;
 
     const tempId = `temp-${Date.now()}`;
+
     const tempMsg = {
       id: tempId,
+      temp_id: tempId,
       sender_id: profile.id,
       receiver_id: selectedFriend.id,
-      content: content,
+      content: newMessage.trim(),
       message_type: 'text',
-      is_read: false,
-      created_at: new Date().toISOString(),
+      reply_to_id: replyTo?.id || null,
+      reply_preview: replyTo
+        ? {
+          id: replyTo.id,
+          sender_username: replyTo.sender?.username,
+          content:
+            replyTo.message_type === 'voice'
+              ? '🎤 Voice message'
+              : replyTo.message_type === 'image'
+                ? '🖼️ Photo'
+                : replyTo.content,
+          message_type: replyTo.message_type,
+        }
+        : null,
       is_temp: true,
+      created_at: new Date().toISOString(),
       sender: {
+        id: profile.id,
         username: profile.username,
         avatar_url: getUserAvatar(profile),
-        id: profile.id,
       },
     };
 
-    setMessages((prev) => [...prev, tempMsg]);
+    // setMessages(prev => [...prev, tempMsg]);
     setNewMessage('');
-
-    if (audioUrl) {
-      setAudioUrl(null);
-      setRecordingTime(0);
-    }
+    setReplyTo(null);
 
     const payload = {
       type: 'message',
-      content: content,
+      content: tempMsg.content,
       message_type: 'text',
+      temp_id: tempId,
+      reply_to_id: replyTo?.id || undefined,
     };
 
-    if (!sendWsMessage(payload)) {
-      try {
-        const sent = await sendPrivateMessage(selectedFriend.id, payload);
-        setMessages((prev) =>
-          prev
-            .filter((m) => m.id !== tempId)
-            .concat({
-              ...sent,
-              is_temp: false,
-              sender: {
-                username: profile.username,
-                avatar_url: getUserAvatar(profile),
-                id: profile.id,
-              },
-            })
-        );
-      } catch (err) {
-        setError(err.message || 'Failed to send');
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        setNewMessage(content);
-      }
-    }
+    sendWsMessage(payload);
   };
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() && !audioUrl && !imagePreview) return;
-    if (newMessage.trim()) await sendTextMessage();
-    setNewMessage('');
-    setAudioUrl(null);
-    setImagePreview(null);
+
+    try {
+      if (newMessage.trim()) {
+        await sendTextMessage();
+      }
+
+      if (audioBlobRef.current) {
+        await sendVoiceMessage();
+      }
+
+      if (imagePreview && selectedFriend) {
+        const file = imagePreviewFileRef.current;
+        if (file) await handleImageUpload(file);
+      }
+
+      setNewMessage('');
+      setAudioUrl(null);
+      setImagePreview(null);
+      setReplyTo(null);
+
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      setError(err.message || t('failed_send_message'));
+    }
   };
 
   const handleInputChange = (e) => {
@@ -1521,10 +1348,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         return;
       }
 
-      // Determine message type
       let messageType = message.message_type;
       if (!messageType) {
-        // Fallback detection
         if (message.content.includes('/voice_messages/') ||
           message.content.match(/\.(mp3|wav|ogg|webm|m4a)$/i)) {
           messageType = 'voice';
@@ -1542,7 +1367,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         original_sender: message.sender?.username || profile?.username || 'Unknown',
       };
 
-      // Add voice-specific fields if it's a voice message
       if (messageType === 'voice') {
         payload.voice_duration = message.voice_duration;
         payload.file_size = message.file_size;
@@ -1578,65 +1402,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     if (selectedFriend) scrollToBottom();
   }, [selectedFriend, scrollToBottom]);
 
-  const getConnectionStatus = () => {
-    const unread = messages.filter(
-      (m) => !m.is_read && m.sender_id === selectedFriend?.id
-    ).length;
-
-    // Check if friend is online
-    const friendIsOnline = selectedFriend && onlineUsers.has(selectedFriend.id);
-
-    if (friendTyping) return {
-      text: 'Typing...',
-      color: 'info.main',
-      icon: 'typing'
-    };
-
-    if (!isConnected) return {
-      text: reconnectAttempts > 0 ? `Reconnecting... (${reconnectAttempts})` : 'Connecting...',
-      color: 'warning.main',
-      icon: 'disconnected'
-    };
-
-    if (friendIsOnline) return {
-      text: `Online • ${unread} unread`,
-      color: 'success.main',
-      icon: 'online'
-    };
-
-    // Friend is offline
-    let offlineText = 'Offline';
-    if (lastSeenMap[selectedFriend?.id]) {
-      const lastSeen = new Date(lastSeenMap[selectedFriend.id]);
-      const now = new Date();
-      const diffMinutes = Math.floor((now - lastSeen) / (1000 * 60));
-
-      if (diffMinutes < 1) {
-        offlineText = 'Just now';
-      } else if (diffMinutes < 60) {
-        offlineText = `${diffMinutes}m ago`;
-      } else if (diffMinutes < 1440) {
-        const hours = Math.floor(diffMinutes / 60);
-        offlineText = `${hours}h ago`;
-      } else {
-        const days = Math.floor(diffMinutes / 1440);
-        offlineText = `${days}d ago`;
-      }
-    }
-
-    return {
-      text: `Last seen ${offlineText} • ${unread} unread`,
-      color: 'text.secondary',
-      icon: 'offline'
-    };
-  };
-
-  const status = selectedFriend ? getConnectionStatus() : { text: 'Online', color: 'success.main' };
-
   const handleEditMessage = async (messageId, newContent) => {
     if (!newContent.trim()) return;
 
-    // Find message by real ID or temp_id
     const message = messages.find(
       (m) => m.id === messageId || m.temp_id === messageId
     );
@@ -1644,10 +1412,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
     const oldContent = message.content;
 
-    // Get REAL message ID (even if user clicked on a temp message)
     const realMessageId = tempToRealIdMap.current[messageId] || messageId;
 
-    // Optimistic update — show edit instantly
     setMessages((prev) =>
       prev.map((m) => {
         const matches = m.id === messageId || m.id === realMessageId || m.temp_id === messageId;
@@ -1657,7 +1423,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             content: newContent,
             updated_at: new Date().toISOString(),
             edited: true,
-            // Preserve other important fields
             message_type: m.message_type,
             sender: m.sender,
             is_temp: m.is_temp,
@@ -1668,7 +1433,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     );
 
     try {
-      // Use the REAL ID to edit
       await editMessage(realMessageId, newContent);
 
       setSuccess(t("message_edited"));
@@ -1677,7 +1441,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       console.error("Edit failed:", err);
       setError(t("failed_edit_message"));
 
-      // Revert on error - more robust revert
       setMessages((prev) =>
         prev.map((m) => {
           const matches = m.id === messageId || m.id === realMessageId || m.temp_id === messageId;
@@ -1685,7 +1448,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             return {
               ...m,
               content: oldContent,
-              updated_at: m.created_at, // Reset to original
+              updated_at: m.created_at,
               edited: false,
             };
           }
@@ -1830,10 +1593,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     setCallOpen(true);
     setCallStatus("In Call");
   };
-
-  const handleJoinCall = () => {
-
-  }
 
   const handleRejectCall = () => {
     setIncomingCall(prev => ({ ...prev, open: false }));
@@ -2130,7 +1889,28 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                       gap: 1
                     }}
                   >
-                    <Chip label={status.text} size="small" sx={{ bgcolor: status.color, color: 'white', display: { xs: 'none', md: 'block' } }} />
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        backgroundColor: 'green',
+                        borderRadius: 1,
+                        px: { xs: 0.75, md: 1.5 },
+                        py: { xs: 0, md: 0.5 },
+                        mr: { xs: 0, md: 1 },
+                        gap: { xs: 0, sm: 1 }
+                      }}
+                    >
+                      <Typography
+                        sx={{
+                          color: 'white',
+                          fontSize: { xs: 12, md: 14 },
+                          display: { xs: 'none', sm: 'block' }
+                        }}
+                      >
+                        {isOnline ? 'Active Now' : 'Offline'}
+                      </Typography>
+                    </Box>
                     <CallIcon
                       sx={{
                         fontSize: { xs: 22, md: 26 },
@@ -2195,6 +1975,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         getAvatarUrl={getAvatarUrl}
                         getUserInitials={getUserInitials}
                         onCallBack={handleStartCall}
+                        onReply={() => { handleReply(message) }}
                       />
                     ))
                   )}
@@ -2207,11 +1988,48 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   borderColor: 'divider',
                   bgcolor: 'white',
                   display: 'flex',
+                  alightItems: 'center',
                   gap: { xs: 0.5, sm: 1.5 },
-                  alignItems: 'flex-end',
                   flexShrink: 0,
                   minHeight: { xs: '60px', sm: 'auto' }
                 }}>
+
+                  {replyTo && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 64,
+                        right: 0,
+                        p: 1,
+                        mb: 1,
+                        bgcolor: "grey.200",
+                        borderRadius: 2,
+                        borderLeft: "4px solid #1976d2",
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alightItems: 'center',
+                        width: '70%'
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="caption" fontWeight={600}>
+                          Replying to {replyTo.sender.username}
+                        </Typography>
+                        <Typography variant="body2" noWrap>
+                          {replyTo.message_type === 'voice'
+                            ? '🎤 Voice message'
+                            : replyTo.message_type === 'image'
+                              ? '🖼️ Photo'
+                              : replyTo.content}
+                        </Typography>
+                      </Box>
+
+                      <IconButton size="small" onClick={cancelReply}>
+                        <CloseIcon />
+                      </IconButton>
+                    </Box>
+                  )}
+
                   {/* Recording UI */}
                   {isRecording && (
                     <Box
@@ -2273,17 +2091,48 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     </Box>
                   )}
 
-                  <IconButton onClick={isRecording ? stopRecording : startRecording} disabled={!selectedFriend || uploadingImage}
-                    sx={{ color: isRecording ? 'error.main' : (audioUrl ? 'success.main' : 'primary.main') }}>
-                    {isRecording ? <StopIcon /> : <MicIcon />}
-                  </IconButton>
-
                   <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
                   <label htmlFor="image-upload">
-                    <IconButton component="span" disabled={!selectedFriend || uploadingImage}>
-                      {uploadingImage ? <CircularProgress size={24} /> : <ImageIcon />}
-                    </IconButton>
+                    <Button
+                      variant='contained'
+                      sx={{ minWidth: 30, borderRadius: 2, py: 1.2, px: 1 }}
+                      component="span"
+                      disabled={!selectedFriend || uploadingImage}>
+                      {uploadingImage ? <AttachFileIcon /> : <AttachFileIcon />}
+                    </Button>
                   </label>
+
+                  <Button variant='contained' onClick={isRecording ? stopRecording : startRecording} disabled={!selectedFriend || uploadingImage}
+                    sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5, bgcolor: isRecording ? 'error.main' : (audioUrl ? 'success.main' : 'primary.main') }}
+                  >
+                    {isRecording ? <StopIcon /> : <MicIcon />}
+                  </Button>
+
+                  <Box sx={{ position: 'relative' }}>
+                    <IconButton
+                      ref={emojiButtonRef}
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                      disabled={!selectedFriend || uploadingImage || isRecording}
+                      sx={{
+                        fontSize: 50,
+                        color: 'orange'
+                      }}
+                    >
+                      {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                    </IconButton>
+
+                    {showEmojiPicker && (
+                      <EmojiPicker
+                        onSelect={(emoji) => {
+                          setNewMessage(prev => prev + emoji);
+                          setShowEmojiPicker(false);
+                        }}
+                        onClose={() => setShowEmojiPicker(false)}
+                        anchorEl={emojiButtonRef.current}
+                        placement="top-start"
+                      />
+                    )}
+                  </Box>
 
                   <TextField
                     fullWidth
@@ -2301,52 +2150,30 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     maxRows={3}
                     disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
                     sx={{
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: '24px',
-                        maxHeight: { xs: '44px', sm: 'none' }
-                      },
-                      bgcolor: '#f8f9fa',
-                      '& .MuiInputBase-input': {
-                        fontSize: { xs: '0.875rem', sm: '1rem' }
-                      }
+                      bgcolor: 'grey.100',
+                      borderRadius: 2,
+                      '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
                     }}
                   />
-                  <Box sx={{ position: 'relative' }}>
-                    <IconButton
-                      ref={emojiButtonRef}
-                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                      disabled={!selectedFriend || uploadingImage || isRecording}
-                    >
-                      {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
-                    </IconButton>
 
-                    {showEmojiPicker && (
-                      <EmojiPicker
-                        onSelect={(emoji) => {
-                          setNewMessage(prev => prev + emoji);
-                          setShowEmojiPicker(false);
-                        }}
-                        onClose={() => setShowEmojiPicker(false)}
-                        anchorEl={emojiButtonRef.current}
-                        placement="top-start"
-                      />
-                    )}
-                  </Box>
                   {isRecording ? (
-                    <IconButton color="success" onClick={quickSendVoice} disabled={!selectedFriend || recordingTime < 1}
-                      sx={{ bgcolor: 'success.main', color: 'white' }}>
+                    <Button variant="contained" color="success" onClick={quickSendVoice} disabled={!selectedFriend || recordingTime < 1}
+                      sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
+                    >
                       <SendIcon />
-                    </IconButton>
+                    </Button>
                   ) : audioUrl && !isRecording ? (
-                    <IconButton color="primary" onClick={sendVoiceMessage} disabled={!selectedFriend || isUploadingVoice}
-                      sx={{ bgcolor: 'primary.main', color: 'white' }}>
+                    <Button variant="contained" color="primary" onClick={sendVoiceMessage} disabled={!selectedFriend || isUploadingVoice}
+                      sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
+                    >
                       {isUploadingVoice ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
-                    </IconButton>
+                    </Button>
                   ) : (
-                    <IconButton color="primary" onClick={handleSendMessage} disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
-                      sx={{ bgcolor: 'primary.main', color: 'white' }}>
+                    <Button variant="contained" color="primary" onClick={handleSendMessage} disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
+                      sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
+                    >
                       <SendIcon />
-                    </IconButton>
+                    </Button>
                   )}
 
                   {imagePreview && (

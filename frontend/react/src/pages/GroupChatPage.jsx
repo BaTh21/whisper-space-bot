@@ -40,7 +40,6 @@ import SeenMessageListDialog from '../components/dialogs/SeenMessageListDialog';
 import GroupListComponent from '../components/chat/GroupListComponent';
 import CallIcon from '@mui/icons-material/Call';
 import VideocamIcon from '@mui/icons-material/Videocam';
-import VoiceRecordDialog from '../components/dialogs/VoiceRecordDialog';
 import { VoiceMessagePlayer } from '../components/group/VoiceMessagePlayer';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
@@ -788,19 +787,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       action: "call_start"
     }));
 
-    // onlineUsers.forEach(async (uid) => {
-    //   if (uid !== user.id) {
-    //     const pc = await getOrCreatePeer(uid);
-    //     const offer = await pc.createOffer();
-    //     await pc.setLocalDescription(offer);
+    onlineUsers.forEach(async (uid) => {
+      if (uid !== user.id) {
+        const pc = await getOrCreatePeer(uid);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
-    //     wsRef.current.send(JSON.stringify({
-    //       action: "call_offer",
-    //       to_user: uid,
-    //       sdp: pc.localDescription
-    //     }));
-    //   }
-    // });
+        wsRef.current.send(JSON.stringify({
+          action: "call_offer",
+          to_user: uid,
+          sdp: pc.localDescription
+        }));
+      }
+    });
 
     setCallStatus("Calling...");
     setCallingOpen(true);
@@ -1453,17 +1452,22 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                     bgcolor: "#e8f0fe",
                                     py: 1,
                                     px: 3,
-                                    // borderLeft: "3px solid #1976d2",
                                     borderRadius: 1,
-                                    // mb: 1,
                                     display: 'flex',
                                     gap: 1,
+                                    maxHeight: '10vh',
+                                    maxWidth: 250,
+                                    overflow: 'hidden',
                                   }}
                                 >
                                   <Typography variant="body2" sx={{ fontSize: 12, mt: 0.3 }}>
                                     Reply to
                                   </Typography>
-                                  <Box>
+                                  <Box
+                                    sx={{
+                                      opacity: 0.6,
+                                    }}
+                                  >
                                     <Typography variant="caption" sx={{ fontWeight: 600 }}>
                                       {message.parent_message.sender?.username}
                                     </Typography>
@@ -1482,6 +1486,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                           boxShadow: 1,
                                           wordBreak: 'break-word',
                                           transition: 'all 0.2s',
+                                          textOverflow: 'ellipsis',
                                         }}
                                       >
                                         <Typography
@@ -1502,8 +1507,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                             transition: 'all 0.2s',
                                             mt: 1
                                           }}
-                                          disabled={message.updated_at}
-                                          onClick={() => !message.updated_at && handleJoinCall()}
+                                          disabled={true}
                                         >
                                           Join Now
                                         </Button>
@@ -1641,6 +1645,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                     boxShadow: 1,
                                     wordBreak: 'break-word',
                                     transition: 'all 0.2s',
+                                    textAlign: isOwn ? 'right' : 'left'
                                   }}
                                   onClick={(e) => openSecondMenu(e, message.id)}
                                 >
@@ -1653,7 +1658,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                         </Box>
 
                         {(isOwn || message.sender?.username) && (
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: isOwn ? 'end' : 'start' }}>
                             <Typography
                               variant="caption"
                               color="text.secondary"

@@ -84,7 +84,6 @@ async def handle_websocket_private(
             return
         
         if not is_friend(db, current_user.id, friend_id):
-            print(f"❌ Users {current_user.id} and {friend_id} are not friends")
             await websocket.close(code=4003, reason="Not friends")
             return
         
@@ -126,7 +125,6 @@ async def handle_websocket_private(
         db.commit()
         
         chat_id = _chat_id(current_user.id, friend_id)
-        
         await manager.connect(chat_id, websocket, user_id=current_user.id)
         
         async def send_heartbeat():
@@ -181,7 +179,7 @@ async def handle_websocket_private(
                 message_type = data.get("message_type", "text")
                 voice_duration = data.get("voice_duration")
                 file_size = data.get("file_size")
-                temp_id = data.get("temp_id")  # For frontend message tracking
+                temp_id = data.get("temp_id")
                 
                 if not msg_type:
                     await websocket.send_json({
@@ -283,7 +281,7 @@ async def handle_websocket_private(
                         message_data = {
                             "type": "message",
                             "id": full_msg.id,
-                            "temp_id": temp_id,
+                            "temp_id": data.get("temp_id"),
                             "sender_id": full_msg.sender_id,
                             "sender_username": current_user.username,
                             "receiver_id": full_msg.receiver_id,
@@ -300,7 +298,6 @@ async def handle_websocket_private(
                         }
 
                         if full_msg.reply_to:
-                            # Create compact reply preview (like Telegram)
                             reply_content = full_msg.reply_to.content or ""
                             if full_msg.reply_to.message_type == MessageType.voice:
                                 reply_content = "🎤 Voice message"
@@ -311,7 +308,6 @@ async def handle_websocket_private(
                             elif len(reply_content) > 100:
                                 reply_content = reply_content[:100] + "..."
                             
-                            # Add compact reply preview
                             message_data["reply_preview"] = {
                                 "id": full_msg.reply_to.id,
                                 "sender_username": full_msg.reply_to.sender.username,
@@ -367,13 +363,11 @@ async def handle_websocket_private(
                         success = mark_message_as_read(db, message_id, current_user.id)
                         
                         if success:
-                            # Get the updated message with complete seen status
                             updated_message = db.query(PrivateMessage).options(
                                 joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
                             ).filter(PrivateMessage.id == message_id).first()
                             
                             if updated_message:
-                                # Prepare complete seen_by information
                                 seen_by = []
                                 for status in updated_message.seen_statuses:
                                     seen_by.append({
@@ -402,7 +396,6 @@ async def handle_websocket_private(
                             })
                             
                     except Exception as e:
-                        print(f"Error processing read receipt: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to process read receipt"
@@ -410,15 +403,12 @@ async def handle_websocket_private(
 
                 elif msg_type == "typing":
                     is_typing = data.get("is_typing", False)
-                    try:
-                        await manager.broadcast(chat_id, {
-                            "type": "typing",
-                            "is_typing": is_typing,
-                            "user_id": current_user.id,
-                            "username": current_user.username
-                        })
-                    except Exception as e:
-                        print(f"Error broadcasting typing: {e}")
+                    await manager.broadcast(chat_id, {
+                        "type": "typing",
+                        "is_typing": is_typing,
+                        "user_id": current_user.id,
+                        "username": current_user.username
+                    })
 
                 elif msg_type == "delete":
                     message_id = data.get("message_id")
@@ -430,23 +420,19 @@ async def handle_websocket_private(
                         continue
 
                     try:
-                        # Get message and verify ownership
                         message = db.query(PrivateMessage).filter(
                             PrivateMessage.id == message_id,
                             PrivateMessage.sender_id == current_user.id
                         ).first()
                         
                         if message:
-                            # Delete seen statuses first
                             db.query(MessageSeenStatus).filter(
                                 MessageSeenStatus.message_id == message_id
                             ).delete()
                             
-                            # Delete message
                             db.delete(message)
                             db.commit()
                             
-                            # Broadcast deletion
                             await manager.broadcast(chat_id, {
                                 "type": "message_deleted",
                                 "message_id": message_id,
@@ -460,7 +446,6 @@ async def handle_websocket_private(
                             })
                     except Exception as e:
                         db.rollback()
-                        print(f"Error deleting message: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to delete message"
@@ -478,19 +463,16 @@ async def handle_websocket_private(
                         continue
                     
                     try:
-                        # Get message and verify ownership
                         message = db.query(PrivateMessage).filter(
                             PrivateMessage.id == message_id,
                             PrivateMessage.sender_id == current_user.id
                         ).first()
                         
                         if message:
-                            # Update message content
                             message.content = new_content
                             message.updated_at = datetime.utcnow()
                             db.commit()
                             
-                            # Broadcast edit
                             await manager.broadcast(chat_id, {
                                 "type": "message_edited",
                                 "message_id": message_id,
@@ -505,14 +487,12 @@ async def handle_websocket_private(
                             })
                     except Exception as e:
                         db.rollback()
-                        print(f"Error editing message: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to edit message"
                         })
 
                 elif msg_type == "get_online_users":
-                    # Send current online users for this chat
                     online_users = manager.get_online_users(chat_id)
                     await websocket.send_json({
                         "type": "online_users",
@@ -532,11 +512,9 @@ async def handle_websocket_private(
                         continue
                     
                     try:
-                        # Create reaction in database
                         reaction_in = ReactionCreate(emoji=emoji)
                         reaction = create_reaction(db, message_id, current_user.id, reaction_in)
                         
-                        # Broadcast to all users in chat
                         await manager.broadcast(chat_id, {
                             "type": "reaction_added",
                             "message_id": message_id,
@@ -553,7 +531,6 @@ async def handle_websocket_private(
                             }
                         })
                     except Exception as e:
-                        print(f"Error adding reaction: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to add reaction"
@@ -571,11 +548,9 @@ async def handle_websocket_private(
                         continue
                     
                     try:
-                        # Delete reaction from database
                         success, error_message = delete_reaction(db, message_id, reaction_id, current_user.id)
                         
                         if success:
-                            # Broadcast removal to chat
                             await manager.broadcast(chat_id, {
                                 "type": "reaction_removed",
                                 "message_id": message_id,
@@ -584,7 +559,6 @@ async def handle_websocket_private(
                                 "timestamp": datetime.utcnow().isoformat()
                             })
                             
-                            # Also confirm to the sender
                             await websocket.send_json({
                                 "type": "reaction_removed",
                                 "message_id": message_id,
@@ -592,7 +566,6 @@ async def handle_websocket_private(
                                 "success": True
                             })
                         else:
-                            # Send error back to the user who tried to remove
                             await websocket.send_json({
                                 "type": "error",
                                 "error": f"Failed to remove reaction: {error_message}",
@@ -600,14 +573,12 @@ async def handle_websocket_private(
                             })
                             
                     except Exception as e:
-                        # Send error back to the user
                         await websocket.send_json({
                             "type": "error",
                             "error": f"Failed to remove reaction: {str(e)}",
                             "success": False
                         })
                         
-                # ✅ CHECK SPECIFIC USER STATUS
                 elif msg_type == "check_user_status":
                     user_id_to_check = data.get("user_id")
                     if user_id_to_check:
@@ -622,17 +593,13 @@ async def handle_websocket_private(
                             "timestamp": datetime.utcnow().isoformat()
                         })
 
-                # ✅ HEARTBEAT/ACTIVITY UPDATE
                 elif msg_type == "heartbeat":
-                    # Already handled above with activity update
-                    # Send pong response
                     await websocket.send_json({
                         "type": "pong",
                         "timestamp": datetime.utcnow().isoformat()
                     })
                     pass
 
-                # ✅ MESSAGE FORWARDING
                 elif msg_type == "forward":
                     message_id = data.get("message_id")
                     target_user_id = data.get("target_user_id")
@@ -657,7 +624,6 @@ async def handle_websocket_private(
                             })
                             continue
                         
-                        # Check if user is friends with target
                         if not is_friend(db, current_user.id, target_user_id):
                             await websocket.send_json({
                                 "type": "error",
@@ -686,7 +652,6 @@ async def handle_websocket_private(
                         })
                         
                     except Exception as e:
-                        print(f"Error forwarding message: {e}")
                         await websocket.send_json({
                             "type": "error",
                             "error": "Failed to forward message"
