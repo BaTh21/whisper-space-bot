@@ -139,8 +139,6 @@ def get_feed(
         .all()
     )
 
-    print(f"=== GET FEED ===")
-    print(f"Total diaries: {len(diaries)}")
     
     result = []
     for d in diaries:
@@ -148,8 +146,6 @@ def get_feed(
         filtered_thumbnails = []
         if d.video_thumbnails:
             filtered_thumbnails = [thumb for thumb in d.video_thumbnails if thumb is not None]
-        
-        print(f"Diary {d.id}: videos={len(d.videos or [])}, thumbnails={len(filtered_thumbnails)}, media_type={d.media_type}")
         
         diary_out = DiaryOut(
             id=d.id,
@@ -213,11 +209,6 @@ def get_diary_by_id(
     if diary.video_thumbnails:
         filtered_thumbnails = [thumb for thumb in diary.video_thumbnails if thumb is not None]
     
-    print(f"=== GET DIARY BY ID ===")
-    print(f"Diary ID: {diary_id}")
-    print(f"Videos: {diary.videos}")
-    print(f"Video thumbnails: {filtered_thumbnails}")
-    print(f"Media type: {diary.media_type}")
     
     return DiaryOut(
         id=diary.id,
@@ -255,19 +246,13 @@ def update_diary_by_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Update diary endpoint with debugging"""
     try:
-        print(f"=== UPDATE DIARY REQUEST ===")
-        print(f"Diary ID: {diary_id}")
-        print(f"User ID: {current_user.id}")
-        print(f"Has videos in update: {bool(diary_data.videos)}")
+        # Check what fields are actually being updated
+        update_dict = diary_data.dict(exclude_unset=True, exclude_none=True)
         
         diary = update_diary(db, diary_id, diary_data, current_user.id)
-        
-        print(f"✅ Diary updated:")
-        print(f"  - Videos: {diary.videos}")
-        print(f"  - Video thumbnails: {diary.video_thumbnails}")
-        print(f"  - Media type: {diary.media_type}")
-        
+
         # Refresh with relationships
         diary = db.query(Diary).options(
             joinedload(Diary.author),
@@ -292,8 +277,8 @@ def update_diary_by_id(
             share_type=diary.share_type.value,
             groups=[GroupResponse(id=g.id, name=g.name) for g in diary.groups],
             images=diary.images if diary.images else [],
-            videos=diary.videos if diary.videos else [],  # Make sure this is included
-            video_thumbnails=filtered_thumbnails,  # Make sure this is included
+            videos=diary.videos if diary.videos else [],
+            video_thumbnails=filtered_thumbnails,
             likes=[
                 DiaryLikeResponse(
                     id=l.id,
@@ -312,6 +297,7 @@ def update_diary_by_id(
         raise
     except Exception as e:
         print(f"Update diary error: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e)

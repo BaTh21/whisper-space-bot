@@ -1,5 +1,5 @@
 import base64
-from pydantic import BaseModel, ConfigDict, field_serializer, validator, Field
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator, model_validator, validator, Field
 from typing import Literal, Optional, List, Union
 from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
@@ -25,16 +25,18 @@ class DiaryCreate(BaseModel):
     content: str = Field(..., min_length=1)
     share_type: str = Field(..., pattern="^(public|friends|group|personal)$")
     group_ids: Optional[List[int]] = None
-    images: Optional[List[str]] = Field(None, max_items=10)
-    videos: Optional[List[str]] = Field(None, max_items=3)
+    images: Optional[List[str]] = Field(None, max_length=10)
+    videos: Optional[List[str]] = Field(None, max_length=3)
     
-    @validator('share_type', pre=True)
+    @field_validator('share_type', mode='before')
+    @classmethod
     def normalize_share_type(cls, v):
         if isinstance(v, str):
             return v.strip().lower()
         return v
     
-    @validator('images', 'videos', pre=True, each_item=True)
+    @field_validator('images', 'videos', mode='before')
+    @classmethod
     def validate_media_data(cls, v):
         if not v:
             return v
@@ -70,7 +72,8 @@ class DiaryCreate(BaseModel):
         
         return v
     
-    @validator('videos')
+    @field_validator('videos')
+    @classmethod
     def validate_video_size(cls, v):
         if not v:
             return v
@@ -162,10 +165,6 @@ class DiaryOut(BaseModel):
             except:
                 v = []
         
-        # Debug logging
-        print(f"🔧 THUMBNAIL VALIDATOR:")
-        print(f"  Videos count: {len(videos)}")
-        print(f"  Thumbnails input count: {len(v)}")
         
         # Ensure arrays match length
         result = []
@@ -181,9 +180,6 @@ class DiaryOut(BaseModel):
             else:
                 # Add None for missing thumbnails
                 result.append(None)
-        
-        print(f"  Thumbnails output count: {len(result)}")
-        print(f"  Thumbnails with values: {len([t for t in result if t])}")
         
         return result
     
@@ -300,21 +296,73 @@ class DiaryUpdate(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
     
-    @validator('share_type', pre=True)
+    @field_validator('share_type', mode='before')
+    @classmethod
     def normalize_share_type(cls, v):
+        """Normalize share_type to lowercase"""
         if v is None:
             return v
+        
         if isinstance(v, str):
             v = v.strip().lower()
             allowed_values = ["public", "friends", "group", "personal"]
             if v not in allowed_values:
                 raise ValueError(f"share_type must be one of: {allowed_values}")
+        else:
+            print(f"⚠️ share_type is not a string: {type(v)}")
+        
         return v
     
-    @validator('images', pre=True)
+    @field_validator('group_ids', mode='before')
+    @classmethod
+    def validate_group_ids(cls, v, info):
+        """Validate group_ids when share_type is 'group'"""
+
+        
+        if v is None:
+            print(f"  group_ids is None, returning None")
+            return v
+        
+        # Get the data being validated
+        data = getattr(info, 'data', {})
+
+        
+        # Get share_type from data
+        share_type = data.get('share_type')
+
+        
+        # If share_type is being set to 'group' in this update, require group_ids
+        if share_type == 'group':
+            print(f"  Share type is 'group', validating group_ids...")
+            if not v or len(v) == 0:
+                print(f"❌ ERROR: group_ids are required when share_type is 'group'")
+                raise ValueError('group_ids are required when share_type is "group"')
+            
+            if not all(isinstance(gid, int) for gid in v):
+                raise ValueError('All group_ids must be integers')
+        
+        print(f"✅ Validated group_ids: {v}")
+        return v
+    
+    @model_validator(mode='after')
+    def check_group_ids_with_share_type(self):
+        """Check that group_ids makes sense with share_type"""
+
+        # If group_ids is provided but share_type is not 'group', warn
+        if self.group_ids and len(self.group_ids) > 0:
+            if self.share_type and self.share_type != 'group':
+                print(f"⚠️ WARNING: group_ids provided but share_type is '{self.share_type}' not 'group'")
+                print(f"⚠️ These groups may be ignored by the backend")
+        
+        return self
+    
+    @field_validator('images', mode='before')
+    @classmethod
     def validate_and_process_images(cls, v):
+        """Validate images field"""
         if v is None:
             return v
+        
         
         # If it's an empty list, return empty list
         if isinstance(v, list) and len(v) == 0:
@@ -345,12 +393,16 @@ class DiaryUpdate(BaseModel):
             else:
                 raise ValueError('Image must be a string')
         
+        print(f"✅ Processed {len(processed_images)} images")
         return processed_images
     
-    @validator('videos', pre=True)
+    @field_validator('videos', mode='before')
+    @classmethod
     def validate_and_process_videos(cls, v):
+        """Validate videos field"""
         if v is None:
             return v
+        
         
         if isinstance(v, list) and len(v) == 0:
             return []
@@ -380,19 +432,6 @@ class DiaryUpdate(BaseModel):
                 raise ValueError('Video must be a string')
         
         return processed_videos
-    
-    @validator('group_ids', pre=True)
-    def validate_group_ids(cls, v, values):
-        if v is None:
-            return v
-        
-        # Only require group_ids if share_type is 'group'
-        if values.get('share_type') == 'group':
-            if not v or len(v) == 0:
-                raise ValueError('group_ids are required when share_type is "group"')
-            if not all(isinstance(gid, int) for gid in v):
-                raise ValueError('All group_ids must be integers')
-        return v
 
 class CommentUpdate(BaseModel):
     content: str

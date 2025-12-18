@@ -317,7 +317,7 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
     return False
 
 def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_user_id: int):
-    """Update existing diary"""
+    """Update existing diary - FIXED share_type update"""
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
         raise HTTPException(status_code=404, detail="Diary not found")
@@ -327,7 +327,60 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
     
     update_dict = diary_data.dict(exclude_unset=True, exclude_none=True)
     
-    # Handle images update
+    
+    # FIX: Handle share_type update
+    if 'share_type' in update_dict:
+        new_share_type = update_dict['share_type']
+        
+        try:
+            diary.share_type = ShareType(new_share_type.lower().strip())
+            
+            # If changing TO group, ensure group_ids are provided
+            if new_share_type.lower() == 'group' and 'group_ids' in update_dict:
+                group_ids = update_dict['group_ids']
+                print(f"📝 Setting groups: {group_ids}")
+                
+                # Clear existing groups
+                db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
+                
+                # Add new groups
+                if group_ids:
+                    diary_groups = [
+                        DiaryGroup(diary_id=diary_id, group_id=group_id)
+                        for group_id in group_ids
+                    ]
+                    db.add_all(diary_groups)
+            
+            # If changing FROM group, remove all group associations
+            elif diary.share_type != ShareType.group and new_share_type.lower() != 'group':
+                db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
+                
+        except ValueError as e:
+            print(f"❌ Invalid share_type: {new_share_type}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid share_type. Must be one of: {[t.value for t in ShareType]}"
+            )
+    
+    # FIX: Handle group_ids separately (for when share_type is already 'group')
+    if 'group_ids' in update_dict and diary.share_type == ShareType.group:
+        group_ids = update_dict['group_ids']
+        print(f"📝 Updating groups for existing group diary: {group_ids}")
+        
+        # Clear existing groups
+        db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
+        
+        # Add new groups
+        if group_ids:
+            diary_groups = [
+                DiaryGroup(diary_id=diary_id, group_id=group_id)
+                for group_id in group_ids
+            ]
+            db.add_all(diary_groups)
+        else:
+            print(f"⚠️ Warning: group diary with no groups specified")
+    
+    # Handle images update (keep existing)
     if 'images' in update_dict:
         new_images = update_dict['images']
         
@@ -357,7 +410,7 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
             
             diary.images = existing_urls + new_urls
     
-    # Handle videos update
+    # Handle videos update (keep existing)
     if 'videos' in update_dict:
         new_videos = update_dict['videos']
         
@@ -431,6 +484,7 @@ def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_us
     
     db.commit()
     db.refresh(diary)
+    
     return diary
 
 def delete_diary(db: Session, diary_id: int, current_user_id: int):
