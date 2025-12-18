@@ -37,7 +37,7 @@ google-api-core==2.25.2
 google-api-python-client==2.184.0
 google-auth==2.41.1
 google-auth-httplib2==0.2.0
-google-genai==1.41.0
+google-genai==1.55.0
 google-generativeai==0.8.5
 googleapis-common-protos==1.70.0
 greenlet==3.2.4
@@ -50,6 +50,7 @@ httplib2==0.31.0
 httptools==0.6.4
 httpx==0.28.1
 idna==3.10
+ImageIO==2.37.2
 itsdangerous==2.2.0
 Jinja2==3.1.6
 jiter==0.11.0
@@ -89,7 +90,8 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 python-http-client==3.3.7
 python-jose==3.5.0
-python-magic>=0.4.27
+python-magic==0.4.27
+python-magic-bin==0.4.14
 python-multipart==0.0.20
 pytz==2025.2
 pywebpush==2.1.2

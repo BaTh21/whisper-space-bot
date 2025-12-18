@@ -25,6 +25,9 @@ class Diary(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), 
                         onupdate=lambda: datetime.now(timezone.utc))
     images = Column(ARRAY(String), nullable=True, default=list)
+    videos = Column(ARRAY(String), nullable=True, default=list)
+    video_thumbnails = Column(ARRAY(String), nullable=True, default=list)
+    media_type = Column(String(20), default='image')
     
     author = relationship("User", back_populates="diaries")
     diary_groups = relationship("DiaryGroup", back_populates="diary", cascade="all, delete-orphan")

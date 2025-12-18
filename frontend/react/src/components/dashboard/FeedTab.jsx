@@ -9,8 +9,10 @@ import {
   FavoriteBorder,
   Image as ImageIcon,
   MoreVert as MoreVertIcon,
+  PlayArrow as PlayArrowIcon,
   Reply as ReplyIcon,
   Save as SaveIcon,
+  Videocam as VideocamIcon,
   ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -48,7 +50,7 @@ import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDi
 import { formatCambodiaDate } from '../../utils/dateUtils';
 
 // Helper function to convert files to base64
-const convertFilesToBase64 = (files) => {
+const convertFilesToBase64 = (files, type = 'image') => {
   return Promise.all(
     Array.from(files).map(file => {
       return new Promise((resolve, reject) => {
@@ -84,7 +86,7 @@ const CommentItemWithActions = ({
   setSelectedCommentImages,
   onEditComment,
   onDeleteComment,
-  onImageClick
+  onMediaClick
 }) => {
   const [localReplying, setLocalReplying] = useState(false);
   const [localEditing, setLocalEditing] = useState(false);
@@ -224,8 +226,7 @@ const CommentItemWithActions = ({
                   onClose={handleCommentMenuClose}
                 >
                   <MenuItem onClick={handleCommentEdit}>
-                    <EditIcon fontSize="small" sx={{ mr: 1 }} />
-                    Edit
+                    <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
                   </MenuItem>
                   <MenuItem onClick={handleCommentDelete}>
                     <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
@@ -283,7 +284,7 @@ const CommentItemWithActions = ({
                           src={img}
                           alt={`Edit ${idx}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
-                          onClick={() => onImageClick && onImageClick(img)}
+                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
                           className="clickable-image"
                         />
                         <IconButton
@@ -347,10 +348,10 @@ const CommentItemWithActions = ({
                           cursor: 'pointer',
                           transition: 'transform 0.2s'
                         }}
-                        onClick={() => onImageClick && onImageClick(img)}
+                        onClick={() => onMediaClick && onMediaClick(img, 'image')}
                         onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                         onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        className="clickable-image"
+                        className="clickable-media"
                       />
                     </Box>
                   ))}
@@ -402,8 +403,8 @@ const CommentItemWithActions = ({
                           src={img}
                           alt={`Reply preview ${idx}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
-                          onClick={() => onImageClick && onImageClick(img)}
-                          className="clickable-image"
+                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
+                          className="clickable-media"
                         />
                         <IconButton
                           size="small"
@@ -466,7 +467,7 @@ const CommentItemWithActions = ({
                   setSelectedCommentImages={setSelectedCommentImages}
                   onEditComment={onEditComment}
                   onDeleteComment={onDeleteComment}
-                  onImageClick={onImageClick}
+                  onMediaClick={onMediaClick}
                 />
               ))}
             </Box>
@@ -475,6 +476,123 @@ const CommentItemWithActions = ({
       </Box>
     </Box>
   );
+};
+
+// Media Player Component
+const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
+  const [playing, setPlaying] = useState(false);
+
+  if (type === 'image') {
+    return (
+      <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+        {/* <img
+          src={url}
+          alt="Full size view"
+          style={{
+            maxWidth: '100%',
+            maxHeight: '90vh',
+            objectFit: 'contain',
+            borderRadius: 8
+          }}
+        /> */}
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+      {playing ? (
+        <video
+          controls
+          autoPlay
+          style={{
+            maxWidth: '100%',
+            maxHeight: '90vh',
+            borderRadius: 8
+          }}
+          onEnded={() => setPlaying(false)}
+        >
+          <source src={url} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      ) : (
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            height: '60vh',
+            cursor: 'pointer'
+          }}
+          onClick={() => setPlaying(true)}
+        >
+          {thumbnail ? (
+            <>
+              {/* <img
+                // src={thumbnail}
+                alt="Video thumbnail"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: 8
+                }}
+              /> */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 80,
+                  height: 80,
+                  borderRadius: '50%',
+                  bgcolor: 'rgba(0,0,0,0.6)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'transform 0.2s',
+                  '&:hover': {
+                    transform: 'translate(-50%, -50%) scale(1.1)',
+                    bgcolor: 'rgba(0,0,0,0.8)'
+                  }
+                }}
+              >
+                <PlayArrowIcon sx={{ fontSize: 40, color: 'white' }} />
+              </Box>
+            </>
+          ) : (
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                bgcolor: '#333',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <PlayArrowIcon sx={{ fontSize: 60, color: 'white' }} />
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+// Helper function to get video thumbnail
+const getVideoThumbnail = (videoUrl, diary) => {
+  if (!videoUrl || !diary) return null;
+  
+  if (diary.video_thumbnails && Array.isArray(diary.video_thumbnails)) {
+    const videoIndex = diary.videos?.indexOf(videoUrl);
+    if (videoIndex !== -1 && diary.video_thumbnails[videoIndex]) {
+      return diary.video_thumbnails[videoIndex];
+    }
+  }
+  
+  return null;
 };
 
 // Main FeedTab component
@@ -498,6 +616,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const [editShareType, setEditShareType] = useState('');
   const [editGroupIds, setEditGroupIds] = useState([]);
   const [editImages, setEditImages] = useState([]);
+  const [editVideos, setEditVideos] = useState([]);
   const [editLoading, setEditLoading] = useState(false);
 
   // State for comment operations
@@ -517,14 +636,16 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-  // State to force re-render of images
-  const [imageUpdateTrigger, setImageUpdateTrigger] = useState(0);
+  // State to force re-render of media
+  const [mediaUpdateTrigger, setMediaUpdateTrigger] = useState(0);
 
-  // Image viewer state
-  const [imageViewerOpen, setImageViewerOpen] = useState(false);
-  const [selectedImage, setSelectedImage] = useState('');
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [currentImages, setCurrentImages] = useState([]);
+  // Media viewer state
+  const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState('');
+  const [selectedThumbnail, setSelectedThumbnail] = useState('');
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [selectedMediaType, setSelectedMediaType] = useState('image');
+  const [currentMediaList, setCurrentMediaList] = useState([]);
 
   const { t } = useTranslation();
   const theme = useTheme();
@@ -534,7 +655,9 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const normalizedDiaries = diaries.map(diary => ({
     ...diary,
     groups: Array.isArray(diary.groups) ? diary.groups : [],
-    images: Array.isArray(diary.images) ? diary.images : []
+    images: Array.isArray(diary.images) ? diary.images : [],
+    videos: Array.isArray(diary.videos) ? diary.videos : [],
+    video_thumbnails: Array.isArray(diary.video_thumbnails) ? diary.video_thumbnails : []
   }));
 
   const normalizedGroups = Array.isArray(groups) ? groups : [];
@@ -553,102 +676,186 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     setSnackbarOpen(false);
   };
 
-  // Image viewer functions
-  const openImageViewer = (images, index = 0) => {
-    setCurrentImages(images);
-    setSelectedImage(images[index]);
-    setSelectedImageIndex(index);
-    setImageViewerOpen(true);
+  // Media viewer functions
+  const openMediaViewer = (mediaList, thumbnails = [], index = 0, type = 'image') => {
+    setCurrentMediaList(mediaList);
+    setSelectedMedia(mediaList[index]);
+    setSelectedMediaType(type);
+    setSelectedMediaIndex(index);
+    
+    // Set thumbnail for videos
+    if (type === 'video' && thumbnails[index]) {
+      setSelectedThumbnail(thumbnails[index]);
+    } else {
+      setSelectedThumbnail('');
+    }
+    
+    setMediaViewerOpen(true);
   };
 
-  const handleImageViewerClose = () => {
-    setImageViewerOpen(false);
-    setSelectedImage('');
-    setSelectedImageIndex(0);
-    setCurrentImages([]);
+  const handleMediaViewerClose = () => {
+    setMediaViewerOpen(false);
+    setSelectedMedia('');
+    setSelectedThumbnail('');
+    setSelectedMediaIndex(0);
+    setCurrentMediaList([]);
+    setSelectedMediaType('image');
   };
 
-  const handlePrevImage = () => {
-    const newIndex = selectedImageIndex > 0 ? selectedImageIndex - 1 : currentImages.length - 1;
-    setSelectedImage(currentImages[newIndex]);
-    setSelectedImageIndex(newIndex);
+  const handlePrevMedia = () => {
+    const newIndex = selectedMediaIndex > 0 ? selectedMediaIndex - 1 : currentMediaList.length - 1;
+    setSelectedMedia(currentMediaList[newIndex]);
+    setSelectedMediaIndex(newIndex);
+    
+    // Update thumbnail for videos
+    if (selectedMediaType === 'video') {
+      const diary = normalizedDiaries.find(d => d.videos?.includes(selectedMedia));
+      if (diary?.video_thumbnails?.[newIndex]) {
+        setSelectedThumbnail(diary.video_thumbnails[newIndex]);
+      } else {
+        setSelectedThumbnail('');
+      }
+    }
   };
 
-  const handleNextImage = () => {
-    const newIndex = selectedImageIndex < currentImages.length - 1 ? selectedImageIndex + 1 : 0;
-    setSelectedImage(currentImages[newIndex]);
-    setSelectedImageIndex(newIndex);
+  const handleNextMedia = () => {
+    const newIndex = selectedMediaIndex < currentMediaList.length - 1 ? selectedMediaIndex + 1 : 0;
+    setSelectedMedia(currentMediaList[newIndex]);
+    setSelectedMediaIndex(newIndex);
+    
+    // Update thumbnail for videos
+    if (selectedMediaType === 'video') {
+      const diary = normalizedDiaries.find(d => d.videos?.includes(selectedMedia));
+      if (diary?.video_thumbnails?.[newIndex]) {
+        setSelectedThumbnail(diary.video_thumbnails[newIndex]);
+      } else {
+        setSelectedThumbnail('');
+      }
+    }
   };
 
-  // Image upload handler
-  const handleImageUpload = async (event, diaryId = null, commentId = null) => {
+  // Media upload handler
+  const handleMediaUpload = async (event, diaryId = null, commentId = null, mediaType = 'image') => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    // Validate files
+    // Validate files based on type
     const validFiles = Array.from(files).filter(file => {
-      const isValidType = file.type.startsWith('image/');
-      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
-      return isValidType && isValidSize;
+      if (mediaType === 'image') {
+        const isValidType = file.type.startsWith('image/');
+        const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB for images
+        
+        if (!isValidType) {
+          showMessage('Only image files are allowed (jpg, png, gif, etc.)', 'error');
+          return false;
+        }
+        
+        if (!isValidSize) {
+          showMessage('Each image must be less than 10MB', 'error');
+          return false;
+        }
+        
+        // Check count for editing
+        if (diaryId && editingDiary === diaryId) {
+          const currentCount = mediaType === 'image' ? editImages.length : editVideos.length;
+          const maxCount = mediaType === 'image' ? 10 : 3;
+          if (currentCount + files.length > maxCount) {
+            showMessage(`Maximum ${maxCount} ${mediaType === 'image' ? 'images' : 'videos'} allowed`, 'error');
+            return false;
+          }
+        }
+        
+        return true;
+      } else if (mediaType === 'video') {
+        const isValidType = file.type.startsWith('video/') || ['.mp4', '.mov', '.avi', '.webm', '.mkv'].some(ext => file.name.toLowerCase().endsWith(ext));
+        const isValidSize = file.size <= 50 * 1024 * 1024; // 50MB for videos
+        
+        if (!isValidType) {
+          showMessage('Only video files are allowed (mp4, mov, avi, webm, mkv)', 'error');
+          return false;
+        }
+        
+        if (!isValidSize) {
+          showMessage('Each video must be less than 50MB', 'error');
+          return false;
+        }
+        
+        // Check count for editing
+        if (diaryId && editingDiary === diaryId) {
+          if (editVideos.length + files.length > 3) {
+            showMessage('Maximum 3 videos allowed', 'error');
+            return false;
+          }
+        }
+        
+        return true;
+      }
+      
+      return false;
     });
 
-    if (validFiles.length === 0) {
-      showMessage('Please select valid image files (JPG, PNG, GIF, max 5MB each)', 'error');
-      return;
-    }
-
-    if (validFiles.length > 10) {
-      showMessage('Maximum 10 images allowed', 'error');
-      return;
-    }
+    if (validFiles.length === 0) return;
 
     try {
-      const base64Images = await convertFilesToBase64(validFiles);
-      const imageUrls = base64Images.map(img => img.data);
+      const base64Media = await convertFilesToBase64(validFiles, mediaType);
+      const mediaUrls = base64Media.map(img => img.data);
 
       if (diaryId && editingDiary === diaryId) {
         // For diary editing
-        setEditImages(prev => {
-          const newImages = [...prev, ...imageUrls];
-          // Trigger re-render
-          setImageUpdateTrigger(prev => prev + 1);
-          return newImages;
-        });
+        if (mediaType === 'image') {
+          setEditImages(prev => {
+            const newImages = [...prev, ...mediaUrls];
+            setMediaUpdateTrigger(prev => prev + 1);
+            return newImages;
+          });
+        } else {
+          setEditVideos(prev => {
+            const newVideos = [...prev, ...mediaUrls];
+            setMediaUpdateTrigger(prev => prev + 1);
+            return newVideos;
+          });
+        }
+        showMessage(`${mediaType === 'image' ? 'Image' : 'Video'} added`, 'success');
       } else if (commentId) {
-        // For comment replies
+        // For comment replies (only images allowed)
         setSelectedCommentImages(prev => ({
           ...prev,
-          [commentId]: [...(prev[commentId] || []), ...imageUrls]
+          [commentId]: [...(prev[commentId] || []), ...mediaUrls]
         }));
       } else if (diaryId) {
-        // For new comments
+        // For new comments (only images allowed)
         setSelectedCommentImages(prev => ({
           ...prev,
-          [diaryId]: [...(prev[diaryId] || []), ...imageUrls]
+          [diaryId]: [...(prev[diaryId] || []), ...mediaUrls]
         }));
       }
 
       // Clear file input
       event.target.value = '';
     } catch (err) {
-      showMessage('Failed to process images', 'error');
-      console.error('Image upload error:', err);
+      showMessage(`Failed to process ${mediaType}s`, 'error');
+      console.error('Media upload error:', err);
     }
   };
 
-  // Remove image - FIXED VERSION
-  const removeImage = (indexToRemove, diaryId = null, commentId = null) => {
+  // Remove media
+  const removeMedia = (indexToRemove, diaryId = null, commentId = null, mediaType = 'image') => {
     if (diaryId && editingDiary === diaryId) {
-      // For diary edit images - Create a NEW array reference
-      setEditImages(current => {
-        const newImages = current.filter((_, index) => index !== indexToRemove);
-        return newImages;
-      });
-      
-      // Force re-render by updating the trigger
-      setImageUpdateTrigger(prev => prev + 1);
+      if (mediaType === 'image') {
+        setEditImages(current => {
+          const newImages = current.filter((_, index) => index !== indexToRemove);
+          setMediaUpdateTrigger(prev => prev + 1);
+          return newImages;
+        });
+      } else {
+        setEditVideos(current => {
+          const newVideos = current.filter((_, index) => index !== indexToRemove);
+          setMediaUpdateTrigger(prev => prev + 1);
+          return newVideos;
+        });
+      }
+      showMessage(`${mediaType === 'image' ? 'Image' : 'Video'} removed`, 'info');
     } else if (commentId) {
-      // For comment images
       setSelectedCommentImages(prev => {
         const currentImages = prev[commentId] || [];
         const newImages = currentImages.filter((_, index) => index !== indexToRemove);
@@ -658,7 +865,6 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
         };
       });
     } else if (diaryId) {
-      // For new comment images
       setSelectedCommentImages(prev => {
         const currentImages = prev[diaryId] || [];
         const newImages = currentImages.filter((_, index) => index !== indexToRemove);
@@ -727,20 +933,30 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     try {
       const fullDiary = await getDiaryById(diary.id);
       
+      console.log('=== EDIT DIARY DATA ===');
+      console.log('Full diary:', {
+        id: fullDiary.id,
+        videos: fullDiary.videos,
+        video_thumbnails: fullDiary.video_thumbnails,
+        images: fullDiary.images,
+        media_type: fullDiary.media_type
+      });
+      
       // Reset and set with fresh data
       setEditTitle(fullDiary.title || '');
       setEditContent(fullDiary.content || '');
       setEditShareType(fullDiary.share_type || '');
       setEditGroupIds(fullDiary.groups?.map(g => g.id) || []);
       
-      // Set images with fresh array
+      // Set media with fresh arrays - IMPORTANT: Use existing URLs, not re-upload
       setEditImages([...(fullDiary.images || [])]);
+      setEditVideos([...(fullDiary.videos || [])]);
       
       // Set editing diary last
       setEditingDiary(diary.id);
       
-      // Reset image update trigger
-      setImageUpdateTrigger(0);
+      // Reset media update trigger
+      setMediaUpdateTrigger(0);
     } catch (err) {
       console.error('Failed to fetch diary:', err);
       // Fallback to provided data
@@ -750,6 +966,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
       setEditShareType(diary.share_type || '');
       setEditGroupIds(diary.groups?.map(g => g.id) || []);
       setEditImages([...(diary.images || [])]);
+      setEditVideos([...(diary.videos || [])]);
     }
   };
 
@@ -760,8 +977,10 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     setEditShareType('');
     setEditGroupIds([]);
     setEditImages([]);
+    setEditVideos([]);
     setEditLoading(false);
-    setImageUpdateTrigger(0);
+    setMediaUpdateTrigger(0);
+    showMessage('Edit cancelled', 'info');
   };
 
   const handleEditSave = async (diaryId) => {
@@ -783,14 +1002,39 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
         updateData.group_ids = editGroupIds;
       }
 
-      // Always send images array - empty array means remove all images
-      updateData.images = editImages;
+      // Prepare images: existing URLs + new base64 images
+      const existingImageUrls = editImages.filter(img => img.startsWith('http'));
+      const newBase64Images = editImages.filter(img => img.startsWith('data:image/'));
+      
+      // For videos: existing URLs + new base64 videos
+      const existingVideoUrls = editVideos.filter(vid => vid.startsWith('http'));
+      const newBase64Videos = editVideos.filter(vid => vid.startsWith('data:video/'));
+      
+      console.log('=== EDIT DATA ANALYSIS ===');
+      console.log('Existing image URLs:', existingImageUrls.length);
+      console.log('New base64 images:', newBase64Images.length);
+      console.log('Existing video URLs:', existingVideoUrls.length);
+      console.log('New base64 videos:', newBase64Videos.length);
+      
+      // Send all images (existing URLs + new base64)
+      updateData.images = [...existingImageUrls, ...newBase64Images];
+      
+      // Send all videos (existing URLs + new base64)
+      updateData.videos = [...existingVideoUrls, ...newBase64Videos];
+      
+      console.log('=== SENDING UPDATE ===');
+      console.log('Update data structure:', {
+        ...updateData,
+        images: `Array of ${updateData.images.length} items`,
+        videos: `Array of ${updateData.videos.length} items`
+      });
 
       await updateDiaryById(diaryId, updateData);
       showMessage('Diary updated successfully');
       handleEditCancel();
       if (onDataUpdate) onDataUpdate();
     } catch (err) {
+      console.error('Update diary error:', err);
       showMessage(err.message || 'Failed to update diary', 'error');
       setEditLoading(false);
     }
@@ -1001,6 +1245,21 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     }
   };
 
+  // Handle media click
+  const handleMediaClick = (url, type = 'image') => {
+    if (type === 'image') {
+      openMediaViewer([url], [], 0, 'image');
+    } else {
+      // For video, we need to find the thumbnail
+      const diary = normalizedDiaries.find(d => d.videos?.includes(url));
+      if (diary) {
+        const videoIndex = diary.videos.indexOf(url);
+        const thumbnail = diary.video_thumbnails?.[videoIndex] || '';
+        openMediaViewer([url], [thumbnail], 0, 'video');
+      }
+    }
+  };
+
   // Count all comments
   const countAllComments = (comments) => {
     if (!Array.isArray(comments)) return 0;
@@ -1021,10 +1280,10 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', overflow: 'hidden' }}>
-      {/* Image Viewer Modal */}
+      {/* Media Viewer Modal */}
       <Modal
-        open={imageViewerOpen}
-        onClose={handleImageViewerClose}
+        open={mediaViewerOpen}
+        onClose={handleMediaViewerClose}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -1038,20 +1297,16 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
           maxHeight: '90vh',
           outline: 'none'
         }}>
-          <img
-            src={selectedImage}
-            alt="Full size view"
-            style={{
-              maxWidth: '100%',
-              maxHeight: '90vh',
-              objectFit: 'contain',
-              borderRadius: 8
-            }}
+          <MediaPlayer 
+            url={selectedMedia} 
+            type={selectedMediaType}
+            thumbnail={selectedThumbnail}
+            onClose={handleMediaViewerClose}
           />
-          {currentImages.length > 1 && (
+          {currentMediaList.length > 1 && (
             <>
               <IconButton
-                onClick={handlePrevImage}
+                onClick={handlePrevMedia}
                 sx={{
                   position: 'absolute',
                   left: 16,
@@ -1065,7 +1320,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                 <ArrowBackIcon />
               </IconButton>
               <IconButton
-                onClick={handleNextImage}
+                onClick={handleNextMedia}
                 sx={{
                   position: 'absolute',
                   right: 16,
@@ -1092,12 +1347,12 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                   fontSize: '0.875rem'
                 }}
               >
-                {selectedImageIndex + 1} / {currentImages.length}
+                {selectedMediaIndex + 1} / {currentMediaList.length}
               </Typography>
             </>
           )}
           <IconButton
-            onClick={handleImageViewerClose}
+            onClick={handleMediaViewerClose}
             sx={{
               position: 'absolute',
               top: 16,
@@ -1266,30 +1521,65 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                         </FormControl>
                       )}
                       
-                      {/* Image Upload Section for Edit */}
-                      <Box>
-                        <Button
-                          variant="outlined"
-                          component="label"
-                          startIcon={<ImageIcon />}
-                          size="medium"
-                          disabled={editLoading}
-                        >
-                          Add Images (Max 10)
-                          <input
-                            type="file"
-                            hidden
-                            multiple
-                            accept="image/*"
-                            onChange={(e) => handleImageUpload(e, diary.id)}
-                          />
-                        </Button>
+                      {/* Media Upload Section for Edit */}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {/* Image Upload */}
+                        <Box>
+                          <Button
+                            variant="outlined"
+                            component="label"
+                            startIcon={<ImageIcon />}
+                            size="medium"
+                            disabled={editLoading || editImages.length >= 10}
+                            sx={{ mr: 2 }}
+                          >
+                            Add Images (Max 10)
+                            <input
+                              type="file"
+                              hidden
+                              multiple
+                              accept="image/*"
+                              onChange={(e) => handleMediaUpload(e, diary.id, null, 'image')}
+                            />
+                          </Button>
+                          {editImages.length > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                              {editImages.length} selected
+                            </Typography>
+                          )}
+                        </Box>
+                        
+                        {/* Video Upload */}
+                        <Box>
+                          <Button
+                            variant="outlined"
+                            component="label"
+                            startIcon={<VideocamIcon />}
+                            size="medium"
+                            disabled={editLoading || editVideos.length >= 3}
+                            sx={{ mr: 2 }}
+                          >
+                            Add Videos (Max 3)
+                            <input
+                              type="file"
+                              hidden
+                              multiple
+                              accept="video/*"
+                              onChange={(e) => handleMediaUpload(e, diary.id, null, 'video')}
+                            />
+                          </Button>
+                          {editVideos.length > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                              {editVideos.length} selected
+                            </Typography>
+                          )}
+                        </Box>
                       </Box>
                       
-                      {/* Image Preview for Edit - Compact Grid */}
+                      {/* Image Preview for Edit */}
                       {editImages.length > 0 && (
                         <Box 
-                          key={`image-preview-${editImages.length}-${imageUpdateTrigger}`}
+                          key={`image-preview-${editImages.length}-${mediaUpdateTrigger}`}
                           sx={{ mt: 2 }}
                         >
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -1309,7 +1599,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                   borderRadius: '6px',
                                   overflow: 'hidden',
                                   aspectRatio: '1',
-                                  '&:hover .image-overlay': {
+                                  '&:hover .media-overlay': {
                                     opacity: 1
                                   }
                                 }}
@@ -1323,11 +1613,11 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                     objectFit: 'cover',
                                     cursor: 'pointer'
                                   }}
-                                  onClick={() => openImageViewer(editImages, index)}
+                                  onClick={() => handleMediaClick(img, 'image')}
                                 />
                                 
-                                {/* Image Overlay */}
-                                <Box className="image-overlay" sx={{
+                                {/* Media Overlay */}
+                                <Box className="media-overlay" sx={{
                                   position: 'absolute',
                                   top: 0,
                                   left: 0,
@@ -1344,7 +1634,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                   <IconButton
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      removeImage(index, diary.id);
+                                      removeMedia(index, diary.id, null, 'image');
                                     }}
                                     sx={{
                                       bgcolor: 'error.main',
@@ -1360,7 +1650,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                     <CloseIcon sx={{ fontSize: 16 }} />
                                   </IconButton>
                                   <IconButton
-                                    onClick={() => openImageViewer(editImages, index)}
+                                    onClick={() => handleMediaClick(img, 'image')}
                                     sx={{
                                       bgcolor: 'primary.main',
                                       color: 'white',
@@ -1376,7 +1666,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                   </IconButton>
                                 </Box>
                                 
-                                {/* Image Number Badge */}
+                                {/* Media Number Badge */}
                                 <Box
                                   sx={{
                                     position: 'absolute',
@@ -1396,8 +1686,200 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                 >
                                   {index + 1}
                                 </Box>
+                                
+                                {/* URL/New Badge */}
+                                <Box
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 4,
+                                    right: 4,
+                                    bgcolor: img.startsWith('http') ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
+                                    color: 'white',
+                                    px: 0.5,
+                                    py: 0.1,
+                                    borderRadius: 1,
+                                    fontSize: '0.55rem',
+                                    fontWeight: 500
+                                  }}
+                                >
+                                  {img.startsWith('http') ? 'URL' : 'NEW'}
+                                </Box>
                               </Box>
                             ))}
+                          </Box>
+                        </Box>
+                      )}
+                      
+                      {/* Video Preview for Edit */}
+                      {editVideos.length > 0 && (
+                        <Box 
+                          key={`video-preview-${editVideos.length}-${mediaUpdateTrigger}`}
+                          sx={{ mt: 2 }}
+                        >
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Videos ({editVideos.length} / 3)
+                          </Typography>
+                          <Box sx={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                            gap: 1.5,
+                            mt: 1 
+                          }}>
+                            {editVideos.map((vid, index) => {
+                              const isExistingVideo = vid.startsWith('http');
+                              const thumbnail = isExistingVideo ? getVideoThumbnail(vid, diary) : null;
+                              
+                              return (
+                                <Box 
+                                  key={`edit-vid-${diary.id}-${index}`}
+                                  sx={{ 
+                                    position: 'relative',
+                                    borderRadius: '8px',
+                                    overflow: 'hidden',
+                                    aspectRatio: '16/9',
+                                    bgcolor: '#000',
+                                    cursor: 'pointer',
+                                    '&:hover .media-overlay': {
+                                      opacity: 1
+                                    }
+                                  }}
+                                >
+                                  {/* Video Thumbnail or Placeholder */}
+                                  {thumbnail ? (
+                                    <Box
+                                      sx={{
+                                        width: '100%',
+                                        height: '100%',
+                                        position: 'relative'
+                                      }}
+                                      onClick={() => handleMediaClick(vid, 'video')}
+                                    >
+                                      <img
+                                        src={thumbnail}
+                                        alt={`Video ${index + 1}`}
+                                        style={{
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover'
+                                        }}
+                                      />
+                                      <Box
+                                        sx={{
+                                          position: 'absolute',
+                                          top: '50%',
+                                          left: '50%',
+                                          transform: 'translate(-50%, -50%)',
+                                          width: 40,
+                                          height: 40,
+                                          borderRadius: '50%',
+                                          bgcolor: 'rgba(0,0,0,0.6)',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          transition: 'transform 0.2s',
+                                          '&:hover': {
+                                            transform: 'translate(-50%, -50%) scale(1.1)',
+                                            bgcolor: 'rgba(0,0,0,0.8)'
+                                          }
+                                        }}
+                                      >
+                                        <PlayArrowIcon sx={{ fontSize: 24, color: 'white' }} />
+                                      </Box>
+                                    </Box>
+                                  ) : (
+                                    <Box
+                                      sx={{
+                                        width: '100%',
+                                        height: '100%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        position: 'relative'
+                                      }}
+                                      onClick={() => handleMediaClick(vid, 'video')}
+                                    >
+                                      <PlayArrowIcon sx={{ fontSize: 40, color: 'white', zIndex: 1 }} />
+                                    </Box>
+                                  )}
+                                  
+                                  {/* Media Overlay with Remove Button */}
+                                  <Box className="media-overlay" sx={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    bgcolor: 'rgba(0,0,0,0.5)',
+                                    opacity: 0,
+                                    transition: 'opacity 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 0.5
+                                  }}>
+                                    <IconButton
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeMedia(index, diary.id, null, 'video');
+                                      }}
+                                      sx={{
+                                        bgcolor: 'error.main',
+                                        color: 'white',
+                                        width: 32,
+                                        height: 32,
+                                        '&:hover': {
+                                          bgcolor: 'error.dark'
+                                        }
+                                      }}
+                                      size="small"
+                                    >
+                                      <CloseIcon sx={{ fontSize: 16 }} />
+                                    </IconButton>
+                                  </Box>
+                                  
+                                  {/* Video Type Badge */}
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      top: 4,
+                                      left: 4,
+                                      bgcolor: isExistingVideo ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
+                                      color: 'white',
+                                      px: 0.75,
+                                      py: 0.25,
+                                      borderRadius: 1,
+                                      fontSize: '0.65rem',
+                                      fontWeight: 500,
+                                      zIndex: 2
+                                    }}
+                                  >
+                                    {isExistingVideo ? 'UPLOADED' : 'NEW'}
+                                  </Box>
+                                  
+                                  {/* Video Number Badge */}
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      top: 4,
+                                      right: 4,
+                                      bgcolor: 'rgba(0, 0, 0, 0.6)',
+                                      color: 'white',
+                                      borderRadius: '50%',
+                                      width: 20,
+                                      height: 20,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 600,
+                                      zIndex: 2
+                                    }}
+                                  >
+                                    {index + 1}
+                                  </Box>
+                                </Box>
+                              );
+                            })}
                           </Box>
                         </Box>
                       )}
@@ -1472,7 +1954,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
                   {/* Diary Images - Compact Grid View */}
                   {diary.images && diary.images.length > 0 && (
-                    <Box sx={{ mb: 3 }}>
+                    <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                         {diary.images.length} {diary.images.length === 1 ? 'image' : 'images'}
                       </Typography>
@@ -1497,12 +1979,12 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                               transition: 'transform 0.2s',
                               '&:hover': {
                                 transform: 'scale(1.02)',
-                                '& .image-overlay': {
+                                '& .media-overlay': {
                                   opacity: 1
                                 }
                               }
                             }}
-                            onClick={() => openImageViewer(diary.images, index)}
+                            onClick={() => handleMediaClick(img, 'image')}
                           >
                             <img
                               src={img}
@@ -1513,7 +1995,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                 objectFit: 'cover'
                               }}
                             />
-                            <Box className="image-overlay" sx={{
+                            <Box className="media-overlay" sx={{
                               position: 'absolute',
                               top: 0,
                               left: 0,
@@ -1527,6 +2009,107 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                               justifyContent: 'center'
                             }}>
                               <ZoomInIcon sx={{ color: 'white', fontSize: 32 }} />
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Diary Videos - Grid View */}
+                  {diary.videos && diary.videos.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        {diary.videos.length} {diary.videos.length === 1 ? 'video' : 'videos'}
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: {
+                          xs: '1fr',
+                          sm: 'repeat(2, 1fr)',
+                          md: 'repeat(3, 1fr)'
+                        },
+                        gap: 2
+                      }}>
+                        {diary.videos.map((video, index) => (
+                          <Box
+                            key={index}
+                            sx={{
+                              position: 'relative',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              aspectRatio: '16/9',
+                              bgcolor: '#000',
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s',
+                              '&:hover': {
+                                transform: 'scale(1.02)',
+                                '& .media-overlay': {
+                                  opacity: 1
+                                }
+                              }
+                            }}
+                            onClick={() => handleMediaClick(video, 'video')}
+                          >
+                            {/* Video Thumbnail */}
+                            {diary.video_thumbnails?.[index] ? (
+                              <Box></Box>
+                              // <img
+                              //   src={diary.video_thumbnails[index]}
+                              //   alt={`Video thumbnail ${index + 1}`}
+                              //   style={{
+                              //     width: '100%',
+                              //     height: '100%',
+                              //     objectFit: 'cover'
+                              //   }}
+                              // />
+                            ) : (
+                              <Box
+                                sx={{
+                                  width: '100%',
+                                  height: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}
+                              >
+                                <PlayArrowIcon sx={{ fontSize: 48, color: 'white' }} />
+                              </Box>
+                            )}
+                            
+                            {/* Play Button Overlay */}
+                            <Box className="media-overlay" sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              bgcolor: 'rgba(0,0,0,0.3)',
+                              opacity: 0,
+                              transition: 'opacity 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <PlayArrowIcon sx={{ color: 'white', fontSize: 48 }} />
+                            </Box>
+                            
+                            {/* Video Badge */}
+                            <Box
+                              sx={{
+                                position: 'absolute',
+                                top: 8,
+                                right: 8,
+                                bgcolor: 'rgba(0,0,0,0.7)',
+                                color: 'white',
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: 1,
+                                fontSize: '0.7rem',
+                                fontWeight: 500
+                              }}
+                            >
+                              MP4
                             </Box>
                           </Box>
                         ))}
@@ -1617,7 +2200,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                               hidden
                               multiple
                               accept="image/*"
-                              onChange={(e) => handleImageUpload(e, diary.id)}
+                              onChange={(e) => handleMediaUpload(e, diary.id)}
                             />
                           </Button>
                           <Button
@@ -1678,7 +2261,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                 />
                                 <IconButton
                                   size="small"
-                                  onClick={() => removeImage(index, null, diary.id)}
+                                  onClick={() => removeMedia(index, null, diary.id, 'image')}
                                   sx={{
                                     position: 'absolute',
                                     top: -4,
@@ -1727,14 +2310,14 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                               diaryId={diary.id}
                               profile={profile}
                               onAddReply={handleAddReply}
-                              handleImageUpload={handleImageUpload}
+                              handleImageUpload={handleMediaUpload}
                               selectedCommentImages={selectedCommentImages}
                               setSelectedCommentImages={setSelectedCommentImages}
                               onEditComment={handleEditComment}
                               onDeleteComment={handleCommentDeleteClick}
                               replyingTo={replyingTo}
                               setReplyingTo={setReplyingTo}
-                              onImageClick={(img) => openImageViewer([img])}
+                              onMediaClick={handleMediaClick}
                             />
                           ))}
                         </Box>

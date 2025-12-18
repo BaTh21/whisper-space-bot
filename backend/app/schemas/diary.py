@@ -7,57 +7,83 @@ from datetime import datetime, timezone
 ShareTypeInput = Literal["public", "friends", "group", "personal"]
 ShareTypeOutput = str
 
+class CreatorResponse(BaseModel):
+    id: int
+    username: str
+    avatar_url: Optional[str] = None
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+
+class DiaryLikeResponse(BaseModel):
+    id: int
+    user: CreatorResponse
+
 class DiaryCreate(BaseModel):
-    title: str
-    content: str
+    title: str = Field(..., min_length=1, max_length=255)
+    content: str = Field(..., min_length=1)
     share_type: str = Field(..., pattern="^(public|friends|group|personal)$")
     group_ids: Optional[List[int]] = None
-    images: Optional[List[Union[str, bytes]]] = Field(None, max_items=10)  # Accept both base64 strings and bytes
+    images: Optional[List[str]] = Field(None, max_items=10)
+    videos: Optional[List[str]] = Field(None, max_items=3)
     
     @validator('share_type', pre=True)
     def normalize_share_type(cls, v):
         if isinstance(v, str):
-            v = v.strip().lower()
+            return v.strip().lower()
         return v
     
-    @validator('images', pre=True)
-    def validate_and_process_images(cls, v):
-        if v is None or len(v) == 0:
+    @validator('images', 'videos', pre=True, each_item=True)
+    def validate_media_data(cls, v):
+        if not v:
             return v
         
-        if not isinstance(v, list):
-            raise ValueError('images must be a list')
-        
-        if len(v) > 10:
-            raise ValueError('Maximum 10 images allowed')
-        
-        processed_images = []
-        for img in v:
-            if isinstance(img, bytes):
-                # Convert bytes to base64 string
-                img = f"data:image/jpeg;base64,{base64.b64encode(img).decode('utf-8')}"
-            elif isinstance(img, str):
-                # Validate base64 string
-                if not img.startswith('data:image/'):
-                    # Try to detect if it's plain base64
-                    try:
-                        # Check if it's a valid base64 string
-                        base64.b64decode(img, validate=True)
-                        # Assume it's JPEG if no mime type provided
-                        img = f"data:image/jpeg;base64,{img}"
-                    except:
-                        raise ValueError('Images must be base64 encoded or data URLs')
-            else:
-                raise ValueError('Image must be string or bytes')
+        if isinstance(v, str):
+            # Check if it's already a URL
+            if v.startswith(('http://', 'https://')):
+                return v
             
-            # Validate size (max 5MB per image)
-            base64_data = img.split(',')[1] if ',' in img else img
-            if len(base64_data) * 3 / 4 > 5 * 1024 * 1024:  # Approximate size check
-                raise ValueError('Each image must be less than 5MB')
+            # Check if it's a data URL
+            if v.startswith('data:'):
+                if ',' not in v:
+                    raise ValueError('Invalid data URL format')
+                
+                # Validate base64
+                header, data = v.split(',', 1)
+                try:
+                    base64.b64decode(data, validate=True)
+                    return v
+                except:
+                    raise ValueError('Invalid base64 encoding')
             
-            processed_images.append(img)
+            # Try to decode as raw base64
+            try:
+                base64.b64decode(v, validate=True)
+                # Determine MIME type
+                if len(v) > 1000000:  # More than 1MB, likely video
+                    return f"data:video/mp4;base64,{v}"
+                else:
+                    return f"data:image/jpeg;base64,{v}"
+            except:
+                raise ValueError('Invalid media data format')
         
-        return processed_images
+        return v
+    
+    @validator('videos')
+    def validate_video_size(cls, v):
+        if not v:
+            return v
+        
+        for video in v:
+            if video.startswith('data:'):
+                header, data = video.split(',', 1)
+                size = len(data) * 3 / 4  # Approximate size in bytes
+                if size > 50 * 1024 * 1024:  # 50MB
+                    raise ValueError('Each video must be less than 50MB')
+        
+        return v
+
 
 class DiaryShare(BaseModel):
     group_ids: List[int] = None
@@ -76,19 +102,6 @@ class CreateDiaryForGroup(BaseModel):
                 raise ValueError('Images must be base64 encoded with data URL')
         return v
 
-class CreatorResponse(BaseModel):
-    id: int
-    username: str
-    avatar_url: Optional[str] = None
-    
-class GroupResponse(BaseModel):
-    id: int
-    name: str
-
-class DiaryLikeResponse(BaseModel):
-    id: int
-    user: CreatorResponse
-
 class CommentReplyResponse(BaseModel):
     id: int
     user: CreatorResponse
@@ -104,26 +117,42 @@ class CommentResponse(BaseModel):
     created_at: datetime
     user: CreatorResponse
     images: Optional[List[str]] = None
-    replies: Optional[List[CommentReplyResponse]] = None
+    replies: Optional[List['CommentReplyResponse']] = None
     parent_id: Optional[int] = None
     
     class Config:
         form_attributes = True
     
-class DiaryOut(TimestampMixin):
+# FIXED: DiaryOut with proper defaults
+class DiaryOut(BaseModel):
     id: int
     author: CreatorResponse
     title: str
     content: str
-    share_type: ShareTypeOutput
+    share_type: str
     groups: Optional[List[GroupResponse]] = None
-    likes: Optional[list[DiaryLikeResponse]] = None
-    comments: Optional[list[CommentResponse]] = None
+    likes: Optional[List[DiaryLikeResponse]] = None
     is_deleted: Optional[bool] = None
-    images: Optional[List[str]] = None  # Cloudinary URLs
+    images: List[str] = Field(default_factory=list)  # Fixed: Use default_factory
+    videos: List[str] = Field(default_factory=list)  # Fixed: Use default_factory
+    video_thumbnails: List[str] = Field(default_factory=list)  # FIXED: Not Optional, default empty list
+    media_type: Optional[str] = None
     created_at: datetime
-
+    updated_at: datetime
+    
     model_config = ConfigDict(from_attributes=True)
+    
+    @field_serializer('video_thumbnails')
+    def serialize_video_thumbnails(self, thumbnails: List[str], _info) -> List[str]:
+        # Filter out None values
+        return [thumb for thumb in thumbnails if thumb is not None]
+    
+    @field_serializer('images', 'videos')
+    def serialize_arrays(self, value: List[str], _info) -> List[str]:
+        # Ensure we always return a list
+        if value is None:
+            return []
+        return value
     
     @field_serializer('created_at', 'updated_at')
     def serialize_dates(self, dt: Optional[datetime], _info) -> Optional[str]:
@@ -170,12 +199,12 @@ class DiaryCommentOut(TimestampMixin):
 class DiaryUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
-    share_type: Optional[str] = None  # Remove pattern constraint for updates
+    share_type: Optional[str] = None
     group_ids: Optional[List[int]] = None
-    images: Optional[List[str]] = None  # Use only string for base64
+    images: Optional[List[str]] = None
+    videos: Optional[List[str]] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
     
     @validator('share_type', pre=True)
     def normalize_share_type(cls, v):
@@ -223,6 +252,40 @@ class DiaryUpdate(BaseModel):
                 raise ValueError('Image must be a string')
         
         return processed_images
+    
+    @validator('videos', pre=True)
+    def validate_and_process_videos(cls, v):
+        if v is None:
+            return v
+        
+        if isinstance(v, list) and len(v) == 0:
+            return []
+        
+        if not isinstance(v, list):
+            raise ValueError('videos must be a list')
+        
+        if len(v) > 3:
+            raise ValueError('Maximum 3 videos allowed')
+        
+        processed_videos = []
+        for vid in v:
+            if vid is None:
+                continue
+                
+            if isinstance(vid, str):
+                if (vid.startswith('data:video/') or 
+                    vid.startswith(('http://', 'https://'))):
+                    processed_videos.append(vid)
+                else:
+                    try:
+                        base64.b64decode(vid, validate=True)
+                        processed_videos.append(f"data:video/mp4;base64,{vid}")
+                    except:
+                        raise ValueError(f'Invalid video format: {vid[:50]}...')
+            else:
+                raise ValueError('Video must be a string')
+        
+        return processed_videos
     
     @validator('group_ids', pre=True)
     def validate_group_ids(cls, v, values):
