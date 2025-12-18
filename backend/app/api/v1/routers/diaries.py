@@ -1,3 +1,4 @@
+import traceback
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
@@ -21,49 +22,98 @@ def create_diary_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if diary_in.share_type == "group":
-        if not diary_in.group_ids or len(diary_in.group_ids) == 0:
-            raise HTTPException(status_code=400, detail="group_ids are required for group share")
-
-        for group_id in diary_in.group_ids:
-            check_member = db.query(GroupMember).filter(
-                GroupMember.group_id == group_id,
-                GroupMember.user_id == current_user.id
-            ).all()
-            if not check_member:
-                raise HTTPException(status_code=403, detail=f"You are not a member of group {group_id}")
-
-    elif diary_in.share_type == "friends":
-        friends = db.query(Friend).filter(
-            ((Friend.user_id == current_user.id) | (Friend.friend_id == current_user.id)),
-            Friend.status == FriendshipStatus.accepted
-        ).all()
-
-        if not friends:
-            raise HTTPException(status_code=400, detail="You do not have friend yet")
-    
-    diary = create_diary(db, current_user.id, diary_in)
-    
-    return DiaryOut(
-        id=diary.id,
-        author=CreatorResponse(
-            id=current_user.id,
-            username=current_user.username,
-            avatar_url=current_user.avatar_url
-        ),
-        title=diary.title,
-        content=diary.content,
-        share_type=diary.share_type.value,
-        groups=[
-            GroupResponse(id=g.id, name=g.name) for g in diary.groups
-        ],
-        images=diary.images,  # Cloudinary URLs
-        likes=getattr(diary, "likes", 0),
-        is_deleted=diary.is_deleted,
-        created_at=diary.created_at,
-        updated_at=diary.updated_at
-    )
-
+    try:
+        print("=== DIARY CREATE REQUEST ===")
+        print(f"User ID: {current_user.id}")
+        print(f"Share Type: {diary_in.share_type}")
+        print(f"Has videos: {bool(diary_in.videos)}")
+        print(f"Videos count: {len(diary_in.videos) if diary_in.videos else 0}")
+        
+        # Create the diary
+        diary = create_diary(db, current_user.id, diary_in)
+        
+        print(f"✅ Diary created with ID: {diary.id}")
+        print(f"Diary videos from DB: {diary.videos}")
+        print(f"Diary video_thumbnails from DB: {diary.video_thumbnails}")
+        print(f"Diary media_type from DB: {diary.media_type}")
+        
+        # Refresh the diary with all relationships
+        diary = db.query(Diary).options(
+            joinedload(Diary.author),
+            joinedload(Diary.groups),
+            joinedload(Diary.likes).joinedload(DiaryLike.user)
+        ).filter(Diary.id == diary.id).first()
+        
+        print(f"✅ Diary refreshed from DB:")
+        print(f"  - Videos: {diary.videos}")
+        print(f"  - Video thumbnails: {diary.video_thumbnails}")
+        print(f"  - Media type: {diary.media_type}")
+        
+        # Ensure arrays are never None
+        images = diary.images if diary.images else []
+        videos = diary.videos if diary.videos else []
+        video_thumbnails = diary.video_thumbnails if diary.video_thumbnails else []
+        
+        # Filter None values from video_thumbnails
+        filtered_thumbnails = []
+        if video_thumbnails:
+            filtered_thumbnails = [thumb for thumb in video_thumbnails if thumb is not None]
+        
+        print(f"✅ Final data for response:")
+        print(f"  - Videos count: {len(videos)}")
+        print(f"  - Video thumbnails count: {len(filtered_thumbnails)}")
+        print(f"  - Video URLs: {videos}")
+        print(f"  - Thumbnail URLs: {filtered_thumbnails}")
+        
+        # Create the response
+        response = DiaryOut(
+            id=diary.id,
+            author=CreatorResponse(
+                id=current_user.id,
+                username=current_user.username,
+                avatar_url=current_user.avatar_url
+            ),
+            title=diary.title,
+            content=diary.content,
+            share_type=diary.share_type.value,
+            groups=[
+                GroupResponse(id=g.id, name=g.name) for g in diary.groups
+            ],
+            images=images,
+            videos=videos,  # Make sure this is included
+            video_thumbnails=filtered_thumbnails,  # Make sure this is included
+            media_type=diary.media_type,
+            likes=[
+                DiaryLikeResponse(
+                    id=like.id,
+                    user=CreatorResponse(
+                        id=like.user.id,
+                        username=like.user.username,
+                        avatar_url=like.user.avatar_url
+                    )
+                ) for like in diary.likes
+            ] if hasattr(diary, 'likes') and diary.likes else [],
+            is_deleted=diary.is_deleted,
+            created_at=diary.created_at,
+            updated_at=diary.updated_at
+        )
+        
+        print(f"✅ Response created:")
+        print(f"  - Response videos field: {response.videos}")
+        print(f"  - Response video_thumbnails field: {response.video_thumbnails}")
+        
+        return response
+        
+    except HTTPException as e:
+        print(f"HTTP Exception: {e.detail}")
+        raise
+    except Exception as e:
+        print(f"Unexpected error in create_diary_endpoint: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )
 @router.post("/groups/{group_id}", response_model=DiaryOut)
 def create_diary_for_group_(group_id: int,
                             diary_data: CreateDiaryForGroup,
@@ -89,8 +139,18 @@ def get_feed(
         .all()
     )
 
+    print(f"=== GET FEED ===")
+    print(f"Total diaries: {len(diaries)}")
+    
     result = []
     for d in diaries:
+        # Filter None values from video_thumbnails
+        filtered_thumbnails = []
+        if d.video_thumbnails:
+            filtered_thumbnails = [thumb for thumb in d.video_thumbnails if thumb is not None]
+        
+        print(f"Diary {d.id}: videos={len(d.videos or [])}, thumbnails={len(filtered_thumbnails)}, media_type={d.media_type}")
+        
         diary_out = DiaryOut(
             id=d.id,
             author=CreatorResponse(
@@ -102,7 +162,10 @@ def get_feed(
             content=d.content,
             share_type=d.share_type.value,
             groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups],
-            images=d.images,
+            images=d.images if d.images else [],
+            videos=d.videos if d.videos else [],  # Make sure this is included
+            video_thumbnails=filtered_thumbnails,  # Make sure this is included
+            media_type=d.media_type,
             likes=[
                 DiaryLikeResponse(
                     id=l.id,
@@ -127,7 +190,11 @@ def get_diary_by_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    diary = db.query(Diary).options(
+        joinedload(Diary.author),
+        joinedload(Diary.groups),
+        joinedload(Diary.likes).joinedload(DiaryLike.user)
+    ).filter(Diary.id == diary_id).first()
     
     if not diary:
         raise HTTPException(status_code=404, detail="Diary not found")
@@ -141,6 +208,17 @@ def get_diary_by_id(
     elif not can_view(db, diary, current_user.id):
         raise HTTPException(status_code=403, detail="You don't have permission to view this diary")
     
+    # Filter out None values from video_thumbnails
+    filtered_thumbnails = []
+    if diary.video_thumbnails:
+        filtered_thumbnails = [thumb for thumb in diary.video_thumbnails if thumb is not None]
+    
+    print(f"=== GET DIARY BY ID ===")
+    print(f"Diary ID: {diary_id}")
+    print(f"Videos: {diary.videos}")
+    print(f"Video thumbnails: {filtered_thumbnails}")
+    print(f"Media type: {diary.media_type}")
+    
     return DiaryOut(
         id=diary.id,
         author=CreatorResponse(
@@ -152,7 +230,9 @@ def get_diary_by_id(
         content=diary.content,
         share_type=diary.share_type.value,
         groups=[GroupResponse(id=g.id, name=g.name) for g in diary.groups],
-        images=diary.images,
+        images=diary.images if diary.images else [],
+        videos=diary.videos if diary.videos else [],  # Make sure this is included
+        video_thumbnails=filtered_thumbnails,  # Make sure this is included
         likes=[
             DiaryLikeResponse(
                 id=l.id,
@@ -176,7 +256,29 @@ def update_diary_by_id(
     current_user: User = Depends(get_current_user)
 ):
     try:
+        print(f"=== UPDATE DIARY REQUEST ===")
+        print(f"Diary ID: {diary_id}")
+        print(f"User ID: {current_user.id}")
+        print(f"Has videos in update: {bool(diary_data.videos)}")
+        
         diary = update_diary(db, diary_id, diary_data, current_user.id)
+        
+        print(f"✅ Diary updated:")
+        print(f"  - Videos: {diary.videos}")
+        print(f"  - Video thumbnails: {diary.video_thumbnails}")
+        print(f"  - Media type: {diary.media_type}")
+        
+        # Refresh with relationships
+        diary = db.query(Diary).options(
+            joinedload(Diary.author),
+            joinedload(Diary.groups),
+            joinedload(Diary.likes).joinedload(DiaryLike.user)
+        ).filter(Diary.id == diary.id).first()
+        
+        # Filter out None values from video_thumbnails
+        filtered_thumbnails = []
+        if diary.video_thumbnails:
+            filtered_thumbnails = [thumb for thumb in diary.video_thumbnails if thumb is not None]
         
         return DiaryOut(
             id=diary.id,
@@ -189,7 +291,9 @@ def update_diary_by_id(
             content=diary.content,
             share_type=diary.share_type.value,
             groups=[GroupResponse(id=g.id, name=g.name) for g in diary.groups],
-            images=diary.images,
+            images=diary.images if diary.images else [],
+            videos=diary.videos if diary.videos else [],  # Make sure this is included
+            video_thumbnails=filtered_thumbnails,  # Make sure this is included
             likes=[
                 DiaryLikeResponse(
                     id=l.id,
@@ -207,7 +311,6 @@ def update_diary_by_id(
     except HTTPException:
         raise
     except Exception as e:
-        # Log the actual error for debugging
         print(f"Update diary error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

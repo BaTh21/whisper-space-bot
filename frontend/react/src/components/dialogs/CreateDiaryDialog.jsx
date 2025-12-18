@@ -1,4 +1,4 @@
-import { Close as CloseIcon, Image as ImageIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Image as ImageIcon, Videocam as VideocamIcon } from '@mui/icons-material';
 import {
   Box,
   Button,
@@ -28,7 +28,9 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
   const { t, i18n } = useTranslation();
   const [uploading, setUploading] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
+  const [selectedVideos, setSelectedVideos] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+  const [videoPreviews, setVideoPreviews] = useState([]);
 
   const formik = useFormik({
     initialValues: {
@@ -36,7 +38,6 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
       content: '',
       share_type: 'public',
       group_ids: [],
-      images: [], // Base64 encoded images
     },
     validationSchema: Yup.object({
       title: Yup.string().required('Title is required'),
@@ -47,105 +48,171 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
         then: (schema) => schema.min(1, 'Please select at least one group'),
         otherwise: (schema) => schema.notRequired(),
       }),
-      images: Yup.array().max(10, 'Maximum 10 images allowed'),
     }),
     onSubmit: async (values, { resetForm, setSubmitting }) => {
       try {
         setUploading(true);
-        
-        // Convert selected files to base64
-        const imagePromises = selectedImages.map(file => {
-          return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              resolve(e.target.result);
-            };
-            reader.readAsDataURL(file);
-          });
-        });
-        
-        const base64Images = await Promise.all(imagePromises);
-        
-        const payload = {
+
+        // Prepare the data object
+        const formData = {
           title: values.title,
           content: values.content,
           share_type: values.share_type,
           group_ids: values.share_type === 'group' ? values.group_ids : [],
-          images: base64Images, // Include images
         };
 
-        if (values.share_type !== 'group') delete payload.group_ids;
-        if (base64Images.length === 0) delete payload.images; // Don't send empty array
+        // Add images if any
+        if (selectedImages.length > 0) {
+          formData.images = selectedImages; // Pass the File objects directly
+        }
 
-        await createDiary(payload);
+        // Add videos if any
+        if (selectedVideos.length > 0) {
+          formData.videos = selectedVideos; // Pass the File objects directly
+        }
+
+        console.log('=== SENDING TO API ===');
+        console.log('Form data structure:', {
+          ...formData,
+          images: formData.images ? `Array of ${formData.images.length} File objects` : 'none',
+          videos: formData.videos ? `Array of ${formData.videos.length} File objects` : 'none',
+        });
+
+        // The API function will convert File objects to base64
+        await createDiary(formData);
+
+        // Reset and close
         resetForm();
         setSelectedImages([]);
+        setSelectedVideos([]);
         setImagePreviews([]);
+        setVideoPreviews([]);
         onSuccess();
+
       } catch (err) {
+        console.error('Create diary error:', err);
         setError(err.message || 'Failed to create diary');
       } finally {
         setUploading(false);
         setSubmitting(false);
       }
     },
+
   });
 
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files);
-    
+
     // Filter valid images
     const validImages = files.filter(file => {
       const isValidType = file.type.startsWith('image/');
-      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
       const isValidCount = selectedImages.length + files.length <= 10;
-      
+
       if (!isValidType) {
         setError('Only image files are allowed (jpg, png, gif, etc.)');
         return false;
       }
-      
+
       if (!isValidSize) {
-        setError('Each image must be less than 5MB');
+        setError('Each image must be less than 10MB');
         return false;
       }
-      
+
       if (!isValidCount) {
         setError('Maximum 10 images allowed');
         return false;
       }
-      
+
       return true;
     });
-    
+
     if (validImages.length === 0) return;
-    
+
     // Add to selected images
     setSelectedImages(prev => [...prev, ...validImages]);
-    
+
     // Create previews
     validImages.forEach(file => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setImagePreviews(prev => [...prev, { 
-          url: e.target.result, 
+        setImagePreviews(prev => [...prev, {
+          url: e.target.result,
           name: file.name,
-          size: file.size 
+          size: file.size,
+          type: 'image'
         }]);
       };
       reader.readAsDataURL(file);
     });
   };
 
-  const removeImage = (index) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  const handleVideoUpload = (event) => {
+    const files = Array.from(event.target.files);
+
+    // Filter valid videos
+    const validVideos = files.filter(file => {
+      const isValidType = file.type.startsWith('video/') ||
+        ['.mp4', '.mov', '.avi', '.webm', '.mkv'].some(ext =>
+          file.name.toLowerCase().endsWith(ext));
+      const isValidSize = file.size <= 50 * 1024 * 1024; // 50MB
+      const isValidCount = selectedVideos.length + files.length <= 3;
+
+      if (!isValidType) {
+        setError('Only video files are allowed (mp4, mov, avi, webm, mkv)');
+        return false;
+      }
+
+      if (!isValidSize) {
+        setError('Each video must be less than 50MB');
+        return false;
+      }
+
+      if (!isValidCount) {
+        setError('Maximum 3 videos allowed');
+        return false;
+      }
+
+      return true;
+    });
+
+    if (validVideos.length === 0) return;
+
+    // Add to selected videos
+    setSelectedVideos(prev => [...prev, ...validVideos]);
+
+    // Create previews
+    validVideos.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setVideoPreviews(prev => [...prev, {
+          url: e.target.result,
+          name: file.name,
+          size: file.size,
+          type: 'video',
+          thumbnail: null // Placeholder for video thumbnail
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeMedia = (index, type) => {
+    if (type === 'image') {
+      setSelectedImages(prev => prev.filter((_, i) => i !== index));
+      setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    } else {
+      setSelectedVideos(prev => prev.filter((_, i) => i !== index));
+      setVideoPreviews(prev => prev.filter((_, i) => i !== index));
+    }
   };
 
   const handleClose = () => {
     formik.resetForm();
     setSelectedImages([]);
+    setSelectedVideos([]);
     setImagePreviews([]);
+    setVideoPreviews([]);
     onClose();
   };
 
@@ -155,14 +222,18 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
     else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
+  const getFileExtension = (fileName) => {
+    return fileName.split('.').pop().toUpperCase();
+  };
+
   return (
-    <Dialog 
-      open={open} 
+    <Dialog
+      open={open}
       onClose={handleClose}
-      maxWidth="md" 
+      maxWidth="md"
       fullWidth
       PaperProps={{
-        sx: { 
+        sx: {
           borderRadius: '16px',
           maxHeight: '90vh'
         }
@@ -171,8 +242,8 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
       <DialogTitle sx={{ fontWeight: 600, borderBottom: '1px solid #e0e0e0' }}>
         {t('create_new_diary')}
       </DialogTitle>
-      
-      <DialogContent sx={{ mt: 2 }}>
+
+      <DialogContent sx={{ mt: 2, pb: 2 }}>
         <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextField
             label={t('title')}
@@ -185,6 +256,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
             fullWidth
             required
             size="medium"
+            disabled={uploading}
           />
 
           <TextField
@@ -200,6 +272,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
             fullWidth
             required
             size="medium"
+            disabled={uploading}
           />
 
           <FormControl fullWidth>
@@ -210,6 +283,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
               onChange={formik.handleChange}
               onBlur={formik.handleBlur}
               label="Share Type"
+              disabled={uploading}
             >
               <MenuItem value="public">Public</MenuItem>
               <MenuItem value="friends">Friends Only</MenuItem>
@@ -227,6 +301,8 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
                 value={formik.values.group_ids}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
+                label="Groups"
+                disabled={uploading}
                 renderValue={(selected) => (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {groups
@@ -253,111 +329,227 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
             </FormControl>
           )}
 
-          {/* Image Upload Section */}
+          {/* Media Upload Section */}
           <Box sx={{ mt: 1 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-              Add Images (Optional)
-            </Typography>
-            
-            <Button
-              variant="outlined"
-              component="label"
-              startIcon={<ImageIcon />}
-              disabled={uploading || selectedImages.length >= 10}
-              fullWidth
-              sx={{ mb: 1 }}
-            >
-              Select Images
-              <input
-                type="file"
-                hidden
-                multiple
-                accept="image/*"
-                onChange={handleImageUpload}
-              />
-            </Button>
-            
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-              You can add up to 10 images. Each image should be less than 5MB.
-              {selectedImages.length > 0 && ` (${selectedImages.length}/10 selected)`}
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
+              Add Media (Optional)
             </Typography>
 
-            {/* Image Previews */}
-            {imagePreviews.length > 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
+              {/* Image Upload */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<ImageIcon />}
+                  disabled={uploading || selectedImages.length >= 10}
+                  sx={{ flexShrink: 0 }}
+                >
+                  Add Images
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                  />
+                </Button>
+                <Typography variant="body2" color="text.secondary">
+                  {selectedImages.length} / 10 selected • Max 10MB each
+                </Typography>
+              </Box>
+
+              {/* Video Upload */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<VideocamIcon />}
+                  disabled={uploading || selectedVideos.length >= 3}
+                  sx={{ flexShrink: 0 }}
+                >
+                  Add Videos
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    accept="video/*"
+                    onChange={handleVideoUpload}
+                  />
+                </Button>
+                <Typography variant="body2" color="text.secondary">
+                  {selectedVideos.length} / 3 selected • Max 50MB each • MP4, MOV, AVI, WebM, MKV
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* Media Previews */}
+            {(imagePreviews.length > 0 || videoPreviews.length > 0) && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Selected Images:
+                  Selected Media ({imagePreviews.length + videoPreviews.length}):
                 </Typography>
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexWrap: 'wrap', 
-                  gap: 2,
-                  maxHeight: 200,
-                  overflowY: 'auto',
-                  p: 1,
-                  border: '1px solid #e0e0e0',
-                  borderRadius: 1
-                }}>
-                  {imagePreviews.map((preview, index) => (
-                    <Box 
-                      key={index} 
-                      sx={{ 
-                        position: 'relative',
-                        width: 100,
-                        height: 100
-                      }}
-                    >
-                      <img
-                        src={preview.url}
-                        alt={`Preview ${index + 1}`}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                          borderRadius: 4,
-                          border: '1px solid #e0e0e0'
-                        }}
-                      />
-                      <IconButton
-                        size="small"
-                        onClick={() => removeImage(index)}
-                        sx={{
-                          position: 'absolute',
-                          top: -8,
-                          right: -8,
-                          bgcolor: 'white',
-                          border: '1px solid #e0e0e0',
-                          width: 24,
-                          height: 24,
-                          '&:hover': { 
-                            bgcolor: '#f5f5f5',
-                            color: 'error.main'
-                          }
-                        }}
-                      >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                      <Typography 
-                        variant="caption" 
-                        sx={{ 
-                          position: 'absolute',
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          bgcolor: 'rgba(0,0,0,0.7)',
-                          color: 'white',
-                          px: 0.5,
-                          py: 0.25,
-                          fontSize: '0.6rem',
-                          borderBottomLeftRadius: 4,
-                          borderBottomRightRadius: 4
-                        }}
-                      >
-                        {formatFileSize(preview.size)}
-                      </Typography>
+
+                {/* Images Grid */}
+                {imagePreviews.length > 0 && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                      Images ({imagePreviews.length})
+                    </Typography>
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                      gap: 1.5
+                    }}>
+                      {imagePreviews.map((preview, index) => (
+                        <Box
+                          key={`image-${index}`}
+                          sx={{
+                            position: 'relative',
+                            borderRadius: 2,
+                            overflow: 'hidden',
+                            aspectRatio: '1'
+                          }}
+                        >
+                          <img
+                            src={preview.url}
+                            alt={`Preview ${index + 1}`}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => removeMedia(index, 'image')}
+                            sx={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              bgcolor: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              width: 24,
+                              height: 24,
+                              '&:hover': {
+                                bgcolor: 'rgba(0,0,0,0.9)',
+                                color: 'error.light'
+                              }
+                            }}
+                            disabled={uploading}
+                          >
+                            <CloseIcon fontSize="small" />
+                          </IconButton>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              bgcolor: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              px: 0.5,
+                              py: 0.25,
+                              fontSize: '0.6rem',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {formatFileSize(preview.size)}
+                          </Typography>
+                        </Box>
+                      ))}
                     </Box>
-                  ))}
-                </Box>
+                  </Box>
+                )}
+
+                {/* Videos Grid */}
+                {videoPreviews.length > 0 && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                      Videos ({videoPreviews.length})
+                    </Typography>
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: {
+                        xs: '1fr',
+                        sm: 'repeat(2, 1fr)'
+                      },
+                      gap: 1.5
+                    }}>
+                      {videoPreviews.map((preview, index) => (
+                        <Box
+                          key={`video-${index}`}
+                          sx={{
+                            position: 'relative',
+                            borderRadius: 2,
+                            overflow: 'hidden',
+                            aspectRatio: '16/9',
+                            bgcolor: '#000'
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              width: '100%',
+                              height: '100%',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'white'
+                            }}
+                          >
+                            <VideocamIcon sx={{ fontSize: 40, mb: 1, opacity: 0.7 }} />
+                            <Typography variant="caption" sx={{ textAlign: 'center', px: 1 }}>
+                              {preview.name.length > 20
+                                ? preview.name.substring(0, 20) + '...'
+                                : preview.name}
+                            </Typography>
+                            <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.8 }}>
+                              {getFileExtension(preview.name)} • {formatFileSize(preview.size)}
+                            </Typography>
+                          </Box>
+                          <IconButton
+                            size="small"
+                            onClick={() => removeMedia(index, 'video')}
+                            sx={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              bgcolor: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              width: 24,
+                              height: 24,
+                              '&:hover': {
+                                bgcolor: 'rgba(0,0,0,0.9)',
+                                color: 'error.light'
+                              }
+                            }}
+                            disabled={uploading}
+                          >
+                            <CloseIcon fontSize="small" />
+                          </IconButton>
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: 4,
+                              left: 4,
+                              bgcolor: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              px: 1,
+                              py: 0.25,
+                              borderRadius: 1,
+                              fontSize: '0.6rem',
+                              fontWeight: 500
+                            }}
+                          >
+                            VIDEO
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
               </Box>
             )}
           </Box>
@@ -365,7 +557,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
       </DialogContent>
 
       <DialogActions sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
-        <Button 
+        <Button
           onClick={handleClose}
           disabled={uploading}
         >
@@ -376,6 +568,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           variant="contained"
           disabled={!formik.isValid || formik.isSubmitting || uploading}
           startIcon={uploading ? <CircularProgress size={20} color="inherit" /> : null}
+          sx={{ minWidth: 120 }}
         >
           {uploading ? 'Uploading...' : t('create_diary')}
         </Button>

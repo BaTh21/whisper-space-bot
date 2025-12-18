@@ -410,17 +410,126 @@ export const acceptFriendRequest = async (requesterId) => {
 // Diary endpoints
 export const createDiary = async (data) => {
   try {
-    const response = await api.post(`/api/v1/diaries/`, data);
+    console.log('=== CREATE DIARY API CALL ===');
+    console.log('Original data:', {
+      title: data.title,
+      content: data.content,
+      share_type: data.share_type,
+      images_count: data.images?.length || 0,
+      videos_count: data.videos?.length || 0,
+    });
+    
+    // Prepare the data - ALWAYS include images and videos arrays
+    const diaryData = {
+      title: data.title,
+      content: data.content,
+      share_type: data.share_type,
+      group_ids: data.group_ids || [],
+      images: [],  // ALWAYS include empty array
+      videos: [],  // ALWAYS include empty array
+    };
+    
+    // Handle images
+    if (data.images && data.images.length > 0) {
+      console.log(`Processing ${data.images.length} images`);
+      
+      // If images are already base64 strings, use them directly
+      if (typeof data.images[0] === 'string' && data.images[0].startsWith('data:image/')) {
+        diaryData.images = data.images;
+        console.log('Images are already base64 format');
+      } else {
+        // Convert File objects to base64
+        console.log('Converting image files to base64');
+        const imagePromises = data.images.map(async (image) => {
+          if (image instanceof File) {
+            validateMediaFile(image, 'image', 10, 10);
+            return await fileToBase64(image);
+          }
+          return image; // Already base64 or some other format
+        });
+        
+        diaryData.images = await Promise.all(imagePromises);
+        console.log(`Converted ${diaryData.images.length} images to base64`);
+      }
+    }
+    
+    // Handle videos
+    if (data.videos && data.videos.length > 0) {
+      console.log(`Processing ${data.videos.length} videos`);
+      
+      if (typeof data.videos[0] === 'string' && data.videos[0].startsWith('data:video/')) {
+        diaryData.videos = data.videos;
+        console.log('Videos are already base64 format');
+      } else {
+        // Convert File objects to base64
+        console.log('Converting video files to base64');
+        const videoPromises = data.videos.map(async (video) => {
+          if (video instanceof File) {
+            validateMediaFile(video, 'video', 50, 3);
+            return await fileToBase64(video);
+          }
+          return video; // Already base64 or some other format
+        });
+        
+        diaryData.videos = await Promise.all(videoPromises);
+        console.log(`Converted ${diaryData.videos.length} videos to base64`);
+      }
+    }
+    
+    // Log the final payload structure
+    console.log('Final request payload:', {
+      title: diaryData.title,
+      content: diaryData.content,
+      share_type: diaryData.share_type,
+      group_ids: diaryData.group_ids.length > 0 ? diaryData.group_ids : 'empty array',
+      images: diaryData.images.length > 0 ? `Array of ${diaryData.images.length} base64 images` : 'empty array',
+      videos: diaryData.videos.length > 0 ? `Array of ${diaryData.videos.length} base64 videos` : 'empty array',
+    });
+    
+    console.log('First video sample (first 100 chars):', diaryData.videos[0]?.substring(0, 100) || 'none');
+    
+    const response = await api.post('/api/v1/diaries/', diaryData, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    console.log('=== CREATE DIARY SUCCESS ===');
+    console.log('Response:', response.data);
     return response.data;
   } catch (error) {
-    console.error("Create diary error:", error.response?.data);
-    throw new Error(
-      error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to create diary"
-    );
+    console.error('=== CREATE DIARY ERROR ===');
+    console.error('Error status:', error.response?.status);
+    console.error('Error data:', error.response?.data);
+    console.error('Error message:', error.message);
+    
+    let errorMessage = "Failed to create diary";
+    const errorData = error.response?.data;
+    
+    if (errorData) {
+      if (typeof errorData === 'string') {
+        errorMessage = errorData;
+      } else if (errorData.detail) {
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map(err => 
+            `${err.loc?.join('.') || 'unknown'}: ${err.msg}`
+          ).join(', ');
+        } else if (typeof errorData.detail === 'object') {
+          errorMessage = JSON.stringify(errorData.detail);
+        }
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      } else if (errorData.errors) {
+        errorMessage = JSON.stringify(errorData.errors);
+      }
+    }
+    
+    throw new Error(errorMessage);
   }
 };
+
 
 export const createDiaryForGroup = async (groupId, data) => {
   try {
@@ -456,37 +565,161 @@ export const getDiaryById = async (diaryId) => {
   }
 };
 
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+const validateMediaFile = (file, type, maxSizeMB, maxCount) => {
+  if (type === 'image') {
+    if (!file.type.startsWith('image/')) {
+      throw new Error(`File ${file.name} is not an image`);
+    }
+  } else if (type === 'video') {
+    if (!file.type.startsWith('video/')) {
+      // Check file extension as fallback
+      const validVideoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.mkv'];
+      const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+      if (!validVideoExtensions.includes(fileExtension)) {
+        throw new Error(`File ${file.name} is not a supported video format. Supported: ${validVideoExtensions.join(', ')}`);
+      }
+    }
+  }
+  
+  if (file.size > maxSizeMB * 1024 * 1024) {
+    throw new Error(`File ${file.name} exceeds maximum size of ${maxSizeMB}MB`);
+  }
+  
+  return true;
+};
+
 export const updateDiaryById = async (diaryId, data) => {
   try {
     console.log('=== UPDATE DIARY API CALL ===');
     console.log('Diary ID:', diaryId);
-    console.log('Request Data:', {
+    console.log('Request Data Structure:', {
       ...data,
-      imagesPreview: data.images ? 
-        `Array of ${data.images.length} images, first: ${data.images[0]?.substring(0, 50)}...` : 
-        'No images'
+      images: data.images ? `Array of ${data.images.length} items` : 'No images',
+      videos: data.videos ? `Array of ${data.videos.length} items` : 'No videos',
     });
     
-    const res = await api.patch(`/api/v1/diaries/${diaryId}`, data, {
+    // Prepare update data
+    const updateData = {};
+    
+    // Add text fields if provided
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.content !== undefined) updateData.content = data.content;
+    if (data.share_type !== undefined) updateData.share_type = data.share_type;
+    if (data.group_ids !== undefined) updateData.group_ids = data.group_ids;
+    
+    // Handle images
+    if (data.images !== undefined) {
+      if (Array.isArray(data.images)) {
+        console.log(`Processing ${data.images.length} images for update`);
+        
+        // Filter out any null/undefined values
+        const validImages = data.images.filter(img => img != null);
+        
+        if (validImages.length === 0) {
+          updateData.images = [];
+        } else {
+          // Process images - could be base64 strings or File objects
+          const processedImages = await Promise.all(
+            validImages.map(async (img) => {
+              if (img instanceof File) {
+                validateMediaFile(img, 'image', 10, 10);
+                return await fileToBase64(img);
+              } else if (typeof img === 'string') {
+                // If it's already a URL, keep it as is
+                if (img.startsWith('http')) {
+                  return img;
+                }
+                // If it's base64, ensure it has proper prefix
+                else if (img.startsWith('data:image/')) {
+                  return img;
+                }
+                // If it's plain base64, add data URL prefix
+                else {
+                  try {
+                    // Try to decode to validate it's base64
+                    atob(img);
+                    return `data:image/jpeg;base64,${img}`;
+                  } catch {
+                    throw new Error(`Invalid image format: ${img.substring(0, 50)}...`);
+                  }
+                }
+              }
+              throw new Error(`Invalid image type: ${typeof img}`);
+            })
+          );
+          
+          updateData.images = processedImages;
+        }
+      }
+    }
+    
+    // Handle videos
+    if (data.videos !== undefined) {
+      if (Array.isArray(data.videos)) {
+        console.log(`Processing ${data.videos.length} videos for update`);
+        
+        const validVideos = data.videos.filter(vid => vid != null);
+        
+        if (validVideos.length === 0) {
+          updateData.videos = [];
+        } else {
+          const processedVideos = await Promise.all(
+            validVideos.map(async (vid) => {
+              if (vid instanceof File) {
+                validateMediaFile(vid, 'video', 50, 3);
+                return await fileToBase64(vid);
+              } else if (typeof vid === 'string') {
+                if (vid.startsWith('http')) {
+                  return vid;
+                } else if (vid.startsWith('data:video/')) {
+                  return vid;
+                } else {
+                  try {
+                    atob(vid);
+                    return `data:video/mp4;base64,${vid}`;
+                  } catch {
+                    throw new Error(`Invalid video format: ${vid.substring(0, 50)}...`);
+                  }
+                }
+              }
+              throw new Error(`Invalid video type: ${typeof vid}`);
+            })
+          );
+          
+          updateData.videos = processedVideos;
+        }
+      }
+    }
+    
+    console.log('Sending update data:', {
+      ...updateData,
+      images: updateData.images ? `Array of ${updateData.images.length} images` : 'Not sending images',
+      videos: updateData.videos ? `Array of ${updateData.videos.length} videos` : 'Not sending videos',
+    });
+    
+    const response = await api.patch(`/api/v1/diaries/${diaryId}`, updateData, {
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
     });
     
     console.log('=== UPDATE SUCCESS ===');
-    console.log('Response:', res.data);
-    return res.data;
+    console.log('Response:', response.data);
+    return response.data;
   } catch (error) {
-    console.log('=== UPDATE ERROR ===');
-    console.log('Status:', error.response?.status);
-    console.log('Status Text:', error.response?.statusText);
-    console.log('Response Data:', error.response?.data);
-    console.log('Request Config:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      data: JSON.parse(error.config?.data || '{}'),
-      headers: error.config?.headers
-    });
+    console.error('=== UPDATE ERROR ===');
+    console.error('Status:', error.response?.status);
+    console.error('Status Text:', error.response?.statusText);
+    console.error('Response Data:', error.response?.data);
     
     // Extract detailed error message
     let errorMessage = "Failed to update diary";
@@ -508,10 +741,12 @@ export const updateDiaryById = async (diaryId, data) => {
         }
       } else if (errorData.message) {
         errorMessage = errorData.message;
+      } else if (errorData.msg) {
+        errorMessage = errorData.msg;
       }
     }
     
-    console.log('Parsed Error Message:', errorMessage);
+    console.error('Parsed Error Message:', errorMessage);
     throw new Error(errorMessage);
   }
 };
