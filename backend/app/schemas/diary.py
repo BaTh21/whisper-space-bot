@@ -133,26 +133,98 @@ class DiaryOut(BaseModel):
     groups: Optional[List[GroupResponse]] = None
     likes: Optional[List[DiaryLikeResponse]] = None
     is_deleted: Optional[bool] = None
-    images: List[str] = Field(default_factory=list)  # Fixed: Use default_factory
-    videos: List[str] = Field(default_factory=list)  # Fixed: Use default_factory
-    video_thumbnails: List[str] = Field(default_factory=list)  # FIXED: Not Optional, default empty list
+    images: List[str] = Field(default_factory=list)
+    videos: List[str] = Field(default_factory=list)
+    video_thumbnails: List[Optional[str]] = Field(default_factory=list)  # FIXED: Allow Optional strings
     media_type: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
     
-    @field_serializer('video_thumbnails')
-    def serialize_video_thumbnails(self, thumbnails: List[str], _info) -> List[str]:
-        # Filter out None values
-        return [thumb for thumb in thumbnails if thumb is not None]
-    
-    @field_serializer('images', 'videos')
-    def serialize_arrays(self, value: List[str], _info) -> List[str]:
-        # Ensure we always return a list
-        if value is None:
+    @validator('video_thumbnails', pre=True)
+    def validate_and_align_thumbnails(cls, v, values):
+        """CRITICAL: Ensure thumbnail array matches video array length"""
+        # Get videos from values (may be from input or from_attributes)
+        videos = values.get('videos', [])
+        
+        # If no videos, return empty list
+        if not videos:
             return []
-        return value
+        
+        # Ensure v is a list
+        if v is None:
+            v = []
+        elif not isinstance(v, list):
+            # Try to convert if it's a string or other type
+            try:
+                v = list(v)
+            except:
+                v = []
+        
+        # Debug logging
+        print(f"🔧 THUMBNAIL VALIDATOR:")
+        print(f"  Videos count: {len(videos)}")
+        print(f"  Thumbnails input count: {len(v)}")
+        
+        # Ensure arrays match length
+        result = []
+        for i in range(len(videos)):
+            if i < len(v):
+                # Keep existing thumbnail (could be None, empty string, or URL)
+                thumbnail = v[i]
+                # Convert empty string to None for consistency
+                if thumbnail == "" or thumbnail is None:
+                    result.append(None)
+                else:
+                    result.append(thumbnail)
+            else:
+                # Add None for missing thumbnails
+                result.append(None)
+        
+        print(f"  Thumbnails output count: {len(result)}")
+        print(f"  Thumbnails with values: {len([t for t in result if t])}")
+        
+        return result
+    
+    @validator('videos', pre=True)
+    def validate_videos(cls, v):
+        """Ensure videos is always a list"""
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            return []
+        return v
+    
+    @field_serializer('video_thumbnails')
+    def serialize_video_thumbnails(self, thumbnails: List[Optional[str]], _info) -> List[Optional[str]]:
+        """Serialize thumbnails - PRESERVE NULL VALUES for array alignment"""
+        # IMPORTANT: Return the array as-is, including None values
+        # Frontend needs to handle None thumbnails
+        if thumbnails is None:
+            return []
+        
+        # Convert empty strings to None for consistency
+        result = []
+        for thumb in thumbnails:
+            if thumb is None or thumb == "":
+                result.append(None)
+            else:
+                result.append(thumb)
+        
+        return result
+    
+    @field_serializer('images')
+    def serialize_images(self, images: List[str], _info) -> List[str]:
+        if images is None:
+            return []
+        return images
+    
+    @field_serializer('videos')
+    def serialize_videos(self, videos: List[str], _info) -> List[str]:
+        if videos is None:
+            return []
+        return videos
     
     @field_serializer('created_at', 'updated_at')
     def serialize_dates(self, dt: Optional[datetime], _info) -> Optional[str]:
@@ -163,6 +235,28 @@ class DiaryOut(BaseModel):
         else:
             utc_dt = dt.astimezone(timezone.utc)
             return utc_dt.isoformat().replace('+00:00', 'Z')
+    
+    @validator('video_thumbnails', 'videos', 'images', each_item=True)
+    def validate_urls(cls, v):
+        """Validate each URL in the arrays"""
+        if v is None:
+            return None
+        
+        # Allow empty strings for thumbnails (will be converted to None)
+        if v == "":
+            return v
+        
+        # For thumbnails and images, should be URLs
+        if isinstance(v, str) and v.startswith(('http://', 'https://')):
+            return v
+        
+        # Also allow data URLs for images (for updates)
+        if isinstance(v, str) and v.startswith('data:image/'):
+            return v
+        
+        # If it's not a valid URL or data URL, return None for thumbnails
+        # For videos and images, this might indicate an error
+        return None
 
 class DiaryCommentCreate(BaseModel):
     content: str

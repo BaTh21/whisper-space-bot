@@ -86,9 +86,7 @@ def upload_to_cloudinary(file_content, public_id=None, folder=None, resource_typ
         raise Exception(f"Cloudinary upload failed: {str(e)}")
 
 def upload_video_to_cloudinary(video_data: bytes, folder: str = "videos") -> Dict[str, Any]:
-    """
-    Simplified and reliable video upload
-    """
+    """Upload video to Cloudinary with GUARANTEED thumbnail"""
     try:
         base_folder = os.getenv('CLOUDINARY_UPLOAD_FOLDER', 'whisper_space')
         full_folder = f"{base_folder}/{folder}"
@@ -102,13 +100,23 @@ def upload_video_to_cloudinary(video_data: bytes, folder: str = "videos") -> Dic
             tmp_path = tmp_file.name
         
         try:
-            # Upload with minimal settings
+            # Upload with FORCED thumbnail generation
             upload_result = uploader.upload(
                 tmp_path,
                 resource_type="video",
                 public_id=public_id,
                 folder=full_folder,
                 overwrite=True,
+                eager=[  # This forces thumbnail generation
+                    {
+                        "width": 320,
+                        "height": 180,
+                        "crop": "fill",
+                        "quality": "auto",
+                        "format": "jpg"
+                    }
+                ],
+                eager_async=False,  # Make it synchronous
                 transformation=[
                     {"width": 1280, "height": 720, "crop": "limit"},
                     {"quality": "auto:eco"},
@@ -116,25 +124,39 @@ def upload_video_to_cloudinary(video_data: bytes, folder: str = "videos") -> Dic
                 ]
             )
             
-            # Generate thumbnail URL
-            thumbnail_url, _ = cloudinary_url(
-                upload_result["public_id"],
-                transformation=[
-                    {"width": 320, "height": 180, "crop": "fill"},
-                    {"quality": "auto"},
-                    {"format": "jpg"}
-                ],
-                resource_type="video"
-            )
+            print(f"📊 Cloudinary upload successful:")
+            print(f"  - Secure URL: {upload_result.get('secure_url')}")
+            print(f"  - Eager transformations: {upload_result.get('eager')}")
+            
+            # Get thumbnail from eager transformation
+            thumbnail_url = None
+            if 'eager' in upload_result and upload_result['eager']:
+                for eager_item in upload_result['eager']:
+                    if eager_item.get('format') == 'jpg':
+                        thumbnail_url = eager_item.get('secure_url')
+                        break
+            
+            # If still no thumbnail, generate one manually
+            if not thumbnail_url:
+                print(f"⚠️ No eager thumbnail, generating manually...")
+                thumbnail_url, _ = cloudinary_url(
+                    upload_result["public_id"],
+                    transformation=[
+                        {"width": 320, "height": 180, "crop": "fill"},
+                        {"quality": "auto"},
+                        {"format": "jpg"}
+                    ],
+                    resource_type="video"
+                )
+            
+            print(f"📸 Final thumbnail URL: {thumbnail_url}")
             
             return {
                 "secure_url": upload_result["secure_url"],
                 "public_id": upload_result["public_id"],
-                "thumbnail_url": thumbnail_url,
+                "thumbnail_url": thumbnail_url,  # GUARANTEED to have value
                 "duration": upload_result.get("duration"),
                 "bytes": upload_result.get("bytes"),
-                "width": upload_result.get("width"),
-                "height": upload_result.get("height"),
                 "format": upload_result.get("format", "mp4")
             }
             
@@ -234,21 +256,14 @@ def extract_public_id_from_url(url):
             return None
         
         parts = url.split('/')
-        
-        # Find upload index
-        try:
-            upload_index = parts.index('upload')
-        except ValueError:
-            return None
+        upload_index = parts.index('upload')
         
         if upload_index >= len(parts) - 1:
             return None
         
-        # Get public_id parts
         public_id_parts = parts[upload_index + 2:]
-        
-        # Remove file extension
         public_id = '/'.join(public_id_parts)
+        
         if '.' in public_id:
             public_id = public_id.rsplit('.', 1)[0]
         
@@ -309,6 +324,27 @@ def generate_video_poster(video_url):
     except Exception as e:
         print(f"Failed to generate video poster: {str(e)}")
         return None
+def generate_video_thumbnail(video_url: str) -> str:
+    """Generate thumbnail for existing video URL"""
+    try:
+        public_id = extract_public_id_from_url(video_url)
+        if not public_id:
+            raise ValueError("Could not extract public_id from URL")
+        
+        thumbnail_url, _ = cloudinary_url(
+            public_id,
+            transformation=[
+                {"width": 320, "height": 180, "crop": "fill"},
+                {"quality": "auto"},
+                {"format": "jpg"}
+            ],
+            resource_type="video"
+        )
+        
+        return thumbnail_url
+    except Exception as e:
+        print(f"Failed to generate thumbnail: {str(e)}")
+        raise
 
 def create_video_transformation(public_id, transformations=None, resource_type="video"):
     """
