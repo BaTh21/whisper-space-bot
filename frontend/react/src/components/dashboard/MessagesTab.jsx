@@ -7,16 +7,13 @@ import {
 } from '@mui/icons-material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CallIcon from '@mui/icons-material/Call';
-import MicIcon from '@mui/icons-material/Mic';
 import SearchIcon from '@mui/icons-material/Search';
-import StopIcon from '@mui/icons-material/Stop';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import {
   Avatar,
   Box,
   Button,
   Chip,
-  CircularProgress,
   IconButton,
   InputAdornment,
   List,
@@ -1734,10 +1731,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         sx={{
                           color: 'white',
                           fontSize: { xs: 12, md: 14 },
-                          display: { xs: 'none', sm: 'block' }
+                          display: { xs: 'block', sm: 'block' }
                         }}
                       >
-                        {isOnline ? 'Active Now' : 'Offline'}
+                        {isOnline ? 'Active' : 'Offline'}
                       </Typography>
                     </Box>
                     <CallIcon
