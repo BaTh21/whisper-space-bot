@@ -55,6 +55,7 @@ import { IncomingCallDialog } from '../group/InCommingCallDialog';
 import CallDialog from '../group/CallDialog';
 import { useAuth } from '../../context/AuthContext';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import VoiceRecorder from '../group/VoiceRecorder';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -302,7 +303,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         });
       }
-      
+
       else if (type === "new_call_message") {
         const realMessage = {
           id: data.message_id,
@@ -603,112 +604,35 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   };
 
-  const startRecording = async () => {
-    if (!selectedFriend) {
-      setError('Please select a friend first');
+  const handleVoiceConfirm = (blob) => {
+    if (!blob || !selectedFriend) return;
+
+    audioBlobRef.current = blob;
+
+    sendVoiceMessage();
+  };
+
+  const sendVoiceMessage = async () => {
+    if (!audioBlobRef.current || audioBlobRef.current.size === 0) {
+      setError('Empty voice recording');
       return;
     }
-    if (isRecording) return;
+
+    const blobToSend = audioBlobRef.current;
+    audioBlobRef.current = null;
+
+    const formData = new FormData();
+    formData.append('voice_file', blobToSend, 'voice.webm');
+    formData.append('duration', Math.max(recordingTime, 1).toString());
 
     try {
-      audioBlobRef.current = null;
-      setAudioUrl(null);
-      setRecordingTime(0);
-      setVoiceSending(false);
-      setIsUploadingVoice(false);
-
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-          channelCount: 1,
-        }
-      });
-
-      const supportedTypes = [
-        'audio/mp4',
-        'audio/webm;codecs=opus',
-        'audio/webm'
-      ];
-      let selectedType = 'audio/webm';
-      for (const type of supportedTypes) {
-        if (MediaRecorder.isTypeSupported(type)) {
-          selectedType = type;
-          break;
-        }
-      }
-
-      const options = { mimeType: selectedType, audioBitsPerSecond: 128000 };
-      const mediaRecorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = mediaRecorder;
-
-      const audioChunks = [];
-      let isStopped = false;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && !isStopped) {
-          audioChunks.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        if (isStopped) return;
-        isStopped = true;
-
-        if (audioChunks.length === 0) {
-          cleanupRecording();
-          return;
-        }
-
-        const blob = new Blob(audioChunks, { type: selectedType });
-        audioBlobRef.current = blob;
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-        cleanupStream();
-        setIsRecording(false);
-      };
-
-      mediaRecorder.onerror = (event) => {
-        console.error('MediaRecorder error:', event.error);
-        setError('Recording failed: ' + event.error.name);
-        cleanupRecording();
-      };
-
-      mediaRecorder.start(1000);
-      setIsRecording(true);
-      setRecordingTime(0);
-
-      recordingIntervalRef.current = setInterval(() => {
-        setRecordingTime(prev => {
-          if (prev >= 120) {
-            stopRecording();
-            setError('Recording stopped automatically after 2 minutes');
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, 1000);
+      await apiSendVoiceMessage(selectedFriend.id, formData);
     } catch (err) {
-      setIsRecording(false);
-      setRecordingTime(0);
-      audioBlobRef.current = null;
-      setAudioUrl(null);
-
-      if (err.name === 'NotAllowedError') {
-        setError('Microphone access denied. Please allow microphone permissions.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No microphone found. Please check your audio device.');
-      } else {
-        setError('Microphone access failed: ' + err.message);
-      }
+      console.error(err.response?.data || err);
+      setError(err.response?.data?.message || 'Failed to send voice');
     }
   };
+
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
@@ -720,21 +644,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         recordingIntervalRef.current = null;
       }
     }
-  };
-
-  const cleanupStream = () => {
-    if (mediaRecorderRef.current?.stream) {
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  const cleanupRecording = () => {
-    if (isRecording) setIsRecording(false);
-    if (recordingIntervalRef.current) {
-      clearInterval(recordingIntervalRef.current);
-      recordingIntervalRef.current = null;
-    }
-    cleanupStream();
   };
 
   const cancelRecording = () => {
@@ -766,82 +675,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }, 50);
   };
 
-  const sendVoiceMessage = async () => {
-    if (voiceSending || isUploadingVoice || !audioBlobRef.current || !selectedFriend) return;
-
-    const blobToSend = audioBlobRef.current;
-    audioBlobRef.current = null;
-    setAudioUrl(null);
-
-    setVoiceSending(true);
-    setIsUploadingVoice(true);
-
-    const tempId = `temp-voice-${Date.now()}-${Math.random()}`;
-
-    const tempMsg = {
-      id: tempId,
-      temp_id: tempId,
-      content: 'Voice message...',
-      message_type: 'voice',
-      is_temp: true,
-      is_read: false,
-      created_at: new Date().toISOString(),
-      voice_duration: recordingTime,
-      file_size: blobToSend.size,
-      sender_id: profile.id,
-      sender: {
-        id: profile.id,
-        username: profile.username,
-        avatar_url: getUserAvatar(profile),
-      },
-      seen_by: [],
-      _uniqueId: Date.now() + Math.random(),
-    };
-
-    setMessages(prev => {
-      const withoutTemp = prev.filter(msg => !msg.is_temp);
-      return [...withoutTemp, tempMsg];
-    });
-
-    try {
-      const formData = new FormData();
-
-      formData.append('voice_file', blobToSend, `voice-${Date.now()}.webm`);
-      formData.append('duration', recordingTime.toString());
-
-      if (tempId) {
-        formData.append('temp_id', tempId);
-      }
-
-      const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
-
-      setMessages(prev => {
-        return prev.map(msg =>
-          msg.id === tempId || msg.temp_id === tempId
-            ? {
-              ...sentMessage,
-              is_temp: false,
-              sender: {
-                ...sentMessage.sender,
-                avatar_url: getAvatarUrl(sentMessage.sender?.avatar_url)
-              }
-            }
-            : msg
-        );
-      });
-
-      setSuccess(t('voice_message_sent'));
-      setTimeout(() => setSuccess(''), 2000);
-    } catch (err) {
-      setError(err.message || 'Failed to send voice message');
-
-      setMessages(prev => prev.filter(msg => msg.id !== tempId && msg.temp_id !== tempId));
-    } finally {
-      setIsUploadingVoice(false);
-      setVoiceSending(false);
-      setRecordingTime(0);
-    }
-  };
   const handleAddReaction = async (messageId, emoji) => {
     try {
       const reaction = await addReactionToMessage(messageId, { emoji });
@@ -1292,7 +1125,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       },
     };
 
-    // setMessages(prev => [...prev, tempMsg]);
     setNewMessage('');
     setReplyTo(null);
 
@@ -1778,53 +1610,50 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                       <Avatar src={getUserAvatar(friend)}>
                         {getUserInitials(friend.username)}
                       </Avatar>
-                      {isOnline && (
-                        <Box
-                          className="online-indicator"
-                          sx={{
-                            position: 'absolute',
-                            bottom: 2,
-                            right: 2,
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            bgcolor: '#4CAF50',
-                            border: '2px solid white',
-                            animation: 'pulse 2s infinite'
-                          }}
-                        />
-                      )}
                     </ListItemAvatar>
                     <ListItemText
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           {friend.username}
                           {isOnline ? (
-                            <Typography
+                            <Box
                               component="span"
                               variant="caption"
                               sx={{
                                 color: '#4CAF50',
                                 fontWeight: 500,
-                                fontSize: '0.7rem'
+                                fontSize: '0.7rem',
+                                display: 'flex',
+                                alightItems: 'center'
                               }}
                             >
-                              • Online
-                            </Typography>
+                              <Box
+                                className="online-indicator"
+                                sx={{
+                                  width: 10,
+                                  height: 10,
+                                  borderRadius: '50%',
+                                  bgcolor: '#4CAF50',
+                                  border: '2px solid white',
+                                  animation: 'pulse 2s infinite',
+                                  mt: 0.25
+                                }}
+                              />
+                              <Typography
+                                sx={{ ml: 0.5 }}
+                              >
+                                Active Now
+                              </Typography>
+                            </Box>
                           ) : null}
                         </Box>
                       }
                       secondary={
-                        isOnline
-                          ? 'Active now'
-                          : lastSeenText
-                            ? `Last seen ${lastSeenText}`
-                            : friend.email
+                        friend.email
                       }
                       secondaryTypographyProps={{
                         sx: {
                           fontSize: '0.75rem',
-                          color: isOnline ? '#4CAF50' : 'text.secondary'
                         }
                       }}
                     />
@@ -2008,7 +1837,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         display: 'flex',
                         justifyContent: 'space-between',
                         alightItems: 'center',
-                        width: '70%'
+                        width: { xs: '100%', md: 400, lg: '75%' }
                       }}
                     >
                       <Box>
@@ -2030,67 +1859,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     </Box>
                   )}
 
-                  {/* Recording UI */}
-                  {isRecording && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        bottom: 80,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        px: 3,
-                        py: 1.5,
-                        borderRadius: '999px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 2,
-                        boxShadow: 4,
-                        zIndex: 10
-                      }}
-                    >
-                      <MicIcon />
-                      <Typography fontWeight={500}>
-                        {Math.floor(recordingTime / 60)}:
-                        {(recordingTime % 60).toString().padStart(2, '0')}
-                      </Typography>
-                      <IconButton onClick={stopRecording} sx={{ color: 'white' }}>
-                        <StopIcon sx={{ color: 'white' }} />
-                      </IconButton>
-                    </Box>
-                  )}
-
-                  {audioUrl && !isRecording && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        bottom: 80,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        px: 3,
-                        py: 1.5,
-                        borderRadius: '999px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 2,
-                        boxShadow: 4,
-                        zIndex: 10
-                      }}
-                    >
-                      <MicIcon />
-                      <Typography variant="body2">
-                        {Math.floor(recordingTime / 60)}:
-                        {(recordingTime % 60).toString().padStart(2, '0')}
-                      </Typography>
-                      <IconButton size="small" onClick={cancelRecording}>
-                        <CloseIcon fontSize="small" sx={{ color: 'white' }} />
-                      </IconButton>
-                    </Box>
-                  )}
-
                   <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
                   <label htmlFor="image-upload">
                     <Button
@@ -2102,73 +1870,64 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     </Button>
                   </label>
 
-                  <Button variant='contained' onClick={isRecording ? stopRecording : startRecording} disabled={!selectedFriend || uploadingImage}
-                    sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5, bgcolor: isRecording ? 'error.main' : (audioUrl ? 'success.main' : 'primary.main') }}
-                  >
-                    {isRecording ? <StopIcon /> : <MicIcon />}
-                  </Button>
-
-                  <Box sx={{ position: 'relative' }}>
-                    <IconButton
-                      ref={emojiButtonRef}
-                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                      disabled={!selectedFriend || uploadingImage || isRecording}
-                      sx={{
-                        fontSize: 50,
-                        color: 'orange'
-                      }}
-                    >
-                      {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
-                    </IconButton>
-
-                    {showEmojiPicker && (
-                      <EmojiPicker
-                        onSelect={(emoji) => {
-                          setNewMessage(prev => prev + emoji);
-                          setShowEmojiPicker(false);
-                        }}
-                        onClose={() => setShowEmojiPicker(false)}
-                        anchorEl={emojiButtonRef.current}
-                        placement="top-start"
-                      />
-                    )}
-                  </Box>
-
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder={!selectedFriend ? t('select_friend') : t('type_message')}
-                    value={newMessage}
-                    onChange={handleInputChange}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey && selectedFriend && !isRecording) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    multiline
-                    maxRows={3}
-                    disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
-                    sx={{
-                      bgcolor: 'grey.100',
-                      borderRadius: 2,
-                      '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-                    }}
+                  <VoiceRecorder
+                    onConfirm={handleVoiceConfirm}
+                    onRecordingChange={setIsRecording}
                   />
 
-                  {isRecording ? (
-                    <Button variant="contained" color="success" onClick={quickSendVoice} disabled={!selectedFriend || recordingTime < 1}
-                      sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
-                    >
-                      <SendIcon />
-                    </Button>
-                  ) : audioUrl && !isRecording ? (
-                    <Button variant="contained" color="primary" onClick={sendVoiceMessage} disabled={!selectedFriend || isUploadingVoice}
-                      sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
-                    >
-                      {isUploadingVoice ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
-                    </Button>
-                  ) : (
+                  {!isRecording && (
+                    <Box sx={{ position: 'relative' }}>
+                      <IconButton
+                        ref={emojiButtonRef}
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                        disabled={!selectedFriend || uploadingImage || isRecording}
+                        sx={{
+                          fontSize: 50,
+                          color: 'orange'
+                        }}
+                      >
+                        {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                      </IconButton>
+
+                      {showEmojiPicker && (
+                        <EmojiPicker
+                          onSelect={(emoji) => {
+                            setNewMessage(prev => prev + emoji);
+                            setShowEmojiPicker(false);
+                          }}
+                          onClose={() => setShowEmojiPicker(false)}
+                          anchorEl={emojiButtonRef.current}
+                          placement="top-start"
+                        />
+                      )}
+                    </Box>
+                  )}
+
+                  {!isRecording && (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder={!selectedFriend ? t('select_friend') : t('type_message')}
+                      value={newMessage}
+                      onChange={handleInputChange}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && selectedFriend && !isRecording) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      multiline
+                      maxRows={3}
+                      disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
+                      sx={{
+                        bgcolor: 'grey.100',
+                        borderRadius: 2,
+                        '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                      }}
+                    />
+                  )}
+
+                  {!isRecording && (
                     <Button variant="contained" color="primary" onClick={handleSendMessage} disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
                       sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
                     >
