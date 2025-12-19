@@ -586,14 +586,37 @@ const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
 const getVideoThumbnail = (videoUrl, diary) => {
   if (!videoUrl || !diary || !diary.video_thumbnails) return null;
   
-  const videoIndex = diary.videos?.indexOf(videoUrl);
+  // Check if diary.videos is an array
+  if (!Array.isArray(diary.videos) || diary.videos.length === 0) return null;
   
+  // Improved matching logic
+  // Try exact match first
+  let videoIndex = diary.videos.findIndex(v => v === videoUrl);
+  
+  // If exact match fails, try matching by public ID (Cloudinary ID)
+  if (videoIndex === -1 && videoUrl.includes('cloudinary.com')) {
+    const extractPublicId = (url) => {
+      // Extract the public ID from Cloudinary URL
+      // Example: https://res.cloudinary.com/demo/video/upload/v1234567/folder/video_id.mp4
+      const match = url.match(/\/upload\/(?:v\d+\/)?(.+)\.\w+$/);
+      return match ? match[1] : null;
+    };
+    
+    const targetPublicId = extractPublicId(videoUrl);
+    if (targetPublicId) {
+      videoIndex = diary.videos.findIndex(v => {
+        const vPublicId = extractPublicId(v);
+        return vPublicId === targetPublicId;
+      });
+    }
+  }
+  
+  // Get the thumbnail if index is found
   if (videoIndex !== -1 && videoIndex < diary.video_thumbnails.length) {
     const thumbnail = diary.video_thumbnails[videoIndex];
     
     // Check if thumbnail exists and is a valid string
     if (thumbnail && typeof thumbnail === 'string' && thumbnail.trim() !== '') {
-      // Debug log
       console.log(`✅ Found thumbnail for video ${videoIndex}:`, thumbnail.substring(0, 50) + '...');
       return thumbnail;
     }
