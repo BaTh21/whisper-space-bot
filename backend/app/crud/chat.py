@@ -99,57 +99,25 @@ def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int =
         ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == user_id))
     ).order_by(PrivateMessage.created_at.desc()).offset(offset).limit(limit).all()
 
-# ADD THIS FUNCTION - Mark messages as read
-def mark_messages_as_read(db: Session, message_ids: List[int], user_id: int) -> int:
-    """
-    Mark multiple messages as read by the receiver with validation
-    """
+def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
+    # Check if already exists
+    existing = db.query(MessageSeenStatus).filter_by(message_id=message_id, user_id=user_id).first()
+    if existing:
+        return True  # Already marked as read
+
+    seen_status = MessageSeenStatus(
+        message_id=message_id,
+        user_id=user_id,
+        seen_at=datetime.utcnow()
+    )
+    db.add(seen_status)
     try:
-        if not message_ids:
-            return 0
-            
-        # Get messages that belong to this user and are unread
-        messages = db.query(PrivateMessage).filter(
-            PrivateMessage.id.in_(message_ids),
-            PrivateMessage.receiver_id == user_id,  # Only receiver can mark as read
-            PrivateMessage.is_read == False
-        ).all()
-        
-        if not messages:
-            return 0
-        
-        marked_count = 0
-        current_time = datetime.now(timezone.utc)
-        
-        for message in messages:
-            # Update message read status
-            message.is_read = True
-            message.read_at = current_time
-            
-            # Add seen status entry if not exists
-            existing_seen = db.query(MessageSeenStatus).filter(
-                MessageSeenStatus.message_id == message.id,
-                MessageSeenStatus.user_id == user_id
-            ).first()
-            
-            if not existing_seen:
-                seen_status = MessageSeenStatus(
-                    message_id=message.id,
-                    user_id=user_id,
-                    seen_at=current_time
-                )
-                db.add(seen_status)
-                marked_count += 1
-        
         db.commit()
-        return marked_count
-        
+        return True
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to mark messages as read: {str(e)}"
-        )
+        return False
+
 
 # ADD NEW FUNCTION to get seen status
 def get_message_seen_status(db: Session, message_id: int):
@@ -229,7 +197,7 @@ def edit_private_message(db: Session, message_id: int, user_id: int, new_content
         
         # Update message
         msg.content = new_content.strip()
-        msg.updated_at = datetime.now(timezone.utc)
+        msg.edited_at = datetime.now(timezone.utc)
         
         db.commit()
         db.refresh(msg)
@@ -288,40 +256,44 @@ def delete_message_forever(db: Session, message_id: int, user_id: int) -> dict:
     return {"message_id": message_id, "receiver_id": receiver_id}
 
 def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
-    """Mark a private message as read by the receiver and create seen status"""
     try:
         message = db.query(PrivateMessage).filter(
             PrivateMessage.id == message_id,
-            PrivateMessage.receiver_id == user_id  # Only receiver can mark as read
+            PrivateMessage.receiver_id == user_id
         ).first()
-        
-        if message and not message.is_read:
-            current_time = datetime.now(timezone.utc)
+
+        if not message:
+            return False
+
+        current_time = datetime.now(timezone.utc)
+
+        # Create seen status if not exists
+        existing_seen = db.query(MessageSeenStatus).filter(
+            MessageSeenStatus.message_id == message_id,
+            MessageSeenStatus.user_id == user_id
+        ).first()
+
+        if not existing_seen:
+            seen_status = MessageSeenStatus(
+                message_id=message_id,
+                user_id=user_id,
+                seen_at=current_time
+            )
+            db.add(seen_status)
+
+        # Mark as read only once (global flag)
+        if not message.is_read:
             message.is_read = True
             message.read_at = current_time
-            
-            # Create seen status entry if not exists
-            existing_seen = db.query(MessageSeenStatus).filter(
-                MessageSeenStatus.message_id == message_id,
-                MessageSeenStatus.user_id == user_id
-            ).first()
-            
-            if not existing_seen:
-                seen_status = MessageSeenStatus(
-                    message_id=message_id,
-                    user_id=user_id,
-                    seen_at=current_time
-                )
-                db.add(seen_status)
-            
-            db.commit()
-            print(f"[DB] Message {message_id} marked as read by user {user_id}")
-            return True
-        return False
+
+        db.commit()
+        return True
+
     except Exception as e:
-        print(f"[DB] Error marking message as read: {e}")
         db.rollback()
+        print(f"[DB] Error marking message as read: {e}")
         return False
+
 
 def update_user_online_status(db: Session, user_id: int, is_online: bool) -> bool:
     """Update user's online status"""

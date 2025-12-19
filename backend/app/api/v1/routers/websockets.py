@@ -470,7 +470,7 @@ async def handle_websocket_private(
                         
                         if message:
                             message.content = new_content
-                            message.updated_at = datetime.utcnow()
+                            message.edited_at = datetime.utcnow()
                             db.commit()
                             
                             await manager.broadcast(chat_id, {

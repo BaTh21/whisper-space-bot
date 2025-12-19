@@ -62,6 +62,8 @@ const ChatMessage = ({
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t, i18n } = useTranslation();
 
+  console.log("messages", message);
+
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
     if (msg.message_type === 'voice') return 'voice';
@@ -202,31 +204,31 @@ const ChatMessage = ({
 
   const senderInfo = getSenderInfo();
 
-  const getMessageStatus = () => {
-    if (!isMine) return 'sent';
-    if (message.is_temp) return 'sending';
-    if (message.is_read === true) return 'seen';
-    if (message.seen_by && message.seen_by.length > 0) return 'seen';
-    if (message.delivered_at) return 'delivered';
-    return 'sent';
-  };
+  // const getMessageStatus = () => {
+  //   if (!isMine) return 'sent';
+  //   if (message.is_temp) return 'sending';
+  //   if (message.is_read === true) return 'seen';
+  //   if (message.delivered_at) return 'delivered';
 
-  const status = getMessageStatus();
+  //   return 'sent';
+  // };
 
-  const renderTick = () => {
-    switch (status) {
-      case 'sending':
-        return <DoneIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
-      case 'sent':
-        return <DoneIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
-      case 'delivered':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
-      case 'seen':
-        return <DoneAllIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
-      default:
-        return null;
-    }
-  };
+  // const status = getMessageStatus();
+
+  // const renderTick = () => {
+  //   switch (status) {
+  //     case 'sending':
+  //       return <DoneIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
+  //     case 'sent':
+  //       return <DoneIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
+  //     case 'delivered':
+  //       return <DoneAllIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />;
+  //     case 'seen':
+  //       return <DoneAllIcon sx={{ fontSize: '1rem', color: 'primary.main' }} />;
+  //     default:
+  //       return null;
+  //   }
+  // };
 
   const renderOnlineStatus = () => {
     if (isMine || !friendOnlineStatus || !currentFriend) return null;
@@ -1025,7 +1027,7 @@ const ChatMessage = ({
 
               <Box sx={{
                 display: 'flex',
-                justifyContent: 'flex-end',
+                justifyContent: isMine ? 'flex-end' : 'flex-start',
                 alignItems: 'center',
                 mt: 0.5,
                 gap: 0.5,
@@ -1042,9 +1044,26 @@ const ChatMessage = ({
                   }}
                 >
                   {formatCambodiaTime(message.created_at)}
-                  {message.updated_at && message.updated_at !== message.created_at && ' (edited)'}
+                  {message.edited_at && message.edited_at !== message.created_at && ' (edited)'}
                 </Typography>
-                {isMine && renderTick()}
+                {message.seen_by.length > 0 ?
+                  (
+                    <DoneAllIcon
+                      fontSize="12"
+                      color="green"
+                      sx={{
+                        color: 'green',
+                        transition: 'transform 0.2s',
+                        '&:hover': { transform: 'scale(1.3)' }
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    />
+                  ) : (
+                    <DoneIcon fontSize="12" />
+                  )
+                }
               </Box>
 
             </Box>

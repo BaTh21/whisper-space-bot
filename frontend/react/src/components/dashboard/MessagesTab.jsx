@@ -273,7 +273,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           read_at: data.read_at || null,
           seen_by: data.seen_by || [],
           created_at: data.created_at,
-          updated_at: data.updated_at || null,
+          edited_at: data.edited_at || null,
           edited_at: data.edited_at || null,
           edited: !!data.edited_at,
           voice_duration: data.voice_duration || 0,
@@ -318,7 +318,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             avatar_url: getAvatarUrl(data.sender.avatar_url),
           },
           created_at: data.created_at,
-          updated_at: data.created_at,
+          edited_at: data.edited_at,
           edited: false,
           is_read: true,
           read_at: new Date().toISOString(),
@@ -336,11 +336,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         });
       }
       else if (type === "read_receipt") {
-        setMessages((prev) =>
-          prev.map((msg) => {
+        setMessages(prev =>
+          prev.map(msg => {
             if (msg.id === data.message_id) {
               const currentSeenBy = msg.seen_by || [];
-              const readerId = data.reader_id || data.user_id;
+              const readerId = data.reader_id;
 
               const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
 
@@ -357,9 +357,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                       user_id: readerId,
                       username: reader?.username || 'Friend',
                       avatar_url: getUserAvatar(reader),
-                      seen_at: data.read_at || new Date().toISOString(),
-                    },
-                  ],
+                      seen_at: data.read_at || new Date().toISOString()
+                    }
+                  ]
                 };
               }
             }
@@ -389,7 +389,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                   ...msg,
                   content: data.content || msg.content,
                   message_type: data.message_type || msg.message_type,
-                  updated_at: data.updated_at,
+                  edited_at: data.edited_at,
                   edited: true,
                   is_read: data.is_read !== undefined ? data.is_read : msg.is_read,
                   read_at: data.read_at || msg.read_at,
@@ -401,7 +401,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                 ...msg,
                 content: data.content || msg.content,
                 message_type: data.message_type || msg.message_type,
-                updated_at: data.updated_at,
+                edited_at: data.edited_at,
                 edited: true,
               };
             }
@@ -533,6 +533,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   const handleWebSocketOpen = useCallback(() => {
     console.log('[WS] Connected');
+    markUnseenMessagesAsRead(sendWsMessage, messages, selectedFriend.id);
     setError(null);
     if (messages.length === 0 && selectedFriend) loadInitialMessages();
   }, [selectedFriend, messages.length, setError]);
@@ -571,6 +572,20 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     heartbeatInterval: 30000,
     debug: true,
   });
+
+  const markUnseenMessagesAsRead = (sendWsMessage, chatMessages, chatId) => {
+    if (!sendWsMessage || !chatMessages || chatMessages.length === 0) return;
+
+    chatMessages.forEach(msg => {
+      if (!msg.is_read) {
+        sendWsMessage({
+          type: "read",
+          message_id: msg.id,
+          chat_id: chatId,
+        });
+      }
+    });
+  };
 
   useEffect(() => {
     const fetchBlockedUsers = async () => {
@@ -631,48 +646,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       console.error(err.response?.data || err);
       setError(err.response?.data?.message || 'Failed to send voice');
     }
-  };
-
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      if (mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
-      }
-    }
-  };
-
-  const cancelRecording = () => {
-    if (isRecording) stopRecording();
-    setTimeout(() => {
-      audioBlobRef.current = null;
-      setAudioUrl(null);
-      setRecordingTime(0);
-      setVoiceSending(false);
-      setIsUploadingVoice(false);
-    }, 100);
-  };
-
-  const quickSendVoice = () => {
-    if (!isRecording || voiceSending) return;
-    stopRecording();
-
-    let attempts = 0;
-    const maxAttempts = 40;
-    const checkBlob = setInterval(() => {
-      attempts++;
-      if (audioBlobRef.current && !voiceSending) {
-        clearInterval(checkBlob);
-        sendVoiceMessage();
-      }
-      if (attempts >= maxAttempts || !audioBlobRef.current) {
-        clearInterval(checkBlob);
-      }
-    }, 50);
   };
 
   const handleAddReaction = async (messageId, emoji) => {
@@ -1224,7 +1197,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           return {
             ...m,
             content: newContent,
-            updated_at: new Date().toISOString(),
+            edited_at: new Date().toISOString(),
             edited: true,
             message_type: m.message_type,
             sender: m.sender,
@@ -1251,7 +1224,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             return {
               ...m,
               content: oldContent,
-              updated_at: m.created_at,
+              edited_at: m.created_at,
               edited: false,
             };
           }

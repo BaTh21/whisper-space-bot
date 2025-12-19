@@ -75,7 +75,6 @@ export const useWebSocket = (url, options = {}) => {
           return;
         }
 
-        log("Message received:", data);
         onMessage?.(data);
       };
 

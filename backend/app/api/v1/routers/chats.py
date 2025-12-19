@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, get_multiple_users_online_status, mark_messages_as_read
+from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, get_multiple_users_online_status, mark_message_as_read
 from app.crud.friend import is_blocked, is_blocked_by, is_friend
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import MessageType, PrivateMessage
@@ -1133,7 +1133,7 @@ async def edit_message(
             "message_id": full_msg.id,  # Both id and message_id for compatibility
             "content": full_msg.content,
             "message_type": full_msg.message_type.value,
-            "updated_at": full_msg.updated_at.isoformat(),
+            "edited_at": full_msg.edited_at.isoformat(),
             "created_at": full_msg.created_at.isoformat(),
             "sender_id": full_msg.sender_id,
             "receiver_id": full_msg.receiver_id,
@@ -1157,7 +1157,7 @@ async def edit_message(
         return {
             "id": full_msg.id,
             "content": full_msg.content,
-            "updated_at": full_msg.updated_at.isoformat(),
+            "edited_at": full_msg.edited_at.isoformat(),
             "message_type": full_msg.message_type.value,
             "edited": True,
             "sender_username": full_msg.sender.username,
@@ -1297,7 +1297,7 @@ def build_message_out(
         original_sender_avatar=msg.original_sender_avatar,
 
         created_at=msg.created_at.isoformat(),
-        updated_at=msg.updated_at.isoformat() if msg.updated_at else None,
+        edited_at=msg.edited_at.isoformat() if msg.edited_at else None,
 
         sender_username=getattr(msg.sender, "username", None),
         receiver_username=getattr(msg.receiver, "username", None),

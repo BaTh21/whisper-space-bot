@@ -74,7 +74,7 @@ class MessageOut(TimestampMixin):
     read_at: Optional[str] = None  
     delivered_at: Optional[str] = None
     created_at: str 
-    updated_at: Optional[str] = None
+    edited_at: Optional[str] = None
     is_forwarded: Optional[bool] = False
     forwarded_from_id: Optional[int] = False
     original_sender: Optional[str] = None
