@@ -14,6 +14,7 @@ import {
   InputLabel,
   ListItemText,
   MenuItem,
+  Paper,
   Select,
   TextField,
   Typography
@@ -23,6 +24,24 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as Yup from 'yup';
 import { createDiary } from '../../services/api';
+import Draggable from "react-draggable";
+import { useRef } from "react";
+
+function DraggablePaper(props) {
+    const nodeRef = useRef(null);
+
+    return (
+        <Draggable
+            nodeRef={nodeRef}
+            handle="#draggable-dialog-title"
+            cancel={'[class*="MuiDialogContent-root"]'}
+        >
+            <div ref={nodeRef} style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
+                <Paper {...props} />
+            </div>
+        </Draggable>
+    );
+}
 
 const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
   const { t, i18n } = useTranslation();
@@ -238,12 +257,14 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           maxHeight: '90vh'
         }
       }}
+      PaperComponent= {DraggablePaper}
     >
-      <DialogTitle sx={{ fontWeight: 600, borderBottom: '1px solid #e0e0e0' }}>
+
+      <DialogTitle id="draggable-dialog-title" sx={{ fontWeight: 600, borderBottom: '1px solid #e0e0e0' }}>
         {t('create_new_diary')}
       </DialogTitle>
 
-      <DialogContent sx={{ mt: 2, pb: 2 }}>
+      <DialogContent sx={{ mt: 2, pb: 2 }} >
         <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextField
             label={t('title')}
