@@ -602,60 +602,86 @@ async def handle_websocket_private(
 
                 elif msg_type == "forward":
                     message_id = data.get("message_id")
-                    target_user_id = data.get("target_user_id")
-                    
-                    if not message_id or not target_user_id:
+                    target_user_ids = data.get("target_user_ids", [])
+
+                    if not message_id or not target_user_ids:
                         await websocket.send_json({
                             "type": "error",
-                            "error": "Message ID and target user ID are required"
+                            "error": "Message ID and target users are required"
                         })
                         continue
-                    
+
                     try:
-                        # Get original message
                         original_msg = db.query(PrivateMessage).filter(
                             PrivateMessage.id == message_id
                         ).first()
-                        
                         if not original_msg:
-                            await websocket.send_json({
-                                "type": "error",
-                                "error": "Original message not found"
-                            })
-                            continue
-                        
-                        if not is_friend(db, current_user.id, target_user_id):
-                            await websocket.send_json({
-                                "type": "error",
-                                "error": "You must be friends with the target user"
-                            })
-                            continue
-                        
-                        # Create forwarded message
-                        forwarded_msg = create_private_message(
-                            db=db,
-                            sender_id=current_user.id,
-                            receiver_id=target_user_id,
-                            content=original_msg.content,
-                            message_type=original_msg.message_type,
-                            voice_duration=original_msg.voice_duration,
-                            file_size=original_msg.file_size,
-                            is_forwarded=True,
-                            forwarded_from_id=original_msg.sender_id
-                        )
-                        
-                        # Notify sender
+                            raise Exception("Original message not found")
+
+                        forwarded_to = []
+
+                        for target_user_id in target_user_ids:
+                            if target_user_id == current_user.id:
+                                continue  # Skip self
+                            if not is_friend(db, current_user.id, target_user_id):
+                                continue  # Skip non-friends
+
+                            # Create forwarded message
+                            forwarded_msg = create_private_message(
+                                db=db,
+                                sender_id=current_user.id,
+                                receiver_id=target_user_id,
+                                content=original_msg.content,
+                                message_type=original_msg.message_type.value,
+                                voice_duration=original_msg.voice_duration,
+                                file_size=original_msg.file_size,
+                                is_forwarded=True,
+                                forwarded_from_id=original_msg.sender_id,
+                                original_sender=original_msg.sender.username if original_msg.sender else None,
+                                original_sender_avatar=original_msg.sender.avatar_url if original_msg.sender else None,
+                            )
+
+                            # Send to the specific user using your manager
+                            payload = {
+                                "type": "message",
+                                "id": forwarded_msg.id,
+                                "content": forwarded_msg.content,
+                                "message_type": forwarded_msg.message_type.value,
+                                "sender_id": current_user.id,
+                                "sender_username": current_user.username,
+                                "is_forwarded": True,
+                                "forwarded_from_id": original_msg.sender_id,
+                                "voice_duration": forwarded_msg.voice_duration,
+                                "file_size": forwarded_msg.file_size,
+                                "created_at": forwarded_msg.created_at.isoformat(),
+                                "is_read": False,
+                                "original_sender": forwarded_msg.original_sender,
+                                "original_sender_avatar": forwarded_msg.original_sender_avatar
+                            }
+
+                            # Use your WebSocketManager method to send directly to the user
+                            user_chats = manager.get_user_chats(target_user_id)
+                            for chat_id in user_chats:
+                                await manager.send_to_user(chat_id, target_user_id, payload)
+
+                            forwarded_to.append(target_user_id)
+
+                        if not forwarded_to:
+                            raise Exception("No valid recipients to forward message")
+
                         await websocket.send_json({
                             "type": "forward_success",
-                            "message_id": forwarded_msg.id,
-                            "target_user_id": target_user_id
+                            "forwarded_to": forwarded_to
                         })
-                        
+
                     except Exception as e:
+                        import traceback
+                        traceback.print_exc()
                         await websocket.send_json({
                             "type": "error",
-                            "error": "Failed to forward message"
+                            "error": str(e)
                         })
+
                 
                 elif msg_type == "call_start":
                     call_type = data.get("call_type")

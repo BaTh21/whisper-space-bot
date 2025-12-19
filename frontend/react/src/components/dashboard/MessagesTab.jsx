@@ -282,6 +282,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           reply_to_id: data.reply_to_id || null,
           reply_preview: data.reply_preview || null,
           reply_to: data.reply_to || null,
+          is_forwarded: data.is_forwarded || null,
+          original_sender: data.original_sender || null,
+          original_sender_avatar: data.original_sender_avatar || null
         };
 
         setMessages((prev) => {
@@ -1170,44 +1173,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       handleTypingStart();
     }
   };
+
   const handleForwardMessage = async (message, friend) => {
-    try {
-      if (!message || !friend) {
-        setError('Invalid message or friend');
-        return;
-      }
 
-      let messageType = message.message_type;
-      if (!messageType) {
-        if (message.content.includes('/voice_messages/') ||
-          message.content.match(/\.(mp3|wav|ogg|webm|m4a)$/i)) {
-          messageType = 'voice';
-        } else if (message.content.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-          messageType = 'image';
-        } else {
-          messageType = 'text';
-        }
-      }
+    sendWsMessage({
+      type: "forward",
+      message_id: message.id,
+      target_user_ids: friends.map(f => f.id),
+    });
 
-      const payload = {
-        content: message.content,
-        message_type: messageType,
-        is_forwarded: true,
-        original_sender: message.sender?.username || profile?.username || 'Unknown',
-      };
-
-      if (messageType === 'voice') {
-        payload.voice_duration = message.voice_duration;
-        payload.file_size = message.file_size;
-      }
-
-      setForwardDialogOpen(false);
-      setForwardingMessage(null);
-      setSuccess(t(`message_forwarded ${friend.username}`));
-      setTimeout(() => setSuccess(null), 2000);
-    } catch (err) {
-      setError(t('failed_forward_message'));
-    }
   };
 
   const handleForward = (msg) => {
@@ -1802,6 +1776,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         getUserInitials={getUserInitials}
                         onCallBack={handleStartCall}
                         onReply={() => { handleReply(message) }}
+                        userId={user.id}
                       />
                     ))
                   )}

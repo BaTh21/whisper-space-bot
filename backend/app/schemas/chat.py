@@ -76,7 +76,9 @@ class MessageOut(TimestampMixin):
     created_at: str 
     updated_at: Optional[str] = None
     is_forwarded: Optional[bool] = False
+    forwarded_from_id: Optional[int] = False
     original_sender: Optional[str] = None
+    original_sender_avatar: Optional[str] = None
     sender_username: Optional[str] = None
     receiver_username: Optional[str] = None
     voice_duration: Optional[float] = None  # ADDED

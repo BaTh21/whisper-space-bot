@@ -25,42 +25,49 @@ const ForwardMessageDialog = ({
   getAvatarUrl,
   getUserInitials
 }) => {
-  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [selectedFriends, setSelectedFriends] = useState([]);
+
+  const toggleFriend = (friend) => {
+    setSelectedFriends(prev => {
+      const exists = prev.some(f => f.id === friend.id);
+      if (exists) {
+        return prev.filter(f => f.id !== friend.id);
+      }
+      return [...prev, friend];
+    });
+  };
 
   const handleForward = () => {
-    if (selectedFriend && onForward && message) {
-      onForward(message, selectedFriend);
-      setSelectedFriend(null);
+    if (selectedFriends.length && onForward && message) {
+      onForward(message, selectedFriends);
+      setSelectedFriends([]);
       onClose();
     }
   };
 
-  const handleSelectFriend = (friend) => {
-    setSelectedFriend(friend);
-  };
-
   const handleCloseDialog = () => {
-    setSelectedFriend(null);
+    setSelectedFriends([]);
     onClose();
   };
 
-  // Determine message type for display
+  // Message preview
   const getMessagePreview = (msg) => {
     if (!msg) return '';
-    
-    if (msg.content.match(/\.(mp4|mp3|wav|m4a|ogg|aac|flac)$/i) || 
-        msg.content.includes('voice_messages') ||
-        msg.content.includes('audio')) {
+
+    if (
+      msg.content.match(/\.(mp4|mp3|wav|m4a|ogg|aac|flac)$/i) ||
+      msg.content.includes('voice_messages')
+    ) {
       return '🎤 Voice message';
     }
-    else if (msg.content.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i) ||
-             msg.content.includes('images') ||
-             msg.content.includes('photos')) {
+
+    if (
+      msg.content.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)
+    ) {
       return '🖼️ Image';
     }
-    else {
-      return msg.content;
-    }
+
+    return msg.content;
   };
 
   return (
@@ -73,7 +80,7 @@ const ForwardMessageDialog = ({
           </Typography>
         </Box>
       </DialogTitle>
-      
+
       <DialogContent>
         {/* Message Preview */}
         {message && (
@@ -82,7 +89,7 @@ const ForwardMessageDialog = ({
               p: 2,
               mb: 2,
               bgcolor: 'grey.50',
-              borderRadius: '8px',
+              borderRadius: 2,
               border: '1px solid',
               borderColor: 'grey.200',
             }}
@@ -93,60 +100,56 @@ const ForwardMessageDialog = ({
             <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
               {getMessagePreview(message)}
             </Typography>
-            {message.reply_to && (
-              <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(0,0,0,0.05)', borderRadius: '4px' }}>
-                <Typography variant="caption" color="text.secondary">
-                  Replying to: {message.reply_to.content}
-                </Typography>
-              </Box>
-            )}
           </Box>
         )}
 
         <Typography variant="body2" color="text.secondary" gutterBottom>
-          Select a friend to forward to:
+          Select friends to forward to:
         </Typography>
 
         <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-          {friends.map((friend) => (
-            <ListItem
-              key={friend.id}
-              selected={selectedFriend?.id === friend.id}
-              onClick={() => handleSelectFriend(friend)}
-              sx={{
-                borderRadius: '8px',
-                mb: 1,
-                '&.Mui-selected': {
-                  bgcolor: 'primary.light',
+          {friends.map(friend => {
+            const selected = selectedFriends.some(f => f.id === friend.id);
+
+            return (
+              <ListItem
+                key={friend.id}
+                onClick={() => toggleFriend(friend)}
+                sx={{
+                  cursor: 'pointer',
+                  borderRadius: 2,
+                  mb: 1,
+                  bgcolor: selected ? 'primary.light' : 'transparent',
                   '&:hover': {
-                    bgcolor: 'primary.light',
+                    bgcolor: selected ? 'primary.light' : 'action.hover',
                   },
-                },
-              }}
-            >
-              <ListItemAvatar>
-                <Avatar
-                  src={getAvatarUrl(friend.avatar_url || friend.avatar)}
-                  sx={{ width: 40, height: 40 }}
-                >
-                  {getUserInitials(friend.username)}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={
-                  <Typography fontWeight="500">
-                    {friend.username}
-                  </Typography>
-                }
-                secondary={friend.email}
-              />
-            </ListItem>
-          ))}
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar
+                    src={getAvatarUrl(friend.avatar_url || friend.avatar)}
+                    sx={{ width: 40, height: 40 }}
+                  >
+                    {getUserInitials(friend.username)}
+                  </Avatar>
+                </ListItemAvatar>
+
+                <ListItemText
+                  primary={
+                    <Typography fontWeight={selected ? 600 : 500}>
+                      {friend.username}
+                    </Typography>
+                  }
+                  secondary={friend.email}
+                />
+              </ListItem>
+            );
+          })}
 
           {friends.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="body2" color="text.secondary">
-                No friends available to forward to
+                No friends available
               </Typography>
             </Box>
           )}
@@ -157,13 +160,14 @@ const ForwardMessageDialog = ({
         <Button onClick={handleCloseDialog} variant="outlined">
           Cancel
         </Button>
+
         <Button
           onClick={handleForward}
           variant="contained"
-          disabled={!selectedFriend}
+          disabled={!selectedFriends.length}
           startIcon={<ForwardIcon />}
         >
-          Forward
+          Forward {selectedFriends.length || ''}
         </Button>
       </DialogActions>
     </Dialog>

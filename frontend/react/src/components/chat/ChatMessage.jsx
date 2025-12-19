@@ -46,7 +46,8 @@ const ChatMessage = ({
   onRemoveReaction,
   onLoadReactions,
   onCallBack,
-  onReply
+  onReply,
+  userId
 }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -61,6 +62,9 @@ const ChatMessage = ({
   const [reactions, setReactions] = useState(message.reactions || []);
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t, i18n } = useTranslation();
+
+  console.log("message", message);
+  console.log("user id", userId);
 
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
@@ -897,15 +901,47 @@ const ChatMessage = ({
               onClick={handleMenu}
             >
               {message.is_forwarded && (
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, opacity: 0.8 }}>
-                  <ForwardIcon fontSize="small" sx={{ mr: 0.5, fontSize: '1rem' }} />
-                  <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
-                    Forwarded {message.original_sender && `from ${message.original_sender}`}
+                <Box
+                  sx={{
+                    bgcolor: "#e8f0fe",
+                    py: 1,
+                    px: 3,
+                    borderRadius: 1,
+                    display: 'flex',
+                    gap: 1,
+                    maxHeight: '10vh',
+                    maxWidth: 250,
+                    overflow: 'hidden',
+                    borderLeft: "3px solid #1a73e8",
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                    Forwarded from {message.forwarded_from_id !== userId ?
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          gap: 0.2,
+                          alightItems: 'center'
+                        }}
+                      >
+                        <Avatar
+                          src={message.original_sender_avatar}
+                          alt={message.original_sender || "author image"}
+                          sx={{
+                            width: 14,
+                            height: 14,
+                            mt: 0.3
+                          }}
+                        >{message.original_sender.charAt(0) || "U"}</Avatar>
+                        {message.original_sender}
+                      </Box>
+                      :
+                      (" you")}
                   </Typography>
                 </Box>
               )}
 
-              {message.reply_preview  && (
+              {message.reply_preview && (
                 <Box
                   sx={{
                     bgcolor: "#e8f0fe",

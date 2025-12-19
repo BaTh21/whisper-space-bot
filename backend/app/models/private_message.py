@@ -27,8 +27,10 @@ class PrivateMessage(Base):
     reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
     is_forwarded = Column(Boolean, default=False)
     original_sender = Column(String(255), nullable=True)
+    original_sender_avatar = Column(String(255), nullable=True)
     voice_duration = Column(Float, nullable=True)
     file_size = Column(Integer, nullable=True)  
+    forwarded_from_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # FIXED: Self-referencing relationship for replies
     reply_to = relationship(

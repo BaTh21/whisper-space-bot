@@ -167,7 +167,9 @@ async def get_private_chat(
                 reply_to=None,
                 reply_to_id=reply.reply_to_id,
                 is_forwarded=reply.is_forwarded,
+                forwarded_from_id=reply.forwarded_from_id,
                 original_sender=reply.original_sender,
+                original_sender_avatar=reply.original_sender_avatar,
                 created_at=reply.created_at.isoformat(),
                 sender_username=getattr(reply.sender, "username", None),
                 receiver_username=getattr(reply.receiver, "username", None),
@@ -1290,7 +1292,9 @@ def build_message_out(
         reply_preview=reply_preview,
 
         is_forwarded=msg.is_forwarded,
+        forwarded_from_id=msg.forwarded_from_id,
         original_sender=msg.original_sender,
+        original_sender_avatar=msg.original_sender_avatar,
 
         created_at=msg.created_at.isoformat(),
         updated_at=msg.updated_at.isoformat() if msg.updated_at else None,
