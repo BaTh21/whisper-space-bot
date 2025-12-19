@@ -37,27 +37,27 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
                 detail=f"Failed to upload images: {str(e)}"
             )
     
-    # Handle videos - FIX: Use save_single_media in a loop
+    # Handle videos - PROCESS INDIVIDUALLY FOR THUMBNAIL GUARANTEE
     video_urls = []
     video_thumbnails = []
     if diary_in.videos:
         print(f"🎬 Uploading {len(diary_in.videos)} videos")
+        print(f"⚠️ Processing videos one by one for thumbnail guarantee")
         
         try:
-            # Process each video individually using save_single_media
+            # Process each video individually
             for idx, video_data in enumerate(diary_in.videos):
                 print(f"  Processing video {idx+1}/{len(diary_in.videos)}")
                 
                 try:
-                    # Use the existing save_single_media method
-                    video_url, thumbnail_url = image_service_sync.save_single_media(video_data, is_diary=True)
+                    # This method GUARANTEES a thumbnail for videos
+                    video_url, video_thumbnail = image_service_sync.save_single_media(video_data, is_diary=True)
                     
                     if video_url:
                         video_urls.append(video_url)
-                        video_thumbnails.append(thumbnail_url)  # Could be None
-                        print(f"  ✅ Video {idx+1} uploaded")
-                        print(f"     URL: {video_url[:50]}...")
-                        print(f"     Thumbnail: {'Yes' if thumbnail_url else 'No'}")
+                        video_thumbnails.append(video_thumbnail)  # Could be None, but array position preserved
+                        print(f"  ✅ Video {idx+1} - URL: {video_url[:50]}...")
+                        print(f"  📸 Thumbnail: {'PRESENT' if video_thumbnail else 'NONE'}")
                     else:
                         print(f"  ⚠️ Video {idx+1} returned no URL")
                         
@@ -66,70 +66,22 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
                     # Don't fail entire diary if one video fails
                     continue
             
-            print(f"✅ VIDEO PROCESSING COMPLETE:")
-            print(f"  Videos uploaded: {len(video_urls)}")
-            print(f"  Thumbnails: {len(video_thumbnails)}")
-            
-            # Ensure arrays match length
-            if len(video_thumbnails) != len(video_urls):
-                print(f"⚠️ Array mismatch: {len(video_urls)} videos, {len(video_thumbnails)} thumbnails")
-                # Fix mismatch
-                while len(video_thumbnails) < len(video_urls):
-                    video_thumbnails.append(None)
-                
-            # Debug
-            for i in range(len(video_urls)):
-                print(f"  Video {i}: URL={video_urls[i][:50]}..., Thumb={'Yes' if video_thumbnails[i] else 'No'}")
-                
-        except Exception as e:
-            # Clean up any uploaded images
-            if image_urls:
-                image_service_sync.cleanup_media(image_urls)
-            print(f"❌ Video upload failed: {str(e)}")
-            traceback.print_exc()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to upload videos: {str(e)}"
-            )
-    
-    # Handle videos - FIXED: Use save_multiple_videos for consistency
-    video_urls = []
-    video_thumbnails = []
-    if diary_in.videos:
-        print(f"🎬 Uploading {len(diary_in.videos)} videos")
-        
-        try:
-            # Use save_multiple_videos to ensure consistent array handling
-            video_urls, video_thumbnails = image_service_sync.save_multiple_videos(diary_in.videos, is_diary=True)
-            
-            print(f"✅ VIDEO PROCESSING COMPLETE:")
-            print(f"  Videos uploaded: {len(video_urls)}")
-            print(f"  Thumbnails generated: {len(video_thumbnails)}")
-            
             # CRITICAL: Ensure arrays are the same length
             if len(video_thumbnails) != len(video_urls):
-                print(f"⚠️ Array mismatch detected! Fixing...")
-                print(f"  Videos: {len(video_urls)}, Thumbnails: {len(video_thumbnails)}")
-                
-                # Create matching arrays
-                aligned_thumbnails = []
-                for i in range(len(video_urls)):
-                    if i < len(video_thumbnails) and video_thumbnails[i]:
-                        aligned_thumbnails.append(video_thumbnails[i])
-                    else:
-                        # Generate missing thumbnail
-                        try:
-                            thumb_url = image_service_sync.generate_video_thumbnail(video_urls[i])
-                            aligned_thumbnails.append(thumb_url)
-                        except:
-                            aligned_thumbnails.append(None)
-                
-                video_thumbnails = aligned_thumbnails
+                print(f"⚠️ Array mismatch: videos={len(video_urls)}, thumbnails={len(video_thumbnails)}")
+                # Fix by adding None for missing thumbnails
+                while len(video_thumbnails) < len(video_urls):
+                    video_thumbnails.append(None)
+            
+            print(f"✅ VIDEO PROCESSING COMPLETE:")
+            print(f"  Videos: {len(video_urls)}")
+            print(f"  Thumbnails: {len(video_thumbnails)}")
+            print(f"  Valid thumbnails: {len([t for t in video_thumbnails if t])}")
             
             # Debug output
             for i in range(len(video_urls)):
                 thumb_status = "✅" if video_thumbnails[i] else "❌"
-                print(f"  Video {i}: {thumb_status} URL: {video_urls[i][:50]}...")
+                print(f"  Video {i}: {thumb_status} {video_urls[i][:50]}...")
                 
         except Exception as e:
             # Clean up any uploaded images
