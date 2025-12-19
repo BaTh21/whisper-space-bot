@@ -182,6 +182,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setError={setError}
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}
+              friends={friends}               // ← Correct: use the state you defined
+              pendingRequests={pendingRequests} 
             />
           </TabPanel>
 
