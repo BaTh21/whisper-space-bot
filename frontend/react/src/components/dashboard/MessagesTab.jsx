@@ -1174,12 +1174,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     }
   };
 
-  const handleForwardMessage = async (message, friend) => {
+  const handleForwardMessage = async (message, selectedFriends) => {
 
     sendWsMessage({
       type: "forward",
       message_id: message.id,
-      target_user_ids: friends.map(f => f.id),
+      target_user_ids: selectedFriends.map(f => f.id),
     });
 
   };
@@ -1954,7 +1954,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
         open={forwardDialogOpen}
         onClose={() => setForwardDialogOpen(false)}
         message={forwardingMessage}
-        friends={friends.filter((f) => f.id !== selectedFriend?.id)}
+        friends={friends}
         onForward={handleForwardMessage}
         getAvatarUrl={getAvatarUrl}
         getUserInitials={getUserInitials}

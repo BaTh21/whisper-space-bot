@@ -5,7 +5,6 @@ import {
   Done as DoneIcon,
   Download as DownloadIcon,
   Edit as EditIcon,
-  Forward as ForwardIcon,
   Image as ImageIcon,
   Schedule as LastSeenIcon,
   FiberManualRecord as OnlineIcon,
@@ -62,9 +61,6 @@ const ChatMessage = ({
   const [reactions, setReactions] = useState(message.reactions || []);
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t, i18n } = useTranslation();
-
-  console.log("message", message);
-  console.log("user id", userId);
 
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
