@@ -100,14 +100,14 @@ def upload_video_to_cloudinary(video_data: bytes, folder: str = "videos") -> Dic
             tmp_path = tmp_file.name
         
         try:
-            # Upload with FORCED thumbnail generation
+            # Upload BYTES directly — much more reliable on servers
             upload_result = uploader.upload(
-                tmp_path,
+                video_data,  # ← PASS BYTES DIRECTLY
                 resource_type="video",
                 public_id=public_id,
                 folder=full_folder,
                 overwrite=True,
-                eager=[  # This forces thumbnail generation
+                eager=[
                     {
                         "width": 320,
                         "height": 180,
@@ -116,13 +116,41 @@ def upload_video_to_cloudinary(video_data: bytes, folder: str = "videos") -> Dic
                         "format": "jpg"
                     }
                 ],
-                eager_async=False,  # Make it synchronous
+                eager_async=False,
                 transformation=[
                     {"width": 1280, "height": 720, "crop": "limit"},
                     {"quality": "auto:eco"},
                     {"format": "mp4"}
-                ]
+                ],
+                # Important for large files
+                chunk_size=6000000,  # 6MB chunks
+                timeout=120
             )
+        
+        # try:
+        #     # Upload with FORCED thumbnail generation
+        #     upload_result = uploader.upload(
+        #         tmp_path,
+        #         resource_type="video",
+        #         public_id=public_id,
+        #         folder=full_folder,
+        #         overwrite=True,
+        #         eager=[  # This forces thumbnail generation
+        #             {
+        #                 "width": 320,
+        #                 "height": 180,
+        #                 "crop": "fill",
+        #                 "quality": "auto",
+        #                 "format": "jpg"
+        #             }
+        #         ],
+        #         eager_async=False,  # Make it synchronous
+        #         transformation=[
+        #             {"width": 1280, "height": 720, "crop": "limit"},
+        #             {"quality": "auto:eco"},
+        #             {"format": "mp4"}
+        #         ]
+        #     )
             
             print(f"📊 Cloudinary upload successful:")
             print(f"  - Secure URL: {upload_result.get('secure_url')}")
