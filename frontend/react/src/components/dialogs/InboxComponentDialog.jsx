@@ -12,7 +12,6 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
-import Modal from '@mui/material/Modal';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
@@ -28,6 +27,26 @@ import {
 import { websocketService } from '../../services/websocketService';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 import DeleteDialog from './DeleteDialog';
+
+import { Dialog, DialogActions, DialogContent, DialogTitle, Modal, Paper } from '@mui/material';
+import { useRef } from "react";
+import Draggable from "react-draggable";
+
+function DraggablePaper(props) {
+    const nodeRef = useRef(null);
+
+    return (
+        <Draggable
+            nodeRef={nodeRef}
+            handle="#draggable-dialog-title"
+            cancel={'[class*="MuiDialogContent-root"]'}
+        >
+            <div ref={nodeRef} style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
+                <Paper {...props} />
+            </div>
+        </Draggable>
+    );
+}
 
 // Export a function to get the current friend request count for other components
 let externalFriendRequestCount = 0;
@@ -52,7 +71,7 @@ const updateExternalCounts = (friendCount, groupCount, messageCount) => {
     externalGroupInviteCount = groupCount;
     externalNewMessageCount = messageCount;
     externalTotalNotificationCount = friendCount + groupCount + messageCount;
-    
+
     if (externalNotificationCallback) {
         externalNotificationCallback({
             friendRequests: friendCount,
@@ -74,7 +93,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
     const [newMessages, setNewMessages] = useState([]);
     const [wsConnected, setWsConnected] = useState(false);
     const [loadingFriendRequests, setLoadingFriendRequests] = useState(false);
-    
+
     // State for tracking total notification counts
     const [friendRequestCount, setFriendRequestCount] = useState(0);
     const [groupInviteCount, setGroupInviteCount] = useState(0);
@@ -87,12 +106,12 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
         const groupCount = Array.isArray(invites) ? invites.length : 0;
         const messageCount = Array.isArray(newMessages) ? newMessages.length : 0;
         const total = friendCount + groupCount + messageCount;
-        
+
         setFriendRequestCount(friendCount);
         setGroupInviteCount(groupCount);
         setNewMessageCount(messageCount);
         setTotalNotificationCount(total);
-        
+
         // Update external counts
         updateExternalCounts(friendCount, groupCount, messageCount);
     }, [friendRequests, invites, newMessages]);
@@ -356,7 +375,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                 try {
                     // Check and refresh token if needed
                     const tokenResult = await refreshTokenIfNeeded();
-                    
+
                     if (!tokenResult.success) {
                         toast.error('Session expired. Please login again.');
                         onClose(); // Close inbox modal
@@ -394,10 +413,10 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                 } catch (error) {
                     console.error('❌ Failed to connect WebSocket:', error);
                     setWsConnected(false);
-                    
+
                     // Check if it's a token error
-                    if (error.message.includes('token') || 
-                        error.message.includes('expired') || 
+                    if (error.message.includes('token') ||
+                        error.message.includes('expired') ||
                         error.message.includes('401') ||
                         error.message.includes('auth')) {
                         toast.error('Session expired. Please login again.');
@@ -620,14 +639,162 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                 description="Are you sure want to delete invite?"
                 onConfirm={handleDeleteInvite}
             />
+            <Dialog
+                open={open}
+                onClose={onClose}
+                aria-labelledby="inbox-dialog-title"
+                aria-describedby="inbox-dialog-description"
+                // PaperProps={{
+                //     component: DraggablePaper, // Keeps draggable functionality
+                // }}
+                maxWidth="md"
+                fullWidth
+                sx={{
+                    '& .MuiDialog-paper': {
+                        width: { xs: '90%', md: 800 },
+                        maxHeight: '80vh',
+                        borderRadius: 2,
+                    },
+                }}
+                PaperComponent= {DraggablePaper}
+            >
+                <DialogTitle id="draggable-dialog-title" sx={{ cursor: 'move' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Typography variant="h6">
+                                Inbox
+                                {totalNotificationCount > 0 && (
+                                    <Badge
+                                        badgeContent={totalNotificationCount}
+                                        color="error"
+                                        sx={{ ml: 2 }}
+                                    />
+                                )}
+                            </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: '50%',
+                                bgcolor: wsConnected ? 'success.main' : 'error.main'
+                            }} />
+                            <Typography variant="caption" color="text.secondary">
+                                {wsConnected ? 'Connected' : 'Disconnected'}
+                            </Typography>
+                        </Box>
+                    </Box>
+                </DialogTitle>
 
-            <Modal
+                <DialogContent dividers>
+                    {renderFriendRequests()}
+                    {renderNewMessages()}
+
+                    {/* Group Invites Section */}
+                    <Box sx={{ mb: 3, mt: 3 }}>
+                        <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            Pending Group Invites ({invites.length})
+                        </Typography>
+
+                        {loading ? (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                                <CircularProgress />
+                            </Box>
+                        ) : invites.length === 0 ? (
+                            <Typography color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+                                No pending group invites
+                            </Typography>
+                        ) : (
+                            <List>
+                                {invites.map((invite, index) => {
+                                    const expiresAt = new Date(invite.expires_at).getTime();
+                                    const now = Date.now();
+                                    const timeDiffMs = expiresAt - now;
+                                    const fiveMinutesMs = 5 * 60 * 1000;
+                                    const isExpiringSoon = timeDiffMs > 0 && timeDiffMs <= fiveMinutesMs;
+                                    const isExpired = timeDiffMs <= 0;
+
+                                    return (
+                                        <div key={invite.id}>
+                                            <ListItem>
+                                                <ListItemText
+                                                    primary={`${invite.group?.name || 'Unknown Group'}`}
+                                                    secondary={`Invited by ${invite.inviter?.username || 'Unknown User'} • Status: ${invite.status || 'pending'}`}
+                                                />
+                                                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", minWidth: 150 }}>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Created: {formatCambodiaTime(invite.created_at)}
+                                                    </Typography>
+                                                    <Typography
+                                                        variant="body2"
+                                                        color={isExpired ? "error.main" : isExpiringSoon ? "warning.main" : "text.secondary"}
+                                                    >
+                                                        {isExpired
+                                                            ? "Expired"
+                                                            : isExpiringSoon
+                                                                ? "Expires in 5 minutes"
+                                                                : `Expires: ${formatCambodiaTime(invite.expires_at)}`}
+                                                    </Typography>
+                                                </Box>
+
+                                                <Button
+                                                    startIcon={<CheckCircleIcon />}
+                                                    onClick={() => handleAcceptInvite(invite.id)}
+                                                    disabled={isExpired || invite.status !== "pending" || processingInviteId === invite.id}
+                                                    sx={{ color: 'green', ml: 2 }}
+                                                    size="small"
+                                                >
+                                                    {processingInviteId === invite.id ? 'Accepting...' : 'Accept'}
+                                                </Button>
+
+                                                <Button
+                                                    startIcon={<DeleteIcon />}
+                                                    onClick={() => {
+                                                        setInviteId(invite.id);
+                                                        setDeletePopup(true);
+                                                    }}
+                                                    sx={{ color: 'red', ml: 1 }}
+                                                    size="small"
+                                                >
+                                                    Delete
+                                                </Button>
+                                            </ListItem>
+                                            {index < invites.length - 1 && <Divider />}
+                                        </div>
+                                    );
+                                })}
+                            </List>
+                        )}
+                    </Box>
+                </DialogContent>
+
+                <DialogActions sx={{ borderTop: 1, borderColor: 'divider' }}>
+                    <Button variant="outlined" onClick={onClose}>
+                        Close
+                    </Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={() => {
+                            fetchInvites();
+                            fetchFriendRequests();
+                            toast.info("Inbox refreshed");
+                        }}
+                    >
+                        Refresh
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* <Modal
                 open={open}
                 onClose={onClose}
                 aria-labelledby="inbox-modal-title"
                 aria-describedby="inbox-modal-description"
+                PaperComponent = {DraggablePaper}
             >
-                <Box
+                <Box 
+                id="draggable-dialog-title"
                     sx={{
                         position: 'absolute',
                         top: '50%',
@@ -638,12 +805,13 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                         borderRadius: 2,
                         boxShadow: 24,
                         p: 3,
+                        cursor:"move",
                         maxHeight: '80vh',
                         overflow: 'auto',
                     }}
                 >
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <Typography id="inbox-modal-title" variant="h6" gutterBottom sx={{ flexGrow: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }} >
+                        <Typography variant="h6" gutterBottom sx={{ flexGrow: 1 }}>
                             Inbox
                             {totalNotificationCount > 0 && (
                                 <Badge
@@ -669,7 +837,6 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                     {renderFriendRequests()}
                     {renderNewMessages()}
 
-                    {/* Group Invites Section */}
                     <Box sx={{ mb: 3 }}>
                         <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
                             Pending Group Invites ({invites.length})
@@ -771,7 +938,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                         </Button>
                     </Box>
                 </Box>
-            </Modal>
+            </Modal> */}
         </>
     );
 }
@@ -791,14 +958,14 @@ export function InboxButtonWithBadge({ onClick, children, sx = {} }) {
         <Badge
             badgeContent={totalNotificationCount}
             color="error"
-            sx={{ 
-                '& .MuiBadge-badge': { 
-                    fontSize: '0.75rem', 
-                    height: '20px', 
+            sx={{
+                '& .MuiBadge-badge': {
+                    fontSize: '0.75rem',
+                    height: '20px',
                     minWidth: '20px',
                     top: 8,
                     right: 8
-                } 
+                }
             }}
         >
             <Button onClick={onClick} sx={sx}>
@@ -880,17 +1047,17 @@ export function InboxIconButton({ onClick, sx = {}, size = "medium", showTooltip
     ) : "No new notifications";
 
     return (
-        <Box 
-            sx={{ 
+        <Box
+            sx={{
                 position: 'relative',
                 display: 'inline-flex',
                 alignItems: 'center',
-                ...sx 
+                ...sx
             }}
         >
-            <IconButton 
-                onClick={onClick} 
-                sx={{ 
+            <IconButton
+                onClick={onClick}
+                sx={{
                     color: 'inherit',
                 }}
                 size={size}
@@ -898,7 +1065,7 @@ export function InboxIconButton({ onClick, sx = {}, size = "medium", showTooltip
             >
                 <MailIcon />
             </IconButton>
-            
+
             {/* Notification badge */}
             {totalNotificationCount > 0 && (
                 <Badge
@@ -959,11 +1126,11 @@ export function AdvancedNotificationBadge({ onClick, sx = {} }) {
                 }
             }}
         >
-            <IconButton 
-                onClick={onClick} 
-                sx={{ 
+            <IconButton
+                onClick={onClick}
+                sx={{
                     color: 'inherit',
-                    ...sx 
+                    ...sx
                 }}
             >
                 <MailIcon />

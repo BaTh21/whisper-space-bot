@@ -98,85 +98,70 @@ class ImageServiceSync:
         except Exception as e:
             raise Exception(f"Video upload failed: {str(e)}")
     
-    def save_single_media(self, media_data, is_diary=True):
-        """Save single media (image or video) and return URL and thumbnail"""
+    def save_single_media(self, data_url: str, is_diary: bool = True) -> Tuple[str, Optional[str]]:
+        """Save single media item with GUARANTEED thumbnail for videos"""
         try:
-            print(f"📤 save_single_media called with data starting: {media_data[:100] if media_data else 'None'}")
+            print(f"🔄 save_single_media called")
             
-            # Check if it's a video
-            if media_data.startswith('data:video/'):
-                print("🎬 Detected video data")
+            if not data_url:
+                raise ValueError("Empty data URL")
+            
+            # If already a URL (for updates/edits)
+            if data_url.startswith(('http://', 'https://')):
+                print(f"📎 Already a URL: {data_url[:50]}...")
                 
-                # Extract the base64 data
-                if ',' not in media_data:
-                    raise ValueError("Invalid data URL format")
-                    
-                header, data = media_data.split(',', 1)
-                
-                # Determine file format
-                if 'mp4' in header:
-                    format = 'mp4'
-                elif 'webm' in header:
-                    format = 'webm'
-                else:
-                    format = 'mp4'
-                
-                print(f"  Format: {format}")
-                print(f"  Data length: {len(data)}")
-                
-                # Upload video to Cloudinary
-                folder = "diary_videos" if is_diary else "comment_videos"
-                print(f"  Uploading to folder: {folder}")
-                
-                # Decode base64
-                video_bytes = base64.b64decode(data)
-                print(f"  Decoded bytes: {len(video_bytes)}")
-                
-                upload_result = upload_video_to_cloudinary(
-                    video_bytes,
-                    folder=folder
-                )
-                
-                video_url = upload_result.get('secure_url')
-                thumbnail_url = upload_result.get('thumbnail_url')
-                
-                print(f"  Upload result:")
-                print(f"    Video URL: {video_url}")
-                print(f"    Thumbnail URL: {thumbnail_url}")
-                
-                # If thumbnail is missing, generate it
-                if video_url and not thumbnail_url:
-                    print("  Generating thumbnail...")
+                # Check if it's a video and generate thumbnail
+                if any(ext in data_url.lower() for ext in ['.mp4', '.mov', '.avi', '.webm', 'video']):
+                    print(f"🎥 Existing video URL detected")
                     try:
-                        thumbnail_url = generate_video_thumbnail(video_url)
-                        print(f"    Generated thumbnail: {thumbnail_url}")
-                    except Exception as thumb_error:
-                        print(f"    Thumbnail generation failed: {str(thumb_error)}")
-                        thumbnail_url = None
+                        thumbnail = generate_video_thumbnail(data_url)
+                        print(f"📸 Generated thumbnail for existing video")
+                        return data_url, thumbnail
+                    except Exception as thumb_err:
+                        print(f"⚠️ Could not generate thumbnail: {thumb_err}")
+                        return data_url, None
+                else:
+                    return data_url, None
+            
+            # New upload - validate and decode
+            media_data, mime_type, media_type = self.validate_and_decode_media(data_url)
+            print(f"📦 Media type: {media_type}, Size: {len(media_data)} bytes")
+            
+            base_folder = "diaries" if is_diary else "comments"
+            
+            if media_type == 'image':
+                folder = f"{base_folder}/images"
+                print(f"📷 Uploading image to {folder}")
+                url = self.upload_image(media_data, folder)
+                print(f"✅ Image uploaded: {url[:50]}...")
+                return url, None
                 
-                return video_url, thumbnail_url
+            else:  # video
+                folder = f"{base_folder}/videos"
+                print(f"🎬 Uploading video to {folder}")
                 
-            else:
-                print("🖼️ Detected image data")
-                # It's an image
-                folder = "diary_images" if is_diary else "comment_images"
-                print(f"  Uploading to folder: {folder}")
+                # This function GUARANTEES a thumbnail
+                upload_result = upload_video_to_cloudinary(media_data, folder)
+                url = upload_result["secure_url"]
+                thumbnail = upload_result["thumbnail_url"]
                 
-                upload_result = upload_to_cloudinary(
-                    media_data,
-                    folder=folder,
-                    resource_type="image"
-                )
+                print(f"✅ Video uploaded: {url[:50]}...")
+                print(f"📸 Thumbnail: {thumbnail[:50] if thumbnail else 'None'}...")
                 
-                image_url = upload_result.get('secure_url')
-                print(f"  Image URL: {image_url}")
+                # Double-check thumbnail
+                if not thumbnail:
+                    print(f"⚠️ CRITICAL: Still no thumbnail, trying again...")
+                    thumbnail = generate_video_thumbnail(url)
                 
-                return image_url, None
+                return url, thumbnail or None
                 
         except Exception as e:
-            print(f"❌ save_single_media error: {str(e)}")
+            print(f"❌ Error in save_single_media: {str(e)}")
             traceback.print_exc()
-            raise
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to save media: {str(e)}"
+            )
     
     def save_multiple_images(self, images_data: List[str], is_diary: bool = True) -> List[str]:
         """Save multiple images"""
@@ -190,39 +175,38 @@ class ImageServiceSync:
                     continue
         return saved_urls
     
-    def save_multiple_videos(self, video_data_list, is_diary=True):
-        """Upload multiple videos and generate thumbnails"""
-        video_urls = []
-        video_thumbnails = []
+    def save_multiple_videos(self, videos_data: List[str], is_diary: bool = True) -> Tuple[List[str], List[Optional[str]]]:
+        """Save multiple videos - PROCESS ONE BY ONE"""
+        print(f"🎬 Processing {len(videos_data)} videos individually")
         
-        print(f"🎬 Processing {len(video_data_list)} videos...")
+        saved_urls = []
+        thumbnails = []
         
-        for idx, video_data in enumerate(video_data_list):
+        for idx, vid_data in enumerate(videos_data):
+            if not vid_data:
+                continue
+                
             try:
-                print(f"  Processing video {idx+1}/{len(video_data_list)}")
+                print(f"  Processing video {idx + 1}/{len(videos_data)}")
+                url, thumbnail = self.save_single_media(vid_data, is_diary)
                 
-                # Upload video and get thumbnail
-                video_url, thumbnail_url = self.save_single_media(video_data, is_diary=is_diary)
-                
-                if video_url:
-                    video_urls.append(video_url)
-                    video_thumbnails.append(thumbnail_url)
-                    print(f"  ✅ Video {idx+1} uploaded successfully")
-                    print(f"     URL: {video_url[:50]}...")
-                    print(f"     Thumbnail: {thumbnail_url[:50] if thumbnail_url else 'None'}...")
+                if url:
+                    saved_urls.append(url)
+                    thumbnails.append(thumbnail)
+                    print(f"  ✅ Video {idx + 1} success")
                 else:
-                    print(f"  ⚠️ Video {idx+1} upload returned no URL")
+                    print(f"  ⚠️ Video {idx + 1} returned no URL")
                     
             except Exception as e:
-                print(f"  ❌ Video {idx+1} upload error: {str(e)}")
-                # Continue with other videos
+                print(f"  ❌ Video {idx + 1} failed: {str(e)}")
                 continue
         
-        print(f"✅ Video processing complete:")
-        print(f"  Videos uploaded: {len(video_urls)}")
-        print(f"  Thumbnails generated: {len(video_thumbnails)}")
+        # Ensure arrays match length
+        while len(thumbnails) < len(saved_urls):
+            thumbnails.append(None)
         
-        return video_urls, video_thumbnails
+        print(f"🎬 Completed: {len(saved_urls)} videos, {len([t for t in thumbnails if t])} thumbnails")
+        return saved_urls, thumbnails
     
     def delete_media(self, media_url: str) -> bool:
         """Delete media from Cloudinary"""

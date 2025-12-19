@@ -584,34 +584,22 @@ const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
 
 // Helper function to get video thumbnail - FIXED VERSION
 const getVideoThumbnail = (videoUrl, diary) => {
-  if (!videoUrl || !diary) return null;
+  if (!videoUrl || !diary || !diary.video_thumbnails) return null;
   
-  // Log for debugging
-  console.log(`🔍 getVideoThumbnail called:`, {
-    diaryId: diary.id,
-    videoUrl: videoUrl?.substring(0, 60),
-    videosCount: diary.videos?.length,
-    thumbnailsCount: diary.video_thumbnails?.length
-  });
+  const videoIndex = diary.videos?.indexOf(videoUrl);
   
-  // Get arrays with proper defaults
-  const videos = Array.isArray(diary.videos) ? diary.videos : [];
-  const thumbnails = Array.isArray(diary.video_thumbnails) ? diary.video_thumbnails : [];
-  
-  // Simple direct index approach - MOST RELIABLE
-  // Since videos and thumbnails arrays are parallel in backend
-  for (let i = 0; i < videos.length; i++) {
-    if (videos[i] === videoUrl) {
-      const thumbnail = thumbnails[i];
-      if (thumbnail && typeof thumbnail === 'string' && thumbnail.trim() !== '') {
-        console.log(`✅ Found thumbnail at index ${i}:`, thumbnail.substring(0, 60));
-        return thumbnail;
-      }
-      break;
+  if (videoIndex !== -1 && videoIndex < diary.video_thumbnails.length) {
+    const thumbnail = diary.video_thumbnails[videoIndex];
+    
+    // Check if thumbnail exists and is a valid string
+    if (thumbnail && typeof thumbnail === 'string' && thumbnail.trim() !== '') {
+      // Debug log
+      console.log(`✅ Found thumbnail for video ${videoIndex}:`, thumbnail.substring(0, 50) + '...');
+      return thumbnail;
     }
   }
   
-  console.log(`❌ No thumbnail found for:`, videoUrl?.substring(0, 60));
+  console.log(`❌ No thumbnail found for video:`, videoUrl?.substring(0, 50));
   return null;
 };
 
