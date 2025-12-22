@@ -20,27 +20,26 @@ import {
   Typography
 } from '@mui/material';
 import { useFormik } from 'formik';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import Draggable from "react-draggable";
 import { useTranslation } from 'react-i18next';
 import * as Yup from 'yup';
 import { createDiary } from '../../services/api';
-import Draggable from "react-draggable";
-import { useRef } from "react";
 
 function DraggablePaper(props) {
-    const nodeRef = useRef(null);
+  const nodeRef = useRef(null);
 
-    return (
-        <Draggable
-            nodeRef={nodeRef}
-            handle="#draggable-dialog-title"
-            cancel={'[class*="MuiDialogContent-root"]'}
-        >
-            <div ref={nodeRef} style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
-                <Paper {...props} />
-            </div>
-        </Draggable>
-    );
+  return (
+    <Draggable
+      nodeRef={nodeRef}
+      handle="#draggable-dialog-title"
+      cancel={'[class*="MuiDialogContent-root"]'}
+    >
+      <div ref={nodeRef} style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
+        <Paper {...props} />
+      </div>
+    </Draggable>
+  );
 }
 
 const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
@@ -257,7 +256,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           maxHeight: '90vh'
         }
       }}
-      PaperComponent= {DraggablePaper}
+      PaperComponent={DraggablePaper}
     >
 
       <DialogTitle id="draggable-dialog-title" sx={{ fontWeight: 600, borderBottom: '1px solid #e0e0e0' }}>
@@ -303,19 +302,19 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
               value={formik.values.share_type}
               onChange={formik.handleChange}
               onBlur={formik.handleBlur}
-              label="Share Type"
+              label={t('share_type')}
               disabled={uploading}
             >
-              <MenuItem value="public">Public</MenuItem>
-              <MenuItem value="friends">Friends Only</MenuItem>
-              <MenuItem value="group">Group</MenuItem>
-              <MenuItem value="personal">Personal</MenuItem>
+              <MenuItem value="public">{t('public')}</MenuItem>
+              <MenuItem value="friends">{t('friends')}</MenuItem>
+              <MenuItem value="group">{t('group')}</MenuItem>
+              <MenuItem value="personal">{t('personal')}</MenuItem>
             </Select>
           </FormControl>
 
           {formik.values.share_type === 'group' && (
             <FormControl fullWidth>
-              <InputLabel>Select Groups</InputLabel>
+              <InputLabel>{t('select_groups')}</InputLabel>
               <Select
                 multiple
                 name="group_ids"
@@ -353,7 +352,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           {/* Media Upload Section */}
           <Box sx={{ mt: 1 }}>
             <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
-              Add Media (Optional)
+              {t('add_media_optional')}
             </Typography>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
@@ -366,7 +365,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
                   disabled={uploading || selectedImages.length >= 10}
                   sx={{ flexShrink: 0 }}
                 >
-                  Add Images
+                  {t('add_images')}
                   <input
                     type="file"
                     hidden
@@ -376,7 +375,10 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
                   />
                 </Button>
                 <Typography variant="body2" color="text.secondary">
-                  {selectedImages.length} / 10 selected • Max 10MB each
+                  {t('images_selected_info', {
+                    count: selectedImages.length,
+                    maxSize: '10MB'
+                  })}
                 </Typography>
               </Box>
 
@@ -389,7 +391,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
                   disabled={uploading || selectedVideos.length >= 3}
                   sx={{ flexShrink: 0 }}
                 >
-                  Add Videos
+                  {t('add_videos')}
                   <input
                     type="file"
                     hidden
@@ -399,7 +401,10 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
                   />
                 </Button>
                 <Typography variant="body2" color="text.secondary">
-                  {selectedVideos.length} / 3 selected • Max 50MB each • MP4, MOV, AVI, WebM, MKV
+                  {t('videos_selected_info', {
+                    count: selectedVideos.length,
+                    maxSize: '50MB'
+                  })}
                 </Typography>
               </Box>
             </Box>
@@ -408,14 +413,14 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
             {(imagePreviews.length > 0 || videoPreviews.length > 0) && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Selected Media ({imagePreviews.length + videoPreviews.length}):
+                 {t('selected_media', { count: imagePreviews.length + videoPreviews.length })}
                 </Typography>
 
                 {/* Images Grid */}
                 {imagePreviews.length > 0 && (
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                      Images ({imagePreviews.length})
+                      {t('images_preview', { count: imagePreviews.length })}
                     </Typography>
                     <Box sx={{
                       display: 'grid',
@@ -488,7 +493,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
                 {videoPreviews.length > 0 && (
                   <Box>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                      Videos ({videoPreviews.length})
+                      {t('videos_preview', { count: videoPreviews.length })}
                     </Typography>
                     <Box sx={{
                       display: 'grid',
@@ -564,7 +569,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
                               fontWeight: 500
                             }}
                           >
-                            VIDEO
+                            {t('video')}
                           </Box>
                         </Box>
                       ))}
@@ -591,7 +596,7 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           startIcon={uploading ? <CircularProgress size={20} color="inherit" /> : null}
           sx={{ minWidth: 120 }}
         >
-          {uploading ? 'Uploading...' : t('create_diary')}
+          {uploading ? t('uploading') : t('create_diary')}
         </Button>
       </DialogActions>
     </Dialog>

@@ -99,6 +99,7 @@ const CommentItemWithActions = ({
   const [commentMenuAnchorEl, setCommentMenuAnchorEl] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
   const commentMenuOpen = Boolean(commentMenuAnchorEl);
+  const { t, i18n } = useTranslation();
 
 
   const isCommentOwner = profile && comment.user?.id === profile.id;
@@ -230,11 +231,11 @@ const CommentItemWithActions = ({
                   onClose={handleCommentMenuClose}
                 >
                   <MenuItem onClick={handleCommentEdit}>
-                    <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+                    <EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}
                   </MenuItem>
                   <MenuItem onClick={handleCommentDelete}>
                     <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
-                    <Typography color="error">Delete</Typography>
+                    <Typography color="error">{t('delete')}</Typography>
                   </MenuItem>
                 </Menu>
               </Box>
@@ -271,7 +272,7 @@ const CommentItemWithActions = ({
                   size="small"
                   startIcon={<ImageIcon />}
                 >
-                  Add Images
+                  {t('add_images')}
                   <input
                     type="file"
                     hidden
@@ -320,7 +321,7 @@ const CommentItemWithActions = ({
                   disabled={editLoading || !localEditText.trim()}
                   startIcon={editLoading ? <CircularProgress size={16} /> : null}
                 >
-                  {editLoading ? 'Saving...' : 'Save'}
+                  {editLoading ? t('saving...') : t('save')}
                 </Button>
                 <Button
                   variant="outlined"
@@ -328,7 +329,7 @@ const CommentItemWithActions = ({
                   onClick={handleCancelEdit}
                   disabled={editLoading}
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
               </Box>
             </Box>
@@ -369,7 +370,7 @@ const CommentItemWithActions = ({
               <TextField
                 fullWidth
                 size="small"
-                placeholder={`Reply to ${comment.user?.username}...`}
+                placeholder={t('reply_to', { username: comment.user?.username })}
                 value={localReplyText}
                 onChange={(e) => setLocalReplyText(e.target.value)}
                 sx={{ mb: 1 }}
@@ -390,7 +391,7 @@ const CommentItemWithActions = ({
                   size="small"
                   startIcon={<ImageIcon />}
                 >
-                  Add Image
+                  {t('add_images_max', { max: 10 })}
                   <input
                     type="file"
                     hidden
@@ -441,14 +442,14 @@ const CommentItemWithActions = ({
                   onClick={handleSubmitReply}
                   disabled={!localReplyText?.trim()}
                 >
-                  Send
+                  {t('send')}
                 </Button>
                 <Button
                   variant="text"
                   size="small"
                   onClick={handleCancelReply}
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
               </Box>
             </Box>
@@ -491,7 +492,7 @@ const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
       <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
         <img
           src={url}
-          alt="Full size view"
+          alt={t('full_view')}
           style={{
             maxWidth: '100%',
             maxHeight: '90vh',
@@ -1493,14 +1494,14 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
 
       {/* Delete Diary Dialog */}
       <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
-        <DialogTitle>Delete Diary</DialogTitle>
+        <DialogTitle>{t('delete_title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete "{diaryToDelete?.title}"? This cannot be undone.
+           {t('delete_diary', { title: diaryToDelete?.title })}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>Cancel</Button>
+          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>{t('cancel')}</Button>
           <Button
             onClick={handleDeleteDiary}
             color="error"
@@ -1508,21 +1509,21 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
             disabled={deleteLoading}
             startIcon={deleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
           >
-            {deleteLoading ? 'Deleting...' : 'Delete'}
+            {deleteLoading ? t('deleting') : t('delete')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Comment Dialog */}
       <Dialog open={commentDeleteDialogOpen} onClose={handleCommentDeleteCancel}>
-        <DialogTitle>Delete Comment</DialogTitle>
+        <DialogTitle>{t('delete_comment')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this comment? This cannot be undone.
+            {t('delete_confirm')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCommentDeleteCancel} disabled={commentDeleteLoading}>Cancel</Button>
+          <Button onClick={handleCommentDeleteCancel} disabled={commentDeleteLoading}>{t('cancel')}</Button>
           <Button
             onClick={() => handleDeleteComment(commentToDelete)}
             color="error"
@@ -1530,7 +1531,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
             disabled={commentDeleteLoading}
             startIcon={commentDeleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
           >
-            {commentDeleteLoading ? 'Deleting...' : 'Delete'}
+            {commentDeleteLoading ? t('deleting') : t('delete')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1538,11 +1539,11 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       {/* Diary Options Menu */}
       <Menu anchorEl={menuAnchorEl} open={menuOpen} onClose={handleMenuClose}>
         <MenuItem onClick={handleEditDiaryClick}>
-          <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+          <EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}
         </MenuItem>
         <MenuItem onClick={handleDeleteDiaryClick}>
           <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
-          <Typography color="error">Delete</Typography>
+          <Typography color="error">{t('delete')}</Typography>
         </MenuItem>
       </Menu>
 
@@ -1582,7 +1583,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <TextField
                         fullWidth
-                        label="Title"
+                        label={t('title')}
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         disabled={editLoading}
@@ -1590,7 +1591,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                       />
                       <TextField
                         fullWidth
-                        label="Content"
+                        label={t('content')}
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                         disabled={editLoading}
@@ -1599,17 +1600,17 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                         size="medium"
                       />
                       <FormControl size="medium" fullWidth>
-                        <InputLabel>Share Type</InputLabel>
+                        <InputLabel>{t('share_type')}</InputLabel>
                         <Select
                           value={editShareType}
-                          label="Share Type"
+                          label={t('share_type')}
                           onChange={(e) => setEditShareType(e.target.value)}
                           disabled={editLoading}
                         >
-                          <MenuItem value="public">Public</MenuItem>
-                          <MenuItem value="friends">Friends</MenuItem>
-                          <MenuItem value="personal">Personal</MenuItem>
-                          <MenuItem value="group">Group</MenuItem>
+                          <MenuItem value="public">{t('public')}</MenuItem>
+                          <MenuItem value="friends">{t('friends')}</MenuItem>
+                          <MenuItem value="personal">{t('personal')}</MenuItem>
+                          <MenuItem value="group">{t('group')}</MenuItem>
                         </Select>
                       </FormControl>
                       {editShareType === 'group' && (
@@ -1641,7 +1642,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                             disabled={editLoading || editImages.length >= 10}
                             sx={{ mr: 2 }}
                           >
-                            Add Images (Max 10)
+                            {t('add_images_max',{max:10})} 
                             <input
                               type="file"
                               hidden
@@ -1667,7 +1668,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                             disabled={editLoading || editVideos.length >= 3}
                             sx={{ mr: 2 }}
                           >
-                            Add Videos (Max 3)
+                           {t('add_videos_max', { max: 3 })}
                             <input
                               type="file"
                               hidden
@@ -1691,7 +1692,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                           sx={{ mt: 2 }}
                         >
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Images ({editImages.length} / 10)
+                            {t('images_count', { count: editImages.length, max: 10 })}
                           </Typography>
                           <Box sx={{
                             display: 'grid',
@@ -1810,7 +1811,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                                     fontWeight: 500
                                   }}
                                 >
-                                  {img.startsWith('http') ? 'URL' : 'NEW'}
+                                  {img.startsWith('http') ? t('existing') : t('new')}
                                 </Box>
                               </Box>
                             ))}
@@ -1825,7 +1826,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                           sx={{ mt: 2 }}
                         >
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Videos ({editVideos.length} / 3)
+                            {t('videos_count', { count: editVideos.length, max: 3 })}
                           </Typography>
                           <Box sx={{
                             display: 'grid',
@@ -1980,7 +1981,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                                       zIndex: 2
                                     }}
                                   >
-                                    {isExistingVideo ? 'UPLOADED' : 'NEW'}
+                                    {isExistingVideo ? t('uploaded') : t('new')}
                                   </Box>
 
                                   {/* Video Number Badge */}
@@ -2019,7 +2020,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                           startIcon={<CancelIcon />}
                           size="medium"
                         >
-                          Cancel
+                          {t('cancel')}
                         </Button>
                         <Button
                           variant="contained"
@@ -2028,7 +2029,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                           startIcon={editLoading ? <CircularProgress size={24} /> : <SaveIcon />}
                           size="medium"
                         >
-                          {editLoading ? 'Saving...' : 'Save'}
+                          {editLoading ? t('saving...') : t('save')}
                         </Button>
                       </Box>
                     </Box>
@@ -2292,7 +2293,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                                       textAlign: 'center'
                                     }}
                                   >
-                                    No thumbnail
+                                    {t('no_thumbnail')}
                                   </Typography>
                                 </Box>
                               )}
@@ -2349,7 +2350,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                         minWidth: '100px'
                       }}
                     >
-                      Like {diaryLikes[diary.id] > 0 && `(${diaryLikes[diary.id]})`}
+                      {t('like')} {diaryLikes[diary.id] > 0 && `(${diaryLikes[diary.id]})`}
                     </Button>
                     <Button
                       startIcon={<CommentIcon />}
@@ -2358,7 +2359,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                       color={expandedDiary === diary.id ? 'primary' : 'inherit'}
                       sx={{ minWidth: '120px' }}
                     >
-                      Comment {diaryComments[diary.id] && `(${countAllComments(diaryComments[diary.id])})`}
+                      {t('comment')} {diaryComments[diary.id] && `(${countAllComments(diaryComments[diary.id])})`}
                     </Button>
                   </Box>
 
@@ -2375,7 +2376,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                       }}>
                         <TextField
                           fullWidth
-                          placeholder="Write a comment..."
+                          placeholder={t('placeholder')}
                           value={commentTexts[diary.id] || ''}
                           onChange={(e) => setCommentTexts(prev => ({ ...prev, [diary.id]: e.target.value }))}
                           onKeyPress={(e) => {
@@ -2415,7 +2416,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                             }}
                             size="medium"
                           >
-                            Image
+                            {t('image')}
                             <input
                               type="file"
                               hidden
@@ -2439,7 +2440,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                             {commentLoading[diary.id] ? (
                               <CircularProgress size={24} color="inherit" />
                             ) : (
-                              'Send'
+                              t('send')
                             )}
                           </Button>
                         </Box>
@@ -2552,7 +2553,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                             fontStyle: 'italic'
                           }}
                         >
-                          No comments yet. Be the first to comment!
+                          {t('no_comments')}
                         </Typography>
                       )}
                     </Box>

@@ -11,8 +11,7 @@ i18n
   .init({
     resources: { 
       en: { translation: en }, 
-      km: { translation: km },
-      jp: { translation: jp } 
+      km: { translation: km }
     },
     fallbackLng: 'en',
     interpolation: { escapeValue: false }
