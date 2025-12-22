@@ -116,18 +116,19 @@ class WebSocketManager:
 
     async def send_to_user(self, chat_id: str, user_id: int, message: dict) -> bool:
         if chat_id not in self.active_connections:
+            print(f"[WS] chat_id {chat_id} not found")
             return False
+
         sent = False
-        dead_connections = set()
         for websocket, info in self.active_connections[chat_id].items():
+            print(f"[WS] checking user {info['user_id']}")
             if info["user_id"] == user_id:
-                try:
-                    await websocket.send_json(message)
-                    sent = True
-                except Exception:
-                    dead_connections.add(websocket)
-        for websocket in dead_connections:
-            self.disconnect(chat_id, websocket)
+                await websocket.send_json(message)
+                sent = True
+
+        if not sent:
+            print(f"[WS] user {user_id} not connected to chat {chat_id}")
+
         return sent
 
     def get_online_users(self, chat_id: str) -> Set[int]:

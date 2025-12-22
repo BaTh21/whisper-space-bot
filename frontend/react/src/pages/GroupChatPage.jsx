@@ -15,7 +15,8 @@ import {
   Typography,
   Drawer,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Tooltip
 } from '@mui/material';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
@@ -1675,6 +1676,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                             </Typography>
                             <Box sx={{ mt: 0.5 }}>
                               {message.seen_by?.length > 0 ? (
+                                <Tooltip title={message.seen_by.map(s => s.user?.username).join(', ') || 'Seen'}>
                                 <DoneAllIcon
                                   fontSize="12"
                                   color="green"
@@ -1688,6 +1690,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                     setOpenSeenMessage(true);
                                   }}
                                 />
+                                </Tooltip>
                               ) : (
                                 <CheckIcon fontSize="12" />
                               )}

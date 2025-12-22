@@ -287,14 +287,11 @@ async def handle_websocket_private(
                             "receiver_id": full_msg.receiver_id,
                             "content": full_msg.content,
                             "message_type": full_msg.message_type.value,
-                            "is_read": full_msg.is_read,
-                            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
                             "created_at": full_msg.created_at.isoformat(),
                             "reply_to_id": full_msg.reply_to_id,
                             "avatar_url": full_msg.sender.avatar_url,
                             "voice_duration": full_msg.voice_duration,
                             "file_size": full_msg.file_size,
-                            "seen_by": seen_by
                         }
 
                         if full_msg.reply_to:
@@ -335,9 +332,6 @@ async def handle_websocket_private(
                                 "voice_duration": full_msg.reply_to.voice_duration,
                                 "created_at": full_msg.reply_to.created_at.isoformat(),
                                 "file_size": full_msg.reply_to.file_size,
-                                "is_read": full_msg.reply_to.is_read,
-                                "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
-                                "seen_by": reply_seen_by
                             }
 
                         await manager.broadcast(chat_id, message_data)
@@ -350,55 +344,49 @@ async def handle_websocket_private(
                             "temp_id": temp_id
                         })
 
-                elif msg_type == "read":
+                elif msg_type == "read_message":
                     message_id = data.get("message_id")
+
                     if not message_id:
                         await websocket.send_json({
                             "type": "error",
-                            "error": "Message ID is required for read receipt"
+                            "error": "message_id is required"
                         })
                         continue
 
                     try:
-                        success = mark_message_as_read(db, message_id, current_user.id)
-                        
-                        if success:
-                            updated_message = db.query(PrivateMessage).options(
-                                joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
-                            ).filter(PrivateMessage.id == message_id).first()
-                            
-                            if updated_message:
-                                seen_by = []
-                                for status in updated_message.seen_statuses:
-                                    seen_by.append({
-                                        "user_id": status.user.id,
-                                        "username": status.user.username,
-                                        "avatar_url": status.user.avatar_url,
-                                        "seen_at": status.seen_at.isoformat() if status.seen_at else None
-                                    })
+                        message = mark_message_as_read(
+                            db=db,
+                            message_id=message_id,
+                            user_id=current_user.id
+                        )
 
-                                broadcast_data = {
-                                    "type": "message_updated",
-                                    "message_id": message_id,
-                                    "id": message_id,
-                                    "is_read": True,
-                                    "read_at": datetime.utcnow().isoformat(),
-                                    "seen_by": seen_by,
-                                    "reader_id": current_user.id
-                                }
-                                
-                                await manager.broadcast(chat_id, broadcast_data)
-                                
-                        else:
+                        if not message:
                             await websocket.send_json({
                                 "type": "error",
-                                "error": "Failed to mark message as read"
+                                "error": "Message not found or not allowed"
                             })
-                            
+                            continue
+
+                        read_event = {
+                            "type": "message_read",
+                            "message_id": message.id,
+                            "reader_id": current_user.id,
+                            "reader_username": current_user.username,
+                            "reader_avatar": current_user.avatar_url,
+                            "read_at": message.read_at.isoformat()
+                        }
+
+                        await manager.broadcast(
+                            chat_id=chat_id,
+                            message=read_event,
+                        )
+
                     except Exception as e:
+                        print("Read error:", e)
                         await websocket.send_json({
                             "type": "error",
-                            "error": "Failed to process read receipt"
+                            "error": "Failed to mark message as read"
                         })
 
                 elif msg_type == "typing":

@@ -255,19 +255,18 @@ def delete_message_forever(db: Session, message_id: int, user_id: int) -> dict:
 
     return {"message_id": message_id, "receiver_id": receiver_id}
 
-def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
+def mark_message_as_read(db: Session, message_id: int, user_id: int) -> Optional[PrivateMessage]:
     try:
         message = db.query(PrivateMessage).filter(
             PrivateMessage.id == message_id,
             PrivateMessage.receiver_id == user_id
         ).first()
 
-        if not message:
-            return False
-
+        if not message or message.sender_id == user_id:
+            return None
+        
         current_time = datetime.now(timezone.utc)
 
-        # Create seen status if not exists
         existing_seen = db.query(MessageSeenStatus).filter(
             MessageSeenStatus.message_id == message_id,
             MessageSeenStatus.user_id == user_id
@@ -281,18 +280,19 @@ def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
             )
             db.add(seen_status)
 
-        # Mark as read only once (global flag)
         if not message.is_read:
             message.is_read = True
             message.read_at = current_time
 
         db.commit()
-        return True
+        db.refresh(message)
+        return message
 
     except Exception as e:
         db.rollback()
         print(f"[DB] Error marking message as read: {e}")
-        return False
+        return None
+
 
 
 def update_user_online_status(db: Session, user_id: int, is_online: bool) -> bool:

@@ -82,10 +82,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [isOnline, setIsOnline] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
-  const [voiceSending, setVoiceSending] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState(null);
-  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
 
@@ -110,6 +108,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const pendingAnswers = useRef({});
   const pendingCandidates = useRef({})
   const isCallerRef = useRef(false);
+  const sentReadReceipts = useRef(new Set());
+  const isConnectedRef = useRef(false);
+  const sendWsMessageRef = useRef(null);
 
   const [incomingCall, setIncomingCall] = useState({
     open: false,
@@ -119,8 +120,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     call_type: ""
   });
 
-  const mediaRecorderRef = useRef(null);
-  const recordingIntervalRef = useRef(null);
   const audioBlobRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -274,8 +273,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           seen_by: data.seen_by || [],
           created_at: data.created_at,
           edited_at: data.edited_at || null,
-          edited_at: data.edited_at || null,
-          edited: !!data.edited_at,
           voice_duration: data.voice_duration || 0,
           file_size: data.file_size || 0,
 
@@ -293,7 +290,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             const tempIndex = updated.findIndex(m => m.is_temp && m.temp_id === data.temp_id);
             if (tempIndex !== -1) {
               tempToRealIdMap.current[data.temp_id] = data.id;
-              updated[tempIndex] = realMessage;
+              const prevTempMsg = updated[tempIndex];
+              updated[tempIndex] = {
+                ...realMessage,
+                seen_by: prevTempMsg.seen_by || realMessage.seen_by || [],
+              };
             }
           }
 
@@ -302,6 +303,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           }
           return updated.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         });
+
+        if (data.sender_id !== user.id) {
+          sendReadReceipt(data.id);
+        }
       }
 
       else if (type === "new_call_message") {
@@ -335,33 +340,27 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           return prev;
         });
       }
-      else if (type === "read_receipt") {
+
+      else if (type === "message_read") {
         setMessages(prev =>
           prev.map(msg => {
             if (msg.id === data.message_id) {
-              const currentSeenBy = msg.seen_by || [];
-              const readerId = data.reader_id;
-
-              const alreadySeen = currentSeenBy.some(s => s.user_id === readerId);
-
-              if (!alreadySeen && readerId) {
-                const reader = friends.find(f => f.id === readerId) || selectedFriend;
-
-                return {
-                  ...msg,
-                  is_read: true,
-                  read_at: data.read_at || new Date().toISOString(),
-                  seen_by: [
-                    ...currentSeenBy,
-                    {
-                      user_id: readerId,
-                      username: reader?.username || 'Friend',
-                      avatar_url: getUserAvatar(reader),
-                      seen_at: data.read_at || new Date().toISOString()
-                    }
-                  ]
-                };
-              }
+              const alreadySeen = msg.seen_by?.some(s => s.user_id === data.reader_id);
+              if (alreadySeen) return msg;
+              return {
+                ...msg,
+                is_read: true,
+                read_at: data.read_at,
+                seen_by: [
+                  ...(msg.seen_by || []),
+                  {
+                    user_id: data.reader_id,
+                    username: data.reader_username,
+                    avatar_url: data.reader_avatar || '',
+                    seen_at: data.read_at
+                  }
+                ]
+              };
             }
             return msg;
           })
@@ -531,28 +530,63 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     ]
   );
 
+  const sendReadReceipt = useCallback((messageId, senderId) => {
+    if (!isConnectedRef.current) return;
+    if (!sendWsMessageRef.current) return;
+
+    sendWsMessageRef.current({
+      type: "read_message",
+      message_id: messageId,
+      user_id: senderId
+    });
+  }, []);
+
+  const sendSeenMessage = useCallback(() => {
+    if (!selectedFriend || !isConnectedRef.current) return;
+
+    messages.forEach((msg) => {
+      if (msg.sender_id !== user.id && !msg.is_read) {
+        sendReadReceipt(msg.id, msg.sender_id);
+      }
+    });
+  }, [messages, selectedFriend, sendReadReceipt, user.id]);
+
   const handleWebSocketOpen = useCallback(() => {
     console.log('[WS] Connected');
-    markUnseenMessagesAsRead(sendWsMessage, messages, selectedFriend.id);
     setError(null);
-    if (messages.length === 0 && selectedFriend) loadInitialMessages();
-  }, [selectedFriend, messages.length, setError]);
+    isConnectedRef.current = true;
+
+    if (selectedFriend && messages.length > 0) {
+      const unread = messages.filter(
+        m => m.sender_id !== user.id && !m.is_read && m.id && !m.is_temp
+      );
+      unread.forEach(m => {
+        if (!sentReadReceipts.current.has(m.id)) {
+          sendWsMessageRef.current?.({
+            type: "read_message",
+            message_id: m.id,
+          });
+          sentReadReceipts.current.add(m.id);
+        }
+      });
+    }
+
+    if (messages.length === 0 && selectedFriend) {
+      loadInitialMessages();
+    }
+  }, [sendSeenMessage, messages.length, selectedFriend]);
 
   const handleWebSocketClose = useCallback((event) => {
     console.log('[WS] Closed', event.code, event.reason);
     setFriendTyping(false);
   }, []);
 
-  const handleWebSocketError = useCallback(
-    (error) => {
-      console.error('[WS] Error', error);
-      setError(null);
-    },
-    [setError]
-  );
+  const handleWebSocketError = useCallback((error) => {
+    console.error('[WS] Error', error);
+  }, []);
 
   const handleReconnect = useCallback((attempt) => {
-    console.log(`[WS] Reconnect #${attempt}`);
+    console.log(`[WS] Reconnect attempt #${attempt}`);
   }, []);
 
   const {
@@ -566,26 +600,29 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     onClose: handleWebSocketClose,
     onError: handleWebSocketError,
     onReconnect: handleReconnect,
-    shouldReconnect: true,
-    reconnectInterval: 3000,
-    maxReconnectAttempts: 5,
-    heartbeatInterval: 30000,
-    debug: true,
   });
 
-  const markUnseenMessagesAsRead = (sendWsMessage, chatMessages, chatId) => {
-    if (!sendWsMessage || !chatMessages || chatMessages.length === 0) return;
+  useEffect(() => {
+    sendWsMessageRef.current = sendWsMessage;
+  }, [sendWsMessage]);  
 
-    chatMessages.forEach(msg => {
-      if (!msg.is_read) {
-        sendWsMessage({
-          type: "read",
-          message_id: msg.id,
-          chat_id: chatId,
+  useEffect(() => {
+    if (!selectedFriend || !isConnected || !sendWsMessageRef.current) return;
+
+    const unreadMessages = messages.filter(
+      msg => msg.sender_id !== user.id && !msg.is_read && msg.id && !msg.is_temp
+    );
+
+    unreadMessages.forEach(msg => {
+      if (!sentReadReceipts.current.has(msg.id)) {
+        sendWsMessageRef.current({
+          type: "read_message",
+          message_id: msg.id
         });
+        sentReadReceipts.current.add(msg.id);
       }
     });
-  };
+  }, [messages, selectedFriend, isConnected, user.id]);
 
   useEffect(() => {
     const fetchBlockedUsers = async () => {
@@ -966,6 +1003,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     if (selectedFriend?.id === friend?.id) return;
     if (selectedFriend) closeConnection(1000, 'Switching friends');
 
+    sentReadReceipts.current = new Set();
+
     setSelectedFriend(friend);
     setMessages([]);
     setNewMessage('');
@@ -1015,53 +1054,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   useEffect(() => {
     updateFriendsOnlineStatus();
   }, [updateFriendsOnlineStatus]);
-
-  useEffect(() => {
-    if (!isConnected || !selectedFriend) return;
-
-    const handleStatusMessage = (data) => {
-      if (data.type === 'user_online') {
-        setOnlineUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.add(data.user_id);
-          return newSet;
-        });
-
-        if (selectedFriend?.id === data.user_id) {
-          setIsOnline(true);
-          setTimeout(() => setSuccess(''), 2000);
-        }
-
-      } else if (data.type === 'user_offline') {
-        setOnlineUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(data.user_id);
-          return newSet;
-        });
-
-        setLastSeenMap(prev => ({
-          ...prev,
-          [data.user_id]: data.last_seen || new Date().toISOString()
-        }));
-      } else if (data.type === 'online_users') {
-        setOnlineUsers(new Set(data.user_ids || []));
-      }
-    };
-
-    const ws = new WebSocket(getWsUrl());
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'user_online' || data.type === 'user_offline' || data.type === 'online_users') {
-          handleStatusMessage(data);
-        }
-      } catch (err) {
-        console.error('Failed to parse status message:', err);
-      }
-    };
-
-    return () => ws.close();
-  }, [isConnected, selectedFriend, getWsUrl]);
 
   const sendTextMessage = async () => {
     if (!newMessage.trim() || !selectedFriend) return;
@@ -1234,13 +1226,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       setTimeout(() => setError(null), 3000);
     }
   };
-
-  useEffect(() => {
-    const editedMessages = messages.filter(m => m.edited);
-    if (editedMessages.length > 0) {
-      console.log("📝 Currently edited messages:", editedMessages);
-    }
-  }, [messages]);
 
   const getLocalStream = async (isAudioOnly = false) => {
     if (!localStreamRef.current) {
@@ -1508,26 +1493,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
             <List sx={{ mt: 2 }}>
               {friends.map((friend) => {
                 const isOnline = onlineUsers.has(friend.id);
-                const lastSeen = lastSeenMap[friend.id] || friend.last_seen;
-
-                let lastSeenText = '';
-                if (!isOnline && lastSeen) {
-                  const lastSeenDate = new Date(lastSeen);
-                  const now = new Date();
-                  const diffMinutes = Math.floor((now - lastSeenDate) / (1000 * 60));
-
-                  if (diffMinutes < 1) {
-                    lastSeenText = 'just now';
-                  } else if (diffMinutes < 60) {
-                    lastSeenText = `${diffMinutes}m ago`;
-                  } else if (diffMinutes < 1440) {
-                    const hours = Math.floor(diffMinutes / 60);
-                    lastSeenText = `${hours}h ago`;
-                  } else {
-                    const days = Math.floor(diffMinutes / 1440);
-                    lastSeenText = `${days}d ago`;
-                  }
-                }
 
                 return (
                   <ListItem
@@ -1649,7 +1614,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                         width: { xs: 38, md: 44 },
                         height: { xs: 38, md: 44 },
                       }}
-                    />
+                    >
+                      {getUserInitials(selectedFriend.username)}
+                    </Avatar>
                     <Box sx={{ ml: 1 }}>
                       <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
                       <Typography sx={{ display: { xs: 'block', md: 'none' } }} variant="caption" color="text.secondary">{status.text}</Typography>
@@ -1863,7 +1830,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                       }}
                       multiline
                       maxRows={3}
-                      disabled={!selectedFriend || uploadingImage || isRecording || isUploadingVoice}
+                      disabled={!selectedFriend || uploadingImage || isRecording}
                       sx={{
                         bgcolor: 'grey.100',
                         borderRadius: 2,
