@@ -66,20 +66,30 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
 
   // Function to update Cambodia time
   const updateCambodiaTime = () => {
-    const now = new Date();
-    
-    // Cambodia is UTC+7 (Indochina Time)
-    const options = {
-      timeZone: 'Asia/Phnom_Penh',
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    };
-    
-    const timeString = now.toLocaleTimeString('en-US', options);
-    setCurrentTime(timeString);
+  const now = new Date();
+  
+  // Cambodia is UTC+7 (Indochina Time)
+  const options = {
+    timeZone: 'Asia/Phnom_Penh',
+    hour12: true,                  
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h12'               
   };
+  
+  const formatter = new Intl.DateTimeFormat('en-US', options);
+  const parts = formatter.formatToParts(now);
+  
+  // Extract hour, minute, second, and dayPeriod (AM/PM)
+  const hour = parts.find(p => p.type === 'hour').value;
+  const minute = parts.find(p => p.type === 'minute').value;
+  const second = parts.find(p => p.type === 'second').value;
+  const dayPeriod = parts.find(p => p.type === 'dayPeriod').value; // 'AM' or 'PM'
+
+  const timeString = `${hour}:${minute}:${second} ${dayPeriod}`;
+  setCurrentTime(timeString);
+};
 
   const fetchInvites = async () => {
     try {
@@ -300,10 +310,9 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
 
             {/* Right: Auth + Language + Time + User Menu */}
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              {/* Cambodia Time Display - Clean style */}
               {isAuthenticated && (
                 <>
-                  {/* Desktop Time Display - Clean minimal style */}
+                  
                   <Box sx={{ 
                     display: { xs: 'none', md: 'flex' },
                     alignItems: 'center',
@@ -325,7 +334,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                     </Typography>
                   </Box>
 
-                  {/* Mobile Time Display - Simplified */}
                   <Box sx={{ 
                     display: { xs: 'flex', md: 'none' },
                     alignItems: 'center',
@@ -340,13 +348,12 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                       fontSize: '0.75rem',
                       fontFamily: 'monospace'
                     }}>
-                      {currentTime.split(':').slice(0, 2).join(':')}
+                      {currentTime.replace(/:\d{2}($| )/g, '$1').trim()}
                     </Typography>
                   </Box>
                 </>
               )}
 
-              {/* Language Switcher */}
               {isAuthenticated && (
                 <>
                   <IconButton 
@@ -390,14 +397,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                         style={{ width: 20, height: 14, marginRight: 8 }}
                       />
                       ភាសាខ្មែរ
-                    </MenuItem>
-                    <MenuItem onClick={() => changeLanguage('jp')}>
-                      <img
-                        src="/flags/japan.png"
-                        alt="Japanese"
-                        style={{ width: 20, height: 14, marginRight: 8 }}
-                      />
-                      日本語
                     </MenuItem>
                   </Menu>
                 </>

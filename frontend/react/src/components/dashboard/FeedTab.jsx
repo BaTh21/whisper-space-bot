@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+// FeedTab.jsx - COMPLETE FIXED VERSION
 import {
   Article as ArticleIcon,
   Cancel as CancelIcon,
@@ -10,11 +10,17 @@ import {
   FavoriteBorder,
   Image as ImageIcon,
   MoreVert as MoreVertIcon,
+  PlayArrow as PlayArrowIcon,
   Reply as ReplyIcon,
   Save as SaveIcon,
-  Send as SendIcon
+  Videocam as VideocamIcon,
+  ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import {
+  Alert,
   Avatar,
   Box,
   Button,
@@ -27,25 +33,27 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Divider,
   FormControl,
   IconButton,
   InputLabel,
   Menu,
   MenuItem,
+  Modal,
   Select,
   Snackbar,
-  Alert,
   TextField,
   Typography,
   useMediaQuery,
   useTheme
 } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, updateComment, updateDiaryById } from '../../services/api';
+import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 
 // Helper function to convert files to base64
-const convertFilesToBase64 = (files) => {
+const convertFilesToBase64 = (files, type = 'image') => {
   return Promise.all(
     Array.from(files).map(file => {
       return new Promise((resolve, reject) => {
@@ -80,7 +88,8 @@ const CommentItemWithActions = ({
   selectedCommentImages,
   setSelectedCommentImages,
   onEditComment,
-  onDeleteComment
+  onDeleteComment,
+  onMediaClick
 }) => {
   const [localReplying, setLocalReplying] = useState(false);
   const [localEditing, setLocalEditing] = useState(false);
@@ -90,6 +99,8 @@ const CommentItemWithActions = ({
   const [commentMenuAnchorEl, setCommentMenuAnchorEl] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
   const commentMenuOpen = Boolean(commentMenuAnchorEl);
+  const { t, i18n } = useTranslation();
+
 
   const isCommentOwner = profile && comment.user?.id === profile.id;
   const maxDepth = 5;
@@ -144,7 +155,7 @@ const CommentItemWithActions = ({
 
   const handleSaveEdit = async () => {
     if (!localEditText.trim()) return;
-    
+
     setEditLoading(true);
     try {
       await onEditComment(comment.id, localEditText, localEditImages);
@@ -159,7 +170,7 @@ const CommentItemWithActions = ({
   const handleEditImageUpload = async (event) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    
+
     try {
       const base64Images = await convertFilesToBase64(files);
       const imageUrls = base64Images.map(img => img.data);
@@ -220,12 +231,11 @@ const CommentItemWithActions = ({
                   onClose={handleCommentMenuClose}
                 >
                   <MenuItem onClick={handleCommentEdit}>
-                    <EditIcon fontSize="small" sx={{ mr: 1 }} />
-                    Edit
+                    <EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}
                   </MenuItem>
                   <MenuItem onClick={handleCommentDelete}>
                     <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
-                    <Typography color="error">Delete</Typography>
+                    <Typography color="error">{t('delete')}</Typography>
                   </MenuItem>
                 </Menu>
               </Box>
@@ -262,7 +272,7 @@ const CommentItemWithActions = ({
                   size="small"
                   startIcon={<ImageIcon />}
                 >
-                  Add Images
+                  {t('add_images')}
                   <input
                     type="file"
                     hidden
@@ -279,6 +289,8 @@ const CommentItemWithActions = ({
                           src={img}
                           alt={`Edit ${idx}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
+                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
+                          className="clickable-image"
                         />
                         <IconButton
                           size="small"
@@ -309,7 +321,7 @@ const CommentItemWithActions = ({
                   disabled={editLoading || !localEditText.trim()}
                   startIcon={editLoading ? <CircularProgress size={16} /> : null}
                 >
-                  {editLoading ? 'Saving...' : 'Save'}
+                  {editLoading ? t('saving...') : t('save')}
                 </Button>
                 <Button
                   variant="outlined"
@@ -317,7 +329,7 @@ const CommentItemWithActions = ({
                   onClick={handleCancelEdit}
                   disabled={editLoading}
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
               </Box>
             </Box>
@@ -327,18 +339,24 @@ const CommentItemWithActions = ({
                 {comment.content}
               </Typography>
               {comment.images && comment.images.length > 0 && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
                   {comment.images.map((img, idx) => (
                     <Box key={idx} sx={{ position: 'relative' }}>
                       <img
                         src={img}
                         alt={`Comment ${idx + 1}`}
                         style={{
-                          width: 80,
-                          height: 80,
+                          width: 50,
+                          height: 50,
                           objectFit: 'cover',
-                          borderRadius: 4
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          transition: 'transform 0.2s'
                         }}
+                        onClick={() => onMediaClick && onMediaClick(img, 'image')}
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        className="clickable-media"
                       />
                     </Box>
                   ))}
@@ -352,7 +370,7 @@ const CommentItemWithActions = ({
               <TextField
                 fullWidth
                 size="small"
-                placeholder={`Reply to ${comment.user?.username}...`}
+                placeholder={t('reply_to', { username: comment.user?.username })}
                 value={localReplyText}
                 onChange={(e) => setLocalReplyText(e.target.value)}
                 sx={{ mb: 1 }}
@@ -373,7 +391,7 @@ const CommentItemWithActions = ({
                   size="small"
                   startIcon={<ImageIcon />}
                 >
-                  Add Image
+                  {t('add_images_max', { max: 10 })}
                   <input
                     type="file"
                     hidden
@@ -390,6 +408,8 @@ const CommentItemWithActions = ({
                           src={img}
                           alt={`Reply preview ${idx}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
+                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
+                          className="clickable-media"
                         />
                         <IconButton
                           size="small"
@@ -422,14 +442,14 @@ const CommentItemWithActions = ({
                   onClick={handleSubmitReply}
                   disabled={!localReplyText?.trim()}
                 >
-                  Send
+                  {t('send')}
                 </Button>
                 <Button
                   variant="text"
                   size="small"
                   onClick={handleCancelReply}
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
               </Box>
             </Box>
@@ -452,6 +472,7 @@ const CommentItemWithActions = ({
                   setSelectedCommentImages={setSelectedCommentImages}
                   onEditComment={onEditComment}
                   onDeleteComment={onDeleteComment}
+                  onMediaClick={onMediaClick}
                 />
               ))}
             </Box>
@@ -462,8 +483,132 @@ const CommentItemWithActions = ({
   );
 };
 
+// Media Player Component - FIXED: Images now show
+const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
+  const [playing, setPlaying] = useState(false);
+
+  if (type === 'image') {
+    return (
+      <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+        <img
+          src={url}
+          alt={t('full_view')}
+          style={{
+            maxWidth: '100%',
+            maxHeight: '90vh',
+            objectFit: 'contain',
+            borderRadius: 8
+          }}
+        />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+      {playing ? (
+        <video
+          controls
+          autoPlay
+          style={{
+            maxWidth: '100%',
+            maxHeight: '90vh',
+            borderRadius: 8
+          }}
+          onEnded={() => setPlaying(false)}
+        >
+          <source src={url} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      ) : (
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            height: '60vh',
+            cursor: 'pointer'
+          }}
+          onClick={() => setPlaying(true)}
+        >
+          {thumbnail ? (
+            <>
+              <img
+                src={thumbnail}
+                alt="Video thumbnail"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: 8
+                }}
+              />
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 80,
+                  height: 80,
+                  borderRadius: '50%',
+                  bgcolor: 'rgba(0,0,0,0.6)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'transform 0.2s',
+                  '&:hover': {
+                    transform: 'translate(-50%, -50%) scale(1.1)',
+                    bgcolor: 'rgba(0,0,0,0.8)'
+                  }
+                }}
+              >
+                <PlayArrowIcon sx={{ fontSize: 40, color: 'white' }} />
+              </Box>
+            </>
+          ) : (
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                bgcolor: '#333',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <PlayArrowIcon sx={{ fontSize: 60, color: 'white' }} />
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+// Helper function to get video thumbnail - FIXED VERSION
+const getVideoThumbnail = (videoUrl, diary) => {
+  if (!videoUrl || !diary || !diary.video_thumbnails) return null;
+
+  const videoIndex = diary.videos?.indexOf(videoUrl);
+
+  if (videoIndex !== -1 && videoIndex < diary.video_thumbnails.length) {
+    const thumbnail = diary.video_thumbnails[videoIndex];
+
+    // Check if thumbnail exists and is a valid string
+    if (thumbnail && typeof thumbnail === 'string' && thumbnail.trim() !== '') {
+      // Debug log
+      console.log(`✅ Found thumbnail for video ${videoIndex}:`, thumbnail.substring(0, 50) + '...');
+      return thumbnail;
+    }
+  }
+
+  console.log(`❌ No thumbnail found for video:`, videoUrl?.substring(0, 50));
+  return null;
+};
+
 // Main FeedTab component
-const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
+const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends = [], pendingRequests = [], }) => {
   const [expandedDiary, setExpandedDiary] = useState(null);
   const [diaryComments, setDiaryComments] = useState({});
   const [diaryLikes, setDiaryLikes] = useState({});
@@ -483,6 +628,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const [editShareType, setEditShareType] = useState('');
   const [editGroupIds, setEditGroupIds] = useState([]);
   const [editImages, setEditImages] = useState([]);
+  const [editVideos, setEditVideos] = useState([]);
   const [editLoading, setEditLoading] = useState(false);
 
   // State for comment operations
@@ -502,8 +648,87 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-  // State to force re-render of images
-  const [imageUpdateTrigger, setImageUpdateTrigger] = useState(0);
+  // State to force re-render of media
+  const [mediaUpdateTrigger, setMediaUpdateTrigger] = useState(0);
+
+  // Media viewer state
+  const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState('');
+  const [selectedThumbnail, setSelectedThumbnail] = useState('');
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [selectedMediaType, setSelectedMediaType] = useState('image');
+  const [currentMediaList, setCurrentMediaList] = useState([]);
+  const [sendingRequests, setSendingRequests] = useState(new Set());
+  const handleSendFriendRequest = async (userId) => {
+    if (!userId || !profile || userId === profile.id) return;
+    if (sendingRequests.has(userId)) return;
+
+    setSendingRequests(prev => new Set(prev).add(userId));
+
+    try {
+      const result = await sendFriendRequest(userId);
+
+      if (result.success) {
+        let message = result.message || 'Friend request sent successfully';
+
+        if (result.code === 'ALREADY_EXISTS') {
+          message = result.message || 'Friend request already sent';
+        } else if (result.code === 'ALREADY_FRIENDS') {
+          message = 'You are already friends';
+        }
+
+        showMessage(message, 'success');
+
+        // Optional: trigger refresh to update any friend counts
+        if (onDataUpdate) onDataUpdate();
+      } else {
+        showMessage(result.message || 'Failed to send friend request', 'error');
+      }
+    } catch (err) {
+      console.error('Send friend request failed:', err);
+      let errorMessage = err.message || 'An unexpected error occurred';
+
+      if (err.message?.includes('401')) {
+        errorMessage = 'Please log in again';
+      } else if (!navigator.onLine) {
+        errorMessage = 'No internet connection';
+      }
+
+      showMessage(errorMessage, 'error');
+    } finally {
+      setSendingRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
+    }
+  };
+  const [following, setFollowing] = useState(new Set());
+  const handleToggleFollow = async (authorId) => {
+    if (!authorId || !profile) return;
+
+    try {
+      // TODO: Replace with your actual API call
+      // await followUser(authorId); // or unfollowUser(authorId)
+
+      setFollowing(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(authorId)) {
+          newSet.delete(authorId);
+          showMessage('Unfollowed', 'info');
+        } else {
+          newSet.add(authorId);
+          showMessage('Following', 'success');
+        }
+        return newSet;
+      });
+
+      // Optional: trigger data refresh
+      if (onDataUpdate) onDataUpdate();
+    } catch (err) {
+      showMessage('Failed to update follow status', 'error');
+    }
+  };
 
   const { t } = useTranslation();
   const theme = useTheme();
@@ -513,7 +738,9 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const normalizedDiaries = diaries.map(diary => ({
     ...diary,
     groups: Array.isArray(diary.groups) ? diary.groups : [],
-    images: Array.isArray(diary.images) ? diary.images : []
+    images: Array.isArray(diary.images) ? diary.images : [],
+    videos: Array.isArray(diary.videos) ? diary.videos : [],
+    video_thumbnails: Array.isArray(diary.video_thumbnails) ? diary.video_thumbnails : []
   }));
 
   const normalizedGroups = Array.isArray(groups) ? groups : [];
@@ -532,81 +759,201 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     setSnackbarOpen(false);
   };
 
-  // Image upload handler
-  const handleImageUpload = async (event, diaryId = null, commentId = null) => {
+  // Debug: Log diary data
+  console.log('=== DIARY DATA DEBUG ===');
+  normalizedDiaries.forEach((diary, idx) => {
+    if (diary.videos && diary.videos.length > 0) {
+      console.log(`📓 Diary ${idx}: ${diary.title}`);
+      console.log(`  Videos: ${diary.videos.length}`);
+      console.log(`  Thumbnails: ${diary.video_thumbnails?.length || 0}`);
+
+      diary.videos.forEach((video, vidIdx) => {
+        const thumb = diary.video_thumbnails?.[vidIdx];
+        console.log(`  Video ${vidIdx}: ${video?.substring(0, 60)}...`);
+        console.log(`    Thumbnail: ${thumb ? thumb.substring(0, 60) + '...' : 'NULL/EMPTY'}`);
+        console.log(`    Thumbnail type: ${typeof thumb}`);
+      });
+    }
+  });
+
+  // Media viewer functions
+  const openMediaViewer = (mediaList, thumbnails = [], index = 0, type = 'image') => {
+    console.log('📺 Opening media viewer:', {
+      mediaListCount: mediaList.length,
+      thumbnailsCount: thumbnails.length,
+      index,
+      type
+    });
+
+    setCurrentMediaList(mediaList);
+    setSelectedMedia(mediaList[index]);
+    setSelectedMediaType(type);
+    setSelectedMediaIndex(index);
+
+    // Set thumbnail for videos
+    if (type === 'video' && thumbnails[index]) {
+      setSelectedThumbnail(thumbnails[index]);
+      console.log('📸 Set thumbnail for video:', thumbnails[index]?.substring(0, 50));
+    } else {
+      setSelectedThumbnail('');
+    }
+
+    setMediaViewerOpen(true);
+  };
+
+  const handleMediaViewerClose = () => {
+    setMediaViewerOpen(false);
+    setSelectedMedia('');
+    setSelectedThumbnail('');
+    setSelectedMediaIndex(0);
+    setCurrentMediaList([]);
+    setSelectedMediaType('image');
+  };
+
+  const handlePrevMedia = () => {
+    const newIndex = selectedMediaIndex > 0 ? selectedMediaIndex - 1 : currentMediaList.length - 1;
+    setSelectedMedia(currentMediaList[newIndex]);
+    setSelectedMediaIndex(newIndex);
+
+    // Update thumbnail for videos
+    if (selectedMediaType === 'video') {
+      setSelectedThumbnail('');
+    }
+  };
+
+  const handleNextMedia = () => {
+    const newIndex = selectedMediaIndex < currentMediaList.length - 1 ? selectedMediaIndex + 1 : 0;
+    setSelectedMedia(currentMediaList[newIndex]);
+    setSelectedMediaIndex(newIndex);
+
+    // Update thumbnail for videos
+    if (selectedMediaType === 'video') {
+      setSelectedThumbnail('');
+    }
+  };
+
+  // Media upload handler
+  const handleMediaUpload = async (event, diaryId = null, commentId = null, mediaType = 'image') => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    // Validate files
+    // Validate files based on type
     const validFiles = Array.from(files).filter(file => {
-      const isValidType = file.type.startsWith('image/');
-      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
-      return isValidType && isValidSize;
+      if (mediaType === 'image') {
+        const isValidType = file.type.startsWith('image/');
+        const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB for images
+
+        if (!isValidType) {
+          showMessage('Only image files are allowed (jpg, png, gif, etc.)', 'error');
+          return false;
+        }
+
+        if (!isValidSize) {
+          showMessage('Each image must be less than 10MB', 'error');
+          return false;
+        }
+
+        // Check count for editing
+        if (diaryId && editingDiary === diaryId) {
+          const currentCount = mediaType === 'image' ? editImages.length : editVideos.length;
+          const maxCount = mediaType === 'image' ? 10 : 3;
+          if (currentCount + files.length > maxCount) {
+            showMessage(`Maximum ${maxCount} ${mediaType === 'image' ? 'images' : 'videos'} allowed`, 'error');
+            return false;
+          }
+        }
+
+        return true;
+      } else if (mediaType === 'video') {
+        const isValidType = file.type.startsWith('video/') || ['.mp4', '.mov', '.avi', '.webm', '.mkv'].some(ext => file.name.toLowerCase().endsWith(ext));
+        const isValidSize = file.size <= 50 * 1024 * 1024; // 50MB for videos
+
+        if (!isValidType) {
+          showMessage('Only video files are allowed (mp4, mov, avi, webm, mkv)', 'error');
+          return false;
+        }
+
+        if (!isValidSize) {
+          showMessage('Each video must be less than 50MB', 'error');
+          return false;
+        }
+
+        // Check count for editing
+        if (diaryId && editingDiary === diaryId) {
+          if (editVideos.length + files.length > 3) {
+            showMessage('Maximum 3 videos allowed', 'error');
+            return false;
+          }
+        }
+
+        return true;
+      }
+
+      return false;
     });
 
-    if (validFiles.length === 0) {
-      showMessage('Please select valid image files (JPG, PNG, GIF, max 5MB each)', 'error');
-      return;
-    }
-
-    if (validFiles.length > 10) {
-      showMessage('Maximum 10 images allowed', 'error');
-      return;
-    }
+    if (validFiles.length === 0) return;
 
     try {
-      const base64Images = await convertFilesToBase64(validFiles);
-      const imageUrls = base64Images.map(img => img.data);
+      const base64Media = await convertFilesToBase64(validFiles, mediaType);
+      const mediaUrls = base64Media.map(img => img.data);
 
       if (diaryId && editingDiary === diaryId) {
         // For diary editing
-        setEditImages(prev => {
-          const newImages = [...prev, ...imageUrls];
-          // Trigger re-render
-          setImageUpdateTrigger(prev => prev + 1);
-          return newImages;
-        });
+        if (mediaType === 'image') {
+          setEditImages(prev => {
+            const newImages = [...prev, ...mediaUrls];
+            setMediaUpdateTrigger(prev => prev + 1);
+            return newImages;
+          });
+        } else {
+          setEditVideos(prev => {
+            const newVideos = [...prev, ...mediaUrls];
+            setMediaUpdateTrigger(prev => prev + 1);
+            return newVideos;
+          });
+        }
+        showMessage(`${mediaType === 'image' ? 'Image' : 'Video'} added`, 'success');
       } else if (commentId) {
-        // For comment replies
+        // For comment replies (only images allowed)
         setSelectedCommentImages(prev => ({
           ...prev,
-          [commentId]: [...(prev[commentId] || []), ...imageUrls]
+          [commentId]: [...(prev[commentId] || []), ...mediaUrls]
         }));
       } else if (diaryId) {
-        // For new comments
+        // For new comments (only images allowed)
         setSelectedCommentImages(prev => ({
           ...prev,
-          [diaryId]: [...(prev[diaryId] || []), ...imageUrls]
+          [diaryId]: [...(prev[diaryId] || []), ...mediaUrls]
         }));
       }
 
       // Clear file input
       event.target.value = '';
     } catch (err) {
-      showMessage('Failed to process images', 'error');
-      console.error('Image upload error:', err);
+      showMessage(`Failed to process ${mediaType}s`, 'error');
+      console.error('Media upload error:', err);
     }
   };
 
-  // Remove image - FIXED VERSION
-  const removeImage = (indexToRemove, diaryId = null, commentId = null) => {
-    console.log('Removing image at index:', indexToRemove);
-    
+  // Remove media
+  const removeMedia = (indexToRemove, diaryId = null, commentId = null, mediaType = 'image') => {
     if (diaryId && editingDiary === diaryId) {
-      // For diary edit images - Create a NEW array reference
-      setEditImages(current => {
-        const newImages = current.filter((_, index) => index !== indexToRemove);
-        console.log('Images after removal:', {
-          before: current.length,
-          after: newImages.length
+      if (mediaType === 'image') {
+        setEditImages(current => {
+          const newImages = current.filter((_, index) => index !== indexToRemove);
+          setMediaUpdateTrigger(prev => prev + 1);
+          return newImages;
         });
-        return newImages;
-      });
-      
-      // Force re-render by updating the trigger
-      setImageUpdateTrigger(prev => prev + 1);
+      } else {
+        setEditVideos(current => {
+          const newVideos = current.filter((_, index) => index !== indexToRemove);
+          setMediaUpdateTrigger(prev => prev + 1);
+          return newVideos;
+        });
+      }
+      showMessage(`${mediaType === 'image' ? 'Image' : 'Video'} removed`, 'info');
     } else if (commentId) {
-      // For comment images
       setSelectedCommentImages(prev => {
         const currentImages = prev[commentId] || [];
         const newImages = currentImages.filter((_, index) => index !== indexToRemove);
@@ -616,7 +963,6 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
         };
       });
     } else if (diaryId) {
-      // For new comment images
       setSelectedCommentImages(prev => {
         const currentImages = prev[diaryId] || [];
         const newImages = currentImages.filter((_, index) => index !== indexToRemove);
@@ -668,7 +1014,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
   const handleDeleteDiary = async () => {
     if (!diaryToDelete) return;
-    
+
     setDeleteLoading(true);
     try {
       await deleteDiaryById(diaryToDelete.id);
@@ -684,35 +1030,40 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const handleEditClick = async (diary) => {
     try {
       const fullDiary = await getDiaryById(diary.id);
-      
+
+      console.log('=== EDIT DIARY DATA ===');
+      console.log('Full diary:', {
+        id: fullDiary.id,
+        videos: fullDiary.videos,
+        video_thumbnails: fullDiary.video_thumbnails,
+        images: fullDiary.images,
+        media_type: fullDiary.media_type
+      });
+
       // Reset and set with fresh data
       setEditTitle(fullDiary.title || '');
       setEditContent(fullDiary.content || '');
       setEditShareType(fullDiary.share_type || '');
       setEditGroupIds(fullDiary.groups?.map(g => g.id) || []);
-      
-      // Set images with fresh array
+
+      // Set media with fresh arrays
       setEditImages([...(fullDiary.images || [])]);
-      
+      setEditVideos([...(fullDiary.videos || [])]);
+
       // Set editing diary last
       setEditingDiary(diary.id);
-      
-      // Reset image update trigger
-      setImageUpdateTrigger(0);
-      
-      console.log('Edit mode started with:', {
-        images: fullDiary.images?.length || 0,
-        diaryId: diary.id
-      });
+
+      // Reset media update trigger
+      setMediaUpdateTrigger(0);
     } catch (err) {
       console.error('Failed to fetch diary:', err);
-      // Fallback to provided data
       setEditingDiary(diary.id);
       setEditTitle(diary.title || '');
       setEditContent(diary.content || '');
       setEditShareType(diary.share_type || '');
       setEditGroupIds(diary.groups?.map(g => g.id) || []);
       setEditImages([...(diary.images || [])]);
+      setEditVideos([...(diary.videos || [])]);
     }
   };
 
@@ -723,8 +1074,10 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     setEditShareType('');
     setEditGroupIds([]);
     setEditImages([]);
+    setEditVideos([]);
     setEditLoading(false);
-    setImageUpdateTrigger(0);
+    setMediaUpdateTrigger(0);
+    showMessage('Edit cancelled', 'info');
   };
 
   const handleEditSave = async (diaryId) => {
@@ -746,12 +1099,31 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
         updateData.group_ids = editGroupIds;
       }
 
-      // Always send images array - empty array means remove all images
-      updateData.images = editImages;
+      // Prepare images: existing URLs + new base64 images
+      const existingImageUrls = editImages.filter(img => img.startsWith('http'));
+      const newBase64Images = editImages.filter(img => img.startsWith('data:image/'));
 
-      console.log('Sending update with:', {
-        imagesCount: editImages.length,
-        images: editImages
+      // For videos: existing URLs + new base64 videos
+      const existingVideoUrls = editVideos.filter(vid => vid.startsWith('http'));
+      const newBase64Videos = editVideos.filter(vid => vid.startsWith('data:video/'));
+
+      console.log('=== EDIT DATA ANALYSIS ===');
+      console.log('Existing image URLs:', existingImageUrls.length);
+      console.log('New base64 images:', newBase64Images.length);
+      console.log('Existing video URLs:', existingVideoUrls.length);
+      console.log('New base64 videos:', newBase64Videos.length);
+
+      // Send all images (existing URLs + new base64)
+      updateData.images = [...existingImageUrls, ...newBase64Images];
+
+      // Send all videos (existing URLs + new base64)
+      updateData.videos = [...existingVideoUrls, ...newBase64Videos];
+
+      console.log('=== SENDING UPDATE ===');
+      console.log('Update data structure:', {
+        ...updateData,
+        images: `Array of ${updateData.images.length} items`,
+        videos: `Array of ${updateData.videos.length} items`
       });
 
       await updateDiaryById(diaryId, updateData);
@@ -759,6 +1131,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
       handleEditCancel();
       if (onDataUpdate) onDataUpdate();
     } catch (err) {
+      console.error('Update diary error:', err);
       showMessage(err.message || 'Failed to update diary', 'error');
       setEditLoading(false);
     }
@@ -885,7 +1258,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
   const handleEditComment = async (commentId, content, images = []) => {
     try {
       const updatedComment = await updateComment(commentId, content, images);
-      
+
       // Update state
       setDiaryComments(prev => {
         const updateCommentRecursive = (comments) => {
@@ -940,7 +1313,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
     try {
       await deleteCommentById(commentId);
-      
+
       // Remove from state
       setDiaryComments(prev => {
         const removeCommentRecursive = (comments) => {
@@ -969,10 +1342,37 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
     }
   };
 
+  // Handle media click - FIXED: Pass thumbnails for videos
+  const handleMediaClick = (url, type = 'image') => {
+    console.log('🖱️ Media clicked:', { url: url?.substring(0, 50), type });
+
+    if (type === 'image') {
+      openMediaViewer([url], [], 0, 'image');
+    } else {
+      // For video, find the diary and get thumbnail
+      const diary = normalizedDiaries.find(d => d.videos?.includes(url));
+      if (diary) {
+        const videoIndex = diary.videos.indexOf(url);
+        const thumbnails = diary.video_thumbnails || [];
+        const thumbnail = thumbnails[videoIndex] || '';
+
+        console.log('🎬 Video clicked:', {
+          videoIndex,
+          thumbnail: thumbnail?.substring(0, 50),
+          thumbnailsCount: thumbnails.length
+        });
+
+        openMediaViewer([url], thumbnails, 0, 'video');
+      } else {
+        openMediaViewer([url], [], 0, 'video');
+      }
+    }
+  };
+
   // Count all comments
   const countAllComments = (comments) => {
     if (!Array.isArray(comments)) return 0;
-    
+
     let total = 0;
     const countRecursive = (commentList) => {
       commentList.forEach(comment => {
@@ -982,13 +1382,100 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
         }
       });
     };
-    
+
     countRecursive(comments);
     return total;
   };
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', overflow: 'hidden' }}>
+      {/* Media Viewer Modal */}
+      <Modal
+        open={mediaViewerOpen}
+        onClose={handleMediaViewerClose}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          outline: 'none'
+        }}
+      >
+        <Box sx={{
+          position: 'relative',
+          maxWidth: '90vw',
+          maxHeight: '90vh',
+          outline: 'none'
+        }}>
+          <MediaPlayer
+            url={selectedMedia}
+            type={selectedMediaType}
+            thumbnail={selectedThumbnail}
+            onClose={handleMediaViewerClose}
+          />
+          {currentMediaList.length > 1 && (
+            <>
+              <IconButton
+                onClick={handlePrevMedia}
+                sx={{
+                  position: 'absolute',
+                  left: 16,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+              <IconButton
+                onClick={handleNextMedia}
+                sx={{
+                  position: 'absolute',
+                  right: 16,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                }}
+              >
+                <ArrowForwardIcon />
+              </IconButton>
+              <Typography
+                sx={{
+                  position: 'absolute',
+                  bottom: 16,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  color: 'white',
+                  px: 2,
+                  py: 0.5,
+                  borderRadius: 2,
+                  fontSize: '0.875rem'
+                }}
+              >
+                {selectedMediaIndex + 1} / {currentMediaList.length}
+              </Typography>
+            </>
+          )}
+          <IconButton
+            onClick={handleMediaViewerClose}
+            sx={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              bgcolor: 'rgba(0,0,0,0.5)',
+              color: 'white',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </Modal>
+
       {/* Snackbar for notifications */}
       <Snackbar
         open={snackbarOpen}
@@ -996,8 +1483,8 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
         onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert 
-          onClose={handleSnackbarClose} 
+        <Alert
+          onClose={handleSnackbarClose}
           severity={snackbarSeverity}
           sx={{ width: '100%' }}
         >
@@ -1007,14 +1494,14 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
 
       {/* Delete Diary Dialog */}
       <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
-        <DialogTitle>Delete Diary</DialogTitle>
+        <DialogTitle>{t('delete_title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete "{diaryToDelete?.title}"? This cannot be undone.
+           {t('delete_diary', { title: diaryToDelete?.title })}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>Cancel</Button>
+          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>{t('cancel')}</Button>
           <Button
             onClick={handleDeleteDiary}
             color="error"
@@ -1022,21 +1509,21 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
             disabled={deleteLoading}
             startIcon={deleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
           >
-            {deleteLoading ? 'Deleting...' : 'Delete'}
+            {deleteLoading ? t('deleting') : t('delete')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Comment Dialog */}
       <Dialog open={commentDeleteDialogOpen} onClose={handleCommentDeleteCancel}>
-        <DialogTitle>Delete Comment</DialogTitle>
+        <DialogTitle>{t('delete_comment')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this comment? This cannot be undone.
+            {t('delete_confirm')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCommentDeleteCancel} disabled={commentDeleteLoading}>Cancel</Button>
+          <Button onClick={handleCommentDeleteCancel} disabled={commentDeleteLoading}>{t('cancel')}</Button>
           <Button
             onClick={() => handleDeleteComment(commentToDelete)}
             color="error"
@@ -1044,7 +1531,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
             disabled={commentDeleteLoading}
             startIcon={commentDeleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
           >
-            {commentDeleteLoading ? 'Deleting...' : 'Delete'}
+            {commentDeleteLoading ? t('deleting') : t('delete')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1052,28 +1539,28 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
       {/* Diary Options Menu */}
       <Menu anchorEl={menuAnchorEl} open={menuOpen} onClose={handleMenuClose}>
         <MenuItem onClick={handleEditDiaryClick}>
-          <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+          <EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}
         </MenuItem>
         <MenuItem onClick={handleDeleteDiaryClick}>
           <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
-          <Typography color="error">Delete</Typography>
+          <Typography color="error">{t('delete')}</Typography>
         </MenuItem>
       </Menu>
 
       {/* Header */}
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: { xs: 'column', sm: 'row' }, 
-        justifyContent: 'space-between', 
-        alignItems: { xs: 'stretch', sm: 'center' }, 
-        gap: 2, 
-        mb: 3 
+      <Box sx={{
+        display: 'flex',
+        flexDirection: { xs: 'column', sm: 'row' },
+        justifyContent: 'space-between',
+        alignItems: { xs: 'stretch', sm: 'center' },
+        gap: 2,
+        mb: 3,
       }}>
         <Typography variant="h5" fontWeight="600">{t('your_feed')}</Typography>
-        <Button 
-          variant="contained" 
-          onClick={onNewDiary} 
-          startIcon={<ArticleIcon />} 
+        <Button
+          variant="contained"
+          onClick={onNewDiary}
+          startIcon={<ArticleIcon />}
           sx={{ borderRadius: '8px' }}
         >
           {isMobile ? t('new') : t('new_diary')}
@@ -1086,17 +1573,17 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
           {t('no_diaries_yet')}
         </Typography>
       ) : (
-        <Box sx={{ maxHeight: '70vh', overflowY: 'auto' }}>
+        <Box sx={{ maxHeight: '70vh', overflowY: 'auto'}}>
           {normalizedDiaries.map((diary) => (
-            <Card key={diary.id} sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderRadius: '12px' }}>
+            <Card key={diary.id} sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderRadius: '12px', border: "1px solid" }}>
               {/* Diary Header */}
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2}}>
                 <Box sx={{ flex: 1 }}>
                   {editingDiary === diary.id ? (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <TextField
                         fullWidth
-                        label="Title"
+                        label={t('title')}
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         disabled={editLoading}
@@ -1104,7 +1591,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                       />
                       <TextField
                         fullWidth
-                        label="Content"
+                        label={t('content')}
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                         disabled={editLoading}
@@ -1113,17 +1600,17 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                         size="medium"
                       />
                       <FormControl size="medium" fullWidth>
-                        <InputLabel>Share Type</InputLabel>
+                        <InputLabel>{t('share_type')}</InputLabel>
                         <Select
                           value={editShareType}
-                          label="Share Type"
+                          label={t('share_type')}
                           onChange={(e) => setEditShareType(e.target.value)}
                           disabled={editLoading}
                         >
-                          <MenuItem value="public">Public</MenuItem>
-                          <MenuItem value="friends">Friends</MenuItem>
-                          <MenuItem value="personal">Personal</MenuItem>
-                          <MenuItem value="group">Group</MenuItem>
+                          <MenuItem value="public">{t('public')}</MenuItem>
+                          <MenuItem value="friends">{t('friends')}</MenuItem>
+                          <MenuItem value="personal">{t('personal')}</MenuItem>
+                          <MenuItem value="group">{t('group')}</MenuItem>
                         </Select>
                       </FormControl>
                       {editShareType === 'group' && (
@@ -1142,88 +1629,153 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                           </Select>
                         </FormControl>
                       )}
-                      
-                      {/* Image Upload Section for Edit */}
-                      <Box>
-                        <Button
-                          variant="outlined"
-                          component="label"
-                          startIcon={<ImageIcon />}
-                          size="medium"
-                          disabled={editLoading}
-                        >
-                          Add Images (Max 10)
-                          <input
-                            type="file"
-                            hidden
-                            multiple
-                            accept="image/*"
-                            onChange={(e) => handleImageUpload(e, diary.id)}
-                          />
-                        </Button>
+
+                      {/* Media Upload Section for Edit */}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {/* Image Upload */}
+                        <Box>
+                          <Button
+                            variant="outlined"
+                            component="label"
+                            startIcon={<ImageIcon />}
+                            size="medium"
+                            disabled={editLoading || editImages.length >= 10}
+                            sx={{ mr: 2 }}
+                          >
+                            {t('add_images_max',{max:10})} 
+                            <input
+                              type="file"
+                              hidden
+                              multiple
+                              accept="image/*"
+                              onChange={(e) => handleMediaUpload(e, diary.id, null, 'image')}
+                            />
+                          </Button>
+                          {editImages.length > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                              {editImages.length} selected
+                            </Typography>
+                          )}
+                        </Box>
+
+                        {/* Video Upload */}
+                        <Box>
+                          <Button
+                            variant="outlined"
+                            component="label"
+                            startIcon={<VideocamIcon />}
+                            size="medium"
+                            disabled={editLoading || editVideos.length >= 3}
+                            sx={{ mr: 2 }}
+                          >
+                           {t('add_videos_max', { max: 3 })}
+                            <input
+                              type="file"
+                              hidden
+                              multiple
+                              accept="video/*"
+                              onChange={(e) => handleMediaUpload(e, diary.id, null, 'video')}
+                            />
+                          </Button>
+                          {editVideos.length > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                              {editVideos.length} selected
+                            </Typography>
+                          )}
+                        </Box>
                       </Box>
-                      
-                      {/* Image Preview for Edit - FIXED with re-render trigger */}
+
+                      {/* Image Preview for Edit */}
                       {editImages.length > 0 && (
-                        <Box 
-                          key={`image-preview-${editImages.length}-${imageUpdateTrigger}`}
-                          sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '8px' }}
+                        <Box
+                          key={`image-preview-${editImages.length}-${mediaUpdateTrigger}`}
+                          sx={{ mt: 2 }}
                         >
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Images ({editImages.length} / 10)
+                            {t('images_count', { count: editImages.length, max: 10 })}
                           </Typography>
-                          <Box sx={{ 
-                            display: 'flex', 
-                            flexWrap: 'wrap', 
-                            gap: 1.5,
-                            mt: 1 
+                          <Box sx={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
+                            gap: 1,
+                            mt: 1
                           }}>
                             {editImages.map((img, index) => (
-                              <Box 
+                              <Box
                                 key={`edit-img-${diary.id}-${index}-${img.substring(0, 20)}`}
-                                sx={{ 
+                                sx={{
                                   position: 'relative',
-                                  border: '1px solid',
-                                  borderColor: 'divider',
-                                  borderRadius: '8px',
-                                  overflow: 'hidden'
+                                  borderRadius: '6px',
+                                  overflow: 'hidden',
+                                  aspectRatio: '1',
+                                  '&:hover .media-overlay': {
+                                    opacity: 1
+                                  }
                                 }}
                               >
                                 <img
                                   src={img}
                                   alt={`Image ${index + 1}`}
                                   style={{
-                                    width: 100,
-                                    height: 100,
+                                    width: '100%',
+                                    height: '100%',
                                     objectFit: 'cover',
-                                    display: 'block'
+                                    cursor: 'pointer'
                                   }}
+                                  onClick={() => handleMediaClick(img, 'image')}
                                 />
-                                
-                                {/* Remove Button */}
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    removeImage(index, diary.id);
-                                  }}
-                                  sx={{
-                                    position: 'absolute',
-                                    top: 4,
-                                    right: 4,
-                                    bgcolor: 'error.main',
-                                    color: 'white',
-                                    width: 28,
-                                    height: 28,
-                                    '&:hover': {
-                                      bgcolor: 'error.dark'
-                                    }
-                                  }}
-                                  size="small"
-                                >
-                                  <CloseIcon sx={{ fontSize: 16 }} />
-                                </IconButton>
-                                
-                                {/* Image Number */}
+
+                                {/* Media Overlay */}
+                                <Box className="media-overlay" sx={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  bgcolor: 'rgba(0,0,0,0.5)',
+                                  opacity: 0,
+                                  transition: 'opacity 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 0.5
+                                }}>
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeMedia(index, diary.id, null, 'image');
+                                    }}
+                                    sx={{
+                                      bgcolor: 'error.main',
+                                      color: 'white',
+                                      width: 28,
+                                      height: 28,
+                                      '&:hover': {
+                                        bgcolor: 'error.dark'
+                                      }
+                                    }}
+                                    size="small"
+                                  >
+                                    <CloseIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                  <IconButton
+                                    onClick={() => handleMediaClick(img, 'image')}
+                                    sx={{
+                                      bgcolor: 'primary.main',
+                                      color: 'white',
+                                      width: 28,
+                                      height: 28,
+                                      '&:hover': {
+                                        bgcolor: 'primary.dark'
+                                      }
+                                    }}
+                                    size="small"
+                                  >
+                                    <ZoomInIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Box>
+
+                                {/* Media Number Badge */}
                                 <Box
                                   sx={{
                                     position: 'absolute',
@@ -1232,22 +1784,234 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                                     bgcolor: 'rgba(0, 0, 0, 0.6)',
                                     color: 'white',
                                     borderRadius: '50%',
-                                    width: 24,
-                                    height: 24,
+                                    width: 20,
+                                    height: 20,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '0.75rem'
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600
                                   }}
                                 >
                                   {index + 1}
+                                </Box>
+
+                                {/* URL/New Badge */}
+                                <Box
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 4,
+                                    right: 4,
+                                    bgcolor: img.startsWith('http') ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
+                                    color: 'white',
+                                    px: 0.5,
+                                    py: 0.1,
+                                    borderRadius: 1,
+                                    fontSize: '0.55rem',
+                                    fontWeight: 500
+                                  }}
+                                >
+                                  {img.startsWith('http') ? t('existing') : t('new')}
                                 </Box>
                               </Box>
                             ))}
                           </Box>
                         </Box>
                       )}
-                      
+
+                      {/* Video Preview for Edit */}
+                      {editVideos.length > 0 && (
+                        <Box
+                          key={`video-preview-${editVideos.length}-${mediaUpdateTrigger}`}
+                          sx={{ mt: 2 }}
+                        >
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            {t('videos_count', { count: editVideos.length, max: 3 })}
+                          </Typography>
+                          <Box sx={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                            gap: 1.5,
+                            mt: 1
+                          }}>
+                            {editVideos.map((vid, index) => {
+                              const isExistingVideo = vid.startsWith('http');
+                              const thumbnail = isExistingVideo ? getVideoThumbnail(vid, diary) : null;
+
+                              return (
+                                <Box
+                                  key={`edit-vid-${diary.id}-${index}`}
+                                  sx={{
+                                    position: 'relative',
+                                    borderRadius: '8px',
+                                    overflow: 'hidden',
+                                    aspectRatio: '16/9',
+                                    bgcolor: '#000',
+                                    cursor: 'pointer',
+                                    '&:hover .media-overlay': {
+                                      opacity: 1
+                                    }
+                                  }}
+                                >
+                                  {/* Video Thumbnail or Placeholder */}
+                                  {thumbnail ? (
+                                    <Box
+                                      sx={{
+                                        width: '100%',
+                                        height: '100%',
+                                        position: 'relative'
+                                      }}
+                                      onClick={() => handleMediaClick(vid, 'video')}
+                                    >
+                                      <img
+                                        src={thumbnail}
+                                        alt={`Video ${index + 1}`}
+                                        style={{
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover'
+                                        }}
+                                        onError={(e) => {
+                                          console.error(`❌ Failed to load thumbnail:`, thumbnail);
+                                          e.target.style.display = 'none';
+                                        }}
+                                      />
+                                      <Box
+                                        sx={{
+                                          position: 'absolute',
+                                          top: '50%',
+                                          left: '50%',
+                                          transform: 'translate(-50%, -50%)',
+                                          width: 40,
+                                          height: 40,
+                                          borderRadius: '50%',
+                                          bgcolor: 'rgba(0,0,0,0.6)',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          transition: 'transform 0.2s',
+                                          '&:hover': {
+                                            transform: 'translate(-50%, -50%) scale(1.1)',
+                                            bgcolor: 'rgba(0,0,0,0.8)'
+                                          }
+                                        }}
+                                      >
+                                        <PlayArrowIcon sx={{ fontSize: 24, color: 'white' }} />
+                                      </Box>
+                                    </Box>
+                                  ) : (
+                                    <Box
+                                      sx={{
+                                        width: '100%',
+                                        height: '100%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        position: 'relative'
+                                      }}
+                                      onClick={() => handleMediaClick(vid, 'video')}
+                                    >
+                                      <PlayArrowIcon sx={{ fontSize: 40, color: 'white', zIndex: 1 }} />
+                                      <Typography
+                                        variant="caption"
+                                        sx={{
+                                          position: 'absolute',
+                                          bottom: 8,
+                                          left: 8,
+                                          color: 'white',
+                                          bgcolor: 'rgba(0,0,0,0.5)',
+                                          px: 1,
+                                          borderRadius: 1,
+                                          zIndex: 2
+                                        }}
+                                      >
+                                        No thumbnail
+                                      </Typography>
+                                    </Box>
+                                  )}
+
+                                  {/* Media Overlay with Remove Button */}
+                                  <Box className="media-overlay" sx={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    bgcolor: 'rgba(0,0,0,0.5)',
+                                    opacity: 0,
+                                    transition: 'opacity 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 0.5
+                                  }}>
+                                    <IconButton
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeMedia(index, diary.id, null, 'video');
+                                      }}
+                                      sx={{
+                                        bgcolor: 'error.main',
+                                        color: 'white',
+                                        width: 32,
+                                        height: 32,
+                                        '&:hover': {
+                                          bgcolor: 'error.dark'
+                                        }
+                                      }}
+                                      size="small"
+                                    >
+                                      <CloseIcon sx={{ fontSize: 16 }} />
+                                    </IconButton>
+                                  </Box>
+
+                                  {/* Video Type Badge */}
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      top: 4,
+                                      left: 4,
+                                      bgcolor: isExistingVideo ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
+                                      color: 'white',
+                                      px: 0.75,
+                                      py: 0.25,
+                                      borderRadius: 1,
+                                      fontSize: '0.65rem',
+                                      fontWeight: 500,
+                                      zIndex: 2
+                                    }}
+                                  >
+                                    {isExistingVideo ? t('uploaded') : t('new')}
+                                  </Box>
+
+                                  {/* Video Number Badge */}
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      top: 4,
+                                      right: 4,
+                                      bgcolor: 'rgba(0, 0, 0, 0.6)',
+                                      color: 'white',
+                                      borderRadius: '50%',
+                                      width: 20,
+                                      height: 20,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 600,
+                                      zIndex: 2
+                                    }}
+                                  >
+                                    {index + 1}
+                                  </Box>
+                                </Box>
+                              );
+                            })}
+                          </Box>
+                        </Box>
+                      )}
+
                       <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
                         <Button
                           variant="outlined"
@@ -1256,7 +2020,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                           startIcon={<CancelIcon />}
                           size="medium"
                         >
-                          Cancel
+                          {t('cancel')}
                         </Button>
                         <Button
                           variant="contained"
@@ -1265,23 +2029,82 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                           startIcon={editLoading ? <CircularProgress size={24} /> : <SaveIcon />}
                           size="medium"
                         >
-                          {editLoading ? 'Saving...' : 'Save'}
+                          {editLoading ? t('saving...') : t('save')}
                         </Button>
                       </Box>
                     </Box>
                   ) : (
                     <>
-                      <Typography variant="h6" gutterBottom fontWeight="600">
-                        {diary.title}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant="body2" color="green" fontWeight="600">
-                          By {diary.author?.username}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {formatCambodiaDate(diary.created_at)}
-                        </Typography>
-                      </Box>
+                        {/* Author Info with Avatar */}
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Avatar
+                              src={diary.author?.avatar_url}
+                              alt={diary.author?.username}
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                bgcolor: 'primary.light',
+                                fontSize: '1.1rem',
+                              }}
+                            >
+                              {diary.author?.username?.charAt(0)?.toUpperCase() || 'U'}
+                            </Avatar>
+
+                            <Box>
+                              <Typography variant="body1" fontWeight="600" color="green">
+                                {diary.author?.username || 'Unknown User'}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {formatCambodiaDate(diary.created_at)}
+                              </Typography>
+                            </Box>
+                            {/* Friend Request / Status Chips */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            {profile && diary.author?.id !== profile.id && (
+                              <>
+                                {friends?.some(f => f.id === diary.author.id) ? (
+                                  <Chip label="Friend" color="success" size="small" variant="outlined" sx={{ borderRadius: '16px' }} />
+                                ) : pendingRequests?.some(r => r.id === diary.author.id) ? (
+                                  <Chip label="Request Sent" color="warning" size="small" variant="outlined" sx={{ borderRadius: '16px' }} />
+                                ) : (
+                                  <Button
+                                    variant="contained"
+                                    color="primary"
+                                    size="small"
+                                    onClick={() => handleSendFriendRequest(diary.author.id)}
+                                    disabled={sendingRequests.has(diary.author.id)}
+                                    startIcon={<PersonAddIcon sx={{ fontSize: 10 }} />}
+                                    sx={{
+                                      borderRadius: '20px',
+                                      textTransform: 'none',
+                                      fontWeight: 500,
+                                      px: 2,
+                                      py: 0.5,
+                                      fontSize: '0.70rem',
+                                    }}
+                                  >
+                                    {sendingRequests.has(diary.author.id) ? "Sending..." : "Add Friend"}
+                                  </Button>
+                                )}
+                              </>
+                            )}
+
+                            {profile && diary.author?.id === profile.id && (
+                              <Chip
+                                label="You"
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                sx={{ fontSize: '0.75rem', height: 26 }}
+                              />
+                            )}
+                          </Box>
+                          </Box>
+
+                          
+                        </Box>
+                    
                     </>
                   )}
                 </Box>
@@ -1293,7 +2116,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                       size="small"
                       color={
                         diary.share_type === 'public' ? 'primary' :
-                        diary.share_type === 'friends' ? 'secondary' : 'default'
+                          diary.share_type === 'friends' ? 'secondary' : 'default'
                       }
                     />
                     {profile && diary.author?.id === profile.id && (
@@ -1308,45 +2131,226 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                   </Box>
                 )}
               </Box>
-
+              <Divider/>
+                
               {/* Diary Content */}
               {editingDiary !== diary.id && (
                 <>
-                  <Typography variant="body1" sx={{ mb: 3, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {diary.content}
                   </Typography>
 
-                  {/* Diary Images */}
+                  {/* Diary Images - Compact Grid View */}
                   {diary.images && diary.images.length > 0 && (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
-                      {diary.images.map((img, index) => (
-                        <img
-                          key={index}
-                          src={img}
-                          alt={`Diary ${index + 1}`}
-                          style={{
-                            maxWidth: '100%',
-                            maxHeight: 300,
-                            borderRadius: 8,
-                            objectFit: 'cover'
-                          }}
-                        />
-                      ))}
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        {diary.images.length} {diary.images.length === 1 ? 'image' : 'images'}
+                      </Typography>
+                      <Box sx={{
+                        display: 'grid',
+                        border: '1px solid rgba(0, 0, 0, 0.2)',
+                        borderRadius: 2,
+                        padding: 5,
+                        gridTemplateColumns: {
+                          xs: 'repeat(2, 1fr)',
+                          sm: 'repeat(3, 1fr)',
+                          md: 'repeat(4, 1fr)'
+                        },
+                        gap: 1
+                      }}>
+                        {diary.images.map((img, index) => (
+                          <Box
+                            key={index}
+                            sx={{
+                              position: 'relative',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              aspectRatio: '1',
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s',
+                              '&:hover': {
+                                transform: 'scale(1.02)',
+                                '& .media-overlay': {
+                                  opacity: 1
+                                }
+                              }
+                            }}
+                            onClick={() => handleMediaClick(img, 'image')}
+                          >
+                            <img
+                              src={img}
+                              alt={`Diary ${index + 1}`}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                              }}
+                            />
+                            <Box className="media-overlay" sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              bgcolor: 'rgba(0,0,0,0.3)',
+                              opacity: 0,
+                              transition: 'opacity 0.2s',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <ZoomInIcon sx={{ color: 'white', fontSize: 32 }} />
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
                     </Box>
                   )}
 
+                  {/* Diary Videos - Grid View - FIXED: Shows thumbnails */}
+                  {diary.videos && diary.videos.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        {diary.videos.length} {diary.videos.length === 1 ? 'video' : 'videos'}
+                      </Typography>
+                      <Box sx={{
+                        display: 'grid',
+                        border: '1px solid rgba(0, 0, 0, 0.2)',
+                        borderRadius: 2,
+                        gridTemplateColumns: {
+                          xs: '1fr',
+                          sm: 'repeat(2, 1fr)',
+                          md: 'repeat(3, 1fr)'
+                        },
+                        padding: 5,
+                        gap: 2
+                      }}>
+                        {diary.videos.map((video, index) => {
+                          // Get thumbnail for this specific video
+                          const thumbnail = getVideoThumbnail(video, diary);
+
+                          console.log(`🎬 Rendering video ${index}:`, {
+                            video: video?.substring(0, 50),
+                            thumbnail: thumbnail?.substring(0, 50),
+                            hasThumbnail: !!thumbnail
+                          });
+
+                          return (
+                            <Box
+                              key={index}
+                              sx={{
+                                position: 'relative',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                aspectRatio: '16/9',
+                                bgcolor: '#000',
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s',
+                                '&:hover': {
+                                  transform: 'scale(1.02)',
+                                  '& .media-overlay': {
+                                    opacity: 1
+                                  }
+                                }
+                              }}
+                              onClick={() => handleMediaClick(video, 'video')}
+                            >
+                              {/* Video Thumbnail or Placeholder */}
+                              {thumbnail ? (
+                                <Box>
+                                  <img
+                                    src={thumbnail}
+                                    alt={`Video thumbnail ${index + 1}`}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover'
+                                    }}
+                                    onError={(e) => {
+                                      console.error(`❌ Failed to load thumbnail for video ${index}:`, thumbnail);
+                                      e.target.style.display = 'none';
+                                    }}
+                                  />
+                                </Box>
+                              ) : (
+                                <Box
+                                  sx={{
+                                    width: '100%',
+                                    height: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexDirection: 'column',
+                                    gap: 1,
+
+                                  }}
+                                >
+                                  <VideocamIcon sx={{ fontSize: 48, color: '#666' }} />
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      color: '#888',
+                                      textAlign: 'center'
+                                    }}
+                                  >
+                                    {t('no_thumbnail')}
+                                  </Typography>
+                                </Box>
+                              )}
+
+                              {/* Play Button Overlay */}
+                              <Box className="media-overlay" sx={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                bgcolor: thumbnail ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.5)',
+                                opacity: 0,
+                                transition: 'opacity 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                <PlayArrowIcon sx={{ color: 'white', fontSize: 48 }} />
+                              </Box>
+
+                              {/* Video Number Badge */}
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  top: 8,
+                                  right: 8,
+                                  bgcolor: 'rgba(0,0,0,0.7)',
+                                  color: 'white',
+                                  px: 1,
+                                  py: 0.25,
+                                  borderRadius: 1,
+                                  fontSize: '0.7rem',
+                                  fontWeight: 500
+                                }}
+                              >
+                                {index + 1}
+                              </Box>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  )}
+                  <Divider/>
                   {/* Actions */}
                   <Box sx={{ display: 'flex', gap: 2, mb: expandedDiary === diary.id ? 0 : 2 }}>
                     <Button
                       startIcon={likedDiaries.has(diary.id) ? <Favorite color="error" /> : <FavoriteBorder />}
                       onClick={() => handleLikeDiary(diary.id)}
                       size="medium"
-                      sx={{ 
+                      sx={{
                         color: likedDiaries.has(diary.id) ? 'error.main' : 'inherit',
                         minWidth: '100px'
                       }}
                     >
-                      Like {diaryLikes[diary.id] > 0 && `(${diaryLikes[diary.id]})`}
+                      {t('like')} {diaryLikes[diary.id] > 0 && `(${diaryLikes[diary.id]})`}
                     </Button>
                     <Button
                       startIcon={<CommentIcon />}
@@ -1355,24 +2359,24 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                       color={expandedDiary === diary.id ? 'primary' : 'inherit'}
                       sx={{ minWidth: '120px' }}
                     >
-                      Comment {diaryComments[diary.id] && `(${countAllComments(diaryComments[diary.id])})`}
+                      {t('comment')} {diaryComments[diary.id] && `(${countAllComments(diaryComments[diary.id])})`}
                     </Button>
                   </Box>
 
                   {/* Comments Section */}
                   <Collapse in={expandedDiary === diary.id}>
-                    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '12px' }}>
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '12px', border: "1px solid" }}>
                       {/* Comment Input */}
-                      <Box sx={{ 
-                        display: 'flex', 
-                        flexDirection: { xs: 'column', sm: 'row' }, 
-                        gap: 1.5, 
+                      <Box sx={{
+                        display: 'flex',
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        gap: 1.5,
                         mb: 2,
                         alignItems: { xs: 'stretch', sm: 'flex-start' }
                       }}>
                         <TextField
                           fullWidth
-                          placeholder="Write a comment..."
+                          placeholder={t('placeholder')}
                           value={commentTexts[diary.id] || ''}
                           onChange={(e) => setCommentTexts(prev => ({ ...prev, [diary.id]: e.target.value }))}
                           onKeyPress={(e) => {
@@ -1391,9 +2395,9 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                             }
                           }}
                         />
-                        <Box sx={{ 
-                          display: 'flex', 
-                          gap: 1, 
+                        <Box sx={{
+                          display: 'flex',
+                          gap: 1,
                           flexDirection: { xs: 'row', sm: 'column' },
                           width: { xs: '100%', sm: 'auto' }
                         }}>
@@ -1412,13 +2416,13 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                             }}
                             size="medium"
                           >
-                            Image
+                            {t('image')}
                             <input
                               type="file"
                               hidden
                               multiple
                               accept="image/*"
-                              onChange={(e) => handleImageUpload(e, diary.id)}
+                              onChange={(e) => handleMediaUpload(e, diary.id)}
                             />
                           </Button>
                           <Button
@@ -1436,18 +2440,15 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                             {commentLoading[diary.id] ? (
                               <CircularProgress size={24} color="inherit" />
                             ) : (
-                              'Send'
+                              t('send')
                             )}
                           </Button>
                         </Box>
                       </Box>
 
-                      {/* Selected Images Preview for Comments */}
+                      {/* Selected Images Preview for Comments - Compact */}
                       {selectedCommentImages[diary.id]?.length > 0 && (
-                        <Box sx={{ 
-                          display: 'flex', 
-                          flexWrap: 'wrap', 
-                          gap: 1, 
+                        <Box sx={{
                           mb: 2,
                           p: 1,
                           bgcolor: 'background.paper',
@@ -1455,45 +2456,59 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                           border: '1px solid',
                           borderColor: 'divider'
                         }}>
-                          {selectedCommentImages[diary.id].map((img, index) => (
-                            <Box key={index} sx={{ position: 'relative' }}>
-                              <img
-                                src={img}
-                                alt={`Preview ${index}`}
-                                style={{ 
-                                  width: 80, 
-                                  height: 80, 
-                                  objectFit: 'cover', 
-                                  borderRadius: 6 
-                                }}
-                              />
-                              <IconButton
-                                size="small"
-                                onClick={() => removeImage(index, null, diary.id)}
-                                sx={{
-                                  position: 'absolute',
-                                  top: -8,
-                                  right: -8,
-                                  bgcolor: 'error.main',
-                                  color: 'white',
-                                  width: 24,
-                                  height: 24,
-                                  '&:hover': { 
-                                    bgcolor: 'error.dark' 
-                                  }
-                                }}
-                              >
-                                <CloseIcon sx={{ fontSize: 14 }} />
-                              </IconButton>
-                            </Box>
-                          ))}
+                          <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                            Selected images ({selectedCommentImages[diary.id].length})
+                          </Typography>
+                          <Box sx={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: 0.5
+                          }}>
+                            {selectedCommentImages[diary.id].map((img, index) => (
+                              <Box key={index} sx={{
+                                position: 'relative',
+                                width: 50,
+                                height: 50,
+                                borderRadius: 4,
+                                overflow: 'hidden'
+                              }}>
+                                <img
+                                  src={img}
+                                  alt={`Preview ${index}`}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover'
+                                  }}
+                                />
+                                <IconButton
+                                  size="small"
+                                  onClick={() => removeMedia(index, null, diary.id, 'image')}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: -4,
+                                    right: -4,
+                                    bgcolor: 'error.main',
+                                    color: 'white',
+                                    width: 20,
+                                    height: 20,
+                                    '&:hover': {
+                                      bgcolor: 'error.dark'
+                                    }
+                                  }}
+                                >
+                                  <CloseIcon sx={{ fontSize: 12 }} />
+                                </IconButton>
+                              </Box>
+                            ))}
+                          </Box>
                         </Box>
                       )}
 
                       {/* Comments List */}
                       {diaryComments[diary.id]?.length > 0 ? (
-                        <Box sx={{ 
-                          maxHeight: 300, 
+                        <Box sx={{
+                          maxHeight: 300,
                           overflowY: 'auto',
                           '&::-webkit-scrollbar': {
                             width: '8px',
@@ -1517,27 +2532,28 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups }) => {
                               diaryId={diary.id}
                               profile={profile}
                               onAddReply={handleAddReply}
-                              handleImageUpload={handleImageUpload}
+                              handleImageUpload={handleMediaUpload}
                               selectedCommentImages={selectedCommentImages}
                               setSelectedCommentImages={setSelectedCommentImages}
                               onEditComment={handleEditComment}
                               onDeleteComment={handleCommentDeleteClick}
                               replyingTo={replyingTo}
                               setReplyingTo={setReplyingTo}
+                              onMediaClick={handleMediaClick}
                             />
                           ))}
                         </Box>
                       ) : (
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary" 
-                          align="center" 
-                          sx={{ 
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          align="center"
+                          sx={{
                             py: 2,
                             fontStyle: 'italic'
                           }}
                         >
-                          No comments yet. Be the first to comment!
+                          {t('no_comments')}
                         </Typography>
                       )}
                     </Box>

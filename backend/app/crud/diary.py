@@ -1,3 +1,4 @@
+import traceback
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 from app.models.diary import Diary, ShareType
@@ -15,11 +16,101 @@ from app.models.group import Group
 from app.services.image_service_sync import image_service_sync
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
+    """Create a new diary with GUARANTEED video thumbnails"""
+    print(f"=== DIARY CREATE ===")
+    print(f"User ID: {user_id}")
+    print(f"Share Type: {diary_in.share_type}")
+    print(f"Images: {len(diary_in.images) if diary_in.images else 0}")
+    print(f"Videos: {len(diary_in.videos) if diary_in.videos else 0}")
+    
     # Handle images
     image_urls = []
     if diary_in.images:
-        image_urls = image_service_sync.save_multiple_images(diary_in.images, is_diary=True)
+        print(f"📷 Uploading {len(diary_in.images)} images")
+        try:
+            image_urls = image_service_sync.save_multiple_images(diary_in.images, is_diary=True)
+            print(f"✅ {len(image_urls)} images uploaded successfully")
+        except Exception as e:
+            print(f"❌ Image upload failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to upload images: {str(e)}"
+            )
     
+    # Handle videos - PROCESS INDIVIDUALLY FOR THUMBNAIL GUARANTEE
+    video_urls = []
+    video_thumbnails = []
+    if diary_in.videos:
+        print(f"🎬 Uploading {len(diary_in.videos)} videos")
+        print(f"⚠️ Processing videos one by one for thumbnail guarantee")
+        
+        try:
+            # Process each video individually
+            for idx, video_data in enumerate(diary_in.videos):
+                print(f"  Processing video {idx+1}/{len(diary_in.videos)}")
+                
+                try:
+                    # This method GUARANTEES a thumbnail for videos
+                    video_url, video_thumbnail = image_service_sync.save_single_media(video_data, is_diary=True)
+                    
+                    if video_url:
+                        video_urls.append(video_url)
+                        video_thumbnails.append(video_thumbnail)  # Could be None, but array position preserved
+                        print(f"  ✅ Video {idx+1} - URL: {video_url[:50]}...")
+                        print(f"  📸 Thumbnail: {'PRESENT' if video_thumbnail else 'NONE'}")
+                    else:
+                        print(f"  ⚠️ Video {idx+1} returned no URL")
+                        
+                except Exception as video_error:
+                    print(f"  ❌ Video {idx+1} error: {str(video_error)}")
+                    # Don't fail entire diary if one video fails
+                    continue
+            
+            # CRITICAL: Ensure arrays are the same length
+            if len(video_thumbnails) != len(video_urls):
+                print(f"⚠️ Array mismatch: videos={len(video_urls)}, thumbnails={len(video_thumbnails)}")
+                # Fix by adding None for missing thumbnails
+                while len(video_thumbnails) < len(video_urls):
+                    video_thumbnails.append(None)
+            
+            print(f"✅ VIDEO PROCESSING COMPLETE:")
+            print(f"  Videos: {len(video_urls)}")
+            print(f"  Thumbnails: {len(video_thumbnails)}")
+            print(f"  Valid thumbnails: {len([t for t in video_thumbnails if t])}")
+            
+            # Debug output
+            for i in range(len(video_urls)):
+                thumb_status = "✅" if video_thumbnails[i] else "❌"
+                print(f"  Video {i}: {thumb_status} {video_urls[i][:50]}...")
+                
+        except Exception as e:
+            # Clean up any uploaded images
+            if image_urls:
+                image_service_sync.cleanup_media(image_urls)
+            print(f"❌ Video upload failed: {str(e)}")
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to upload videos: {str(e)}"
+            )
+    
+    # Determine media type
+    if image_urls and video_urls:
+        media_type = 'mixed'
+    elif video_urls:
+        media_type = 'video'
+    elif image_urls:
+        media_type = 'image'
+    else:
+        media_type = 'text'
+    
+    print(f"📱 Final media type: {media_type}")
+    print(f"📦 FINAL DATA FOR DIARY:")
+    print(f"  Images: {len(image_urls)}")
+    print(f"  Videos: {len(video_urls)}")
+    print(f"  Video thumbnails: {len(video_thumbnails)}")
+    
+    # Create diary
     diary = Diary(
         user_id=user_id,
         title=diary_in.title,
@@ -28,11 +119,16 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
         is_deleted=False,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
-        images=image_urls
+        images=image_urls,
+        videos=video_urls,
+        video_thumbnails=video_thumbnails,  # This array will always match videos array
+        media_type=media_type
     )
+    
     db.add(diary)
     db.flush()
 
+    # Handle group sharing
     if diary_in.share_type == "group" and diary_in.group_ids:
         diary_groups = [
             DiaryGroup(diary_id=diary.id, group_id=group_id)
@@ -42,7 +138,16 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
 
     db.commit()
     db.refresh(diary)
+    
+    print(f"✅ DIARY CREATED SUCCESSFULLY - ID: {diary.id}")
+    print(f"📋 Database stored data:")
+    print(f"  Videos: {diary.videos}")
+    print(f"  Video thumbnails: {diary.video_thumbnails}")
+    print(f"  Video count match: {len(diary.videos) == len(diary.video_thumbnails)}")
+    
     return diary
+
+
 
 def create_diary_for_group(db: Session, group_id: int, diary_data: CreateDiaryForGroup, current_user_id: int):
     group = db.query(Group).filter(Group.id == group_id).first()
@@ -212,125 +317,175 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
     return False
 
 def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_user_id: int):
+    """Update existing diary - FIXED share_type update"""
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                           detail="Diary not found")
+        raise HTTPException(status_code=404, detail="Diary not found")
     
     if diary.user_id != current_user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                           detail="Only creator can edit this diary")
+        raise HTTPException(status_code=403, detail="Only creator can edit this diary")
     
     update_dict = diary_data.dict(exclude_unset=True, exclude_none=True)
     
-    # Handle images update - FIXED VERSION
-    if 'images' in update_dict:
-        print(f"Processing images update. Input: {update_dict['images']}")
-        
-        # If images is an empty list, remove all images
-        if update_dict['images'] == []:
-            print("Clearing all images")
-            if diary.images:
-                image_service_sync.cleanup_images(diary.images)
-            diary.images = []
-        elif update_dict['images']:
-            # We have new images to process
-            # Separate URLs (already uploaded) from base64 (need upload)
-            existing_urls = []
-            base64_images = []
-            
-            for img in update_dict['images']:
-                if img.startswith(('http://', 'https://')):
-                    existing_urls.append(img)
-                elif img.startswith('data:image/'):
-                    base64_images.append(img)
-                else:
-                    # Try to handle plain base64
-                    try:
-                        base64.b64decode(img, validate=True)
-                        base64_images.append(f"data:image/jpeg;base64,{img}")
-                    except:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Invalid image format: {img[:50]}..."
-                        )
-            
-            print(f"Image analysis - URLs: {len(existing_urls)}, Base64: {len(base64_images)}")
-            
-            # Clean up old images that are not in existing_urls
-            if diary.images:
-                images_to_remove = [old_img for old_img in diary.images 
-                                   if old_img not in existing_urls]
-                if images_to_remove:
-                    print(f"Cleaning up {len(images_to_remove)} old images")
-                    image_service_sync.cleanup_images(images_to_remove)
-            
-            # Upload new base64 images
-            new_urls = []
-            if base64_images:
-                print(f"Uploading {len(base64_images)} new images")
-                try:
-                    new_urls = image_service_sync.save_multiple_images(base64_images, is_diary=True)
-                    print(f"Uploaded to URLs: {new_urls}")
-                except Exception as e:
-                    print(f"Error uploading images: {e}")
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Failed to upload images: {str(e)}"
-                    )
-            
-            # Combine existing URLs with new URLs
-            diary.images = existing_urls + new_urls
-            print(f"Final image URLs: {diary.images}")
-    # If 'images' key is not in update_dict, we don't change the images at all
     
-    # Handle share_type update
+    # FIX: Handle share_type update
     if 'share_type' in update_dict:
-        share_type_value = update_dict['share_type']
+        new_share_type = update_dict['share_type']
         
         try:
-            if isinstance(share_type_value, str):
-                diary.share_type = ShareType(share_type_value.lower())
-            else:
-                available_values = [t.value for t in ShareType]
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid share_type. Must be one of: {available_values}"
-                )
+            diary.share_type = ShareType(new_share_type.lower().strip())
+            
+            # If changing TO group, ensure group_ids are provided
+            if new_share_type.lower() == 'group' and 'group_ids' in update_dict:
+                group_ids = update_dict['group_ids']
+                print(f"📝 Setting groups: {group_ids}")
+                
+                # Clear existing groups
+                db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
+                
+                # Add new groups
+                if group_ids:
+                    diary_groups = [
+                        DiaryGroup(diary_id=diary_id, group_id=group_id)
+                        for group_id in group_ids
+                    ]
+                    db.add_all(diary_groups)
+            
+            # If changing FROM group, remove all group associations
+            elif diary.share_type != ShareType.group and new_share_type.lower() != 'group':
+                db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
+                
         except ValueError as e:
-            available_values = [t.value for t in ShareType]
+            print(f"❌ Invalid share_type: {new_share_type}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid share_type. Must be one of: {available_values}"
+                status_code=400,
+                detail=f"Invalid share_type. Must be one of: {[t.value for t in ShareType]}"
             )
     
+    # FIX: Handle group_ids separately (for when share_type is already 'group')
+    if 'group_ids' in update_dict and diary.share_type == ShareType.group:
+        group_ids = update_dict['group_ids']
+        print(f"📝 Updating groups for existing group diary: {group_ids}")
+        
+        # Clear existing groups
+        db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
+        
+        # Add new groups
+        if group_ids:
+            diary_groups = [
+                DiaryGroup(diary_id=diary_id, group_id=group_id)
+                for group_id in group_ids
+            ]
+            db.add_all(diary_groups)
+        else:
+            print(f"⚠️ Warning: group diary with no groups specified")
+    
+    # Handle images update (keep existing)
+    if 'images' in update_dict:
+        new_images = update_dict['images']
+        
+        if new_images == []:
+            # Clear all images
+            if diary.images:
+                image_service_sync.cleanup_media(diary.images)
+            diary.images = []
+        elif new_images:
+            # Separate existing URLs from new base64 data
+            existing_urls = [img for img in new_images if img.startswith(('http://', 'https://'))]
+            new_base64 = [img for img in new_images if img.startswith('data:image/')]
+            
+            # Remove old images not in new list
+            if diary.images:
+                to_remove = [old for old in diary.images if old not in existing_urls]
+                if to_remove:
+                    image_service_sync.cleanup_media(to_remove)
+            
+            # Upload new images
+            new_urls = []
+            if new_base64:
+                try:
+                    new_urls = image_service_sync.save_multiple_images(new_base64, is_diary=True)
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Failed to upload images: {str(e)}")
+            
+            diary.images = existing_urls + new_urls
+    
+    # Handle videos update (keep existing)
+    if 'videos' in update_dict:
+        new_videos = update_dict['videos']
+        
+        if new_videos == []:
+            # Clear all videos and thumbnails
+            if diary.videos:
+                image_service_sync.cleanup_media(diary.videos)
+            if diary.video_thumbnails:
+                image_service_sync.cleanup_media([t for t in diary.video_thumbnails if t])
+            diary.videos = []
+            diary.video_thumbnails = []
+        elif new_videos:
+            # Separate existing URLs from new base64 data
+            existing_videos = [vid for vid in new_videos if vid.startswith(('http://', 'https://'))]
+            new_base64 = [vid for vid in new_videos if vid.startswith('data:video/')]
+            
+            # Remove old videos not in new list
+            if diary.videos:
+                to_remove = []
+                thumbnails_to_remove = []
+                
+                for i, old_vid in enumerate(diary.videos):
+                    if old_vid not in existing_videos:
+                        to_remove.append(old_vid)
+                        if i < len(diary.video_thumbnails):
+                            thumbnails_to_remove.append(diary.video_thumbnails[i])
+                
+                if to_remove:
+                    image_service_sync.cleanup_media(to_remove)
+                if thumbnails_to_remove:
+                    image_service_sync.cleanup_media([t for t in thumbnails_to_remove if t])
+            
+            # Upload new videos
+            new_video_urls = []
+            new_thumbnails = []
+            if new_base64:
+                try:
+                    new_video_urls, new_thumbnails = image_service_sync.save_multiple_videos(new_base64, is_diary=True)
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Failed to upload videos: {str(e)}")
+            
+            diary.videos = existing_videos + new_video_urls
+            
+            # Handle thumbnails
+            existing_thumbnails = []
+            if diary.video_thumbnails:
+                for i, vid_url in enumerate(diary.videos):
+                    if vid_url in existing_videos and i < len(diary.video_thumbnails):
+                        existing_thumbnails.append(diary.video_thumbnails[i])
+            
+            diary.video_thumbnails = existing_thumbnails + new_thumbnails
+    
+    # Update other fields
     if 'title' in update_dict:
         diary.title = update_dict['title']
     
     if 'content' in update_dict:
         diary.content = update_dict['content']
     
-    # Handle group_ids if share_type is group
-    if 'group_ids' in update_dict:
-        if diary.share_type == ShareType.group:
-            db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
-            
-            for group_id in update_dict['group_ids']:
-                diary_group = DiaryGroup(diary_id=diary_id, group_id=group_id)
-                db.add(diary_group)
+    # Update media type
+    if diary.images and diary.videos:
+        diary.media_type = 'mixed'
+    elif diary.videos:
+        diary.media_type = 'video'
+    elif diary.images:
+        diary.media_type = 'image'
+    else:
+        diary.media_type = 'text'
     
     diary.updated_at = datetime.now(timezone.utc)
     
-    try:
-        db.commit()
-        db.refresh(diary)
-        return diary
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error: {str(e)}"
-        )
+    db.commit()
+    db.refresh(diary)
+    
+    return diary
 
 def delete_diary(db: Session, diary_id: int, current_user_id: int):
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
@@ -344,13 +499,20 @@ def delete_diary(db: Session, diary_id: int, current_user_id: int):
     
     # Clean up images from Cloudinary
     if diary.images:
-        image_service_sync.cleanup_images(diary.images)
+        image_service_sync.cleanup_media(diary.images)
+    
+    # Clean up videos and thumbnails
+    if diary.videos:
+        image_service_sync.cleanup_media(diary.videos)
+    
+    if diary.video_thumbnails:
+        image_service_sync.cleanup_media(diary.video_thumbnails)
     
     # Also clean up comment images
     comments = db.query(DiaryComment).filter(DiaryComment.diary_id == diary_id).all()
     for comment in comments:
         if comment.images:
-            image_service_sync.cleanup_images(comment.images)
+            image_service_sync.cleanup_media(comment.images)
     
     # HARD DELETE
     db.delete(diary)

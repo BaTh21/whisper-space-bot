@@ -39,9 +39,3 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Print config (without password)
-print(f"✅ Config loaded:")
-print(f"   Environment: {settings.ENVIRONMENT}")
-print(f"   SMTP: {settings.SMTP_HOST}:{settings.SMTP_PORT}")
-print(f"   SMTP User: {settings.SMTP_USER}")
-print(f"   Frontend: {settings.FRONTEND_URL}")

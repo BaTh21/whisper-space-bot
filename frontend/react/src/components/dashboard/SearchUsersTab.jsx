@@ -16,8 +16,8 @@ import {
   useTheme
 } from '@mui/material';
 import { useState } from 'react';
-import { searchUsers, sendFriendRequest } from '../../services/api';
 import { useTranslation } from 'react-i18next';
+import { searchUsers, sendFriendRequest } from '../../services/api';
 
 const SearchUsersTab = ({ 
   setError, 

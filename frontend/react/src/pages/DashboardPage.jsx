@@ -1,10 +1,9 @@
-//DashboardPage.jsx
 import {
   Alert,
   Backdrop,
   Box,
   CircularProgress,
-  Collapse,
+  Collapse
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -214,6 +213,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setError={setError}
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}
+              friends={friends}               // ← Correct: use the state you defined
+              pendingRequests={pendingRequests} 
             />
           </TabPanel>
 

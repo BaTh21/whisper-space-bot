@@ -339,6 +339,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
           }
           return prev;
         });
+
+        if (data.sender_id !== user.id) {
+          sendReadReceipt(data.id);
+        }
       }
 
       else if (type === "message_read") {
