@@ -348,7 +348,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                       fontSize: '0.75rem',
                       fontFamily: 'monospace'
                     }}>
-                      {currentTime.split(':').slice(0, 2).join(':')}
+                      {currentTime.replace(/:\d{2}($| )/g, '$1').trim()}
                     </Typography>
                   </Box>
                 </>
