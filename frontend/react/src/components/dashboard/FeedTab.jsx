@@ -11,14 +11,14 @@ import {
   Image as ImageIcon,
   MoreVert as MoreVertIcon,
   PlayArrow as PlayArrowIcon,
-  Reply as ReplyIcon,
   Save as SaveIcon,
   Videocam as VideocamIcon,
-  ZoomIn as ZoomInIcon
+  ZoomIn as ZoomInIcon,
 } from '@mui/icons-material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import SearchIcon from '@mui/icons-material/Search';
 import {
   Alert,
   Avatar,
@@ -45,576 +45,29 @@ import {
   TextField,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
+  InputAdornment
 } from '@mui/material';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
-
-// Helper function to convert files to base64
-const convertFilesToBase64 = (files, type = 'image') => {
-  return Promise.all(
-    Array.from(files).map(file => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          resolve({
-            data: e.target.result,
-            name: file.name,
-            type: file.type,
-            size: file.size
-          });
-        };
-        reader.onerror = (error) => {
-          reject(new Error(`Failed to read file: ${file.name}`));
-        };
-        reader.readAsDataURL(file);
-      });
-    })
-  );
-};
-
-// Enhanced CommentItemWithActions component
-const CommentItemWithActions = ({
-  comment,
-  diaryId,
-  profile,
-  onAddReply,
-  level = 0,
-  replyingTo,
-  setReplyingTo,
-  handleImageUpload,
-  selectedCommentImages,
-  setSelectedCommentImages,
-  onEditComment,
-  onDeleteComment,
-  onMediaClick
-}) => {
-  const [localReplying, setLocalReplying] = useState(false);
-  const [localEditing, setLocalEditing] = useState(false);
-  const [localEditText, setLocalEditText] = useState(comment.content);
-  const [localEditImages, setLocalEditImages] = useState(comment.images || []);
-  const [localReplyText, setLocalReplyText] = useState('');
-  const [commentMenuAnchorEl, setCommentMenuAnchorEl] = useState(null);
-  const [editLoading, setEditLoading] = useState(false);
-  const commentMenuOpen = Boolean(commentMenuAnchorEl);
-  const { t, i18n } = useTranslation();
-
-
-  const isCommentOwner = profile && comment.user?.id === profile.id;
-  const maxDepth = 5;
-  const isTooDeep = level >= maxDepth;
-
-  const handleCommentMenuOpen = (event) => {
-    event.stopPropagation();
-    setCommentMenuAnchorEl(event.currentTarget);
-  };
-
-  const handleCommentMenuClose = () => {
-    setCommentMenuAnchorEl(null);
-  };
-
-  const handleCommentEdit = () => {
-    setLocalEditing(true);
-    setLocalEditText(comment.content);
-    setLocalEditImages(comment.images || []);
-    handleCommentMenuClose();
-  };
-
-  const handleCommentDelete = () => {
-    onDeleteComment(comment.id);
-    handleCommentMenuClose();
-  };
-
-  const handleReply = () => {
-    setReplyingTo(comment.id);
-    setLocalReplying(true);
-  };
-
-  const handleCancelReply = () => {
-    setReplyingTo(null);
-    setLocalReplying(false);
-    setLocalReplyText('');
-  };
-
-  const handleSubmitReply = async () => {
-    if (onAddReply && localReplyText?.trim()) {
-      const images = selectedCommentImages[`reply-${comment.id}`] || [];
-      await onAddReply(diaryId, comment.id, localReplyText, images);
-      setLocalReplying(false);
-      setLocalReplyText('');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setLocalEditing(false);
-    setLocalEditText(comment.content);
-    setLocalEditImages(comment.images || []);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!localEditText.trim()) return;
-
-    setEditLoading(true);
-    try {
-      await onEditComment(comment.id, localEditText, localEditImages);
-      setLocalEditing(false);
-    } catch (err) {
-      console.error('Failed to edit comment:', err);
-    } finally {
-      setEditLoading(false);
-    }
-  };
-
-  const handleEditImageUpload = async (event) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    try {
-      const base64Images = await convertFilesToBase64(files);
-      const imageUrls = base64Images.map(img => img.data);
-      setLocalEditImages(prev => [...prev, ...imageUrls]);
-    } catch (err) {
-      console.error('Failed to upload images:', err);
-    }
-  };
-
-  const removeEditImage = (index) => {
-    setLocalEditImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  return (
-    <Box sx={{
-      mb: 2,
-      ml: level > 0 ? 2 : 0,
-      borderLeft: level > 0 ? '2px solid #e0e0e0' : 'none',
-      pl: level > 0 ? 2 : 0,
-      position: 'relative'
-    }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
-        <Avatar sx={{
-          width: level > 0 ? 24 : 28,
-          height: level > 0 ? 24 : 28,
-          fontSize: level > 0 ? '0.7rem' : '0.8rem',
-          flexShrink: 0
-        }}>
-          {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
-        </Avatar>
-        <Box sx={{ flex: 1 }}>
-          <Box sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            flexWrap: 'wrap',
-            mb: 0.5
-          }}>
-            <Typography variant="body2" fontWeight="600" color="green" component="span">
-              {comment.user?.username}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" component="span">
-              {formatCambodiaDate(comment.created_at)}
-            </Typography>
-
-            {isCommentOwner && !localEditing && (
-              <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
-                <IconButton
-                  size="small"
-                  onClick={handleCommentMenuOpen}
-                  sx={{ minWidth: 'auto', p: 0.5 }}
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-                <Menu
-                  anchorEl={commentMenuAnchorEl}
-                  open={commentMenuOpen}
-                  onClose={handleCommentMenuClose}
-                >
-                  <MenuItem onClick={handleCommentEdit}>
-                    <EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}
-                  </MenuItem>
-                  <MenuItem onClick={handleCommentDelete}>
-                    <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
-                    <Typography color="error">{t('delete')}</Typography>
-                  </MenuItem>
-                </Menu>
-              </Box>
-            )}
-
-            {profile && !isTooDeep && !isCommentOwner && !localEditing && (
-              <Button
-                size="small"
-                startIcon={<ReplyIcon fontSize="small" />}
-                onClick={handleReply}
-                sx={{ minWidth: 'auto', ml: isCommentOwner ? 0 : 'auto' }}
-              >
-                Reply
-              </Button>
-            )}
-          </Box>
-
-          {localEditing && isCommentOwner ? (
-            <Box sx={{ mb: 2 }}>
-              <TextField
-                fullWidth
-                size="small"
-                value={localEditText}
-                onChange={(e) => setLocalEditText(e.target.value)}
-                sx={{ mb: 1 }}
-                multiline
-                rows={2}
-                autoFocus
-              />
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
-                <Button
-                  variant="outlined"
-                  component="label"
-                  size="small"
-                  startIcon={<ImageIcon />}
-                >
-                  {t('add_images')}
-                  <input
-                    type="file"
-                    hidden
-                    multiple
-                    accept="image/*"
-                    onChange={handleEditImageUpload}
-                  />
-                </Button>
-                {localEditImages.length > 0 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
-                    {localEditImages.map((img, idx) => (
-                      <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
-                        <img
-                          src={img}
-                          alt={`Edit ${idx}`}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
-                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
-                          className="clickable-image"
-                        />
-                        <IconButton
-                          size="small"
-                          onClick={() => removeEditImage(idx)}
-                          sx={{
-                            position: 'absolute',
-                            top: -4,
-                            right: -4,
-                            bgcolor: 'rgba(0,0,0,0.5)',
-                            color: 'white',
-                            width: 16,
-                            height: 16,
-                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
-                          }}
-                        >
-                          <CloseIcon sx={{ fontSize: 12 }} />
-                        </IconButton>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleSaveEdit}
-                  disabled={editLoading || !localEditText.trim()}
-                  startIcon={editLoading ? <CircularProgress size={16} /> : null}
-                >
-                  {editLoading ? t('saving...') : t('save')}
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleCancelEdit}
-                  disabled={editLoading}
-                >
-                  {t('cancel')}
-                </Button>
-              </Box>
-            </Box>
-          ) : (
-            <>
-              <Typography variant="body2" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
-                {comment.content}
-              </Typography>
-              {comment.images && comment.images.length > 0 && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
-                  {comment.images.map((img, idx) => (
-                    <Box key={idx} sx={{ position: 'relative' }}>
-                      <img
-                        src={img}
-                        alt={`Comment ${idx + 1}`}
-                        style={{
-                          width: 50,
-                          height: 50,
-                          objectFit: 'cover',
-                          borderRadius: 4,
-                          cursor: 'pointer',
-                          transition: 'transform 0.2s'
-                        }}
-                        onClick={() => onMediaClick && onMediaClick(img, 'image')}
-                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        className="clickable-media"
-                      />
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </>
-          )}
-
-          {(replyingTo === comment.id || localReplying) && !isTooDeep && !localEditing && (
-            <Box sx={{ mb: 2, mt: 1 }}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder={t('reply_to', { username: comment.user?.username })}
-                value={localReplyText}
-                onChange={(e) => setLocalReplyText(e.target.value)}
-                sx={{ mb: 1 }}
-                multiline
-                rows={2}
-                autoFocus
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmitReply();
-                  }
-                }}
-              />
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                <Button
-                  variant="outlined"
-                  component="label"
-                  size="small"
-                  startIcon={<ImageIcon />}
-                >
-                  {t('add_images_max', { max: 10 })}
-                  <input
-                    type="file"
-                    hidden
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)}
-                  />
-                </Button>
-                {selectedCommentImages[`reply-${comment.id}`]?.length > 0 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
-                    {selectedCommentImages[`reply-${comment.id}`].map((img, idx) => (
-                      <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
-                        <img
-                          src={img}
-                          alt={`Reply preview ${idx}`}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
-                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
-                          className="clickable-media"
-                        />
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            const newImages = selectedCommentImages[`reply-${comment.id}`].filter((_, i) => i !== idx);
-                            setSelectedCommentImages(prev => ({
-                              ...prev,
-                              [`reply-${comment.id}`]: newImages
-                            }));
-                          }}
-                          sx={{
-                            position: 'absolute',
-                            top: -4,
-                            right: -4,
-                            bgcolor: 'rgba(0,0,0,0.5)',
-                            color: 'white',
-                            width: 16,
-                            height: 16
-                          }}
-                        >
-                          <CloseIcon sx={{ fontSize: 12 }} />
-                        </IconButton>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleSubmitReply}
-                  disabled={!localReplyText?.trim()}
-                >
-                  {t('send')}
-                </Button>
-                <Button
-                  variant="text"
-                  size="small"
-                  onClick={handleCancelReply}
-                >
-                  {t('cancel')}
-                </Button>
-              </Box>
-            </Box>
-          )}
-
-          {comment.replies && comment.replies.length > 0 && !isTooDeep && (
-            <Box sx={{ mt: 2 }}>
-              {comment.replies.map((reply) => (
-                <CommentItemWithActions
-                  key={reply.id}
-                  comment={reply}
-                  diaryId={diaryId}
-                  profile={profile}
-                  onAddReply={onAddReply}
-                  level={level + 1}
-                  replyingTo={replyingTo}
-                  setReplyingTo={setReplyingTo}
-                  handleImageUpload={handleImageUpload}
-                  selectedCommentImages={selectedCommentImages}
-                  setSelectedCommentImages={setSelectedCommentImages}
-                  onEditComment={onEditComment}
-                  onDeleteComment={onDeleteComment}
-                  onMediaClick={onMediaClick}
-                />
-              ))}
-            </Box>
-          )}
-        </Box>
-      </Box>
-    </Box>
-  );
-};
-
-// Media Player Component - FIXED: Images now show
-const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
-  const [playing, setPlaying] = useState(false);
-
-  if (type === 'image') {
-    return (
-      <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-        <img
-          src={url}
-          alt={t('full_view')}
-          style={{
-            maxWidth: '100%',
-            maxHeight: '90vh',
-            objectFit: 'contain',
-            borderRadius: 8
-          }}
-        />
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-      {playing ? (
-        <video
-          controls
-          autoPlay
-          style={{
-            maxWidth: '100%',
-            maxHeight: '90vh',
-            borderRadius: 8
-          }}
-          onEnded={() => setPlaying(false)}
-        >
-          <source src={url} type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
-      ) : (
-        <Box
-          sx={{
-            position: 'relative',
-            width: '100%',
-            height: '60vh',
-            cursor: 'pointer'
-          }}
-          onClick={() => setPlaying(true)}
-        >
-          {thumbnail ? (
-            <>
-              <img
-                src={thumbnail}
-                alt="Video thumbnail"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  borderRadius: 8
-                }}
-              />
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: 80,
-                  height: 80,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(0,0,0,0.6)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'transform 0.2s',
-                  '&:hover': {
-                    transform: 'translate(-50%, -50%) scale(1.1)',
-                    bgcolor: 'rgba(0,0,0,0.8)'
-                  }
-                }}
-              >
-                <PlayArrowIcon sx={{ fontSize: 40, color: 'white' }} />
-              </Box>
-            </>
-          ) : (
-            <Box
-              sx={{
-                width: '100%',
-                height: '100%',
-                bgcolor: '#333',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <PlayArrowIcon sx={{ fontSize: 60, color: 'white' }} />
-            </Box>
-          )}
-        </Box>
-      )}
-    </Box>
-  );
-};
-
-// Helper function to get video thumbnail - FIXED VERSION
-const getVideoThumbnail = (videoUrl, diary) => {
-  if (!videoUrl || !diary || !diary.video_thumbnails) return null;
-
-  const videoIndex = diary.videos?.indexOf(videoUrl);
-
-  if (videoIndex !== -1 && videoIndex < diary.video_thumbnails.length) {
-    const thumbnail = diary.video_thumbnails[videoIndex];
-
-    // Check if thumbnail exists and is a valid string
-    if (thumbnail && typeof thumbnail === 'string' && thumbnail.trim() !== '') {
-      // Debug log
-      console.log(`✅ Found thumbnail for video ${videoIndex}:`, thumbnail.substring(0, 50) + '...');
-      return thumbnail;
-    }
-  }
-
-  console.log(`❌ No thumbnail found for video:`, videoUrl?.substring(0, 50));
-  return null;
-};
+import { DiaryCard } from '../diary/DairyCard';
+import { convertFilesToBase64, CommentItemWithActions, MediaPlayer, getVideoThumbnail } from '../diary/DiaryHelper';
+import ActivityComponent from '../diary/ActivityComponent';
+import SuggestFriendComponent from '../diary/SuggestFriendComponent';
+import { useAuth } from '../../context/AuthContext';
 
 // Main FeedTab component
-const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends = [], pendingRequests = [], }) => {
+const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends = [], pendingRequests = [] }) => {
   const [expandedDiary, setExpandedDiary] = useState(null);
   const [diaryComments, setDiaryComments] = useState({});
   const [diaryLikes, setDiaryLikes] = useState({});
   const [commentTexts, setCommentTexts] = useState({});
   const [likedDiaries, setLikedDiaries] = useState(new Set());
   const [commentLoading, setCommentLoading] = useState({});
+  const { auth } = useAuth();
+  const user = auth?.user;
 
   // State for delete confirmation
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -659,6 +112,22 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
   const [selectedMediaType, setSelectedMediaType] = useState('image');
   const [currentMediaList, setCurrentMediaList] = useState([]);
   const [sendingRequests, setSendingRequests] = useState(new Set());
+
+  useEffect(() => {
+    const initialLiked = new Set();
+    const initialLikes = {};
+
+    diaries.forEach(diary => {
+      if (diary.likes.some(like => like.user.id === user.id)) {
+        initialLiked.add(diary.id);
+      }
+      initialLikes[diary.id] = diary.likes.length;
+    });
+
+    setLikedDiaries(initialLiked);
+    setDiaryLikes(initialLikes);
+  }, [diaries, user.id]);
+
   const handleSendFriendRequest = async (userId) => {
     if (!userId || !profile || userId === profile.id) return;
     if (sendingRequests.has(userId)) return;
@@ -703,32 +172,6 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       });
     }
   };
-  const [following, setFollowing] = useState(new Set());
-  const handleToggleFollow = async (authorId) => {
-    if (!authorId || !profile) return;
-
-    try {
-      // TODO: Replace with your actual API call
-      // await followUser(authorId); // or unfollowUser(authorId)
-
-      setFollowing(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(authorId)) {
-          newSet.delete(authorId);
-          showMessage('Unfollowed', 'info');
-        } else {
-          newSet.add(authorId);
-          showMessage('Following', 'success');
-        }
-        return newSet;
-      });
-
-      // Optional: trigger data refresh
-      if (onDataUpdate) onDataUpdate();
-    } catch (err) {
-      showMessage('Failed to update follow status', 'error');
-    }
-  };
 
   const { t } = useTranslation();
   const theme = useTheme();
@@ -740,7 +183,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
     groups: Array.isArray(diary.groups) ? diary.groups : [],
     images: Array.isArray(diary.images) ? diary.images : [],
     videos: Array.isArray(diary.videos) ? diary.videos : [],
-    video_thumbnails: Array.isArray(diary.video_thumbnails) ? diary.video_thumbnails : []
+    video_thumbnails: Array.isArray(diary.video_thumbnails) ? diary.video_thumbnails : [],
   }));
 
   const normalizedGroups = Array.isArray(groups) ? groups : [];
@@ -759,45 +202,14 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
     setSnackbarOpen(false);
   };
 
-  // Debug: Log diary data
-  console.log('=== DIARY DATA DEBUG ===');
-  normalizedDiaries.forEach((diary, idx) => {
-    if (diary.videos && diary.videos.length > 0) {
-      console.log(`📓 Diary ${idx}: ${diary.title}`);
-      console.log(`  Videos: ${diary.videos.length}`);
-      console.log(`  Thumbnails: ${diary.video_thumbnails?.length || 0}`);
-
-      diary.videos.forEach((video, vidIdx) => {
-        const thumb = diary.video_thumbnails?.[vidIdx];
-        console.log(`  Video ${vidIdx}: ${video?.substring(0, 60)}...`);
-        console.log(`    Thumbnail: ${thumb ? thumb.substring(0, 60) + '...' : 'NULL/EMPTY'}`);
-        console.log(`    Thumbnail type: ${typeof thumb}`);
-      });
-    }
-  });
-
   // Media viewer functions
-  const openMediaViewer = (mediaList, thumbnails = [], index = 0, type = 'image') => {
-    console.log('📺 Opening media viewer:', {
-      mediaListCount: mediaList.length,
-      thumbnailsCount: thumbnails.length,
-      index,
-      type
-    });
-
+  const openMediaViewer = (mediaList, startIndex = 0) => {
+    const media = mediaList[startIndex];
     setCurrentMediaList(mediaList);
-    setSelectedMedia(mediaList[index]);
-    setSelectedMediaType(type);
-    setSelectedMediaIndex(index);
-
-    // Set thumbnail for videos
-    if (type === 'video' && thumbnails[index]) {
-      setSelectedThumbnail(thumbnails[index]);
-      console.log('📸 Set thumbnail for video:', thumbnails[index]?.substring(0, 50));
-    } else {
-      setSelectedThumbnail('');
-    }
-
+    setSelectedMedia(media.src);
+    setSelectedMediaType(media.type);
+    setSelectedThumbnail(media.thumbnail || '');
+    setSelectedMediaIndex(startIndex);
     setMediaViewerOpen(true);
   };
 
@@ -811,26 +223,27 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
   };
 
   const handlePrevMedia = () => {
-    const newIndex = selectedMediaIndex > 0 ? selectedMediaIndex - 1 : currentMediaList.length - 1;
-    setSelectedMedia(currentMediaList[newIndex]);
+    const newIndex =
+      selectedMediaIndex > 0
+        ? selectedMediaIndex - 1
+        : currentMediaList.length - 1;
+    const media = currentMediaList[newIndex];
+    setSelectedMedia(media.src);
+    setSelectedMediaType(media.type);
+    setSelectedThumbnail(media.thumbnail || '');
     setSelectedMediaIndex(newIndex);
-
-    // Update thumbnail for videos
-    if (selectedMediaType === 'video') {
-      setSelectedThumbnail('');
-    }
   };
 
   const handleNextMedia = () => {
-    const newIndex = selectedMediaIndex < currentMediaList.length - 1 ? selectedMediaIndex + 1 : 0;
-    setSelectedMedia(currentMediaList[newIndex]);
+    const newIndex =
+      selectedMediaIndex < currentMediaList.length - 1 ? selectedMediaIndex + 1 : 0;
+    const media = currentMediaList[newIndex];
+    setSelectedMedia(media.src);
+    setSelectedMediaType(media.type);
+    setSelectedThumbnail(media.thumbnail || '');
     setSelectedMediaIndex(newIndex);
-
-    // Update thumbnail for videos
-    if (selectedMediaType === 'video') {
-      setSelectedThumbnail('');
-    }
   };
+
 
   // Media upload handler
   const handleMediaUpload = async (event, diaryId = null, commentId = null, mediaType = 'image') => {
@@ -1031,15 +444,6 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
     try {
       const fullDiary = await getDiaryById(diary.id);
 
-      console.log('=== EDIT DIARY DATA ===');
-      console.log('Full diary:', {
-        id: fullDiary.id,
-        videos: fullDiary.videos,
-        video_thumbnails: fullDiary.video_thumbnails,
-        images: fullDiary.images,
-        media_type: fullDiary.media_type
-      });
-
       // Reset and set with fresh data
       setEditTitle(fullDiary.title || '');
       setEditContent(fullDiary.content || '');
@@ -1107,24 +511,11 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       const existingVideoUrls = editVideos.filter(vid => vid.startsWith('http'));
       const newBase64Videos = editVideos.filter(vid => vid.startsWith('data:video/'));
 
-      console.log('=== EDIT DATA ANALYSIS ===');
-      console.log('Existing image URLs:', existingImageUrls.length);
-      console.log('New base64 images:', newBase64Images.length);
-      console.log('Existing video URLs:', existingVideoUrls.length);
-      console.log('New base64 videos:', newBase64Videos.length);
-
       // Send all images (existing URLs + new base64)
       updateData.images = [...existingImageUrls, ...newBase64Images];
 
       // Send all videos (existing URLs + new base64)
       updateData.videos = [...existingVideoUrls, ...newBase64Videos];
-
-      console.log('=== SENDING UPDATE ===');
-      console.log('Update data structure:', {
-        ...updateData,
-        images: `Array of ${updateData.images.length} items`,
-        videos: `Array of ${updateData.videos.length} items`
-      });
 
       await updateDiaryById(diaryId, updateData);
       showMessage('Diary updated successfully');
@@ -1344,29 +735,43 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
 
   // Handle media click - FIXED: Pass thumbnails for videos
   const handleMediaClick = (url, type = 'image') => {
-    console.log('🖱️ Media clicked:', { url: url?.substring(0, 50), type });
+    const diary = normalizedDiaries.find(d =>
+      d.images?.includes(url) || d.videos?.includes(url)
+    );
 
-    if (type === 'image') {
-      openMediaViewer([url], [], 0, 'image');
-    } else {
-      // For video, find the diary and get thumbnail
-      const diary = normalizedDiaries.find(d => d.videos?.includes(url));
-      if (diary) {
-        const videoIndex = diary.videos.indexOf(url);
-        const thumbnails = diary.video_thumbnails || [];
-        const thumbnail = thumbnails[videoIndex] || '';
-
-        console.log('🎬 Video clicked:', {
-          videoIndex,
-          thumbnail: thumbnail?.substring(0, 50),
-          thumbnailsCount: thumbnails.length
-        });
-
-        openMediaViewer([url], thumbnails, 0, 'video');
-      } else {
-        openMediaViewer([url], [], 0, 'video');
-      }
+    if (!diary) {
+      const singleMedia = { src: url, type, thumbnail: '' };
+      openMediaViewer([singleMedia], 0);
+      return;
     }
+
+    const images = diary.images.map(src => ({ src, type: 'image' }));
+    const videos = diary.videos.map((src, i) => ({
+      src,
+      type: 'video',
+      thumbnail: diary.video_thumbnails?.[i] || '',
+    }));
+
+    const mediaList = [...images, ...videos];
+    const index = mediaList.findIndex(m => m.src === url);
+
+    openMediaViewer(mediaList, index);
+  };
+
+  const getDiaryMedia = (url, type = 'image') => {
+    const diary = normalizedDiaries.find(
+      d => d.images?.includes(url) || d.videos?.includes(url)
+    );
+    if (!diary) return [{ src: url, type }];
+
+    const images = diary.images.map(src => ({ src, type: 'image' }));
+    const videos = diary.videos.map((src, i) => ({
+      src,
+      type: 'video',
+      thumbnail: diary.video_thumbnails?.[i] || '',
+    }));
+
+    return [...images, ...videos];
   };
 
   // Count all comments
@@ -1388,32 +793,47 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
   };
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', overflow: 'hidden' }}>
-      {/* Media Viewer Modal */}
-      <Modal
-        open={mediaViewerOpen}
-        onClose={handleMediaViewerClose}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          outline: 'none'
-        }}
+    <Box sx={{
+      maxWidth: '100%',
+      overflow: 'hidden',
+      '&::-webkit-scrollbar': { display: 'none' },
+      scrollbarWidth: 'none',
+      display: 'flex',
+      gap: 3
+    }}>
+
+      <Box
       >
-        <Box sx={{
-          position: 'relative',
-          maxWidth: '90vw',
-          maxHeight: '90vh',
-          outline: 'none'
-        }}>
-          <MediaPlayer
-            url={selectedMedia}
-            type={selectedMediaType}
-            thumbnail={selectedThumbnail}
-            onClose={handleMediaViewerClose}
-          />
-          {currentMediaList.length > 1 && (
-            <>
+        <Modal
+          open={mediaViewerOpen}
+          onClose={handleMediaViewerClose}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            outline: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+            scrollbarWidth: 'none',
+          }}
+        >
+          <Box
+            sx={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              outline: 'none',
+            }}
+          >
+            {/* Media Player */}
+            <MediaPlayer
+              url={selectedMedia}
+              type={selectedMediaType}
+              thumbnail={selectedThumbnail}
+              onClose={handleMediaViewerClose}
+            />
+
+            {/* Prev Button */}
+            {currentMediaList.length > 1 && (
               <IconButton
                 onClick={handlePrevMedia}
                 sx={{
@@ -1423,11 +843,15 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                   transform: 'translateY(-50%)',
                   bgcolor: 'rgba(0,0,0,0.5)',
                   color: 'white',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
                 }}
               >
                 <ArrowBackIcon />
               </IconButton>
+            )}
+
+            {/* Next Button */}
+            {currentMediaList.length > 1 && (
               <IconButton
                 onClick={handleNextMedia}
                 sx={{
@@ -1437,11 +861,15 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                   transform: 'translateY(-50%)',
                   bgcolor: 'rgba(0,0,0,0.5)',
                   color: 'white',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
                 }}
               >
                 <ArrowForwardIcon />
               </IconButton>
+            )}
+
+            {/* Counter */}
+            {currentMediaList.length > 1 && (
               <Typography
                 sx={{
                   position: 'absolute',
@@ -1453,1117 +881,1109 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
                   px: 2,
                   py: 0.5,
                   borderRadius: 2,
-                  fontSize: '0.875rem'
+                  fontSize: '0.875rem',
                 }}
               >
                 {selectedMediaIndex + 1} / {currentMediaList.length}
               </Typography>
-            </>
-          )}
-          <IconButton
-            onClick={handleMediaViewerClose}
+            )}
+
+            {/* Close Button */}
+            <IconButton
+              onClick={handleMediaViewerClose}
+              sx={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                bgcolor: 'rgba(0,0,0,0.5)',
+                color: 'white',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </Modal>
+
+
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={2000}
+          onClose={handleSnackbarClose}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={handleSnackbarClose}
+            severity={snackbarSeverity}
+            sx={{ width: '100%' }}
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+
+        <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
+          <DialogTitle>{t('delete_title')}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {t('delete_diary', { title: diaryToDelete?.title })}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleDeleteCancel} disabled={deleteLoading}>{t('cancel')}</Button>
+            <Button
+              onClick={handleDeleteDiary}
+              color="error"
+              variant="contained"
+              disabled={deleteLoading}
+              startIcon={deleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
+            >
+              {deleteLoading ? t('deleting') : t('delete')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={commentDeleteDialogOpen} onClose={handleCommentDeleteCancel}>
+          <DialogTitle>{t('delete_comment')}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {t('delete_confirm')}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCommentDeleteCancel} disabled={commentDeleteLoading}>{t('cancel')}</Button>
+            <Button
+              onClick={() => handleDeleteComment(commentToDelete)}
+              color="error"
+              variant="contained"
+              disabled={commentDeleteLoading}
+              startIcon={commentDeleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
+            >
+              {commentDeleteLoading ? t('deleting') : t('delete')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Menu anchorEl={menuAnchorEl} open={menuOpen} onClose={handleMenuClose}>
+          <MenuItem onClick={handleEditDiaryClick}>
+            <EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}
+          </MenuItem>
+          <MenuItem onClick={handleDeleteDiaryClick}>
+            <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
+            <Typography color="error">{t('delete')}</Typography>
+          </MenuItem>
+        </Menu>
+
+        <Box sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 2,
+          py: { xs: 3, md: 2 },
+          width: '100%',
+        }}>
+          <Box
             sx={{
-              position: 'absolute',
-              top: 16,
-              right: 16,
-              bgcolor: 'rgba(0,0,0,0.5)',
-              color: 'white',
-              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+              display: 'flex',
+              gap: 2,
+              alignItems: 'center',
+              width: { xs: '100%', md: '100%' }
             }}
           >
-            <CloseIcon />
-          </IconButton>
+            <Typography variant="h5" fontWeight="600" sx={{ display: { xs: 'none', md: 'block' } }}>{t('your_feed')}</Typography>
+            <TextField
+              sx={{ width: { xs: '100%', md: "50%" } }}
+              id="outlined-member-search"
+              label="Search feed"
+              variant="outlined"
+              size="small"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                    >
+                      <SearchIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Box>
+          <Button
+            variant="contained"
+            onClick={onNewDiary}
+            startIcon={<ArticleIcon />}
+            sx={{ borderRadius: '8px', width: { sm: 150 } }}
+          >
+            {isMobile ? t('new') : t('new_diary')}
+          </Button>
         </Box>
-      </Modal>
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={2000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={handleSnackbarClose}
-          severity={snackbarSeverity}
-          sx={{ width: '100%' }}
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
+        {normalizedDiaries.length === 0 ? (
+          <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+            {t('no_diaries_yet')}
+          </Typography>
+        ) : (
+          <Box sx={{
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            "&::-webkit-scrollbar": { display: "none" },
+            scrollbarWidth: "none",
+          }}>
+            {normalizedDiaries.map((diary) => {
+              const combinedMedia = [
+                ...(diary.images || []).map((src) => ({
+                  type: 'image',
+                  src
+                })),
+                ...(diary.videos || []).map((src) => ({
+                  type: 'video',
+                  src,
+                  thumbnail: getVideoThumbnail(src, diary)
+                }))
+              ];
 
-      {/* Delete Diary Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
-        <DialogTitle>{t('delete_title')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-           {t('delete_diary', { title: diaryToDelete?.title })}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>{t('cancel')}</Button>
-          <Button
-            onClick={handleDeleteDiary}
-            color="error"
-            variant="contained"
-            disabled={deleteLoading}
-            startIcon={deleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
-          >
-            {deleteLoading ? t('deleting') : t('delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+              const visibleMedia = combinedMedia.slice(0, 6);
 
-      {/* Delete Comment Dialog */}
-      <Dialog open={commentDeleteDialogOpen} onClose={handleCommentDeleteCancel}>
-        <DialogTitle>{t('delete_comment')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {t('delete_confirm')}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCommentDeleteCancel} disabled={commentDeleteLoading}>{t('cancel')}</Button>
-          <Button
-            onClick={() => handleDeleteComment(commentToDelete)}
-            color="error"
-            variant="contained"
-            disabled={commentDeleteLoading}
-            startIcon={commentDeleteLoading ? <CircularProgress size={20} /> : <DeleteIcon />}
-          >
-            {commentDeleteLoading ? t('deleting') : t('delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Diary Options Menu */}
-      <Menu anchorEl={menuAnchorEl} open={menuOpen} onClose={handleMenuClose}>
-        <MenuItem onClick={handleEditDiaryClick}>
-          <EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}
-        </MenuItem>
-        <MenuItem onClick={handleDeleteDiaryClick}>
-          <DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} />
-          <Typography color="error">{t('delete')}</Typography>
-        </MenuItem>
-      </Menu>
-
-      {/* Header */}
-      <Box sx={{
-        display: 'flex',
-        flexDirection: { xs: 'column', sm: 'row' },
-        justifyContent: 'space-between',
-        alignItems: { xs: 'stretch', sm: 'center' },
-        gap: 2,
-        mb: 3,
-      }}>
-        <Typography variant="h5" fontWeight="600">{t('your_feed')}</Typography>
-        <Button
-          variant="contained"
-          onClick={onNewDiary}
-          startIcon={<ArticleIcon />}
-          sx={{ borderRadius: '8px' }}
-        >
-          {isMobile ? t('new') : t('new_diary')}
-        </Button>
-      </Box>
-
-      {/* Diaries List */}
-      {normalizedDiaries.length === 0 ? (
-        <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-          {t('no_diaries_yet')}
-        </Typography>
-      ) : (
-        <Box sx={{ maxHeight: '70vh', overflowY: 'auto'}}>
-          {normalizedDiaries.map((diary) => (
-            <Card key={diary.id} sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderRadius: '12px', border: "1px solid" }}>
-              {/* Diary Header */}
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2}}>
-                <Box sx={{ flex: 1 }}>
-                  {editingDiary === diary.id ? (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <TextField
-                        fullWidth
-                        label={t('title')}
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        disabled={editLoading}
-                        size="medium"
-                      />
-                      <TextField
-                        fullWidth
-                        label={t('content')}
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        disabled={editLoading}
-                        multiline
-                        rows={4}
-                        size="medium"
-                      />
-                      <FormControl size="medium" fullWidth>
-                        <InputLabel>{t('share_type')}</InputLabel>
-                        <Select
-                          value={editShareType}
-                          label={t('share_type')}
-                          onChange={(e) => setEditShareType(e.target.value)}
-                          disabled={editLoading}
-                        >
-                          <MenuItem value="public">{t('public')}</MenuItem>
-                          <MenuItem value="friends">{t('friends')}</MenuItem>
-                          <MenuItem value="personal">{t('personal')}</MenuItem>
-                          <MenuItem value="group">{t('group')}</MenuItem>
-                        </Select>
-                      </FormControl>
-                      {editShareType === 'group' && (
-                        <FormControl size="medium" fullWidth>
-                          <InputLabel>Groups</InputLabel>
-                          <Select
-                            multiple
-                            value={editGroupIds}
-                            label="Groups"
-                            onChange={(e) => setEditGroupIds(e.target.value)}
-                            disabled={editLoading}
-                          >
-                            {normalizedGroups.map((group) => (
-                              <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      )}
-
-                      {/* Media Upload Section for Edit */}
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {/* Image Upload */}
-                        <Box>
-                          <Button
-                            variant="outlined"
-                            component="label"
-                            startIcon={<ImageIcon />}
-                            size="medium"
-                            disabled={editLoading || editImages.length >= 10}
-                            sx={{ mr: 2 }}
-                          >
-                            {t('add_images_max',{max:10})} 
-                            <input
-                              type="file"
-                              hidden
-                              multiple
-                              accept="image/*"
-                              onChange={(e) => handleMediaUpload(e, diary.id, null, 'image')}
+              return (
+                <Box key={diary.id}>
+                  <Card 
+                    sx={{
+                      p: { xs: 1, sm: 2 },
+                      mb: 2, width: '100%',
+                    }}>
+                    {/* Diary Header */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, }}>
+                      <Box sx={{ flex: 1 }}>
+                        {editingDiary === diary.id ? (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <TextField
+                              fullWidth
+                              label={t('title')}
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              disabled={editLoading}
+                              size="medium"
                             />
-                          </Button>
-                          {editImages.length > 0 && (
-                            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                              {editImages.length} selected
-                            </Typography>
-                          )}
-                        </Box>
-
-                        {/* Video Upload */}
-                        <Box>
-                          <Button
-                            variant="outlined"
-                            component="label"
-                            startIcon={<VideocamIcon />}
-                            size="medium"
-                            disabled={editLoading || editVideos.length >= 3}
-                            sx={{ mr: 2 }}
-                          >
-                           {t('add_videos_max', { max: 3 })}
-                            <input
-                              type="file"
-                              hidden
-                              multiple
-                              accept="video/*"
-                              onChange={(e) => handleMediaUpload(e, diary.id, null, 'video')}
+                            <TextField
+                              fullWidth
+                              label={t('content')}
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              disabled={editLoading}
+                              multiline
+                              rows={4}
+                              size="medium"
                             />
-                          </Button>
-                          {editVideos.length > 0 && (
-                            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                              {editVideos.length} selected
-                            </Typography>
-                          )}
-                        </Box>
-                      </Box>
-
-                      {/* Image Preview for Edit */}
-                      {editImages.length > 0 && (
-                        <Box
-                          key={`image-preview-${editImages.length}-${mediaUpdateTrigger}`}
-                          sx={{ mt: 2 }}
-                        >
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            {t('images_count', { count: editImages.length, max: 10 })}
-                          </Typography>
-                          <Box sx={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
-                            gap: 1,
-                            mt: 1
-                          }}>
-                            {editImages.map((img, index) => (
-                              <Box
-                                key={`edit-img-${diary.id}-${index}-${img.substring(0, 20)}`}
-                                sx={{
-                                  position: 'relative',
-                                  borderRadius: '6px',
-                                  overflow: 'hidden',
-                                  aspectRatio: '1',
-                                  '&:hover .media-overlay': {
-                                    opacity: 1
-                                  }
-                                }}
+                            <FormControl size="medium" fullWidth>
+                              <InputLabel>{t('share_type')}</InputLabel>
+                              <Select
+                                value={editShareType}
+                                label={t('share_type')}
+                                onChange={(e) => setEditShareType(e.target.value)}
+                                disabled={editLoading}
                               >
-                                <img
-                                  src={img}
-                                  alt={`Image ${index + 1}`}
-                                  style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover',
-                                    cursor: 'pointer'
-                                  }}
-                                  onClick={() => handleMediaClick(img, 'image')}
-                                />
-
-                                {/* Media Overlay */}
-                                <Box className="media-overlay" sx={{
-                                  position: 'absolute',
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  bgcolor: 'rgba(0,0,0,0.5)',
-                                  opacity: 0,
-                                  transition: 'opacity 0.2s',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: 0.5
-                                }}>
-                                  <IconButton
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      removeMedia(index, diary.id, null, 'image');
-                                    }}
-                                    sx={{
-                                      bgcolor: 'error.main',
-                                      color: 'white',
-                                      width: 28,
-                                      height: 28,
-                                      '&:hover': {
-                                        bgcolor: 'error.dark'
-                                      }
-                                    }}
-                                    size="small"
-                                  >
-                                    <CloseIcon sx={{ fontSize: 16 }} />
-                                  </IconButton>
-                                  <IconButton
-                                    onClick={() => handleMediaClick(img, 'image')}
-                                    sx={{
-                                      bgcolor: 'primary.main',
-                                      color: 'white',
-                                      width: 28,
-                                      height: 28,
-                                      '&:hover': {
-                                        bgcolor: 'primary.dark'
-                                      }
-                                    }}
-                                    size="small"
-                                  >
-                                    <ZoomInIcon sx={{ fontSize: 16 }} />
-                                  </IconButton>
-                                </Box>
-
-                                {/* Media Number Badge */}
-                                <Box
-                                  sx={{
-                                    position: 'absolute',
-                                    top: 4,
-                                    left: 4,
-                                    bgcolor: 'rgba(0, 0, 0, 0.6)',
-                                    color: 'white',
-                                    borderRadius: '50%',
-                                    width: 20,
-                                    height: 20,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '0.7rem',
-                                    fontWeight: 600
-                                  }}
+                                <MenuItem value="public">{t('public')}</MenuItem>
+                                <MenuItem value="friends">{t('friends')}</MenuItem>
+                                <MenuItem value="personal">{t('personal')}</MenuItem>
+                                <MenuItem value="group">{t('group')}</MenuItem>
+                              </Select>
+                            </FormControl>
+                            {editShareType === 'group' && (
+                              <FormControl size="medium" fullWidth>
+                                <InputLabel>Groups</InputLabel>
+                                <Select
+                                  multiple
+                                  value={editGroupIds}
+                                  label="Groups"
+                                  onChange={(e) => setEditGroupIds(e.target.value)}
+                                  disabled={editLoading}
                                 >
-                                  {index + 1}
-                                </Box>
+                                  {normalizedGroups.map((group) => (
+                                    <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            )}
 
-                                {/* URL/New Badge */}
-                                <Box
-                                  sx={{
-                                    position: 'absolute',
-                                    top: 4,
-                                    right: 4,
-                                    bgcolor: img.startsWith('http') ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
-                                    color: 'white',
-                                    px: 0.5,
-                                    py: 0.1,
-                                    borderRadius: 1,
-                                    fontSize: '0.55rem',
-                                    fontWeight: 500
-                                  }}
+                            {/* Media Upload Section for Edit */}
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              {/* Image Upload */}
+                              <Box>
+                                <Button
+                                  variant="outlined"
+                                  component="label"
+                                  startIcon={<ImageIcon />}
+                                  size="medium"
+                                  disabled={editLoading || editImages.length >= 10}
+                                  sx={{ mr: 2 }}
                                 >
-                                  {img.startsWith('http') ? t('existing') : t('new')}
-                                </Box>
+                                  {t('add_images_max', { max: 10 })}
+                                  <input
+                                    type="file"
+                                    hidden
+                                    multiple
+                                    accept="image/*"
+                                    onChange={(e) => handleMediaUpload(e, diary.id, null, 'image')}
+                                  />
+                                </Button>
+                                {editImages.length > 0 && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                    {editImages.length} selected
+                                  </Typography>
+                                )}
                               </Box>
-                            ))}
-                          </Box>
-                        </Box>
-                      )}
 
-                      {/* Video Preview for Edit */}
-                      {editVideos.length > 0 && (
-                        <Box
-                          key={`video-preview-${editVideos.length}-${mediaUpdateTrigger}`}
-                          sx={{ mt: 2 }}
-                        >
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            {t('videos_count', { count: editVideos.length, max: 3 })}
-                          </Typography>
-                          <Box sx={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                            gap: 1.5,
-                            mt: 1
-                          }}>
-                            {editVideos.map((vid, index) => {
-                              const isExistingVideo = vid.startsWith('http');
-                              const thumbnail = isExistingVideo ? getVideoThumbnail(vid, diary) : null;
-
-                              return (
-                                <Box
-                                  key={`edit-vid-${diary.id}-${index}`}
-                                  sx={{
-                                    position: 'relative',
-                                    borderRadius: '8px',
-                                    overflow: 'hidden',
-                                    aspectRatio: '16/9',
-                                    bgcolor: '#000',
-                                    cursor: 'pointer',
-                                    '&:hover .media-overlay': {
-                                      opacity: 1
-                                    }
-                                  }}
+                              {/* Video Upload */}
+                              <Box>
+                                <Button
+                                  variant="outlined"
+                                  component="label"
+                                  startIcon={<VideocamIcon />}
+                                  size="medium"
+                                  disabled={editLoading || editVideos.length >= 3}
+                                  sx={{ mr: 2 }}
                                 >
-                                  {/* Video Thumbnail or Placeholder */}
-                                  {thumbnail ? (
+                                  {t('add_videos_max', { max: 3 })}
+                                  <input
+                                    type="file"
+                                    hidden
+                                    multiple
+                                    accept="video/*"
+                                    onChange={(e) => handleMediaUpload(e, diary.id, null, 'video')}
+                                  />
+                                </Button>
+                                {editVideos.length > 0 && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                    {editVideos.length} selected
+                                  </Typography>
+                                )}
+                              </Box>
+                            </Box>
+
+                            {/* Image Preview for Edit */}
+                            {editImages.length > 0 && (
+                              <Box
+                                key={`image-preview-${editImages.length}-${mediaUpdateTrigger}`}
+                                sx={{ mt: 2 }}
+                              >
+                                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                  {t('images_count', { count: editImages.length, max: 10 })}
+                                </Typography>
+                                <Box sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
+                                  gap: 1,
+                                  mt: 1
+                                }}>
+                                  {editImages.map((img, index) => (
                                     <Box
+                                      key={`edit-img-${diary.id}-${index}-${img.substring(0, 20)}`}
                                       sx={{
-                                        width: '100%',
-                                        height: '100%',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        borderRadius: '6px',
+                                        overflow: 'hidden',
+                                        aspectRatio: '1',
+                                        '&:hover .media-overlay': {
+                                          opacity: 1
+                                        }
                                       }}
-                                      onClick={() => handleMediaClick(vid, 'video')}
                                     >
                                       <img
-                                        src={thumbnail}
-                                        alt={`Video ${index + 1}`}
+                                        src={img}
+                                        alt={`Image ${index + 1}`}
+                                        style={{
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          cursor: 'pointer'
+                                        }}
+                                        onClick={() => handleMediaClick(img, 'image')}
+                                      />
+
+                                      {/* Media Overlay */}
+                                      <Box className="media-overlay" sx={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        bgcolor: 'rgba(0,0,0,0.5)',
+                                        opacity: 0,
+                                        transition: 'opacity 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 0.5
+                                      }}>
+                                        <IconButton
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeMedia(index, diary.id, null, 'image');
+                                          }}
+                                          sx={{
+                                            bgcolor: 'error.main',
+                                            color: 'white',
+                                            width: 28,
+                                            height: 28,
+                                            '&:hover': {
+                                              bgcolor: 'error.dark'
+                                            }
+                                          }}
+                                          size="small"
+                                        >
+                                          <CloseIcon sx={{ fontSize: 16 }} />
+                                        </IconButton>
+                                        <IconButton
+                                          onClick={() => handleMediaClick(img, 'image')}
+                                          sx={{
+                                            bgcolor: 'primary.main',
+                                            color: 'white',
+                                            width: 28,
+                                            height: 28,
+                                            '&:hover': {
+                                              bgcolor: 'primary.dark'
+                                            }
+                                          }}
+                                          size="small"
+                                        >
+                                          <ZoomInIcon sx={{ fontSize: 16 }} />
+                                        </IconButton>
+                                      </Box>
+
+                                      {/* Media Number Badge */}
+                                      <Box
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 4,
+                                          left: 4,
+                                          bgcolor: 'rgba(0, 0, 0, 0.6)',
+                                          color: 'white',
+                                          borderRadius: '50%',
+                                          width: 20,
+                                          height: 20,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontSize: '0.7rem',
+                                          fontWeight: 600
+                                        }}
+                                      >
+                                        {index + 1}
+                                      </Box>
+
+                                      {/* URL/New Badge */}
+                                      <Box
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 4,
+                                          right: 4,
+                                          bgcolor: img.startsWith('http') ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
+                                          color: 'white',
+                                          px: 0.5,
+                                          py: 0.1,
+                                          borderRadius: 1,
+                                          fontSize: '0.55rem',
+                                          fontWeight: 500
+                                        }}
+                                      >
+                                        {img.startsWith('http') ? t('existing') : t('new')}
+                                      </Box>
+                                    </Box>
+                                  ))}
+                                </Box>
+                              </Box>
+                            )}
+
+                            {/* Video Preview for Edit */}
+                            {editVideos.length > 0 && (
+                              <Box
+                                key={`video-preview-${editVideos.length}-${mediaUpdateTrigger}`}
+                                sx={{ mt: 2 }}
+                              >
+                                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                  {t('videos_count', { count: editVideos.length, max: 3 })}
+                                </Typography>
+                                <Box sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                                  gap: 1.5,
+                                  mt: 1
+                                }}>
+                                  {editVideos.map((vid, index) => {
+                                    const isExistingVideo = vid.startsWith('http');
+                                    const thumbnail = isExistingVideo ? getVideoThumbnail(vid, diary) : null;
+
+                                    return (
+                                      <Box
+                                        key={`edit-vid-${diary.id}-${index}`}
+                                        sx={{
+                                          position: 'relative',
+                                          borderRadius: '8px',
+                                          overflow: 'hidden',
+                                          aspectRatio: '16/9',
+                                          bgcolor: '#000',
+                                          cursor: 'pointer',
+                                          '&:hover .media-overlay': {
+                                            opacity: 1
+                                          }
+                                        }}
+                                      >
+                                        {/* Video Thumbnail or Placeholder */}
+                                        {thumbnail ? (
+                                          <Box
+                                            sx={{
+                                              width: '100%',
+                                              height: '100%',
+                                              position: 'relative'
+                                            }}
+                                            onClick={() => handleMediaClick(vid, 'video')}
+                                          >
+                                            <img
+                                              src={thumbnail}
+                                              alt={`Video ${index + 1}`}
+                                              style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover'
+                                              }}
+                                              onError={(e) => {
+                                                e.target.style.display = 'none';
+                                              }}
+                                            />
+                                            <Box
+                                              sx={{
+                                                position: 'absolute',
+                                                top: '50%',
+                                                left: '50%',
+                                                transform: 'translate(-50%, -50%)',
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: '50%',
+                                                bgcolor: 'rgba(0,0,0,0.6)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                transition: 'transform 0.2s',
+                                                '&:hover': {
+                                                  transform: 'translate(-50%, -50%) scale(1.1)',
+                                                  bgcolor: 'rgba(0,0,0,0.8)'
+                                                }
+                                              }}
+                                            >
+                                              <PlayArrowIcon sx={{ fontSize: 24, color: 'white' }} />
+                                            </Box>
+                                          </Box>
+                                        ) : (
+                                          <Box
+                                            sx={{
+                                              width: '100%',
+                                              height: '100%',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              position: 'relative'
+                                            }}
+                                            onClick={() => handleMediaClick(vid, 'video')}
+                                          >
+                                            <PlayArrowIcon sx={{ fontSize: 40, color: 'white', zIndex: 1 }} />
+                                            <Typography
+                                              variant="caption"
+                                              sx={{
+                                                position: 'absolute',
+                                                bottom: 8,
+                                                left: 8,
+                                                color: 'white',
+                                                bgcolor: 'rgba(0,0,0,0.5)',
+                                                px: 1,
+                                                borderRadius: 1,
+                                                zIndex: 2
+                                              }}
+                                            >
+                                              No thumbnail
+                                            </Typography>
+                                          </Box>
+                                        )}
+
+                                        {/* Media Overlay with Remove Button */}
+                                        <Box className="media-overlay" sx={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          left: 0,
+                                          right: 0,
+                                          bottom: 0,
+                                          bgcolor: 'rgba(0,0,0,0.5)',
+                                          opacity: 0,
+                                          transition: 'opacity 0.2s',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: 0.5
+                                        }}>
+                                          <IconButton
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              removeMedia(index, diary.id, null, 'video');
+                                            }}
+                                            sx={{
+                                              bgcolor: 'error.main',
+                                              color: 'white',
+                                              width: 32,
+                                              height: 32,
+                                              '&:hover': {
+                                                bgcolor: 'error.dark'
+                                              }
+                                            }}
+                                            size="small"
+                                          >
+                                            <CloseIcon sx={{ fontSize: 16 }} />
+                                          </IconButton>
+                                        </Box>
+
+                                        {/* Video Type Badge */}
+                                        <Box
+                                          sx={{
+                                            position: 'absolute',
+                                            top: 4,
+                                            left: 4,
+                                            bgcolor: isExistingVideo ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
+                                            color: 'white',
+                                            px: 0.75,
+                                            py: 0.25,
+                                            borderRadius: 1,
+                                            fontSize: '0.65rem',
+                                            fontWeight: 500,
+                                            zIndex: 2
+                                          }}
+                                        >
+                                          {isExistingVideo ? t('uploaded') : t('new')}
+                                        </Box>
+
+                                        {/* Video Number Badge */}
+                                        <Box
+                                          sx={{
+                                            position: 'absolute',
+                                            top: 4,
+                                            right: 4,
+                                            bgcolor: 'rgba(0, 0, 0, 0.6)',
+                                            color: 'white',
+                                            borderRadius: '50%',
+                                            width: 20,
+                                            height: 20,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 600,
+                                            zIndex: 2
+                                          }}
+                                        >
+                                          {index + 1}
+                                        </Box>
+                                      </Box>
+                                    );
+                                  })}
+                                </Box>
+                              </Box>
+                            )}
+
+                            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+                              <Button
+                                variant="outlined"
+                                onClick={handleEditCancel}
+                                disabled={editLoading}
+                                size="medium"
+                              >
+                                {t('cancel')}
+                              </Button>
+                              <Button
+                                variant="contained"
+                                onClick={() => handleEditSave(diary.id)}
+                                disabled={editLoading || !editTitle.trim() || !editContent.trim()}
+                                startIcon={editLoading ? <CircularProgress size={24} /> : <SaveIcon />}
+                                size="medium"
+                              >
+                                {editLoading ? t('saving...') : t('save')}
+                              </Button>
+                            </Box>
+                          </Box>
+                        ) : (
+                          <>
+                            {/* Author Info with Avatar */}
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                <Avatar
+                                  src={diary.author?.avatar_url}
+                                  alt={diary.author?.username}
+                                  sx={{
+                                    width: 40,
+                                    height: 40,
+                                    bgcolor: 'primary.light',
+                                    fontSize: '1.1rem',
+                                  }}
+                                >
+                                  {diary.author?.username?.charAt(0)?.toUpperCase() || 'U'}
+                                </Avatar>
+
+                                <Box>
+                                  <Typography variant="body1" fontWeight="600" color="green">
+                                    {diary.author?.username || 'Unknown User'}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {formatCambodiaDate(diary.created_at)}
+                                  </Typography>
+                                </Box>
+                                {/* Friend Request / Status Chips */}
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                  {profile && diary.author?.id !== profile.id && (
+                                    <>
+                                      {friends?.some(f => f.id === diary.author.id) ? (
+                                        <Chip label="Friend" color="success" size="small" variant="outlined" sx={{ borderRadius: '16px' }} />
+                                      ) : pendingRequests?.some(r => r.id === diary.author.id) ? (
+                                        <Chip label="Request Sent" color="warning" size="small" variant="outlined" sx={{ borderRadius: '16px' }} />
+                                      ) : (
+                                        <Button
+                                          variant="contained"
+                                          color="primary"
+                                          size="small"
+                                          onClick={() => handleSendFriendRequest(diary.author.id)}
+                                          disabled={sendingRequests.has(diary.author.id)}
+                                          startIcon={<PersonAddIcon sx={{ fontSize: 10 }} />}
+                                          sx={{
+                                            borderRadius: '20px',
+                                            textTransform: 'none',
+                                            fontWeight: 500,
+                                            px: 2,
+                                            py: 0.5,
+                                            fontSize: '0.70rem',
+                                          }}
+                                        >
+                                          {sendingRequests.has(diary.author.id) ? "Sending..." : "Add Friend"}
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {profile && diary.author?.id === profile.id && (
+                                    <Chip
+                                      label="You"
+                                      size="small"
+                                      color="primary"
+                                      variant="outlined"
+                                      sx={{ fontSize: '0.75rem', height: 26 }}
+                                    />
+                                  )}
+                                </Box>
+                              </Box>
+
+                            </Box>
+
+                          </>
+                        )}
+                      </Box>
+
+                      {editingDiary !== diary.id && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip
+                            label={diary.share_type}
+                            size="small"
+                            color={
+                              diary.share_type === 'public' ? 'primary' :
+                                diary.share_type === 'friends' ? 'secondary' : 'default'
+                            }
+                          />
+                          {profile && diary.author?.id === profile.id && (
+                            <IconButton
+                              size="small"
+                              onClick={(e) => handleMenuOpen(e, diary)}
+                              sx={{ color: 'text.secondary' }}
+                            >
+                              <MoreVertIcon />
+                            </IconButton>
+                          )}
+                        </Box>
+                      )}
+                    </Box>
+
+                    {editingDiary !== diary.id && (
+                      <Box>
+                        {combinedMedia.length > 0 && (
+                          <Box sx={{ mb: 1.5 }}>
+                            <Box
+                              sx={{
+                                display: 'grid',
+                                gap: 0.5,
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                                gridTemplateColumns: (() => {
+                                  switch (visibleMedia.length) {
+                                    case 1:
+                                      return '1fr';
+                                    case 2:
+                                      return '1fr 1fr';
+                                    case 3:
+                                      return '2fr 1fr';
+                                    default:
+                                      return '1fr 1fr';
+                                  }
+                                })(),
+                                gridTemplateRows:
+                                  visibleMedia.length === 3 ? '1fr 1fr' : 'auto',
+                              }}
+                            >
+                              {visibleMedia.slice(0, 4).map((media, index) => {
+                                const isLarge =
+                                  visibleMedia.length === 3 && index === 0;
+
+                                return (
+                                  <Box
+                                    key={index}
+                                    onClick={() => handleMediaClick(media.src, media.type)}
+                                    sx={{
+                                      position: 'relative',
+                                      cursor: 'pointer',
+                                      overflow: 'hidden',
+                                      bgcolor: '#000',
+                                      aspectRatio:
+                                        visibleMedia.length === 1
+                                          ? '16 / 9'
+                                          : '1 / 1',
+                                      gridRow: isLarge ? 'span 2' : 'auto',
+                                    }}
+                                  >
+                                    {/* Image */}
+                                    {media.type === 'image' && (
+                                      <Box
+                                        component="img"
+                                        src={media.src}
+                                        alt="feed img"
+                                        sx={{
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                        }}
+                                      />
+                                    )}
+
+                                    {/* Video */}
+                                    {media.type === 'video' && (
+                                      <>
+                                        <Box
+                                          component="img"
+                                          src={media.thumbnail}
+                                          alt=""
+                                          sx={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover',
+                                          }}
+                                        />
+
+                                        {/* Play icon */}
+                                        <PlayArrowIcon
+                                          sx={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            left: '50%',
+                                            transform: 'translate(-50%, -50%)',
+                                            color: '#fff',
+                                            fontSize: 48,
+                                            opacity: 0.9,
+                                          }}
+                                        />
+                                      </>
+                                    )}
+
+                                    {/* +X overlay */}
+                                    {index === 3 && combinedMedia.length > 4 && (
+                                      <Box
+                                        sx={{
+                                          position: 'absolute',
+                                          inset: 0,
+                                          bgcolor: 'rgba(0,0,0,0.55)',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          color: '#fff',
+                                          fontSize: 32,
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        +{combinedMedia.length - 4}
+                                      </Box>
+                                    )}
+                                  </Box>
+                                );
+                              })}
+                            </Box>
+
+                          </Box>
+                        )}
+
+                        {diary.title && (
+                          <Typography
+                            sx={{
+                              mt: 2,
+                              fontSize: 18,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {diary.title}
+                          </Typography>
+                        )}
+
+                        <DiaryCard diary={diary} />
+
+                        <Divider />
+                        <Box sx={{ display: 'flex', gap: 2, mb: expandedDiary === diary.id ? 0 : 2 }}>
+                          <Button
+                            startIcon={
+                              likedDiaries.has(diary.id)
+                                ? <Favorite color="error" />
+                                : <FavoriteBorder />
+                            }
+                            onClick={() => handleLikeDiary(diary.id)}
+                            size="medium"
+                            sx={{
+                              color: likedDiaries.has(diary.id) ? 'error.main' : 'inherit',
+                              minWidth: '100px',
+                              fontWeight: likedDiaries.has(diary.id) ? 'bold' : 'normal',
+                              transition: 'color 0.2s, transform 0.2s',
+                              '&:hover': {
+                                transform: 'scale(1.05)'
+                              }
+                            }}
+                          >
+                            {t('like')} {diaryLikes[diary.id] ?? diary.likes.length}
+                          </Button>
+
+                          <Button
+                            startIcon={<CommentIcon />}
+                            onClick={() => handleExpandDiary(diary.id)}
+                            size="medium"
+                            color={expandedDiary === diary.id ? 'primary' : 'inherit'}
+                            sx={{ minWidth: '120px' }}
+                          >
+                            {t('comment')} {diaryComments[diary.id] && `(${countAllComments(diaryComments[diary.id])})`}
+                          </Button>
+                        </Box>
+
+                        {/* Comments Section */}
+                        <Collapse in={expandedDiary === diary.id}>
+                          <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '12px', border: "1px solid" }}>
+                            {/* Comment Input */}
+                            <Box sx={{
+                              display: 'flex',
+                              flexDirection: { xs: 'column', sm: 'row' },
+                              gap: 1.5,
+                              mb: 2,
+                              alignItems: { xs: 'stretch', sm: 'flex-start' }
+                            }}>
+                              <TextField
+                                fullWidth
+                                placeholder={t('placeholder')}
+                                value={commentTexts[diary.id] || ''}
+                                onChange={(e) => setCommentTexts(prev => ({ ...prev, [diary.id]: e.target.value }))}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleAddComment(diary.id);
+                                  }
+                                }}
+                                disabled={commentLoading[diary.id]}
+                                multiline
+                                rows={2}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    fontSize: '0.95rem',
+                                    borderRadius: '8px',
+                                  }
+                                }}
+                              />
+                              <Box sx={{
+                                display: 'flex',
+                                gap: 1,
+                                flexDirection: { xs: 'row', sm: 'column' },
+                                width: { xs: '100%', sm: 'auto' }
+                              }}>
+                                <Button
+                                  variant="outlined"
+                                  component="label"
+                                  disabled={commentLoading[diary.id]}
+                                  startIcon={<ImageIcon />}
+                                  sx={{
+                                    minWidth: { xs: 'auto', sm: '120px' },
+                                    px: 2,
+                                    borderRadius: '8px',
+                                    '& .MuiButton-startIcon': {
+                                      mr: 1
+                                    }
+                                  }}
+                                  size="medium"
+                                >
+                                  {t('image')}
+                                  <input
+                                    type="file"
+                                    hidden
+                                    multiple
+                                    accept="image/*"
+                                    onChange={(e) => handleMediaUpload(e, diary.id)}
+                                  />
+                                </Button>
+                                <Button
+                                  variant="contained"
+                                  onClick={() => handleAddComment(diary.id)}
+                                  disabled={!commentTexts[diary.id]?.trim() || commentLoading[diary.id]}
+                                  sx={{
+                                    minWidth: { xs: 'auto', sm: '120px' },
+                                    px: 3,
+                                    borderRadius: '8px',
+                                    fontWeight: 500
+                                  }}
+                                  size="medium"
+                                >
+                                  {commentLoading[diary.id] ? (
+                                    <CircularProgress size={24} color="inherit" />
+                                  ) : (
+                                    t('send')
+                                  )}
+                                </Button>
+                              </Box>
+                            </Box>
+
+                            {/* Selected Images Preview for Comments - Compact */}
+                            {selectedCommentImages[diary.id]?.length > 0 && (
+                              <Box sx={{
+                                mb: 2,
+                                p: 1,
+                                bgcolor: 'background.paper',
+                                borderRadius: '8px',
+                                border: '1px solid',
+                                borderColor: 'divider'
+                              }}>
+                                <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                                  Selected images ({selectedCommentImages[diary.id].length})
+                                </Typography>
+                                <Box sx={{
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: 0.5
+                                }}>
+                                  {selectedCommentImages[diary.id].map((img, index) => (
+                                    <Box key={index} sx={{
+                                      position: 'relative',
+                                      width: 50,
+                                      height: 50,
+                                      borderRadius: 4,
+                                      overflow: 'hidden'
+                                    }}>
+                                      <img
+                                        src={img}
+                                        alt={`Preview ${index}`}
                                         style={{
                                           width: '100%',
                                           height: '100%',
                                           objectFit: 'cover'
                                         }}
-                                        onError={(e) => {
-                                          console.error(`❌ Failed to load thumbnail:`, thumbnail);
-                                          e.target.style.display = 'none';
-                                        }}
                                       />
-                                      <Box
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => removeMedia(index, null, diary.id, 'image')}
                                         sx={{
                                           position: 'absolute',
-                                          top: '50%',
-                                          left: '50%',
-                                          transform: 'translate(-50%, -50%)',
-                                          width: 40,
-                                          height: 40,
-                                          borderRadius: '50%',
-                                          bgcolor: 'rgba(0,0,0,0.6)',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          transition: 'transform 0.2s',
+                                          top: -4,
+                                          right: -4,
+                                          bgcolor: 'error.main',
+                                          color: 'white',
+                                          width: 20,
+                                          height: 20,
                                           '&:hover': {
-                                            transform: 'translate(-50%, -50%) scale(1.1)',
-                                            bgcolor: 'rgba(0,0,0,0.8)'
+                                            bgcolor: 'error.dark'
                                           }
                                         }}
                                       >
-                                        <PlayArrowIcon sx={{ fontSize: 24, color: 'white' }} />
-                                      </Box>
+                                        <CloseIcon sx={{ fontSize: 12 }} />
+                                      </IconButton>
                                     </Box>
-                                  ) : (
-                                    <Box
-                                      sx={{
-                                        width: '100%',
-                                        height: '100%',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        position: 'relative'
-                                      }}
-                                      onClick={() => handleMediaClick(vid, 'video')}
-                                    >
-                                      <PlayArrowIcon sx={{ fontSize: 40, color: 'white', zIndex: 1 }} />
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          position: 'absolute',
-                                          bottom: 8,
-                                          left: 8,
-                                          color: 'white',
-                                          bgcolor: 'rgba(0,0,0,0.5)',
-                                          px: 1,
-                                          borderRadius: 1,
-                                          zIndex: 2
-                                        }}
-                                      >
-                                        No thumbnail
-                                      </Typography>
-                                    </Box>
-                                  )}
-
-                                  {/* Media Overlay with Remove Button */}
-                                  <Box className="media-overlay" sx={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    bgcolor: 'rgba(0,0,0,0.5)',
-                                    opacity: 0,
-                                    transition: 'opacity 0.2s',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: 0.5
-                                  }}>
-                                    <IconButton
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeMedia(index, diary.id, null, 'video');
-                                      }}
-                                      sx={{
-                                        bgcolor: 'error.main',
-                                        color: 'white',
-                                        width: 32,
-                                        height: 32,
-                                        '&:hover': {
-                                          bgcolor: 'error.dark'
-                                        }
-                                      }}
-                                      size="small"
-                                    >
-                                      <CloseIcon sx={{ fontSize: 16 }} />
-                                    </IconButton>
-                                  </Box>
-
-                                  {/* Video Type Badge */}
-                                  <Box
-                                    sx={{
-                                      position: 'absolute',
-                                      top: 4,
-                                      left: 4,
-                                      bgcolor: isExistingVideo ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
-                                      color: 'white',
-                                      px: 0.75,
-                                      py: 0.25,
-                                      borderRadius: 1,
-                                      fontSize: '0.65rem',
-                                      fontWeight: 500,
-                                      zIndex: 2
-                                    }}
-                                  >
-                                    {isExistingVideo ? t('uploaded') : t('new')}
-                                  </Box>
-
-                                  {/* Video Number Badge */}
-                                  <Box
-                                    sx={{
-                                      position: 'absolute',
-                                      top: 4,
-                                      right: 4,
-                                      bgcolor: 'rgba(0, 0, 0, 0.6)',
-                                      color: 'white',
-                                      borderRadius: '50%',
-                                      width: 20,
-                                      height: 20,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: '0.7rem',
-                                      fontWeight: 600,
-                                      zIndex: 2
-                                    }}
-                                  >
-                                    {index + 1}
-                                  </Box>
+                                  ))}
                                 </Box>
-                              );
-                            })}
-                          </Box>
-                        </Box>
-                      )}
-
-                      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
-                        <Button
-                          variant="outlined"
-                          onClick={handleEditCancel}
-                          disabled={editLoading}
-                          startIcon={<CancelIcon />}
-                          size="medium"
-                        >
-                          {t('cancel')}
-                        </Button>
-                        <Button
-                          variant="contained"
-                          onClick={() => handleEditSave(diary.id)}
-                          disabled={editLoading || !editTitle.trim() || !editContent.trim()}
-                          startIcon={editLoading ? <CircularProgress size={24} /> : <SaveIcon />}
-                          size="medium"
-                        >
-                          {editLoading ? t('saving...') : t('save')}
-                        </Button>
-                      </Box>
-                    </Box>
-                  ) : (
-                    <>
-                        {/* Author Info with Avatar */}
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                            <Avatar
-                              src={diary.author?.avatar_url}
-                              alt={diary.author?.username}
-                              sx={{
-                                width: 40,
-                                height: 40,
-                                bgcolor: 'primary.light',
-                                fontSize: '1.1rem',
-                              }}
-                            >
-                              {diary.author?.username?.charAt(0)?.toUpperCase() || 'U'}
-                            </Avatar>
-
-                            <Box>
-                              <Typography variant="body1" fontWeight="600" color="green">
-                                {diary.author?.username || 'Unknown User'}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {formatCambodiaDate(diary.created_at)}
-                              </Typography>
-                            </Box>
-                            {/* Friend Request / Status Chips */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                            {profile && diary.author?.id !== profile.id && (
-                              <>
-                                {friends?.some(f => f.id === diary.author.id) ? (
-                                  <Chip label="Friend" color="success" size="small" variant="outlined" sx={{ borderRadius: '16px' }} />
-                                ) : pendingRequests?.some(r => r.id === diary.author.id) ? (
-                                  <Chip label="Request Sent" color="warning" size="small" variant="outlined" sx={{ borderRadius: '16px' }} />
-                                ) : (
-                                  <Button
-                                    variant="contained"
-                                    color="primary"
-                                    size="small"
-                                    onClick={() => handleSendFriendRequest(diary.author.id)}
-                                    disabled={sendingRequests.has(diary.author.id)}
-                                    startIcon={<PersonAddIcon sx={{ fontSize: 10 }} />}
-                                    sx={{
-                                      borderRadius: '20px',
-                                      textTransform: 'none',
-                                      fontWeight: 500,
-                                      px: 2,
-                                      py: 0.5,
-                                      fontSize: '0.70rem',
-                                    }}
-                                  >
-                                    {sendingRequests.has(diary.author.id) ? "Sending..." : "Add Friend"}
-                                  </Button>
-                                )}
-                              </>
-                            )}
-
-                            {profile && diary.author?.id === profile.id && (
-                              <Chip
-                                label="You"
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                                sx={{ fontSize: '0.75rem', height: 26 }}
-                              />
-                            )}
-                          </Box>
-                          </Box>
-
-                          
-                        </Box>
-                    
-                    </>
-                  )}
-                </Box>
-
-                {editingDiary !== diary.id && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Chip
-                      label={diary.share_type}
-                      size="small"
-                      color={
-                        diary.share_type === 'public' ? 'primary' :
-                          diary.share_type === 'friends' ? 'secondary' : 'default'
-                      }
-                    />
-                    {profile && diary.author?.id === profile.id && (
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleMenuOpen(e, diary)}
-                        sx={{ color: 'text.secondary' }}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
-                    )}
-                  </Box>
-                )}
-              </Box>
-              <Divider/>
-                
-              {/* Diary Content */}
-              {editingDiary !== diary.id && (
-                <>
-                  <Typography variant="body1" sx={{ mb: 2, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                    {diary.content}
-                  </Typography>
-
-                  {/* Diary Images - Compact Grid View */}
-                  {diary.images && diary.images.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        {diary.images.length} {diary.images.length === 1 ? 'image' : 'images'}
-                      </Typography>
-                      <Box sx={{
-                        display: 'grid',
-                        border: '1px solid rgba(0, 0, 0, 0.2)',
-                        borderRadius: 2,
-                        padding: 5,
-                        gridTemplateColumns: {
-                          xs: 'repeat(2, 1fr)',
-                          sm: 'repeat(3, 1fr)',
-                          md: 'repeat(4, 1fr)'
-                        },
-                        gap: 1
-                      }}>
-                        {diary.images.map((img, index) => (
-                          <Box
-                            key={index}
-                            sx={{
-                              position: 'relative',
-                              borderRadius: '8px',
-                              overflow: 'hidden',
-                              aspectRatio: '1',
-                              cursor: 'pointer',
-                              transition: 'transform 0.2s',
-                              '&:hover': {
-                                transform: 'scale(1.02)',
-                                '& .media-overlay': {
-                                  opacity: 1
-                                }
-                              }
-                            }}
-                            onClick={() => handleMediaClick(img, 'image')}
-                          >
-                            <img
-                              src={img}
-                              alt={`Diary ${index + 1}`}
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover'
-                              }}
-                            />
-                            <Box className="media-overlay" sx={{
-                              position: 'absolute',
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              bgcolor: 'rgba(0,0,0,0.3)',
-                              opacity: 0,
-                              transition: 'opacity 0.2s',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <ZoomInIcon sx={{ color: 'white', fontSize: 32 }} />
-                            </Box>
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-
-                  {/* Diary Videos - Grid View - FIXED: Shows thumbnails */}
-                  {diary.videos && diary.videos.length > 0 && (
-                    <Box sx={{ mb: 3 }}>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        {diary.videos.length} {diary.videos.length === 1 ? 'video' : 'videos'}
-                      </Typography>
-                      <Box sx={{
-                        display: 'grid',
-                        border: '1px solid rgba(0, 0, 0, 0.2)',
-                        borderRadius: 2,
-                        gridTemplateColumns: {
-                          xs: '1fr',
-                          sm: 'repeat(2, 1fr)',
-                          md: 'repeat(3, 1fr)'
-                        },
-                        padding: 5,
-                        gap: 2
-                      }}>
-                        {diary.videos.map((video, index) => {
-                          // Get thumbnail for this specific video
-                          const thumbnail = getVideoThumbnail(video, diary);
-
-                          console.log(`🎬 Rendering video ${index}:`, {
-                            video: video?.substring(0, 50),
-                            thumbnail: thumbnail?.substring(0, 50),
-                            hasThumbnail: !!thumbnail
-                          });
-
-                          return (
-                            <Box
-                              key={index}
-                              sx={{
-                                position: 'relative',
-                                borderRadius: '8px',
-                                overflow: 'hidden',
-                                aspectRatio: '16/9',
-                                bgcolor: '#000',
-                                cursor: 'pointer',
-                                transition: 'transform 0.2s',
-                                '&:hover': {
-                                  transform: 'scale(1.02)',
-                                  '& .media-overlay': {
-                                    opacity: 1
-                                  }
-                                }
-                              }}
-                              onClick={() => handleMediaClick(video, 'video')}
-                            >
-                              {/* Video Thumbnail or Placeholder */}
-                              {thumbnail ? (
-                                <Box>
-                                  <img
-                                    src={thumbnail}
-                                    alt={`Video thumbnail ${index + 1}`}
-                                    style={{
-                                      width: '100%',
-                                      height: '100%',
-                                      objectFit: 'cover'
-                                    }}
-                                    onError={(e) => {
-                                      console.error(`❌ Failed to load thumbnail for video ${index}:`, thumbnail);
-                                      e.target.style.display = 'none';
-                                    }}
-                                  />
-                                </Box>
-                              ) : (
-                                <Box
-                                  sx={{
-                                    width: '100%',
-                                    height: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    flexDirection: 'column',
-                                    gap: 1,
-
-                                  }}
-                                >
-                                  <VideocamIcon sx={{ fontSize: 48, color: '#666' }} />
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      color: '#888',
-                                      textAlign: 'center'
-                                    }}
-                                  >
-                                    {t('no_thumbnail')}
-                                  </Typography>
-                                </Box>
-                              )}
-
-                              {/* Play Button Overlay */}
-                              <Box className="media-overlay" sx={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                bgcolor: thumbnail ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.5)',
-                                opacity: 0,
-                                transition: 'opacity 0.2s',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}>
-                                <PlayArrowIcon sx={{ color: 'white', fontSize: 48 }} />
                               </Box>
+                            )}
 
-                              {/* Video Number Badge */}
-                              <Box
+                            {/* Comments List */}
+                            {diaryComments[diary.id]?.length > 0 ? (
+                              <Box sx={{
+                                maxHeight: 300,
+                                overflowY: 'auto',
+                                '&::-webkit-scrollbar': {
+                                  width: '8px',
+                                },
+                                '&::-webkit-scrollbar-track': {
+                                  background: '#f1f1f1',
+                                  borderRadius: '4px',
+                                },
+                                '&::-webkit-scrollbar-thumb': {
+                                  background: '#888',
+                                  borderRadius: '4px',
+                                },
+                                '&::-webkit-scrollbar-thumb:hover': {
+                                  background: '#555',
+                                }
+                              }}>
+                                {diaryComments[diary.id].map((comment) => (
+                                  <CommentItemWithActions
+                                    key={comment.id}
+                                    comment={comment}
+                                    diaryId={diary.id}
+                                    profile={profile}
+                                    onAddReply={handleAddReply}
+                                    handleImageUpload={handleMediaUpload}
+                                    selectedCommentImages={selectedCommentImages}
+                                    setSelectedCommentImages={setSelectedCommentImages}
+                                    onEditComment={handleEditComment}
+                                    onDeleteComment={handleCommentDeleteClick}
+                                    replyingTo={replyingTo}
+                                    setReplyingTo={setReplyingTo}
+                                    onMediaClick={handleMediaClick}
+                                  />
+                                ))}
+                              </Box>
+                            ) : (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                align="center"
                                 sx={{
-                                  position: 'absolute',
-                                  top: 8,
-                                  right: 8,
-                                  bgcolor: 'rgba(0,0,0,0.7)',
-                                  color: 'white',
-                                  px: 1,
-                                  py: 0.25,
-                                  borderRadius: 1,
-                                  fontSize: '0.7rem',
-                                  fontWeight: 500
+                                  py: 2,
+                                  fontStyle: 'italic'
                                 }}
                               >
-                                {index + 1}
-                              </Box>
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    </Box>
-                  )}
-                  <Divider/>
-                  {/* Actions */}
-                  <Box sx={{ display: 'flex', gap: 2, mb: expandedDiary === diary.id ? 0 : 2 }}>
-                    <Button
-                      startIcon={likedDiaries.has(diary.id) ? <Favorite color="error" /> : <FavoriteBorder />}
-                      onClick={() => handleLikeDiary(diary.id)}
-                      size="medium"
-                      sx={{
-                        color: likedDiaries.has(diary.id) ? 'error.main' : 'inherit',
-                        minWidth: '100px'
-                      }}
-                    >
-                      {t('like')} {diaryLikes[diary.id] > 0 && `(${diaryLikes[diary.id]})`}
-                    </Button>
-                    <Button
-                      startIcon={<CommentIcon />}
-                      onClick={() => handleExpandDiary(diary.id)}
-                      size="medium"
-                      color={expandedDiary === diary.id ? 'primary' : 'inherit'}
-                      sx={{ minWidth: '120px' }}
-                    >
-                      {t('comment')} {diaryComments[diary.id] && `(${countAllComments(diaryComments[diary.id])})`}
-                    </Button>
-                  </Box>
-
-                  {/* Comments Section */}
-                  <Collapse in={expandedDiary === diary.id}>
-                    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '12px', border: "1px solid" }}>
-                      {/* Comment Input */}
-                      <Box sx={{
-                        display: 'flex',
-                        flexDirection: { xs: 'column', sm: 'row' },
-                        gap: 1.5,
-                        mb: 2,
-                        alignItems: { xs: 'stretch', sm: 'flex-start' }
-                      }}>
-                        <TextField
-                          fullWidth
-                          placeholder={t('placeholder')}
-                          value={commentTexts[diary.id] || ''}
-                          onChange={(e) => setCommentTexts(prev => ({ ...prev, [diary.id]: e.target.value }))}
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleAddComment(diary.id);
-                            }
-                          }}
-                          disabled={commentLoading[diary.id]}
-                          multiline
-                          rows={2}
-                          sx={{
-                            '& .MuiOutlinedInput-root': {
-                              fontSize: '0.95rem',
-                              borderRadius: '8px',
-                            }
-                          }}
-                        />
-                        <Box sx={{
-                          display: 'flex',
-                          gap: 1,
-                          flexDirection: { xs: 'row', sm: 'column' },
-                          width: { xs: '100%', sm: 'auto' }
-                        }}>
-                          <Button
-                            variant="outlined"
-                            component="label"
-                            disabled={commentLoading[diary.id]}
-                            startIcon={<ImageIcon />}
-                            sx={{
-                              minWidth: { xs: 'auto', sm: '120px' },
-                              px: 2,
-                              borderRadius: '8px',
-                              '& .MuiButton-startIcon': {
-                                mr: 1
-                              }
-                            }}
-                            size="medium"
-                          >
-                            {t('image')}
-                            <input
-                              type="file"
-                              hidden
-                              multiple
-                              accept="image/*"
-                              onChange={(e) => handleMediaUpload(e, diary.id)}
-                            />
-                          </Button>
-                          <Button
-                            variant="contained"
-                            onClick={() => handleAddComment(diary.id)}
-                            disabled={!commentTexts[diary.id]?.trim() || commentLoading[diary.id]}
-                            sx={{
-                              minWidth: { xs: 'auto', sm: '120px' },
-                              px: 3,
-                              borderRadius: '8px',
-                              fontWeight: 500
-                            }}
-                            size="medium"
-                          >
-                            {commentLoading[diary.id] ? (
-                              <CircularProgress size={24} color="inherit" />
-                            ) : (
-                              t('send')
+                                {t('no_comments')}
+                              </Typography>
                             )}
-                          </Button>
-                        </Box>
-                      </Box>
-
-                      {/* Selected Images Preview for Comments - Compact */}
-                      {selectedCommentImages[diary.id]?.length > 0 && (
-                        <Box sx={{
-                          mb: 2,
-                          p: 1,
-                          bgcolor: 'background.paper',
-                          borderRadius: '8px',
-                          border: '1px solid',
-                          borderColor: 'divider'
-                        }}>
-                          <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                            Selected images ({selectedCommentImages[diary.id].length})
-                          </Typography>
-                          <Box sx={{
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: 0.5
-                          }}>
-                            {selectedCommentImages[diary.id].map((img, index) => (
-                              <Box key={index} sx={{
-                                position: 'relative',
-                                width: 50,
-                                height: 50,
-                                borderRadius: 4,
-                                overflow: 'hidden'
-                              }}>
-                                <img
-                                  src={img}
-                                  alt={`Preview ${index}`}
-                                  style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover'
-                                  }}
-                                />
-                                <IconButton
-                                  size="small"
-                                  onClick={() => removeMedia(index, null, diary.id, 'image')}
-                                  sx={{
-                                    position: 'absolute',
-                                    top: -4,
-                                    right: -4,
-                                    bgcolor: 'error.main',
-                                    color: 'white',
-                                    width: 20,
-                                    height: 20,
-                                    '&:hover': {
-                                      bgcolor: 'error.dark'
-                                    }
-                                  }}
-                                >
-                                  <CloseIcon sx={{ fontSize: 12 }} />
-                                </IconButton>
-                              </Box>
-                            ))}
                           </Box>
-                        </Box>
-                      )}
+                        </Collapse>
+                      </Box>
+                    )}
+                  </Card>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </Box>
 
-                      {/* Comments List */}
-                      {diaryComments[diary.id]?.length > 0 ? (
-                        <Box sx={{
-                          maxHeight: 300,
-                          overflowY: 'auto',
-                          '&::-webkit-scrollbar': {
-                            width: '8px',
-                          },
-                          '&::-webkit-scrollbar-track': {
-                            background: '#f1f1f1',
-                            borderRadius: '4px',
-                          },
-                          '&::-webkit-scrollbar-thumb': {
-                            background: '#888',
-                            borderRadius: '4px',
-                          },
-                          '&::-webkit-scrollbar-thumb:hover': {
-                            background: '#555',
-                          }
-                        }}>
-                          {diaryComments[diary.id].map((comment) => (
-                            <CommentItemWithActions
-                              key={comment.id}
-                              comment={comment}
-                              diaryId={diary.id}
-                              profile={profile}
-                              onAddReply={handleAddReply}
-                              handleImageUpload={handleMediaUpload}
-                              selectedCommentImages={selectedCommentImages}
-                              setSelectedCommentImages={setSelectedCommentImages}
-                              onEditComment={handleEditComment}
-                              onDeleteComment={handleCommentDeleteClick}
-                              replyingTo={replyingTo}
-                              setReplyingTo={setReplyingTo}
-                              onMediaClick={handleMediaClick}
-                            />
-                          ))}
-                        </Box>
-                      ) : (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          align="center"
-                          sx={{
-                            py: 2,
-                            fontStyle: 'italic'
-                          }}
-                        >
-                          {t('no_comments')}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Collapse>
-                </>
-              )}
-            </Card>
-          ))}
-        </Box>
-      )}
+      <Box
+        sx={{
+          mb: 2, width: { xs: '100%' },
+          display: { xs: 'none', md: 'block' },
+          mt: 2,
+        }}
+      >
+        <ActivityComponent />
+        <br />
+        <SuggestFriendComponent />
+      </Box>
     </Box>
   );
 };
