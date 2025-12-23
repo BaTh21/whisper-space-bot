@@ -13,14 +13,33 @@ import {
   ListItemAvatar,
   ListItemText,
   MenuItem,
+  Paper,
   Select,
   TextField,
   Typography,
 } from '@mui/material';
 import { useFormik } from 'formik';
+import { useRef } from "react";
+import Draggable from "react-draggable";
+import { useTranslation } from 'react-i18next';
 import * as Yup from 'yup';
 import { createGroup } from '../services/api';
-import { useTranslation } from 'react-i18next';
+
+function DraggablePaper(props) {
+    const nodeRef = useRef(null);
+
+    return (
+        <Draggable
+            nodeRef={nodeRef}
+            handle="#draggable-dialog-title"
+            cancel={'[class*="MuiDialogContent-root"]'}
+        >
+            <div ref={nodeRef} style={{ width: '100%', justifyContent: 'center', display: 'flex' }}>
+                <Paper {...props} />
+            </div>
+        </Draggable>
+    );
+}
 
 const CreateGroupDialog = ({ 
   open, 
@@ -72,8 +91,9 @@ const CreateGroupDialog = ({
       maxWidth="md" 
       fullWidth
       PaperProps={{ sx: { borderRadius: '16px' } }}
+      PaperComponent={DraggablePaper}
     >
-      <DialogTitle sx={{ fontWeight: 600, pb: 1 }}>
+      <DialogTitle id="draggable-dialog-title" sx={{ fontWeight: 600, pb: 1 }}>
         {t('create_new_group')}
       </DialogTitle>
       
