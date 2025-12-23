@@ -156,15 +156,15 @@ def create_group_message(
     
     return msg
 
-def get_group_messages(db: Session, group_id: int, limit=50, offset=0):
+def get_group_messages(db: Session, group_id: int, limit: int = 50, offset: int = 0):
+    """
+    Safely fetch group messages with only the sender loaded.
+    This avoids any relationship errors.
+    """
     return (
         db.query(GroupMessage)
         .filter(GroupMessage.group_id == group_id)
-        .options(
-            joinedload(GroupMessage.sender),
-            joinedload(GroupMessage.replies).joinedload(GroupMessageReply.sender),
-            joinedload(GroupMessage.parent_message).joinedload(GroupMessage.sender)
-        )
+        .options(joinedload(GroupMessage.sender))  # Only load sender (safe and needed)
         .order_by(GroupMessage.created_at.desc())
         .offset(offset)
         .limit(limit)

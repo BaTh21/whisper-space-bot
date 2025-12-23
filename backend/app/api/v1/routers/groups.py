@@ -1,3 +1,4 @@
+# app/api/v1/routers/groups.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
@@ -6,14 +7,17 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut, GroupUpdate, GroupInviteResponse, GroupImageResponse, GroupDetailsOut
 from app.services.websocket_manager import manager
-from app.crud.group import accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link, get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member, leave_group, update_group, invite_user, delete_group_invite, delete_cover, get_group_covers, delete_group
+from app.crud.group import (
+    accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link,
+    get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member,
+    leave_group, update_group, invite_user, delete_group_invite, delete_cover, get_group_covers, delete_group,
+    get_or_create_invite_link, upload_group_cover, exists_member  # Added exists_member
+)
 from app.schemas.diary import DiaryOut
 from app.schemas.user import UserOut
 from app.crud.chat import get_group_messages
 from app.models.group_message import GroupMessage
 from app.schemas.chat import GroupMessageOut
-from app.crud.group import get_or_create_invite_link, upload_group_cover
-
 from app.models.group_invite import GroupInvite
 
 router = APIRouter()
@@ -26,7 +30,6 @@ def create_group(
     current_user: User = Depends(get_current_user)
 ):
     return create_group_with_invites(db, group_in, current_user.id)
-
 
 @router.get("/my", response_model=List[GroupOut])
 def list_my_groups(
@@ -41,12 +44,12 @@ def get_group_by_id(group_id: int, db: Session = Depends(get_db)):
     return get_group(db, group_id)
 
 @router.patch("/{group_id}", response_model=GroupOut)
-def update_by_id(group_id: int, 
+def update_by_id(group_id: int,
                  group_data: GroupUpdate,
                  db: Session = Depends(get_db),
                  current_user: User = Depends(get_current_user)
                  ):
-    return update_group(group_id, db, group_data, current_user.id)    
+    return update_group(group_id, db, group_data, current_user.id)
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_group_by_id(group_id: int,
@@ -61,11 +64,10 @@ def join_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if(db, group_id, current_user.id):
+    if exists_member(db, group_id, current_user.id):
         raise HTTPException(400, "Already a member")
     add_member(db, group_id, current_user.id)
     return {"msg": "Joined group"}
-
 
 @router.post("/{group_id}/message", response_model=GroupMessageOut)
 async def send_group_message(
@@ -75,48 +77,51 @@ async def send_group_message(
     current_user: User = Depends(get_current_user)
 ):
     if not exists_member(db, group_id, current_user.id):
-        raise HTTPException(403, "Not a member")
-    
-    msg =(db, current_user.id, group_id, msg_in.content, msg_in.message_type)
+        raise HTTPException(status_code=403, detail="Not a member")
 
-    groupid = f"private_{min(current_user.id, group_id)}_{max(current_user.id, group_id)}"
+    message = GroupMessage(
+        group_id=group_id,
+        sender_id=current_user.id,
+        content=msg_in.content,
+        message_type=msg_in.message_type,
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+
+    chat_id = f"group_{group_id}"
     await manager.broadcast(
-        groupid, 
+        chat_id,
         {
-            "id": msg.id,
-            "sender_id": msg.sender_id,
-            "group_id": msg.group_id,
-            "content": msg.content,
-            "message_type": msg.message_type.value,
-            "created_at": msg.created_at.isoformat() if msg.created_at else None
+            "id": message.id,
+            "sender_id": message.sender_id,
+            "group_id": message.group_id,
+            "content": message.content,
+            "message_type": message.message_type.value,
+            "created_at": message.created_at.isoformat(),
         }
     )
 
-    return GroupMessageOut(
-        id=msg.id,
-        sender_id=msg.sender_id,
-        group_id=msg.group_id,
-        content=msg.content,
-        message_type=msg.message_type.value,
-        created_at=msg.created_at
-    )
-    
-from typing import List
-
+    return message
+   
 @router.get("/{group_id}/message", response_model=List[GroupMessageOut])
 def get_group_messages_(
     group_id: int,
     db: Session = Depends(get_db),
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
 ):
+    if not exists_member(db, group_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not a member of this group")
+
     messages = get_group_messages(db, group_id, limit, offset)
-    return messages
+    return messages or []
 
 @router.post("/{token}/accept")
 def accept_invite(token: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return accept_group_invite(db, token, current_user.id)
-    
+   
 @router.delete("/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_invite_by_id(invite_id: int, db: Session = Depends(get_db)):
     return delete_group_invite(db, invite_id)
@@ -127,7 +132,6 @@ def get_invite_link(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    
     try:
         link = get_or_create_invite_link(db, group_id, current_user.id)
         return {"invite_link": link}
@@ -170,8 +174,8 @@ def accept_invite_by_id(
     return accept_group_invite(db, invite_id, current_user.id)
 
 @router.post("/{group_id}/invites/{user_id}", response_model=GroupInviteResponse)
-def invite_user_by_id(group_id: int, 
-                      user_id: int, 
+def invite_user_by_id(group_id: int,
+                      user_id: int,
                       db: Session = Depends(get_db),
                       current_user: User = Depends(get_current_user)
                       ):
@@ -193,7 +197,6 @@ async def upload_cover_by_id(group_id: int,
                        db: Session = Depends(get_db),
                        cover: UploadFile = File(...),
                        current_user: User = Depends(get_current_user)):
-    
     return await upload_group_cover(group_id, db, cover, current_user.id)
 
 @router.delete("/cover/{cover_id}", status_code=status.HTTP_204_NO_CONTENT)

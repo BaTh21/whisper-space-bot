@@ -103,7 +103,7 @@ const GroupSideComponent = ({ groupId }) => {
                 getGroupMembers(groupId, memberSearchValue),
                 getGroupDiaries(groupId, searchValue),
                 getGroupById(groupId),
-                getDiaryComments(groupId)
+                // getDiaryComments(groupId)
             ]);
             setMembers(membersData);
             setDiaries(diariesData);

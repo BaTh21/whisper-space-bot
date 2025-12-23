@@ -907,6 +907,13 @@ export const getDiaryComments = async (diaryId) => {
     return response.data;
   } catch (error) {
     console.error("Get diary comments error:", error.response?.data);
+    
+    // Handle 404 specifically - diary not found or not accessible
+    if (error.response?.status === 404) {
+      console.log(`Diary ${diaryId} not found or not accessible`);
+      return []; // Return empty array instead of throwing error
+    }
+    
     throw new Error(
       error.response?.data?.detail ||
       error.response?.data?.msg ||
@@ -1221,8 +1228,16 @@ export const getPrivateChat = async (friendId) => {
 };
 
 export const getGroupMessage = async (groupId) => {
-  const res = await api.get(`/api/v1/groups/${groupId}/message`);
-  return res.data;
+  try {
+    const res = await api.get(`/api/v1/groups/${groupId}/message`);
+    return res.data;
+  } catch (error) {
+    if (error.response?.status === 500) {
+      console.warn("Group messages endpoint returned 500 - backend issue");
+      return []; // return empty array so UI doesn't crash
+    }
+    throw error;
+  }
 };
 
 export const updateMessageById = async (messageId, content) => {
