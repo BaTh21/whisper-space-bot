@@ -1978,6 +1978,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
           mb: 2, width: { xs: '100%' },
           display: { xs: 'none', md: 'block' },
           mt: 2,
+          maxWidth: 300
         }}
       >
         <ActivityComponent />
