@@ -28,9 +28,10 @@ import { websocketService } from '../../services/websocketService';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 import DeleteDialog from './DeleteDialog';
 
-import { Dialog, DialogActions, DialogContent, DialogTitle, Modal, Paper } from '@mui/material';
+import { Dialog, DialogActions, DialogContent, DialogTitle, Paper } from '@mui/material';
 import { useRef } from "react";
 import Draggable from "react-draggable";
+import { useTranslation } from 'react-i18next';
 
 function DraggablePaper(props) {
     const nodeRef = useRef(null);
@@ -99,6 +100,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
     const [groupInviteCount, setGroupInviteCount] = useState(0);
     const [newMessageCount, setNewMessageCount] = useState(0);
     const [totalNotificationCount, setTotalNotificationCount] = useState(0);
+    const { t, i18n } = useTranslation();
 
     // Update counts whenever friendRequests, invites, or newMessages change
     useEffect(() => {
@@ -163,7 +165,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                 const normalizedRequests = response.map((req, index) => ({
                     friend_request_id: req.friend_request_id || req.id || `req-${index}`,
                     requester_id: req.requester_id || req.id || 0,
-                    requester_username: req.requester_username || req.username || 'Unknown User',
+                    requester_username: req.requester_username || req.username || t('unknown_user'),
                     requester_avatar_url: req.requester_avatar_url || req.avatar_url || '',
                     created_at: req.created_at || new Date().toISOString(),
                     status: req.status || 'pending'
@@ -198,10 +200,10 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
         try {
             setProcessingInviteId(inviteId);
             await acceptGroupInvite(inviteId);
-            toast.success("You have joined the group successfully!");
+            toast.success(t("group_joined"));
             fetchInvites();
         } catch (error) {
-            toast.error(error.message || "Failed to accept invite");
+            toast.error(error.message || t("accept_failed"));
         } finally {
             setProcessingInviteId(null);
         }
@@ -210,11 +212,11 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
     const handleDeleteInvite = async () => {
         try {
             await deleteInvite(inviteId);
-            toast.success("Invite has been deleted");
+            toast.success(t("invite_deleted"));
             setDeletePopup(false);
             fetchInvites();
         } catch (error) {
-            toast.error(error.message || "Failed to delete invite");
+            toast.error(error.message || t("delete_faileds"));
         }
     };
 
@@ -224,7 +226,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
         if (data.type === 'friend_request') {
             const requestData = data.data || data;
 
-            toast.info(`New friend request from ${requestData.requester_username}`, {
+            toast.info(`${t('new_friend_request')} ${requestData.requester_username}`, {
                 position: "top-right",
                 autoClose: 5000,
             });
@@ -252,7 +254,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
 
     const handleFriendRequestSent = useCallback((data) => {
         if (data.type === 'friend_request_sent') {
-            toast.success(`Friend request sent to ${data.data?.recipient_username}`, {
+            toast.success(`${t('friend_request_sent')} ${data.data?.recipient_username}`, {
                 position: "top-right",
                 autoClose: 3000,
             });
@@ -262,7 +264,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
     const handleAcceptFriendRequest = async (requesterId, friendRequestId) => {
         try {
             const response = await acceptFriendRequest(requesterId);
-            toast.success(response.msg || "Friend request accepted!");
+            toast.success(response.msg || t("friend_accepted"));
 
             // Remove from list
             setFriendRequests(prev => {
@@ -271,14 +273,14 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
             });
         } catch (error) {
             console.error("Error accepting friend request:", error);
-            toast.error(error.response?.data?.detail || "Failed to accept friend request");
+            toast.error(error.response?.data?.detail || t("accept_friend_failed"));
         }
     };
 
     const handleDeclineFriendRequest = async (requesterId, friendRequestId) => {
         try {
             const response = await declineFriendRequest(requesterId);
-            toast.success(response.msg || "Friend request declined");
+            toast.success(response.msg || t("friend_declined"));
 
             // Remove from list
             setFriendRequests(prev => {
@@ -286,14 +288,14 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                 return currentRequests.filter(req => req.requester_id !== requesterId);
             });
         } catch (error) {
-            toast.error(error.response?.data?.detail || "Failed to decline friend request");
+            toast.error(error.response?.data?.detail || t("decline_friend_failed"));
         }
     };
 
     const handleGroupInvite = useCallback((data) => {
         if (data.type === 'group_invite') {
             const groupName = data.data?.group_name || 'a group';
-            toast.info(`New group invite: ${groupName}`);
+            toast.info(`${t('new_group_invite')} ${groupName}`);
             fetchInvites(); // Refresh invites
         }
     }, []);
@@ -315,7 +317,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                 const preview = data.content?.length > 50
                     ? `${data.content.substring(0, 50)}...`
                     : data.content || "New message";
-                toast.info(`New message from ${data.sender_username}: ${preview}`);
+                toast.info(`${t('new_message')} ${data.sender_username}: ${preview}`);
             }
         }
     }, []);
@@ -493,7 +495,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
             return (
                 <Box sx={{ mb: 3, p: 2, bgcolor: 'error.light', borderRadius: 1 }}>
                     <Typography color="error" sx={{ textAlign: 'center' }}>
-                        Error loading friend requests
+                        {t('error_loading_requests')}
                     </Typography>
                 </Box>
             );
@@ -510,7 +512,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
         if (friendRequests.length === 0) {
             return (
                 <Typography color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
-                    No pending friend requests
+                    {t('no_friend_requests')}
                 </Typography>
             );
         }
@@ -518,7 +520,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
         return (
             <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    Friend Requests ({friendRequests.length})
+                    {t('friend_requests')} ({friendRequests.length})
                 </Typography>
                 <List sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
                     {friendRequests.map((request, index) => {
@@ -527,7 +529,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                         }
 
                         const requestId = request.friend_request_id || request.requester_id || `request-${index}`;
-                        const requesterName = request.requester_username || 'Unknown User';
+                        const requesterName = request.requester_username || t('unknown_user');
 
                         return (
                             <div key={requestId}>
@@ -548,7 +550,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                                             secondary={
                                                 <Box>
                                                     <Typography variant="body2" color="text.secondary">
-                                                        Wants to be your friend
+                                                        {t('wants_to_be_friend')}
                                                     </Typography>
                                                     {request.created_at && (
                                                         <Typography variant="caption" color="text.secondary">
@@ -567,7 +569,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                                             color="success"
                                             variant="contained"
                                         >
-                                            Accept
+                                            {t('accept')}
                                         </Button>
                                         <Button
                                             startIcon={<DeleteIcon />}
@@ -576,7 +578,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                                             color="error"
                                             variant="outlined"
                                         >
-                                            Decline
+                                            {t('decline')}
                                         </Button>
                                     </Box>
                                 </ListItem>
@@ -596,7 +598,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
         return (
             <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    New Messages ({newMessages.length})
+                    {t('new_messages')} ({newMessages.length})
                 </Typography>
                 <List sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
                     {newMessages.map((message, index) => (
@@ -662,7 +664,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <Typography variant="h6">
-                                Inbox
+                                {t('inbox')}
                                 {totalNotificationCount > 0 && (
                                     <Badge
                                         badgeContent={totalNotificationCount}
@@ -680,7 +682,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                                 bgcolor: wsConnected ? 'success.main' : 'error.main'
                             }} />
                             <Typography variant="caption" color="text.secondary">
-                                {wsConnected ? 'Connected' : 'Disconnected'}
+                                {wsConnected ? t('connected') : t('disconnected')}
                             </Typography>
                         </Box>
                     </Box>
@@ -693,7 +695,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                     {/* Group Invites Section */}
                     <Box sx={{ mb: 3, mt: 3 }}>
                         <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                            Pending Group Invites ({invites.length})
+                            {t('pending_group_invites')} ({invites.length})
                         </Typography>
 
                         {loading ? (
@@ -702,7 +704,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                             </Box>
                         ) : invites.length === 0 ? (
                             <Typography color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
-                                No pending group invites
+                                {t('no_group_invites')}
                             </Typography>
                         ) : (
                             <List>
@@ -718,8 +720,8 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                                         <div key={invite.id}>
                                             <ListItem>
                                                 <ListItemText
-                                                    primary={`${invite.group?.name || 'Unknown Group'}`}
-                                                    secondary={`Invited by ${invite.inviter?.username || 'Unknown User'} • Status: ${invite.status || 'pending'}`}
+                                                    primary={`${invite.group?.name || t('unknown_group')}`}
+                                                    secondary={`${t('invited_by')} ${invite.inviter?.username || t('unknown_user')} • Status: ${invite.status || 'pending'}`}
                                                 />
                                                 <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", minWidth: 150 }}>
                                                     <Typography variant="body2" color="text.secondary">
@@ -744,7 +746,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                                                     sx={{ color: 'green', ml: 2 }}
                                                     size="small"
                                                 >
-                                                    {processingInviteId === invite.id ? 'Accepting...' : 'Accept'}
+                                                    {processingInviteId === invite.id ? t('accepting') : t('accept')}
                                                 </Button>
 
                                                 <Button
@@ -756,7 +758,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                                                     sx={{ color: 'red', ml: 1 }}
                                                     size="small"
                                                 >
-                                                    Delete
+                                                    {t('delete')}
                                                 </Button>
                                             </ListItem>
                                             {index < invites.length - 1 && <Divider />}
@@ -770,7 +772,7 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
 
                 <DialogActions sx={{ borderTop: 1, borderColor: 'divider' }}>
                     <Button variant="outlined" onClick={onClose}>
-                        Close
+                        {t('close')}
                     </Button>
                     <Button
                         variant="contained"
@@ -778,10 +780,10 @@ export default function InboxComponent({ open, onClose, onSuccess, showBadgeOnBu
                         onClick={() => {
                             fetchInvites();
                             fetchFriendRequests();
-                            toast.info("Inbox refreshed");
+                            toast.info(t("refreshed"));
                         }}
                     >
-                        Refresh
+                        {t('refresh')}
                     </Button>
                 </DialogActions>
             </Dialog>
