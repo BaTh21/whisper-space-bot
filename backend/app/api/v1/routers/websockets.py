@@ -998,8 +998,6 @@ async def websocket_group_chat(
     
     from app.services.ws_manager_group import manager
     
-    await websocket.accept()
-    
     db = next(get_db())
     try:
         current_user = await get_current_user_ws(websocket, db)
@@ -1010,6 +1008,8 @@ async def websocket_group_chat(
         if not is_group_member(db, group_id, current_user.id):
             await websocket.close(code=4003, reason="Not a member of this group")
             return
+        
+        await websocket.accept()
 
         chat_id = f"group_{group_id}"
         await manager.connect(chat_id, websocket, user_id=current_user.id)
