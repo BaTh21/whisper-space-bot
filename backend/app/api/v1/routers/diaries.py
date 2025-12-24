@@ -327,7 +327,7 @@ def comment_on_diary(
     elif not can_view(db, diary, current_user.id):
         raise HTTPException(status_code=404, detail="Diary not found or not visible")
     
-    comment = create_comment(db, diary_id, current_user.id, comment_in.content, 
+    comment = create_comment(db, diary_id, current_user, comment_in.content, 
                            comment_in.parent_id, comment_in.images)
     
     user_response = CreatorResponse(
@@ -355,17 +355,15 @@ def get_diary_comments_endpoint(
     # First, check if diary exists
     diary = db.query(Diary).filter(Diary.id == diary_id).first()
     
-    if not diary:
-        raise HTTPException(404, "Diary not found")
+    # if not diary:
+    #     raise HTTPException(404, "Diary not found")
     
     # Allow creator to always view comments (even if share_type is "friends")
-    if diary.user_id == current_user.id:
-        # Continue to load comments
-        pass
-    elif not can_view(db, diary, current_user.id):
-        raise HTTPException(404, "Diary not found or not visible")
+    # if diary.user_id == current_user.id:
+    #     pass
+    # elif not can_view(db, diary, current_user.id):
+    #     raise HTTPException(404, "Diary not found or not visible")
     
-    # Load ALL comments for this diary with user relationship
     comments = (
         db.query(DiaryComment)
         .options(joinedload(DiaryComment.user))
@@ -485,7 +483,7 @@ def like_diary_endpoint(
     if not diary or not can_view(db, diary, current_user.id):
         raise HTTPException(404, "Diary not found or not visible")
 
-    create_like(db, diary_id, current_user.id)
+    create_like(db, diary_id, current_user)
     return {"message": "Like toggled successfully"}
 
 @router.get("/{diary_id}/likes", response_model=int)

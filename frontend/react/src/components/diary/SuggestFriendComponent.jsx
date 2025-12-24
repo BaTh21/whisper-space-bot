@@ -1,33 +1,33 @@
 import { Box, ListItem, List, ListItemAvatar, Avatar, ListItemText, Typography, Button, IconButton } from "@mui/material"
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-
-const friends = [
-    {
-        id: 1,
-        username: 'admin',
-        email: 'Suggested for you',
-        avatar_url: 'https://imgs.search.brave.com/V9TGFVQbzCT9ioUsgVEOJjITmeIAee7LQWPo2HfdWZk/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9paDEu/cmVkYnViYmxlLm5l/dC9pbWFnZS40OTQ5/NTU4MjczLjc3NjQv/c3Qsc21hbGwsNTA3/eDUwNy1wYWQsNjAw/eDYwMCxmOGY4Zjgu/anBn'
-    },
-    {
-        id: 2,
-        username: 'test',
-        email: 'Suggested for you',
-        avatar_url: 'https://imgs.search.brave.com/DBqWkdJcZHY2lmjC7SlfsVM5Kuz_pX2LAg3oI0zc4i0/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9paDEu/cmVkYnViYmxlLm5l/dC9pbWFnZS41NDIw/MzQxODYyLjY0Njkv/c3Qsc21hbGwsNTA3/eDUwNy1wYWQsNjAw/eDYwMCxmOGY4Zjgu/dTIuanBn'
-    },
-    {
-        id: 3,
-        username: 'test',
-        email: 'Suggested for you',
-    },
-    {
-        id: 4,
-        username: 'test',
-        email: 'Suggested for you',
-    }
-
-]
+import { getSuggestFriends, sendFriendRequest } from '../../services/api';
+import { useEffect, useState } from "react";
+import { toast } from 'react-toastify';
 
 function SuggestFriendComponent() {
+    const [friends, setFriends] = useState([]);
+
+    const fetchData = async () => {
+        const res = await getSuggestFriends();
+        setFriends(res);
+
+    }
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const handleSendFriendRequest = async (userId) => {
+        const result = await sendFriendRequest(userId);
+
+        if (result.success) {
+            toast.success(result.message);
+            fetchData();
+        } else {
+            toast.error(result.message);
+        }
+    };
+
     return (
         <Box
         >
@@ -54,10 +54,6 @@ function SuggestFriendComponent() {
                     return (
                         <ListItem
                             key={friend.id}
-                            onClick={() => {
-                                setShowFriend(true);
-                                handleSelectFriend(friend);
-                            }}
                             sx={{
                                 p: 1,
                                 mb: 1,
@@ -82,21 +78,33 @@ function SuggestFriendComponent() {
                                         {friend.username}
                                     </Box>
                                 }
-                                secondary={
-                                    friend.email
-                                }
+                                secondary='Suggest for you'
                                 secondaryTypographyProps={{
                                     sx: {
                                         fontSize: '0.75rem',
                                     }
                                 }}
                             />
-                            <IconButton>
+                            <IconButton
+                                onClick={() => handleSendFriendRequest(friend.id)}
+                            >
                                 <PersonAddIcon />
                             </IconButton>
                         </ListItem>
                     );
                 })}
+                {friends.length === 0 && (
+                    <Box
+                        sx={{
+                            textAlign: 'center',
+                            color: 'error.main'
+                        }}
+                    >
+                        <Typography>
+                            No user to suggest
+                        </Typography>
+                    </Box>
+                )}
             </List>
         </Box>
     )

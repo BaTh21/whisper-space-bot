@@ -2,7 +2,7 @@ import { Box, Modal, Typography, Avatar, List, ListItem, Chip  } from '@mui/mate
 import UserProfileDialog from '../dialogs/UserProfileDialog';
 import { useState } from 'react';
 
-export default function GroupMemberComponent({ open, onClose, members, creatorId }) {
+export default function GroupMemberComponent({ open, onClose, members, creatorId, group }) {
 
     const [openUserProfile, setOpenUserProfile] = useState(false);
     const [selectedMember, setSelectedMember] = useState(false);
@@ -90,6 +90,7 @@ export default function GroupMemberComponent({ open, onClose, members, creatorId
                 userData={selectedMember}
                 onSuccess={handleSuccess}
                 creatorId={creatorId}
+                group={group}
             />
         </>
     );

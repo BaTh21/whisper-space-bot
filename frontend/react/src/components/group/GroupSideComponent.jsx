@@ -61,7 +61,7 @@ const GroupSideComponent = ({ groupId }) => {
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState(0);
     const [expendedGroupDiary, setExpendGroupDiary] = useState(null);
-    const [diaryGroupComments, setDiaryGroupComments] = useState({});
+    const [diaryGroupComments, setDiaryGroupComments] = useState([]);
     const [newComment, setNewComment] = useState({});
     const [postingComment, setPostingComment] = useState({});
     const { auth } = useAuth();
@@ -111,6 +111,8 @@ const GroupSideComponent = ({ groupId }) => {
             setDiaryGroupComments(commentData);
         } catch (err) {
             console.log(err);
+
+            setDiaryGroupComments([]);
         } finally {
             setLoading(false);
         }

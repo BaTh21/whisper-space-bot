@@ -2,6 +2,8 @@ import traceback
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 from app.models.diary import Diary, ShareType
+from app.models.user import User
+from app.models.activity import ActivityType
 from app.models.diary_comment import DiaryComment
 from app.models.diary_like import DiaryLike
 from app.models.diary_group import DiaryGroup
@@ -14,6 +16,7 @@ from fastapi import HTTPException, status
 from datetime import datetime, timezone
 from app.models.group import Group
 from app.services.image_service_sync import image_service_sync
+from app.crud.activity import create_activity
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     """Create a new diary with GUARANTEED video thumbnails"""
@@ -576,7 +579,7 @@ def delete_share(db: Session, share_id: int, current_user_id: int):
     db.commit()
     return {"detail": "Share has been removed"}
 
-def create_comment(db: Session, diary_id: int, user_id: int, content: str, parent_id: Optional[int] = None, images: Optional[List[str]] = None) -> DiaryComment:
+def create_comment(db: Session, diary_id: int, current_user: User , content: str, parent_id: Optional[int] = None, images: Optional[List[str]] = None) -> DiaryComment:
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
@@ -594,7 +597,7 @@ def create_comment(db: Session, diary_id: int, user_id: int, content: str, paren
     
     comment = DiaryComment(
         diary_id=diary_id,
-        user_id=user_id,
+        user_id=current_user.id,
         content=content,
         parent_id=parent_id,
         images=image_urls,
@@ -604,11 +607,20 @@ def create_comment(db: Session, diary_id: int, user_id: int, content: str, paren
     db.commit()
     db.refresh(comment)
     
+    activity = create_activity(
+        db,
+        actor_id=current_user.id,
+        recipient_id=diary.user_id,
+        activity_type=ActivityType.post_comment,
+        post_id=diary_id,
+        extra_data = f"{current_user.username} comment on your status"
+    )
+    
     comment = db.query(DiaryComment).options(joinedload(DiaryComment.user)).filter(DiaryComment.id == comment.id).first()
     
     return comment
 
-def create_like(db: Session, diary_id: int, user_id: int) -> None:
+def create_like(db: Session, diary_id: int, current_user: User) -> None:
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
@@ -616,13 +628,22 @@ def create_like(db: Session, diary_id: int, user_id: int) -> None:
     
     like = db.query(DiaryLike).filter(
         DiaryLike.diary_id == diary_id,
-        DiaryLike.user_id == user_id
+        DiaryLike.user_id == current_user.id
     ).first()
     if like:
         db.delete(like)
     else:
-        like = DiaryLike(diary_id=diary_id, user_id=user_id)
+        like = DiaryLike(diary_id=diary_id, user_id=current_user.id)
         db.add(like)
+        
+        activity = create_activity(
+        db,
+        actor_id=current_user.id,
+        recipient_id=diary.user_id,
+        activity_type=ActivityType.post_like,
+        post_id=diary_id,
+        extra_data = f"{current_user.username} liked your status"
+        )
     
     db.commit()
 

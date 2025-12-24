@@ -1,13 +1,12 @@
 // Layout.jsx - Clean style time display
 import { AppBar, Avatar, Box, Button, Drawer, IconButton, Menu, MenuItem, Tab, Tabs, Toolbar, Typography } from '@mui/material';
 import Badge from '@mui/material/Badge';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getMe, getPendingFriendRequests, getPendingGroupInvites } from '../services/api';
+import { getMe, getActivityInbox } from '../services/api';
 import DeleteDialog from './dialogs/DeleteDialog';
-import InboxComponent, { getFriendRequestCount, getGroupInviteCount, onNotificationCountChange } from './dialogs/InboxComponentDialog';
 import LogoImg from '/whisperspace.png';
 
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -23,6 +22,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import ReviewsIcon from '@mui/icons-material/RateReview';
 import StickyNote2Icon from '@mui/icons-material/StickyNote2';
+import InboxComponent from './dialogs/InboxComponent';
 
 const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const { t, i18n } = useTranslation();
@@ -30,8 +30,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [popup, setPopup] = useState(false);
-  const [invites, setInvites] = useState([]);
-  const [friends, setFriends] = useState([]);
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState(null);
   const [showLabel, setShowLabel] = useState(true);
@@ -41,13 +39,14 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const langMenuOpen = Boolean(langAnchorEl);
 
-  // Notification states
-  const [friendRequestCount, setFriendRequestCount] = useState(0);
-  const [groupInviteCount, setGroupInviteCount] = useState(0);
-  const [totalNotificationCount, setTotalNotificationCount] = useState(0);
-
   // Cambodia Time state
   const [currentTime, setCurrentTime] = useState('');
+  const [activities, setActivities] = useState([]);
+
+  const unreadCount = useMemo(
+    () => activities.filter(a => !a.is_read).length,
+    [activities]
+  );
 
   const pathToTabMap = {
     '/feed': 0,
@@ -66,81 +65,47 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
 
   // Function to update Cambodia time
   const updateCambodiaTime = () => {
-  const now = new Date();
-  
-  // Cambodia is UTC+7 (Indochina Time)
-  const options = {
-    timeZone: 'Asia/Phnom_Penh',
-    hour12: true,                  
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h12'               
-  };
-  
-  const formatter = new Intl.DateTimeFormat('en-US', options);
-  const parts = formatter.formatToParts(now);
-  
-  // Extract hour, minute, second, and dayPeriod (AM/PM)
-  const hour = parts.find(p => p.type === 'hour').value;
-  const minute = parts.find(p => p.type === 'minute').value;
-  const second = parts.find(p => p.type === 'second').value;
-  const dayPeriod = parts.find(p => p.type === 'dayPeriod').value; // 'AM' or 'PM'
+    const now = new Date();
 
-  const timeString = `${hour}:${minute}:${second} ${dayPeriod}`;
-  setCurrentTime(timeString);
-};
+    // Cambodia is UTC+7 (Indochina Time)
+    const options = {
+      timeZone: 'Asia/Phnom_Penh',
+      hour12: true,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h12'
+    };
 
-  const fetchInvites = async () => {
-    try {
-      const res = await getPendingGroupInvites();
-      setInvites(res);
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
 
-      const friendRes = await getPendingFriendRequests();
-      setFriends(friendRes);
-    } catch (error) {
-      setInvites([]);
-      setFriends([]);
-    }
+    // Extract hour, minute, second, and dayPeriod (AM/PM)
+    const hour = parts.find(p => p.type === 'hour').value;
+    const minute = parts.find(p => p.type === 'minute').value;
+    const second = parts.find(p => p.type === 'second').value;
+    const dayPeriod = parts.find(p => p.type === 'dayPeriod').value; // 'AM' or 'PM'
+
+    const timeString = `${hour}:${minute}:${second} ${dayPeriod}`;
+    setCurrentTime(timeString);
   };
 
   const fetchMe = async () => {
     try {
       const res = await getMe();
       setProfile(res);
+
+      const acRes = await getActivityInbox();
+      setActivities(acRes);
     } catch (error) {
       console.log("Failed to get profile", error);
+
+      setActivities([]);
     }
   };
 
-  // Notification subscription useEffect
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const initialFriendCount = getFriendRequestCount();
-    const initialGroupCount = getGroupInviteCount();
-    
-    setFriendRequestCount(initialFriendCount);
-    setGroupInviteCount(initialGroupCount);
-    setTotalNotificationCount(initialFriendCount + initialGroupCount);
-
-    const handleNotificationUpdate = (counts) => {
-      console.log('📬 Notification update received in Layout:', counts);
-      setFriendRequestCount(counts.friendRequests);
-      setGroupInviteCount(counts.groupInvites);
-      setTotalNotificationCount(counts.total);
-    };
-
-    const unsubscribe = onNotificationCountChange(handleNotificationUpdate);
-    
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [isAuthenticated]);
-
   useEffect(() => {
     if (isAuthenticated) {
-      fetchInvites();
       fetchMe();
     }
   }, [isAuthenticated]);
@@ -179,10 +144,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
 
   const handleHomePageClick = () => navigate("/feed");
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
-
-  const totalInvites = invites.length;
-  const totalFriends = friends.length;
-  const totalNotifications = totalInvites + totalFriends;
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -312,8 +273,8 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
               {isAuthenticated && (
                 <>
-                  
-                  <Box sx={{ 
+
+                  <Box sx={{
                     display: { xs: 'none', md: 'flex' },
                     alignItems: 'center',
                     gap: 0.75,
@@ -324,8 +285,8 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                     bgcolor: 'rgba(255, 255, 255, 0.08)',
                   }}>
                     <AccessTimeIcon sx={{ fontSize: '0.9rem', opacity: 0.8 }} />
-                    <Typography variant="body2" sx={{ 
-                      fontWeight: 'medium', 
+                    <Typography variant="body2" sx={{
+                      fontWeight: 'medium',
                       fontSize: '0.85rem',
                       fontFamily: 'monospace',
                       letterSpacing: '0.5px'
@@ -334,7 +295,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                     </Typography>
                   </Box>
 
-                  <Box sx={{ 
+                  <Box sx={{
                     display: { xs: 'flex', md: 'none' },
                     alignItems: 'center',
                     gap: 0.5,
@@ -344,7 +305,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                     bgcolor: 'rgba(255, 255, 255, 0.1)',
                   }}>
                     <AccessTimeIcon sx={{ fontSize: '0.8rem' }} />
-                    <Typography variant="caption" sx={{ 
+                    <Typography variant="caption" sx={{
                       fontSize: '0.75rem',
                       fontFamily: 'monospace'
                     }}>
@@ -356,11 +317,11 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
 
               {isAuthenticated && (
                 <>
-                  <IconButton 
-                    color="inherit" 
+                  <IconButton
+                    color="inherit"
                     onClick={handleLangMenuOpen}
-                    sx={{ 
-                      '&:hover': { 
+                    sx={{
+                      '&:hover': {
                         bgcolor: 'rgba(255, 255, 255, 0.1)',
                         transform: 'scale(1.05)'
                       },
@@ -405,11 +366,11 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
               {/* Guest Buttons */}
               {!isAuthenticated ? (
                 <>
-                  <Button 
-                    color="inherit" 
-                    component={Link} 
-                    to="/register" 
-                    sx={{ 
+                  <Button
+                    color="inherit"
+                    component={Link}
+                    to="/register"
+                    sx={{
                       borderRadius: 20,
                       textTransform: 'none',
                       fontWeight: 500
@@ -417,11 +378,11 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                   >
                     {t("register")}
                   </Button>
-                  <Button 
-                    color="inherit" 
-                    component={Link} 
-                    to="/login" 
-                    sx={{ 
+                  <Button
+                    color="inherit"
+                    component={Link}
+                    to="/login"
+                    sx={{
                       borderRadius: 20,
                       textTransform: 'none',
                       fontWeight: 500
@@ -436,51 +397,57 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                   {/* Mail Icon */}
                   <Box sx={{ position: 'relative', display: 'inline-flex' }}>
                     <Badge
-                      badgeContent={totalNotifications}
+                      badgeContent={unreadCount}
                       color="error"
+                      overlap="circular"
+                      anchorOrigin={{
+                        vertical: 'top',
+                        horizontal: 'right',
+                      }}
                       sx={{
-                        mr: { xs: 0, sm: 2 },
                         '& .MuiBadge-badge': {
                           fontSize: '0.7rem',
-                          height: '18px',
-                          minWidth: '18px',
-                        }
+                          height: 18,
+                          minWidth: 18,
+                        },
+                        mr: { xs: 0, sm: 2 },
                       }}
                     >
-                      <IconButton 
+                      <IconButton
                         color="inherit"
                         onClick={() => setPopup(true)}
-                        sx={{ 
+                        sx={{
                           p: 1,
-                          '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' }
+                          '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.1)' },
                         }}
                       >
                         <MailIcon sx={{ fontSize: '1.5rem' }} />
                       </IconButton>
                     </Badge>
+
                   </Box>
 
-                  <Box 
-                    sx={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 1, 
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
                       cursor: 'pointer',
                       '&:hover': { opacity: 0.9 }
-                    }} 
+                    }}
                     onClick={handleMenuOpen}
                   >
-                    <Avatar 
+                    <Avatar
                       src={profile?.avatar_url}
-                      sx={{ 
-                        width: 32, 
+                      sx={{
+                        width: 32,
                         height: 32,
                         border: '2px solid rgba(255, 255, 255, 0.2)'
                       }}
                     >
                       {profile?.username?.charAt(0) || "P"}
                     </Avatar>
-                    <Typography sx={{ 
+                    <Typography sx={{
                       display: { xs: 'none', sm: 'block' },
                       fontWeight: 500,
                       fontSize: '0.95rem'
@@ -520,7 +487,15 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
         <Box sx={{ mt: 0 }}>{children}</Box>
 
         {/* Dialogs */}
-        {isAuthenticated && <InboxComponent open={popup} onClose={() => setPopup(false)} onSuccess={handleSuccess} />}
+        {isAuthenticated &&
+          <InboxComponent
+            open={popup}
+            onClose={() => {
+              setPopup(false);
+              fetchMe();
+            }
+            }
+            onSuccess={handleSuccess} />}
         <DeleteDialog
           open={open}
           onClose={() => setOpen(false)}

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.user import search, update
+from app.crud.user import search, update, get_friend_suggestions
 from app.models.user import User
 from app.schemas.user import UserOut, UserUpdate
 
@@ -63,3 +63,11 @@ def search_users(
         import traceback
         traceback.print_exc()
         return []
+    
+@router.get("/suggestions", response_model=list[UserOut])
+def friend_suggestions(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user_id: int = 1  # replace with auth later
+):
+    return get_friend_suggestions(db, current_user_id, limit)

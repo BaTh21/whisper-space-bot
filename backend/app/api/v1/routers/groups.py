@@ -175,7 +175,7 @@ def invite_user_by_id(group_id: int,
                       db: Session = Depends(get_db),
                       current_user: User = Depends(get_current_user)
                       ):
-    return invite_user(group_id, user_id, db, current_user.id)
+    return invite_user(group_id, user_id, db, current_user)
 
 @router.delete("/remove/{group_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_member_by_id(group_id: int,

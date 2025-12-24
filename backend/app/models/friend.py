@@ -32,4 +32,5 @@ class Friend(Base):
     # Composite unique constraint to prevent duplicate friendships
     __table_args__ = (
         UniqueConstraint('user_id', 'friend_id', name='unique_friendship'),
+        UniqueConstraint("friend_id", "user_id", name="unique_reverse_friendship"),
     )

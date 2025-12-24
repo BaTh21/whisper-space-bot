@@ -1,10 +1,11 @@
 from sqlalchemy.orm import Session
 from app.schemas.auth import UserCreate
 from app.models.user import User
+from app.models.friend import Friend
 from app.schemas.user import UserUpdate
 from app.core.security import hash_password
 from typing import List
-
+from sqlalchemy import select
 
 def get_by_id(db: Session, user_id: int) -> User:
     return db.query(User).filter(User.id == user_id).first()
@@ -51,3 +52,30 @@ def verify(db: Session, user_id: int) -> User:
         db.commit()
         db.refresh(user)  # ✅ Refresh to get updated data
     return user  # ✅ Return the user object
+
+def get_friend_suggestions(
+    db: Session,
+    current_user_id: int,
+    limit: int = 20
+):
+    # Subquery of all connected users
+    connected_users = (
+        db.query(Friend.user_id.label("uid"))
+        .filter(Friend.friend_id == current_user_id)
+        .union(
+            db.query(Friend.friend_id.label("uid"))
+            .filter(Friend.user_id == current_user_id)
+        )
+        .subquery()
+    )
+
+    # Main query
+    users = (
+        db.query(User)
+        .filter(User.id != current_user_id)
+        .filter(~User.id.in_(connected_users))
+        .limit(limit)
+        .all()
+    )
+
+    return users

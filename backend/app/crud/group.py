@@ -26,6 +26,9 @@ from sqlalchemy.orm import joinedload
 from app.models.group_invite_link import GroupInviteLink
 from app.core.cloudinary import upload_to_cloudinary, delete_from_cloudinary, configure_cloudinary, extract_public_id_from_url
 
+from app.crud.activity import create_activity
+from app.models.activity import ActivityType
+
 configure_cloudinary()
 
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
@@ -138,7 +141,7 @@ def accept_group_invite(db: Session, invite_id: int, user_id: int) -> Group:
     Accept group invite by invite ID
     """
     invite = db.query(GroupInvite).filter(
-        GroupInvite.id == invite_id,
+        GroupInvite.group_id == invite_id,
         GroupInvite.invitee_id == user_id,
         GroupInvite.status == "pending"
     ).first()
@@ -353,7 +356,7 @@ def create_group_with_invites(db: Session, group_in: GroupCreate, creator_id: in
     db.refresh(db_group)
     return db_group
 
-def invite_user(group_id: int, user_id: int, db: Session, current_user_id: int):
+def invite_user(group_id: int, user_id: int, db: Session, current_user: User):
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
@@ -369,7 +372,7 @@ def invite_user(group_id: int, user_id: int, db: Session, current_user_id: int):
         
     new_invite = GroupInvite(
         group_id=group_id,
-        inviter_id=current_user_id,
+        inviter_id=current_user.id,
         invitee_id=user_id,
         status="pending",
         invite_token=secrets.token_urlsafe(16),
@@ -379,6 +382,15 @@ def invite_user(group_id: int, user_id: int, db: Session, current_user_id: int):
     db.add(new_invite)
     db.commit()
     db.refresh(new_invite)
+    
+    activity = create_activity(
+        db,
+        actor_id=current_user.id,
+        recipient_id=user_id,
+        activity_type=ActivityType.group_invite,
+        group_id=group_id,
+        extra_data = f"{current_user.username} invite you to the group"
+    )
     
     return new_invite
 

@@ -1,32 +1,30 @@
 import { Box, ListItem, List, ListItemAvatar, Avatar, ListItemText, Typography, Button } from "@mui/material"
-
-const friends = [
-    {
-        id: 1,
-        username: 'admin',
-        email: 'has been accepted your request',
-        avatar_url: 'https://imgs.search.brave.com/V9TGFVQbzCT9ioUsgVEOJjITmeIAee7LQWPo2HfdWZk/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9paDEu/cmVkYnViYmxlLm5l/dC9pbWFnZS40OTQ5/NTU4MjczLjc3NjQv/c3Qsc21hbGwsNTA3/eDUwNy1wYWQsNjAw/eDYwMCxmOGY4Zjgu/anBn'
-    },
-    {
-        id: 2,
-        username: 'test',
-        email: 'has been send friend request',
-        avatar_url: 'https://imgs.search.brave.com/DBqWkdJcZHY2lmjC7SlfsVM5Kuz_pX2LAg3oI0zc4i0/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9paDEu/cmVkYnViYmxlLm5l/dC9pbWFnZS41NDIw/MzQxODYyLjY0Njkv/c3Qsc21hbGwsNTA3/eDUwNy1wYWQsNjAw/eDYwMCxmOGY4Zjgu/dTIuanBn'
-    },
-    {
-        id: 3,
-        username: 'test',
-        email: 'liked your status',
-    },
-    {
-        id: 4,
-        username: 'test',
-        email: 'comment on your status',
-        avatar_url: 'https://imgs.search.brave.com/V9TGFVQbzCT9ioUsgVEOJjITmeIAee7LQWPo2HfdWZk/rs:fit:500:0:1:0/g:ce/aHR0cHM6Ly9paDEu/cmVkYnViYmxlLm5l/dC9pbWFnZS40OTQ5/NTU4MjczLjc3NjQv/c3Qsc21hbGwsNTA3/eDUwNy1wYWQsNjAw/eDYwMCxmOGY4Zjgu/anBn'
-    },
-]
+import { getActivityInbox } from "../../services/api";
+import { useEffect, useState } from 'react';
+import InboxComponent from "../dialogs/InboxComponent";
 
 function ActivityComponent() {
+    const [activities, setActivities] = useState([]);
+    const [popup, setPopup] = useState(false);
+
+    const fetchData = async () => {
+        try {
+            const acRes = await getActivityInbox();
+            setActivities(acRes);
+        } catch (error) {
+            setActivities([]);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const handleSuccess = () => {
+        fetchData();
+        setPopup(false);
+    }
+
     return (
         <Box
         >
@@ -38,8 +36,8 @@ function ActivityComponent() {
                     // width: 250
                 }}
             >
-                <Typography variant='h4'>Activity (4)</Typography>
-                <Button>Seen All</Button>
+                <Typography variant='h4'>Activity ({activities.length})</Typography>
+                <Button onClick={() => setPopup(true)}>Seen All</Button>
             </Box>
             <List
                 sx={{
@@ -49,15 +47,11 @@ function ActivityComponent() {
                     scrollbarWidth: "none",
                 }}
             >
-                {friends.map((friend) => {
+                {activities.map((activity) => {
 
                     return (
                         <ListItem
-                            key={friend.id}
-                            onClick={() => {
-                                setShowFriend(true);
-                                handleSelectFriend(friend);
-                            }}
+                            key={activity.id}
                             sx={{
                                 p: 1,
                                 mb: 1,
@@ -72,18 +66,18 @@ function ActivityComponent() {
                             }}
                         >
                             <ListItemAvatar sx={{ position: 'relative' }}>
-                                <Avatar src={friend.avatar_url} alt="profile img">
-                                    {friend.username.charAt(0) || "P"}
+                                <Avatar src={activity.actor.avatar_url} alt="profile img">
+                                    {activity.actor.username.charAt(0) || "P"}
                                 </Avatar>
                             </ListItemAvatar>
                             <ListItemText
                                 primary={
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        {friend.username}
+                                        {activity.actor.username}
                                     </Box>
                                 }
                                 secondary={
-                                    friend.email
+                                    activity.extra_data
                                 }
                                 secondaryTypographyProps={{
                                     sx: {
@@ -94,12 +88,23 @@ function ActivityComponent() {
                         </ListItem>
                     );
                 })}
-                {friends.length === 0 &&(
-                    <Box>
-                        No status yet
+                {activities.length === 0 && (
+                    <Box
+                        sx={{
+                            textAlign: 'center',
+                            color: 'error.main'
+                        }}
+                    >
+                        <Typography>
+                            404
+                        </Typography>
+                        <Typography>
+                            No activity found
+                        </Typography>
                     </Box>
                 )}
             </List>
+            <InboxComponent open={popup} onClose={() => setPopup(false)} onSuccess={handleSuccess} activities={activities} />
         </Box>
     )
 }

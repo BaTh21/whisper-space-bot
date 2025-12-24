@@ -435,6 +435,7 @@ function GroupMenuDialog({ open, onClose, group, onSuccess, members }) {
         onClose={() => setViewMember(false)}
         members={members}
         creatorId={selectedCreatorId}
+        group={group}
       />
     </>
   );
