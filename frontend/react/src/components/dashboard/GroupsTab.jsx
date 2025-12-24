@@ -82,7 +82,7 @@ const GroupsTab = ({ groups }) => {
               size={isMobile ? 'small' : 'medium'}
               onClick={() => setOpenCreateGroup(true)}
             >
-              {isMobile ? t('create') : t('create_group')}
+              {t('create')}
             </Button>
           </Box>
 

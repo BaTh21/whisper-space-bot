@@ -130,7 +130,7 @@ const CreateGroupDialog = ({
           />
 
           {/* Friend Invitation Section */}
-          <FormControl fullWidth margin="normal">
+          {/* <FormControl fullWidth margin="normal">
             <InputLabel>{t('invite_friends')}</InputLabel>
             <Select
               multiple
@@ -184,7 +184,7 @@ const CreateGroupDialog = ({
                 ))
               )}
             </Select>
-          </FormControl>
+          </FormControl> */}
 
           {/* Selected Friends Count */}
           {formik.values.invited_friends.length > 0 && (

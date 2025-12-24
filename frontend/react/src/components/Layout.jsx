@@ -152,7 +152,9 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
     setActiveTab(newValue);
     const tabToPathMap = {
       0: '/feed', 1: '/messages', 2: '/friends', 3: '/groups',
-      4: '/notes', 5: '/search', 6: '/blocked', 7: '/profile',
+      4: '/notes', 5: '/search',
+      //  6: '/blocked', 
+       7: '/profile',
     };
     const newPath = tabToPathMap[newValue] || '/feed';
     navigate(newPath);

@@ -1273,11 +1273,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
 
       <Box sx={{ display: 'flex', height: '80vh' }}>
-        {(isMobile || !showDiaries && (
+        {/* {(isMobile || !showDiaries && (
           <GroupSideComponent
             groupId={groupId}
           />
-        ))}
+        ))} */}
 
         <Drawer
           anchor='right'
