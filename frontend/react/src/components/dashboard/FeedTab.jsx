@@ -138,12 +138,12 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       const result = await sendFriendRequest(userId);
 
       if (result.success) {
-        let message = result.message || 'Friend request sent successfully';
+        let message = result.message || t('request_sent');
 
         if (result.code === 'ALREADY_EXISTS') {
-          message = result.message || 'Friend request already sent';
+          message = result.message || t('already_sent');
         } else if (result.code === 'ALREADY_FRIENDS') {
-          message = 'You are already friends';
+          message = t('already_friends');
         }
 
         showMessage(message, 'success');
@@ -151,16 +151,16 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
         // Optional: trigger refresh to update any friend counts
         if (onDataUpdate) onDataUpdate();
       } else {
-        showMessage(result.message || 'Failed to send friend request', 'error');
+        showMessage(result.message || t('request_failed'), 'error');
       }
     } catch (err) {
       console.error('Send friend request failed:', err);
-      let errorMessage = err.message || 'An unexpected error occurred';
+      let errorMessage = err.message || t('unexpected_error');
 
       if (err.message?.includes('401')) {
-        errorMessage = 'Please log in again';
+        errorMessage = t('please_login');
       } else if (!navigator.onLine) {
-        errorMessage = 'No internet connection';
+        errorMessage = t('no_internet');
       }
 
       showMessage(errorMessage, 'error');
@@ -257,12 +257,12 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
         const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB for images
 
         if (!isValidType) {
-          showMessage('Only image files are allowed (jpg, png, gif, etc.)', 'error');
+          showMessage(t('invalid_file_type (jpg, png, gif, etc.)'), 'error');
           return false;
         }
 
         if (!isValidSize) {
-          showMessage('Each image must be less than 10MB', 'error');
+          showMessage(t('file_too_large'), 'error');
           return false;
         }
 
@@ -271,7 +271,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
           const currentCount = mediaType === 'image' ? editImages.length : editVideos.length;
           const maxCount = mediaType === 'image' ? 10 : 3;
           if (currentCount + files.length > maxCount) {
-            showMessage(`Maximum ${maxCount} ${mediaType === 'image' ? 'images' : 'videos'} allowed`, 'error');
+            showMessage(t('max_images ${maxCount} ${mediaType === "image" ? "images" : "videos"} allowed'), 'error');
             return false;
           }
         }
@@ -282,19 +282,19 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
         const isValidSize = file.size <= 50 * 1024 * 1024; // 50MB for videos
 
         if (!isValidType) {
-          showMessage('Only video files are allowed (mp4, mov, avi, webm, mkv)', 'error');
+          showMessage(t('invalid_video_type (mp4, mov, avi, webm, mkv)'), 'error');
           return false;
         }
 
         if (!isValidSize) {
-          showMessage('Each video must be less than 50MB', 'error');
+          showMessage(t('video_too_large'), 'error');
           return false;
         }
 
         // Check count for editing
         if (diaryId && editingDiary === diaryId) {
           if (editVideos.length + files.length > 3) {
-            showMessage('Maximum 3 videos allowed', 'error');
+            showMessage(t('max_videos 3 videos allowed'), 'error');
             return false;
           }
         }
@@ -431,11 +431,11 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
     setDeleteLoading(true);
     try {
       await deleteDiaryById(diaryToDelete.id);
-      showMessage('Diary deleted successfully');
+      showMessage(t('diary_deleted'));
       handleDeleteCancel();
       if (onDataUpdate) onDataUpdate();
     } catch (err) {
-      showMessage(err.message || 'Failed to delete diary', 'error');
+      showMessage(err.message || t('failed_delete_diary'), 'error');
       setDeleteLoading(false);
     }
   };
@@ -481,12 +481,12 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
     setEditVideos([]);
     setEditLoading(false);
     setMediaUpdateTrigger(0);
-    showMessage('Edit cancelled', 'info');
+    showMessage(t('edit_cancelled'), 'info');
   };
 
   const handleEditSave = async (diaryId) => {
     if (!editTitle.trim() || !editContent.trim()) {
-      showMessage('Title and content are required', 'error');
+      showMessage(t('title_content_required'), 'error');
       return;
     }
 
@@ -518,12 +518,12 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       updateData.videos = [...existingVideoUrls, ...newBase64Videos];
 
       await updateDiaryById(diaryId, updateData);
-      showMessage('Diary updated successfully');
+      showMessage(t('diary_updated'));
       handleEditCancel();
       if (onDataUpdate) onDataUpdate();
     } catch (err) {
       console.error('Update diary error:', err);
-      showMessage(err.message || 'Failed to update diary', 'error');
+      showMessage(err.message || t('failed_update_diary'), 'error');
       setEditLoading(false);
     }
   };
@@ -548,7 +548,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       }
       setLikedDiaries(newLikedDiaries);
     } catch (err) {
-      showMessage(err.message || 'Failed to like diary', 'error');
+      showMessage(err.message || t('failed_like'), 'error');
     }
   };
 
@@ -573,9 +573,9 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
 
       setCommentTexts(prev => ({ ...prev, [diaryId]: '' }));
       setSelectedCommentImages(prev => ({ ...prev, [diaryId]: [] }));
-      showMessage('Comment added successfully');
+      showMessage(t('comment_added'));
     } catch (err) {
-      showMessage(err.message || 'Failed to add comment', 'error');
+      showMessage(err.message || t('failed_add_comment'), 'error');
     } finally {
       setCommentLoading(prev => ({ ...prev, [diaryId]: false }));
     }
@@ -617,7 +617,7 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       // Clear reply form
       setSelectedCommentImages(prev => ({ ...prev, [`reply-${parentCommentId}`]: [] }));
       setReplyingTo(null);
-      showMessage('Reply added successfully');
+      showMessage(t('reply_added'));
     } catch (err) {
       showMessage(err.message || 'Failed to add reply', 'error');
     }
@@ -678,9 +678,9 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
         return updatedState;
       });
 
-      showMessage('Comment updated successfully');
+      showMessage(t('comment_updated'));
     } catch (err) {
-      showMessage(err.message || 'Failed to update comment', 'error');
+      showMessage(err.message || t('failed_update_comment'), 'error');
       throw err;
     }
   };
@@ -725,9 +725,9 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
         return updatedState;
       });
 
-      showMessage('Comment deleted successfully');
+      showMessage(t('comment_deleted'));
     } catch (err) {
-      showMessage(err.message || 'Failed to delete comment', 'error');
+      showMessage(err.message || t('failed_delete_comment'), 'error');
     } finally {
       handleCommentDeleteCancel();
     }

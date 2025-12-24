@@ -1296,8 +1296,16 @@ export const getPrivateChat = async (friendId) => {
 };
 
 export const getGroupMessage = async (groupId) => {
-  const res = await api.get(`/api/v1/groups/${groupId}/message`);
-  return res.data;
+  try {
+    const res = await api.get(`/api/v1/groups/${groupId}/message`);
+    return res.data;
+  } catch (error) {
+    if (error.response?.status === 500) {
+      console.warn("Group messages endpoint returned 500 - backend issue");
+      return []; // return empty array so UI doesn't crash
+    }
+    throw error;
+  }
 };
 
 export const updateMessageById = async (messageId, content) => {

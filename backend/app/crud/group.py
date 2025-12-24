@@ -533,3 +533,8 @@ def get_group_covers(group_id: int, db: Session):
     )
 
     return covers
+def exists_member(db: Session, group_id: int, user_id: int) -> bool:
+    return db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == user_id
+    ).first() is not None

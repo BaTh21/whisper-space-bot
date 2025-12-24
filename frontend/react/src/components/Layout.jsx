@@ -1,4 +1,3 @@
-// Layout.jsx - Clean style time display
 import { AppBar, Avatar, Box, Button, Drawer, IconButton, Menu, MenuItem, Tab, Tabs, Toolbar, Typography } from '@mui/material';
 import Badge from '@mui/material/Badge';
 import { useEffect, useState, useMemo } from 'react';
@@ -35,18 +34,19 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const [showLabel, setShowLabel] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Language menu
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const langMenuOpen = Boolean(langAnchorEl);
 
   // Cambodia Time state
-  const [currentTime, setCurrentTime] = useState('');
   const [activities, setActivities] = useState([]);
 
   const unreadCount = useMemo(
     () => activities.filter(a => !a.is_read).length,
     [activities]
   );
+
+  // Cambodia Time state - separate desktop/mobile formats
+  const [currentTime, setCurrentTime] = useState({ desktop: '', mobile: '' });
 
   const pathToTabMap = {
     '/feed': 0,
@@ -63,31 +63,34 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
 
-  // Function to update Cambodia time
+  // Update Cambodia time: Desktop full, Mobile time only
   const updateCambodiaTime = () => {
     const now = new Date();
 
-    // Cambodia is UTC+7 (Indochina Time)
-    const options = {
+    const commonOptions = {
       timeZone: 'Asia/Phnom_Penh',
-      hour12: true,
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h12'
+      hour12: true,
     };
 
-    const formatter = new Intl.DateTimeFormat('en-US', options);
-    const parts = formatter.formatToParts(now);
+    const desktopOptions = {
+      ...commonOptions,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    };
+    const desktopFormatter = new Intl.DateTimeFormat('en-US', desktopOptions);
+    const desktopParts = desktopFormatter.formatToParts(now);
+    const getDesktop = (type) => desktopParts.find(p => p.type === type)?.value || '';
+    const desktopTime = `${getDesktop('weekday')}, ${getDesktop('day')} ${getDesktop('month')} • ${getDesktop('hour')}:${getDesktop('minute')} ${getDesktop('dayPeriod')}`;
 
-    // Extract hour, minute, second, and dayPeriod (AM/PM)
-    const hour = parts.find(p => p.type === 'hour').value;
-    const minute = parts.find(p => p.type === 'minute').value;
-    const second = parts.find(p => p.type === 'second').value;
-    const dayPeriod = parts.find(p => p.type === 'dayPeriod').value; // 'AM' or 'PM'
+    const mobileFormatter = new Intl.DateTimeFormat('en-US', commonOptions);
+    const mobileParts = mobileFormatter.formatToParts(now);
+    const getMobile = (type) => mobileParts.find(p => p.type === type)?.value || '';
+    const mobileTime = `${getMobile('hour')}:${getMobile('minute')} ${getMobile('dayPeriod')}`;
 
-    const timeString = `${hour}:${minute}:${second} ${dayPeriod}`;
-    setCurrentTime(timeString);
+    setCurrentTime({ desktop: desktopTime, mobile: mobileTime });
   };
 
   const fetchMe = async () => {
@@ -115,7 +118,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
     setActiveTab(currentTab);
   }, [location.pathname]);
 
-  // Set up Cambodia time interval
+  // Update time every second
   useEffect(() => {
     updateCambodiaTime();
     const intervalId = setInterval(updateCambodiaTime, 1000);
@@ -263,58 +266,43 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                   <MenuIcon />
                 </IconButton>
               </Box>
-              <Box component="img" onClick={handleHomePageClick} src={LogoImg} alt="logo" sx={{ width: 50, '&:hover': { scale: 1.1 } }} />
+              <Box component="img" onClick={handleHomePageClick} src={LogoImg} alt="logo" sx={{ width: 50, cursor: 'pointer', '&:hover': { transform: 'scale(1.1)' } }} />
               <Typography variant="h6" sx={{ display: { xs: 'none', sm: 'block' } }}>
                 {t("appName")}
               </Typography>
             </Box>
 
-            {/* Right: Auth + Language + Time + User Menu */}
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            {/* Right Section */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1.5 } }}>
+              {/* Time Display */}
               {isAuthenticated && (
-                <>
-
-                  <Box sx={{
-                    display: { xs: 'none', md: 'flex' },
-                    alignItems: 'center',
-                    gap: 0.75,
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: 1,
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    bgcolor: 'rgba(255, 255, 255, 0.08)',
+                <Box sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: { xs: 0.8, sm: 1.5 },
+                  py: 0.5,
+                  borderRadius: 1,
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  bgcolor: 'rgba(255, 255, 255, 0.08)',
+                }}>
+                  <AccessTimeIcon sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem' }, opacity: 0.8 }} />
+                  <Typography variant="body2" sx={{
+                    fontWeight: 'medium',
+                    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+                    fontFamily: 'monospace',
+                    letterSpacing: '0.3px',
+                    whiteSpace: 'nowrap'
                   }}>
-                    <AccessTimeIcon sx={{ fontSize: '0.9rem', opacity: 0.8 }} />
-                    <Typography variant="body2" sx={{
-                      fontWeight: 'medium',
-                      fontSize: '0.85rem',
-                      fontFamily: 'monospace',
-                      letterSpacing: '0.5px'
-                    }}>
-                      {currentTime}
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{
-                    display: { xs: 'flex', md: 'none' },
-                    alignItems: 'center',
-                    gap: 0.5,
-                    px: 1,
-                    py: 0.5,
-                    borderRadius: 1,
-                    bgcolor: 'rgba(255, 255, 255, 0.1)',
-                  }}>
-                    <AccessTimeIcon sx={{ fontSize: '0.8rem' }} />
-                    <Typography variant="caption" sx={{
-                      fontSize: '0.75rem',
-                      fontFamily: 'monospace'
-                    }}>
-                      {currentTime.replace(/:\d{2}($| )/g, '$1').trim()}
-                    </Typography>
-                  </Box>
-                </>
+                    {/* Use desktop format on md+, mobile format on xs */}
+                    {currentTime.desktop && currentTime.mobile
+                      ? (window.innerWidth >= 900 ? currentTime.desktop : currentTime.mobile)
+                      : 'Loading...'}
+                  </Typography>
+                </Box>
               )}
 
+              {/* Language Button */}
               {isAuthenticated && (
                 <>
                   <IconButton
@@ -337,57 +325,28 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                     anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                     transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                     PaperProps={{
-                      sx: {
-                        mt: 1,
-                        minWidth: 140,
-                      }
+                      sx: { mt: 1, minWidth: 140 }
                     }}
                   >
                     <MenuItem onClick={() => changeLanguage('en')}>
-                      <img
-                        src="/flags/uk.png"
-                        alt="English"
-                        style={{ width: 20, height: 14, marginRight: 8 }}
-                      />
+                      <img src="/flags/uk.png" alt="English" style={{ width: 20, height: 14, marginRight: 8 }} />
                       English
                     </MenuItem>
                     <MenuItem onClick={() => changeLanguage('km')}>
-                      <img
-                        src="/flags/kh.png"
-                        alt="Khmer"
-                        style={{ width: 20, height: 14, marginRight: 8 }}
-                      />
+                      <img src="/flags/kh.png" alt="Khmer" style={{ width: 20, height: 14, marginRight: 8 }} />
                       ភាសាខ្មែរ
                     </MenuItem>
                   </Menu>
                 </>
               )}
 
-              {/* Guest Buttons */}
+              {/* Guest or Authenticated */}
               {!isAuthenticated ? (
                 <>
-                  <Button
-                    color="inherit"
-                    component={Link}
-                    to="/register"
-                    sx={{
-                      borderRadius: 20,
-                      textTransform: 'none',
-                      fontWeight: 500
-                    }}
-                  >
+                  <Button color="inherit" component={Link} to="/register" sx={{ borderRadius: 20, textTransform: 'none', fontWeight: 500 }}>
                     {t("register")}
                   </Button>
-                  <Button
-                    color="inherit"
-                    component={Link}
-                    to="/login"
-                    sx={{
-                      borderRadius: 20,
-                      textTransform: 'none',
-                      fontWeight: 500
-                    }}
-                  >
+                  <Button color="inherit" component={Link} to="/login" sx={{ borderRadius: 20, textTransform: 'none', fontWeight: 500 }}>
                     {t("login")}
                   </Button>
                 </>
@@ -445,37 +404,20 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
                         border: '2px solid rgba(255, 255, 255, 0.2)'
                       }}
                     >
-                      {profile?.username?.charAt(0) || "P"}
+                      {profile?.username?.charAt(0)?.toUpperCase() || "P"}
                     </Avatar>
-                    <Typography sx={{
-                      display: { xs: 'none', sm: 'block' },
-                      fontWeight: 500,
-                      fontSize: '0.95rem'
-                    }}>
+                    <Typography sx={{ display: { xs: 'none', sm: 'block' }, fontWeight: 500, fontSize: '0.95rem', color: 'white' }}>
                       {profile?.username}
                     </Typography>
                   </Box>
 
-                  <Menu
-                    anchorEl={anchorEl}
-                    open={menuOpen}
-                    onClose={handleMenuClose}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                    PaperProps={{
-                      sx: {
-                        mt: 1,
-                        minWidth: 180,
-                      }
-                    }}
-                  >
+                  {/* User Menu */}
+                  <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose} PaperProps={{ sx: { mt: 1, minWidth: 180 } }}>
                     <MenuItem onClick={() => { handleMenuClose(); navigate('/profile'); if (onProfileClick) onProfileClick(7); }}>
-                      <PersonIcon sx={{ mr: 1.5, fontSize: '1.1rem' }} />
-                      {t("profile")}
+                      <PersonIcon sx={{ mr: 1.5 }} /> {t("profile")}
                     </MenuItem>
                     <MenuItem onClick={() => { handleMenuClose(); setOpen(true); }}>
-                      <LogoutIcon sx={{ mr: 1.5, fontSize: '1.1rem' }} />
-                      {t("logout")}
+                      <LogoutIcon sx={{ mr: 1.5 }} /> {t("logout")}
                     </MenuItem>
                   </Menu>
                 </Box>
@@ -484,7 +426,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ mt: 0 }}>{children}</Box>
+        <Box >{children}</Box>
 
         {/* Dialogs */}
         {isAuthenticated &&

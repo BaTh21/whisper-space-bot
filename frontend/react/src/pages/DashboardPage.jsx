@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BlockedUsersTab from '../components/BlockedUsersTab';
+import CreateGroupDialog from '../components/CreateGroupDialog';
 import FeedTab from '../components/dashboard/FeedTab';
 import FriendsTab from '../components/dashboard/FriendsTab';
 import GroupsTab from '../components/dashboard/GroupsTab';
@@ -16,7 +17,6 @@ import NotesTab from '../components/dashboard/NotesTab';
 import ProfileSection from '../components/dashboard/ProfileSection';
 import SearchUsersTab from '../components/dashboard/SearchUsersTab';
 import CreateDiaryDialog from '../components/dialogs/CreateDiaryDialog';
-import CreateGroupDialog from '../components/dialogs/CreateGroupDialog';
 import ViewGroupDialog from '../components/dialogs/ViewGroupDialog';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
