@@ -92,7 +92,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
   const [callPopupOpen, setCallPopupOpen] = useState(false);
-  const [callingOpen, setCallingOpen] = useState(true);
+  const [callingOpen, setCallingOpen] = useState(false);
   const remoteStreamsRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [incomingCall, setIncomingCall] = useState(null);
