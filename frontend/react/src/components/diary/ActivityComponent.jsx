@@ -92,12 +92,9 @@ function ActivityComponent() {
                     <Box
                         sx={{
                             textAlign: 'center',
-                            color: 'error.main'
+                            // color: 'error.main'
                         }}
                     >
-                        <Typography>
-                            404
-                        </Typography>
                         <Typography>
                             No activity found
                         </Typography>
