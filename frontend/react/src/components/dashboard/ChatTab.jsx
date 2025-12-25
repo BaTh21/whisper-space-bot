@@ -11,6 +11,7 @@ import GroupChatPage from "../../pages/GroupChatPage";
 import CreateGroupDialog from "../CreateGroupDialog";
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import { useTranslation } from 'react-i18next';
+import Logo from '/whisperspace.png';
 
 function ChatTab({ friends, profile, setError, setSuccess }) {
     const [chats, setChats] = useState([]);
@@ -217,6 +218,28 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                             toggleGroupList={toggleGroupList}
                         />
                     )}
+                </Box>
+            )}
+            {(!showFriend ) && !isMobile && !selectedGroupId &&(
+                <Box
+                    sx={{
+                        width: '100%',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        flexDirection: 'column'
+                    }}
+                >
+                    <img src={Logo} alt="logo" width={100}/>
+                    <Typography
+                    sx={{
+                        fontSize: 20,
+                        color: 'primary.main',
+                        mt: 2
+                    }}
+                    >
+                        Tab a chat to start new message
+                    </Typography>
                 </Box>
             )}
             <CreateGroupDialog
