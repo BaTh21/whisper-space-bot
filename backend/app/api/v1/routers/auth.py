@@ -211,16 +211,18 @@ async def forgot_password(
 ):
     user = get_by_email(db, req.email)
     if not user:
-        # Security: don't reveal if email exists
-        return BaseResponse(msg="If the email is registered, a password reset code has been sent.")
+        # Security best practice: don't reveal if email exists
+        return BaseResponse(msg="If the email is registered, a reset code has been sent.")
 
+    # Create reset code
     reset_obj = create_password_reset_code(db, user.id)
-    
+
+    # Try to send email
     email_sent = await send_password_reset_email(req.email, reset_obj.code)
     if not email_sent:
         background_tasks.add_task(send_password_reset_email, req.email, reset_obj.code)
 
-    return BaseResponse(msg="If the email is registered, a password reset code has been sent.")
+    return BaseResponse(msg="If the email is registered, a reset code has been sent.")
 
 
 @router.post("/reset-password", response_model=BaseResponse)
@@ -232,7 +234,6 @@ def reset_password(
     if not reset_obj:
         raise HTTPException(status_code=400, detail="Invalid or expired reset code")
 
-    # Safely get user
     user = db.query(User).filter(User.id == reset_obj.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -241,8 +242,7 @@ def reset_password(
     user.password_hash = hash_password(req.new_password)
     db.commit()
 
-    # Delete the used code
-    db.delete(reset_obj)
-    db.commit()
+    # Invalidate the code
+    delete_reset_code(db, reset_obj.id)
 
-    return BaseResponse(msg="Password successfully reset. You can now log in.")
+    return BaseResponse(msg="Password reset successfully. You can now log in.")
