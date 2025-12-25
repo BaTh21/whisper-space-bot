@@ -9,8 +9,6 @@ import DeleteDialog from './dialogs/DeleteDialog';
 import LogoImg from '/whisperspace.png';
 
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import BlockIcon from '@mui/icons-material/Block';
-import GroupsIcon from '@mui/icons-material/Groups';
 import HomeIcon from '@mui/icons-material/Home';
 import LanguageIcon from '@mui/icons-material/Language';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -18,10 +16,9 @@ import MailIcon from '@mui/icons-material/Mail';
 import MenuIcon from '@mui/icons-material/Menu';
 import PeopleIcon from '@mui/icons-material/People';
 import PersonIcon from '@mui/icons-material/Person';
-import PersonSearchIcon from '@mui/icons-material/PersonSearch';
-import ReviewsIcon from '@mui/icons-material/RateReview';
 import StickyNote2Icon from '@mui/icons-material/StickyNote2';
 import InboxComponent from './dialogs/InboxComponent';
+import AssistantIcon from '@mui/icons-material/Assistant';
 
 const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const { t, i18n } = useTranslation();
@@ -37,7 +34,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const langMenuOpen = Boolean(langAnchorEl);
 
-  // Cambodia Time state
   const [activities, setActivities] = useState([]);
 
   const unreadCount = useMemo(
@@ -45,7 +41,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
     [activities]
   );
 
-  // Cambodia Time state - separate desktop/mobile formats
   const [currentTime, setCurrentTime] = useState({ desktop: '', mobile: '' });
 
   const pathToTabMap = {
@@ -60,7 +55,6 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
 
-  // Update Cambodia time: Desktop full, Mobile time only
   const updateCambodiaTime = () => {
     const now = new Date();
 
@@ -209,7 +203,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
         }}
       >
         <Tab icon={<HomeIcon />} label={showLabel ? t("feed") : null} />
-        <Tab icon={<ReviewsIcon />} label={showLabel ? t("messages") : null} />
+        <Tab icon={<AssistantIcon />} label={showLabel ? t("messages") : null} />
         <Tab icon={<PeopleIcon />} label={showLabel ? t("friends") : null} />
         <Tab icon={<StickyNote2Icon />} label={showLabel ? t("notes") : null} />
         <Tab icon={<PersonIcon />} label={showLabel ? t("profile") : null} />

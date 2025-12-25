@@ -6,18 +6,16 @@ import { getChatList } from "../../services/api"
 import { useState, useEffect } from "react"
 import SearchIcon from '@mui/icons-material/Search';
 import MessagesTab from "./MessagesTab";
-import { checkBlockedStatus } from '../../services/api';
 import GroupChatPage from "../../pages/GroupChatPage";
 import CreateGroupDialog from "../CreateGroupDialog";
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import { useTranslation } from 'react-i18next';
-import Logo from '/whisperspace.png';
+import Logo from '/pengu-pudgy.webp';
 
 function ChatTab({ friends, profile, setError, setSuccess }) {
     const [chats, setChats] = useState([]);
     const [showFriend, setShowFriend] = useState(false);
     const [selectedFriend, setSelectedFriend] = useState(null);
-    const [blockStatus, setBlockStatus] = useState({});
     const [showGroupList, setShowGroupList] = useState(true);
     const [selectedGroupId, setSelectedGroupId] = useState(null);
     const [openCreateGroup, setOpenCreateGroup] = useState(false);
@@ -34,19 +32,6 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
         }
     };
 
-    const checkIfUserIsBlocked = async (userId) => {
-        try {
-            const status = await checkBlockedStatus(userId);
-            setBlockStatus(prev => ({
-                ...prev,
-                [userId]: status.is_blocked
-            }));
-            return status.is_blocked;
-        } catch (error) {
-            return blockedUsers.some(user => user.id === userId);
-        }
-    };
-
     const fetchData = async () => {
         const res = await getChatList();
         setChats(res);
@@ -57,24 +42,9 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
     }, []);
 
     const handleSuccess = () => {
+        setOpenCreateGroup(false);
         fetchData();
     }
-
-    console.log("chat", chats)
-
-    const handleSelectedFriend = async (friend) => {
-        const isBlocked =
-            blockStatus[friend.id] || await checkIfUserIsBlocked(friend.id);
-
-        if (isBlocked) {
-            setError(`You have blocked ${friend.username}. Unblock them to chat.`);
-            return;
-        }
-
-        if (selectedFriend?.id === friend.id) return;
-
-        setSelectedFriend(friend);
-    };
 
     return (
         <Box
@@ -88,7 +58,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                 <Box sx={{ width: { xs: '100%', md: 300 } }}>
                     <Box sx={{ pb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            All Chats
+                            All Chats ({chats.length})
                         </Typography>
                         <Button
                             variant="contained"
@@ -122,7 +92,14 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         />
                     </Box>
 
-                    <Box sx={{ mt: 2, height: '80vh', overflowY: 'auto' }}>
+                    <Box
+                        sx={{
+                            mt: 2,
+                            height: '74vh',
+                            overflowY: 'auto',
+                            '&::-webkit-scrollbar': { display: 'none' },
+                            scrollbarWidth: 'none',
+                        }}>
                         <List>
                             {chats.map((chat) => (
                                 <ListItem
@@ -154,7 +131,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                         backgroundColor:
                                             (chat.type === 'private' && selectedFriend?.id === chat.id) ||
                                                 (chat.type === 'group' && selectedGroupId === chat.id)
-                                                ? 'primary.light'
+                                                ? 'primary.main'
                                                 : 'white',
                                         color:
                                             (chat.type === 'private' && selectedFriend?.id === chat.id) ||
@@ -168,6 +145,30 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                         },
                                     }}
                                 >
+                                    <ListItemText
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            right: 0,
+                                            fontSize: 12,
+                                            backgroundColor:
+                                                (chat.type === 'private' && selectedFriend?.id === chat.id) ||
+                                                    (chat.type === 'group' && selectedGroupId === chat.id)
+                                                    ? 'white'
+                                                    : 'primary.main',
+                                            color:
+                                                (chat.type === 'private' && selectedFriend?.id === chat.id) ||
+                                                    (chat.type === 'group' && selectedGroupId === chat.id)
+                                                    ? 'black'
+                                                    : 'white',
+                                            borderRadius: '2px 9px 2px 2px',
+                                            width: 50,
+                                            textAlign: 'center',
+                                            transform: 'translateY(-2px)'
+                                        }}
+                                    >
+                                        {(chat.type === 'group' ? ('Group') : ('Friend'))}
+                                    </ListItemText>
                                     <ListItemAvatar sx={{ position: 'relative' }}>
                                         <Avatar src={chat.avatar}
                                             sx={{
@@ -186,7 +187,20 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                             </Box>
                                         }
                                         secondary={chat.last_message ? chat.last_message : 'Tap to start new message'}
-                                        secondaryTypographyProps={{ sx: { fontSize: '0.75rem' } }}
+                                        secondaryTypographyProps={{
+                                            sx: {
+                                                fontSize: '0.75rem',
+                                                maxWidth: 150,
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                color:
+                                                    (chat.type === 'private' && selectedFriend?.id === chat.id) ||
+                                                        (chat.type === 'group' && selectedGroupId === chat.id)
+                                                        ? 'primary.contrastText'
+                                                        : 'inherit',
+                                            }
+                                        }}
                                     />
                                 </ListItem>
                             ))}
@@ -220,23 +234,26 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                     )}
                 </Box>
             )}
-            {(!showFriend ) && !isMobile && !selectedGroupId &&(
+            {(!showFriend) && !isMobile && !selectedGroupId && (
                 <Box
                     sx={{
                         width: '100%',
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        flexDirection: 'column'
+                        flexDirection: 'column',
+                        border: 1,
+                        borderColor: 'divider',
+                        height: '89vh'
                     }}
                 >
-                    <img src={Logo} alt="logo" width={100}/>
+                    <img src={Logo} alt="logo" width={150} />
                     <Typography
-                    sx={{
-                        fontSize: 20,
-                        color: 'primary.main',
-                        mt: 2
-                    }}
+                        sx={{
+                            fontSize: 20,
+                            color: 'primary.main',
+                            mt: 1
+                        }}
                     >
                         Tab a chat to start new message
                     </Typography>
