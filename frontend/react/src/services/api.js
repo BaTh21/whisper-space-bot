@@ -2071,5 +2071,6 @@ export const ensureValidToken = async () => {
 
   return true;
 };
-
+export const forgotPassword = (data) => api.post('/api/v1/auth/forgot-password', data);
+export const resetPassword = (data) => api.post('/api/v1/auth/reset-password', data);
 export default api;
