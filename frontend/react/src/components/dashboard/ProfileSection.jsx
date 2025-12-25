@@ -1,24 +1,26 @@
-// ProfileSection.jsx
-// dashboard/ProfileSection.jsx
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 import DeleteIcon from '@mui/icons-material/Delete';
+import HttpsIcon from '@mui/icons-material/Https';
+import { IconButton, ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material';
 import {
-  Alert,
   Avatar,
   Box,
   Button,
   Card,
   Chip,
-  Collapse,
   Typography,
   useMediaQuery,
   useTheme,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogContentText,
   DialogActions,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  ListItem
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useRef, useState } from 'react';
@@ -26,11 +28,17 @@ import * as Yup from 'yup';
 import { useAvatar } from '../../hooks/useAvatar';
 import { updateMe, uploadAvatar, deleteAvatar } from '../../services/api'; // Import deleteAvatar
 import { useTranslation } from 'react-i18next';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import SettingsIcon from '@mui/icons-material/Settings';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 
-const ProfileSection = ({ profile, setProfile, error, success, setError, setSuccess }) => {
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import UploadIcon from '@mui/icons-material/Upload';
+
+const ProfileSection = ({ profile, setProfile, setError, setSuccess }) => {
   const { t } = useTranslation();
 
-  const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -38,12 +46,28 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const [imagePreview, setImagePreview] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const [activeMenu, setActiveMenu] = useState(0);
+  const [avatarMenuAnchor, setAvatarMenuAnchor] = useState(null);
+  const avatarMenuOpen = Boolean(avatarMenuAnchor);
+
+  const handleAvatarClick = (event) => {
+    setAvatarMenuAnchor(event.currentTarget);
+  };
+
+  const handleAvatarMenuClose = () => {
+    setAvatarMenuAnchor(null);
+  };
+
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
-  const getAvatarSize = () => (isMobile ? 80 : isTablet ? 100 : 120);
+  const menus = [
+    { label: 'My Diary', icon: <MenuBookIcon /> },
+    { label: 'Private', icon: <HttpsIcon /> },
+  ];
+
   const getAvatarFontSize = () => (isMobile ? '2rem' : isTablet ? '2.5rem' : '3rem');
   const getTitleFontSize = () =>
     isMobile ? '1.5rem' : isTablet ? '1.75rem' : '2.125rem';
@@ -97,7 +121,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
 
         const response = await updateMe(cleanData);
         setProfile(response);
-        setEditing(false);
 
         setSuccess(
           selectedFile
@@ -105,7 +128,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
             : t('profile_updated')
         );
 
-        // Clear the success message after 2 seconds
         setTimeout(() => {
           setSuccess(null);
         }, 2000);
@@ -146,17 +168,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
     setError(null);
   };
 
-  const handleAvatarClick = () => fileInputRef.current?.click();
-
-  const handleDeleteAvatar = async () => {
-    if (!profile?.avatar_url) {
-      setError(t('no_avatar_to_delete'));
-      return;
-    }
-
-    setDeleteDialogOpen(true);
-  };
-
   const confirmDeleteAvatar = async () => {
     setDeleting(true);
     setError(null);
@@ -187,10 +198,9 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
   return (
-    <Card
+    <Box
       sx={{
         mb: 3,
-        p: { xs: 2, sm: 3 },
         borderRadius: { xs: '12px', sm: '16px' },
         border: 1,
         borderColor: 'divider',
@@ -198,23 +208,23 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
         alignItems: 'center',
-        height: '80vh'
+        height: '89vh',
+        position: 'relative'
       }}
     >
       <Box
         sx={{
           display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 3,
+          gap: {xs: 1, md: 3},
           width: '100%',
           maxWidth: 500,
+          mt: 5,
+          px: 2
         }}
       >
-        {/* Avatar Section */}
         <Box
           sx={{
             position: 'relative',
@@ -224,7 +234,6 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
             gap: 2,
           }}
         >
-          {/* Avatar with Camera Icon */}
           <Box
             sx={{
               position: 'relative',
@@ -239,8 +248,8 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               src={currentAvatarUrl}
               alt={profile?.username}
               sx={{
-                width: 200,
-                height: 200,
+                width: { xs: 150, md: 200 },
+                height: { xs: 150, md: 200 },
                 border: imagePreview ? '3px solid' : 'none',
                 borderColor: imagePreview ? 'primary.main' : 'transparent',
                 fontSize: getAvatarFontSize(),
@@ -254,8 +263,8 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
             <Box
               sx={{
                 position: 'absolute',
-                bottom: 0,
-                right: 0,
+                top: 5,
+                left: 5,
                 bgcolor: 'primary.main',
                 borderRadius: '50%',
                 width: 24,
@@ -271,41 +280,20 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
               <CameraswitchIcon sx={{ fontSize: 20 }} />
             </Box>
           </Box>
-
-          {/* Delete Button - Only show if avatar exists */}
-          {profile?.avatar_url && (
-            <Button
-              variant="outlined"
-              color="error"
-              size="small"
-              startIcon={<DeleteIcon />}
-              onClick={handleDeleteAvatar}
-              disabled={deleting}
-              sx={{
-                borderRadius: '20px',
-                textTransform: 'none',
-                fontSize: '0.875rem',
-                '&:hover': {
-                  bgcolor: 'error.light',
-                  color: 'white',
-                }
-              }}
-            >
-              {deleting ? t('deleting') : t('delete_avatar')}
-            </Button>
-          )}
         </Box>
 
-        {/* Profile Info */}
-        <Box sx={{ width: '100%' }}>
+        <Box
+          sx={{
+            width: { xs: '80%', md: '100%' },
+          }}>
           <Typography
-            variant="h4"
-            gutterBottom
             fontWeight="600"
             sx={{
               fontSize: getTitleFontSize(),
               lineHeight: 1.2,
               '&:hover': { bgcolor: 'action.hover', borderRadius: 1 },
+              fontSize: {xs: 18, md: 26},
+              mb: {xs: 0, md: 1}
             }}
             contentEditable
             suppressContentEditableWarning
@@ -341,7 +329,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
             sx={{ borderRadius: '8px', fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
           />
 
-          <Box sx={{ mt: 3, width: '100%' }}>
+          <Box sx={{ mt: {xs: 1, md: 3}, width: '100%' }}>
             <Button
               variant="contained"
               onClick={formik.handleSubmit}
@@ -350,11 +338,20 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
             >
               {loading || uploading ? t('saving') : t('save_changes')}
             </Button>
+            <Tooltip title='setting'>
+              <IconButton
+                sx={{
+                  minWidth: 10,
+                  color: 'primary.main'
+                }}
+              >
+                <SettingsIcon sx={{ fontSize: 32 }} />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
       </Box>
 
-      {/* File Input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -363,20 +360,139 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
         style={{ display: 'none' }}
       />
 
-      {/* Alerts */}
-      <Collapse in={!!error}>
-        <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      </Collapse>
+      <Box
+        sx={{
+          mt: 4,
+          width: '100%',
+          borderColor: 'divider',
+        }}
+      >
+        <ToggleButtonGroup
+          value={activeMenu}
+          exclusive
+          onChange={(event, newValue) => {
+            if (newValue !== null) setActiveMenu(newValue);
+          }}
+          sx={{
+            display: 'flex',
+            borderTop: '1px solid',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          {menus.map((item, index) => (
+            <ToggleButton
+              key={item.label}
+              value={index}
+              sx={{
+                px: 1.5,
+                py: 0.75,
+                minHeight: 36,
+                border: 'none',
+                color: activeMenu === index ? 'primary.main' : 'text.secondary',
+                '&:hover': {
+                  bgcolor: 'action.hover',
+                  color: 'primary.main',
+                },
+                '&.Mui-selected': {
+                  bgcolor: 'transparent',
+                  color: 'primary.main',
+                },
+                position: 'relative',
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  width: '100%',
+                  height: 3,
+                  bgcolor: 'primary.main',
+                  transform: activeMenu === index ? 'scaleX(1)' : 'scaleX(0)',
+                  transition: 'transform 0.25s ease',
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 26, color: activeMenu === index ? 'primary.main' : 'text.secondary' }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                primaryTypographyProps={{
+                  fontSize: 12,
+                  fontWeight: activeMenu === index ? 600 : 500,
+                  lineHeight: 1.2,
+                  mt: 0.25,
+                  mr: 1,
+                }}
+              />
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
+      {activeMenu === 0 && (
+        <>
+          My Dairies
+        </>
+      )}
 
-      <Collapse in={!!success}>
-        <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      </Collapse>
+      <Menu
+        anchorEl={avatarMenuAnchor}
+        open={avatarMenuOpen}
+        onClose={handleAvatarMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            minWidth: 160,
+          },
+        }}
+      >
+        <MenuItem
+          onClick={() => {
+            handleAvatarMenuClose();
+          }}
+        >
+          <ListItemIcon>
+            <VisibilityIcon fontSize="small" />
+          </ListItemIcon>
+          {t('view')}
+        </MenuItem>
 
-      {/* Delete Confirmation Dialog */}
+        <MenuItem
+          onClick={() => {
+            handleAvatarMenuClose();
+            fileInputRef.current?.click();
+          }}
+        >
+          <ListItemIcon>
+            <UploadIcon fontSize="small" />
+          </ListItemIcon>
+          {t('upload')}
+        </MenuItem>
+
+        {profile?.avatar_url && (
+          <MenuItem
+            onClick={() => {
+              handleAvatarMenuClose();
+              setDeleteDialogOpen(true);
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <ListItemIcon sx={{ color: 'error.main' }}>
+              <DeleteIcon fontSize="small" />
+            </ListItemIcon>
+            {t('delete')}
+          </MenuItem>
+        )}
+      </Menu>
+
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
@@ -405,7 +521,7 @@ const ProfileSection = ({ profile, setProfile, error, success, setError, setSucc
           </Button>
         </DialogActions>
       </Dialog>
-    </Card>
+    </Box>
   );
 };
 

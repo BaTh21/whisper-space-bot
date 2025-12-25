@@ -97,7 +97,7 @@ function SuggestFriendComponent() {
                     <Box
                         sx={{
                             textAlign: 'center',
-                            color: 'error.main'
+                            // color: 'error.main'
                         }}
                     >
                         <Typography>
