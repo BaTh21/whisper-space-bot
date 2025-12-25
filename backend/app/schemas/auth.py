@@ -21,3 +21,10 @@ class Token(BaseModel):
 class VerifyCodeRequest(BaseModel):
     email: EmailStr
     code: str
+    
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    code: str
+    new_password: str

@@ -6,11 +6,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import random
 from app.schemas.base import BaseResponse
-from app.schemas.auth import Token, UserCreate, UserLogin, VerifyCodeRequest
+from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, Token, UserCreate, UserLogin, VerifyCodeRequest
 from app.core.database import get_db
 from app.crud.user import get_by_email, create, verify
-from app.crud.auth import create_verification_code, delete_code, get_valid_code, get_valid_refresh_token, revoke_refresh_token, store_refresh_token
-from app.services.email import send_verification_email, send_verification_email_sync
+from app.crud.auth import create_password_reset_code, create_verification_code, delete_code, delete_reset_code, get_valid_code, get_valid_refresh_token, get_valid_reset_code, revoke_refresh_token, store_refresh_token
+from app.services.email import send_password_reset_email, send_verification_email, send_verification_email_sync
 from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password
 from app.schemas.refresh_token import RefreshTokenRequest
 from app.models.user import User
@@ -203,3 +203,46 @@ async def resend_verification(email: str, db: Session = Depends(get_db)):
     
     return BaseResponse(msg="Verification code sent")
 
+@router.post("/forgot-password", response_model=BaseResponse)
+async def forgot_password(
+    req: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    user = get_by_email(db, req.email)
+    if not user:
+        # Security: don't reveal if email exists
+        return BaseResponse(msg="If the email is registered, a password reset code has been sent.")
+
+    reset_obj = create_password_reset_code(db, user.id)
+    
+    email_sent = await send_password_reset_email(req.email, reset_obj.code)
+    if not email_sent:
+        background_tasks.add_task(send_password_reset_email, req.email, reset_obj.code)
+
+    return BaseResponse(msg="If the email is registered, a password reset code has been sent.")
+
+
+@router.post("/reset-password", response_model=BaseResponse)
+def reset_password(
+    req: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    reset_obj = get_valid_reset_code(db, req.code)
+    if not reset_obj:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+
+    # Safely get user
+    user = db.query(User).filter(User.id == reset_obj.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update password
+    user.password_hash = hash_password(req.new_password)
+    db.commit()
+
+    # Delete the used code
+    db.delete(reset_obj)
+    db.commit()
+
+    return BaseResponse(msg="Password successfully reset. You can now log in.")

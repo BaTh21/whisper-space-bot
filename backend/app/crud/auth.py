@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import random
 from app.core.config import settings
 from app.models.refresh_token import RefreshToken
+from app.models.password_reset import PasswordResetCode
 
 
 def store_refresh_token(db: Session, user_id: int, token: str):
@@ -49,4 +50,26 @@ def get_valid_code(db: Session, user_id: int, code: str) -> VerificationCode:
 
 def delete_code(db: Session, vc_id: int):
     db.query(VerificationCode).filter(VerificationCode.id == vc_id).delete()
+    db.commit()
+    
+def create_password_reset_code(db: Session, user_id: int) -> PasswordResetCode:
+    code = "".join([str(random.randint(0, 9)) for _ in range(6)])
+    reset_code = PasswordResetCode(
+        user_id=user_id,
+        code=code,
+        expires_at=datetime.utcnow() + timedelta(minutes=15)  # 15 min expiry
+    )
+    db.add(reset_code)
+    db.commit()
+    db.refresh(reset_code)
+    return reset_code
+
+def get_valid_reset_code(db: Session, code: str) -> PasswordResetCode | None:
+    return db.query(PasswordResetCode).filter(
+        PasswordResetCode.code == code,
+        PasswordResetCode.expires_at > datetime.utcnow()
+    ).first()
+
+def delete_reset_code(db: Session, code_id: int):
+    db.query(PasswordResetCode).filter(PasswordResetCode.id == code_id).delete()
     db.commit()
