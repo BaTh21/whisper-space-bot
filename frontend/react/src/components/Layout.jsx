@@ -52,11 +52,8 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
     '/feed': 0,
     '/messages': 1,
     '/friends': 2,
-    '/groups': 3,
-    '/notes': 4,
-    '/search': 5,
-    '/blocked': 6,
-    '/profile': 7,
+    '/notes': 3,
+    '/profile': 4,
   };
 
   const [activeTab, setActiveTab] = useState(pathToTabMap[location.pathname] || 0);
@@ -151,10 +148,11 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
     const tabToPathMap = {
-      0: '/feed', 1: '/messages', 2: '/friends', 3: '/groups',
-      4: '/notes', 5: '/search',
-      //  6: '/blocked', 
-       7: '/profile',
+      0: '/feed',
+      1: '/messages',
+      2: '/friends',
+      3: '/notes',
+      4: '/profile',
     };
     const newPath = tabToPathMap[newValue] || '/feed';
     navigate(newPath);
@@ -213,10 +211,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
         <Tab icon={<HomeIcon />} label={showLabel ? t("feed") : null} />
         <Tab icon={<ReviewsIcon />} label={showLabel ? t("messages") : null} />
         <Tab icon={<PeopleIcon />} label={showLabel ? t("friends") : null} />
-        <Tab icon={<GroupsIcon />} label={showLabel ? t("groups") : null} />
         <Tab icon={<StickyNote2Icon />} label={showLabel ? t("notes") : null} />
-        <Tab icon={<PersonSearchIcon />} label={showLabel ? t("search") : null} />
-        <Tab icon={<BlockIcon />} label={showLabel ? t("blocked") : null} />
         <Tab icon={<PersonIcon />} label={showLabel ? t("profile") : null} />
       </Tabs>
     </Box>

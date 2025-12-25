@@ -148,3 +148,12 @@ class GroupMessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+        
+class ChatListItem(BaseModel):
+    id: int
+    type: Literal["private", "group"]
+    name: str
+    avatar: Optional[str]
+    last_message: Optional[str]
+    updated_at: datetime
+

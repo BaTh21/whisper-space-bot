@@ -64,8 +64,8 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
-  const [selectedFriend, setSelectedFriend] = useState(null);
+const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend }) => {
+  // const [selectedFriend, setSelectedFriend] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [forwardingMessage, setForwardingMessage] = useState(null);
@@ -77,7 +77,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef(null);
-  const [showFriend, setShowFriend] = useState(false);
+  // const [showFriend, setShowFriend] = useState(false);
   const { t, i18n } = useTranslation();
   const [isOnline, setIsOnline] = useState(false);
 
@@ -142,9 +142,23 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
     });
   };
 
-  const toggleShowFriend = () => {
-    setShowFriend(prev => !prev);
-  }
+  useEffect(() => {
+    if (!selectedFriend) return;
+
+    sentReadReceipts.current = new Set();
+    setMessages([]);
+    setNewMessage('');
+    setFriendTyping(false);
+    setImagePreview(null);
+    setAudioUrl(null);
+    setRecordingTime(0);
+    setIsRecording(false);
+
+    // open socket / fetch messages here
+  }, [selectedFriend]);
+  // const toggleShowFriend = () => {
+  //   setShowFriend(prev => !prev);
+  // }
 
   const getWsUrl = useCallback(() => {
     if (!selectedFriend) return null;
@@ -608,7 +622,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
   useEffect(() => {
     sendWsMessageRef.current = sendWsMessage;
-  }, [sendWsMessage]);  
+  }, [sendWsMessage]);
 
   useEffect(() => {
     if (!selectedFriend || !isConnected || !sendWsMessageRef.current) return;
@@ -994,29 +1008,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
       }
       console.error(err);
     }
-  };
-
-  const handleSelectFriend = async (friend) => {
-    const isBlocked = blockStatus[friend.id] || await checkIfUserIsBlocked(friend.id);
-
-    if (isBlocked) {
-      setError(`You have blocked ${friend.username}. Unblock them to chat.`);
-      return;
-    }
-
-    if (selectedFriend?.id === friend?.id) return;
-    if (selectedFriend) closeConnection(1000, 'Switching friends');
-
-    sentReadReceipts.current = new Set();
-
-    setSelectedFriend(friend);
-    setMessages([]);
-    setNewMessage('');
-    setFriendTyping(false);
-    setImagePreview(null);
-    setAudioUrl(null);
-    setRecordingTime(0);
-    setIsRecording(false);
   };
 
   <EmojiButton
@@ -1458,124 +1449,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
 
       <Box sx={{ display: 'flex', gap: 3, width: '100%', height: '88vh' }}>
 
-        {(!showFriend || !isMobile) && (
-          <Box
-            sx={{
-              width: { xs: '100%', md: 300 },
-              borderColor: 'divider',
-              overflow: 'auto',
-            }}>
-            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                {t('friends')}
-              </Typography>
-              <Chip
-                label={`${onlineUsers.size} online`}
-                size="small"
-                color="success"
-                variant="outlined"
-              />
-            </Box>
-            <Box>
-              <TextField
-                sx={{ width: "100%" }}
-                id="outlined-member-search"
-                label={t('search_friend')}
-                variant="outlined"
-                size="small"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton>
-                        <SearchIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Box>
-            <List sx={{ mt: 2 }}>
-              {friends.map((friend) => {
-                const isOnline = onlineUsers.has(friend.id);
-
-                return (
-                  <ListItem
-                    key={friend.id}
-                    selected={selectedFriend?.id === friend.id}
-                    onClick={() => {
-                      setShowFriend(true);
-                      handleSelectFriend(friend);
-                    }}
-                    sx={{
-                      p: 1,
-                      mb: 1,
-                      borderRadius: '12px',
-                      boxShadow: 0,
-                      backgroundColor: 'white',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        transform: { xs: 'none', sm: 'translateY(-2px)' },
-                        boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
-                      }
-                    }}
-                  >
-                    <ListItemAvatar sx={{ position: 'relative' }}>
-                      <Avatar src={getUserAvatar(friend)}>
-                        {getUserInitials(friend.username)}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {friend.username}
-                          {isOnline ? (
-                            <Box
-                              component="span"
-                              variant="caption"
-                              sx={{
-                                color: '#4CAF50',
-                                fontWeight: 500,
-                                fontSize: '0.7rem',
-                                display: 'flex',
-                                alightItems: 'center'
-                              }}
-                            >
-                              <Box
-                                className="online-indicator"
-                                sx={{
-                                  width: 10,
-                                  height: 10,
-                                  borderRadius: '50%',
-                                  bgcolor: '#4CAF50',
-                                  border: '2px solid white',
-                                  animation: 'pulse 2s infinite',
-                                  mt: 0.25
-                                }}
-                              />
-                              <Typography
-                                sx={{ ml: 0.5 }}
-                              >
-                                Active Now
-                              </Typography>
-                            </Box>
-                          ) : null}
-                        </Box>
-                      }
-                      secondary={
-                        friend.email
-                      }
-                      secondaryTypographyProps={{
-                        sx: {
-                          fontSize: '0.75rem',
-                        }
-                      }}
-                    />
-                  </ListItem>
-                );
-              })}
-            </List>
-          </Box>
-        )}
         {showFriend && (
           <Box
             sx={{
@@ -1605,7 +1478,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess }) => {
                     }}
                   >
                     <IconButton
-                      onClick={toggleShowFriend}
+                      // onClick={toggleShowFriend}
                       sx={{
                         display: { xs: 'block', md: 'none' }
                       }}

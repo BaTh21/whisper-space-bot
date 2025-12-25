@@ -12,7 +12,6 @@ import CreateGroupDialog from '../components/CreateGroupDialog';
 import FeedTab from '../components/dashboard/FeedTab';
 import FriendsTab from '../components/dashboard/FriendsTab';
 import GroupsTab from '../components/dashboard/GroupsTab';
-import MessagesTab from '../components/dashboard/MessagesTab';
 import NotesTab from '../components/dashboard/NotesTab';
 import ProfileSection from '../components/dashboard/ProfileSection';
 import SearchUsersTab from '../components/dashboard/SearchUsersTab';
@@ -21,6 +20,7 @@ import ViewGroupDialog from '../components/dialogs/ViewGroupDialog';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
+import ChatTab from '../components/dashboard/ChatTab';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -61,11 +61,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
     '/feed': 0,
     '/messages': 1,
     '/friends': 2,
-    '/groups': 3,
-    '/notes': 4,
-    '/search': 5,
-    '/blocked': 6,
-    '/profile': 7,
+    '/notes': 3,
+    '/profile': 4,
   };
 
   // Map tab indices to URL paths
@@ -73,11 +70,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
     0: '/feed',
     1: '/messages',
     2: '/friends',
-    3: '/groups',
-    4: '/notes',
-    5: '/search',
-    6: '/blocked',
-    7: '/profile',
+    3: '/notes',
+    4: '/profile',
   };
 
   // Handle URL-based tab navigation
@@ -214,12 +208,12 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}
               friends={friends}               // ← Correct: use the state you defined
-              pendingRequests={pendingRequests} 
+              pendingRequests={pendingRequests}
             />
           </TabPanel>
 
           <TabPanel value={activeTab} index={1}>
-            <MessagesTab
+            <ChatTab
               friends={friends}
               profile={profile}
               setError={setError}
@@ -240,39 +234,12 @@ const DashboardPage = ({ defaultTab = 0 }) => {
           </TabPanel>
 
           <TabPanel value={activeTab} index={3}>
-            <GroupsTab
-              groups={groups}
-              onNewGroup={() => setGroupDialogOpen(true)}
-              onViewGroup={handleViewGroup}
-            />
-          </TabPanel>
-
-          <TabPanel value={activeTab} index={4}>
             <NotesTab
               setError={setError}
               setSuccess={setSuccess}
             />
           </TabPanel>
-
-          <TabPanel value={activeTab} index={5}>
-            <SearchUsersTab
-              setError={setError}
-              setSuccess={setSuccess}
-              onDataUpdate={fetchDashboardData}
-              friends={friends}
-              pendingRequests={pendingRequests}
-              currentUser={currentUser || profile}
-            />
-          </TabPanel>
-
-          <TabPanel value={activeTab} index={6}>
-            <BlockedUsersTab
-              setError={setError}
-              setSuccess={setSuccess}
-              onDataUpdate={fetchDashboardData}
-            />
-          </TabPanel>
-          <TabPanel value={activeTab} index={7}>
+          <TabPanel value={activeTab} index={4}>
             <ProfileSection
               profile={profile}
               setProfile={setProfile}

@@ -1824,6 +1824,11 @@ export const deleteAvatar = async () => {
   }
 };
 
+export const getChatList = async () => {
+  const res = await api.get("/api/v1/chats/");
+  return res.data;
+}
+
 export const getMessageInfo = async (messageId) => {
   try {
     const response = await api.get(`/api/v1/chats/private/${messageId}/info`);

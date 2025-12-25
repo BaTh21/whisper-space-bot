@@ -15,14 +15,98 @@ from app.crud.friend import is_blocked, is_blocked_by, is_friend
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.user import User
-from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadResponse,
+from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadResponse, ChatListItem,
                              MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
 from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, extract_public_id_from_url
 from app.core.cloudinary import check_cloudinary_health, upload_voice_message
 from app.core.config import settings
+from app.crud.friend import get_friends
+from sqlalchemy import or_, and_
+from app.crud.group import get_user_groups
+from app.models.group_message import GroupMessage
+from datetime import timezone
 
 router = APIRouter()
+
+def to_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+@router.get("/", response_model=list[ChatListItem])
+def list_chats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    chats = []
+
+    friends = get_friends(db, current_user.id)
+
+    for friend in friends:
+        last_msg = (
+            db.query(PrivateMessage)
+            .filter(
+                or_(
+                    and_(
+                        PrivateMessage.sender_id == current_user.id,
+                        PrivateMessage.receiver_id == friend.id
+                    ),
+                    and_(
+                        PrivateMessage.sender_id == friend.id,
+                        PrivateMessage.receiver_id == current_user.id
+                    )
+                )
+            )
+            .order_by(PrivateMessage.created_at.desc())
+            .first()
+        )
+
+        updated_at = to_utc(
+            last_msg.created_at if last_msg else friend.created_at
+        )
+
+        chats.append({
+            "id": friend.id,
+            "type": "private",
+            "name": friend.username,
+            "avatar": friend.avatar_url,
+            "last_message": last_msg.content if last_msg else None,
+            "updated_at": updated_at
+        })
+
+    groups = get_user_groups(db, current_user.id)
+
+    for group in groups:
+        last_msg = (
+            db.query(GroupMessage)
+            .filter(GroupMessage.group_id == group.id)
+            .order_by(GroupMessage.created_at.desc())
+            .first()
+        )
+
+        updated_at = to_utc(
+            last_msg.created_at if last_msg else group.created_at
+        )
+
+        chats.append({
+            "id": group.id,
+            "type": "group",
+            "name": group.name,
+            "avatar": group.images[0].url if group.images else None,
+            "last_message": last_msg.content if last_msg else None,
+            "updated_at": updated_at
+        })
+
+    chats.sort(
+        key=lambda x: x["updated_at"] or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True
+    )
+
+    return chats
 
 # Mark messages as read endpoint
 @router.post("/messages/read")
