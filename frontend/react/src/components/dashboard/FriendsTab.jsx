@@ -14,36 +14,37 @@ import {
   MenuItem,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
+  ToggleButtonGroup,
+  ToggleButton,
+  ListItemIcon
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAvatar } from '../../hooks/useAvatar';
 import { acceptFriendRequest, blockUser, unfriend } from '../../services/api';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import HttpsIcon from '@mui/icons-material/Https';
+import BlockedUsersTab from '../BlockedUsersTab';
 
-const FriendsTab = ({ 
-  friends, 
-  pendingRequests, 
-  setActiveTab, 
-  setError, 
-  setSuccess, 
-  onDataUpdate 
+const FriendsTab = ({
+  friends,
+  pendingRequests,
+  setActiveTab,
+  setError,
+  setSuccess,
+  onDataUpdate
 }) => {
   const [acceptingId, setAcceptingId] = useState(null);
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [processingAction, setProcessingAction] = useState(null);
+  const [activeMenu, setActiveMenu] = useState(0);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { t } = useTranslation();
   const { getUserAvatar, getUserInitials } = useAvatar();
-
-  // Debug logging to see what data we're receiving
-  useEffect(() => {
-    console.log('📬 Pending Requests Data:', pendingRequests);
-    console.log('👥 Friends Data:', friends);
-  }, [pendingRequests, friends]);
 
   const handleAcceptRequest = async (requesterId) => {
     setAcceptingId(requesterId);
@@ -52,7 +53,6 @@ const FriendsTab = ({
       setSuccess(t('friend_request_accepted'));
       onDataUpdate();
     } catch (err) {
-      console.error('❌ Error accepting friend request:', err);
       setError(err.response?.data?.detail || err.message || t('friend_request_accept_failed'));
     } finally {
       setAcceptingId(null);
@@ -71,7 +71,7 @@ const FriendsTab = ({
 
   const handleUnfriend = async () => {
     if (!selectedFriend) return;
-    
+
     setProcessingAction('unfriend');
     try {
       await unfriend(selectedFriend.id);
@@ -87,7 +87,7 @@ const FriendsTab = ({
 
   const handleBlock = async () => {
     if (!selectedFriend) return;
-    
+
     setProcessingAction('block');
     try {
       await blockUser(selectedFriend.id);
@@ -106,13 +106,13 @@ const FriendsTab = ({
       localStorage.setItem('selectedFriend', JSON.stringify(friend));
       setActiveTab(1);
       setSuccess(t('opening_chat', { username: friend.username }));
-      
+
       setTimeout(() => {
         setSuccess('');
       }, 2000);
     } else {
       setError(t('cannot_open_messages'));
-      
+
       setTimeout(() => {
         setError('');
       }, 2000);
@@ -131,247 +131,354 @@ const FriendsTab = ({
     };
   };
 
+  const menus = [
+    { label: `All Friends (${friends.length})`, icon: <MenuBookIcon /> },
+    { label: `Pending (${pendingRequests.length})`, icon: <HttpsIcon /> },
+    { label: 'Block', icon: <HttpsIcon /> },
+  ];
+
   return (
-    <Box sx={{ 
-      p: { xs: 2, sm: 3 },
-      maxWidth: '100%',
-      overflow: 'hidden'
-    }}>
+    <Box
+      sx={{
+        py: { xs: 2, sm: 2 },
+        maxWidth: '100%',
+        overflow: 'hidden'
+      }}
+    >
       <Typography variant="h5" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
         {t('friends')}
       </Typography>
 
-      {pendingRequests && pendingRequests.length > 0 && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom color="primary" fontWeight="600" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-            {t('pending_requests_count', { count: pendingRequests.length })}
+      <Box
+        sx={{
+          my: 2,
+          width: '100%',
+          borderColor: 'divider',
+        }}
+      >
+        <ToggleButtonGroup
+          value={activeMenu}
+          exclusive
+          onChange={(event, newValue) => {
+            if (newValue !== null) setActiveMenu(newValue);
+          }}
+          sx={{
+            display: 'flex',
+            borderTop: '1px solid',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          {menus.map((item, index) => (
+            <ToggleButton
+              key={item.label}
+              value={index}
+              sx={{
+                px: 1.5,
+                py: 0.75,
+                minHeight: 36,
+                border: 'none',
+                color: activeMenu === index ? 'primary.main' : 'text.secondary',
+                '&:hover': {
+                  bgcolor: 'action.hover',
+                  color: 'primary.main',
+                },
+                '&.Mui-selected': {
+                  bgcolor: 'transparent',
+                  color: 'primary.main',
+                },
+                position: 'relative',
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  width: '100%',
+                  height: 3,
+                  bgcolor: 'primary.main',
+                  transform: activeMenu === index ? 'scaleX(1)' : 'scaleX(0)',
+                  transition: 'transform 0.25s ease',
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 26, color: activeMenu === index ? 'primary.main' : 'text.secondary' }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                primaryTypographyProps={{
+                  fontSize: 12,
+                  fontWeight: activeMenu === index ? 600 : 500,
+                  lineHeight: 1.2,
+                  mt: 0.25,
+                  mr: 1,
+                }}
+              />
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
+
+
+
+      {activeMenu === 0 && (
+        !friends || friends.length === 0 ? (
+          <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+            {t('no_friends_yet')}
           </Typography>
-          {pendingRequests.map((request, index) => {
-            const requesterData = getRequesterData(request);
-            const requestId = requesterData.id || `request-${index}`;
-            
-            return (
-              <Card 
-                key={requestId}
-                sx={{ 
-                  p: { xs: 1.5, sm: 2 }, 
-                  mb: 1, 
-                  display: 'flex', 
+        ) : (
+          <List sx={{ p: 0 }}>
+            {friends.map((friend) => (
+              <ListItem
+                key={friend.id}
+                sx={{
+                  mb: 1,
+                  borderRadius: '12px',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  backgroundColor: 'white',
+                  transition: 'all 0.2s ease',
                   flexDirection: { xs: 'column', sm: 'row' },
                   alignItems: { xs: 'stretch', sm: 'center' },
                   gap: { xs: 2, sm: 0 },
-                  borderRadius: '12px'
+                  '&:hover': {
+                    transform: { xs: 'none', sm: 'translateY(-2px)' },
+                    boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
+                  }
                 }}
               >
-                <Box sx={{ 
-                  display: 'flex', 
+                <Box sx={{
+                  display: 'flex',
                   alignItems: 'center',
                   width: { xs: '100%', sm: 'auto' },
-                  flex: 1
+                  flex: 1,
+                  minWidth: 0
                 }}>
                   <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
-                    <Avatar 
-                      src={requesterData.avatarUrl || getUserAvatar(request)} 
-                      sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
-                      imgProps={{ 
-                        onError: (e) => { 
-                          e.target.style.display = 'none'; 
-                        } 
+                    <Avatar
+                      src={getUserAvatar(friend)}
+                      sx={{
+                        width: { xs: 40, sm: 48 },
+                        height: { xs: 40, sm: 48 },
+                        border: 1,
+                        borderColor: 'divider'
+                      }}
+                      imgProps={{
+                        onError: (e) => {
+                          e.target.style.display = 'none';
+                        }
                       }}
                     >
-                      {getUserInitials(requesterData.username)}
+                      {getUserInitials(friend.username)}
                     </Avatar>
                   </ListItemAvatar>
-                  <Box sx={{ flexGrow: 1, minWidth: 0, ml: { xs: 1, sm: 2 } }}>
-                    <Typography 
-                      variant="body1" 
-                      fontWeight="500" 
-                      sx={{ 
-                        fontSize: { xs: '0.9rem', sm: '1rem' }, 
-                        overflow: 'hidden', 
-                        textOverflow: 'ellipsis', 
-                        whiteSpace: 'nowrap' 
-                      }}
-                    >
-                      {requesterData.username || t('unknown_user')}
-                    </Typography>
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary"
-                      sx={{ 
-                        fontSize: { xs: '0.8rem', sm: '0.875rem' }, 
-                        overflow: 'hidden', 
-                        textOverflow: 'ellipsis', 
-                        whiteSpace: 'nowrap' 
-                      }}
-                    >
-                      {requesterData.email || ''}
-                    </Typography>
-                  </Box>
+                  <ListItemText
+                    primary={
+                      <Typography
+                        variant="body1"
+                        fontWeight="500"
+                        sx={{
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {friend.username}
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {friend.email}
+                      </Typography>
+                    }
+                    sx={{ my: 0, mr: { xs: 0, sm: 2 }, flex: 1, minWidth: 0 }}
+                  />
                 </Box>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={() => handleAcceptRequest(requesterData.requesterId)}
-                  disabled={acceptingId === requesterData.requesterId}
-                  sx={{ 
-                    borderRadius: '8px', 
-                    minWidth: { xs: '100%', sm: 100 }, 
-                    mt: { xs: 1, sm: 0 },
-                    ml: { xs: 0, sm: 2 }
-                  }}
-                >
-                  {acceptingId === requesterData.requesterId ? (
-                    <CircularProgress size={20} color="inherit" />
-                  ) : t('accept')}
-                </Button>
-              </Card>
-            );
-          })}
-        </Box>
+
+                <Box sx={{
+                  display: 'flex',
+                  gap: 1,
+                  alignItems: 'center',
+                  width: { xs: '100%', sm: 'auto' },
+                  justifyContent: { xs: 'space-between', sm: 'flex-end' }
+                }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => handleMessageFriend(friend)}
+                    sx={{
+                      borderRadius: '8px',
+                      minWidth: { xs: 'auto', sm: 100 },
+                      px: { xs: 1, sm: 2 },
+                      flex: { xs: 1, sm: 'none' }
+                    }}
+                    startIcon={isMobile ? <MessageIcon /> : null}
+                  >
+                    {isMobile ? '' : t('messages')}
+                  </Button>
+                  <IconButton
+                    onClick={(e) => handleActionMenuOpen(e, friend)}
+                    disabled={processingAction === friend.id}
+                    sx={{ borderRadius: '8px', flex: { xs: 'none', sm: 'none' } }}
+                    aria-label="friend actions"
+                    size={isMobile ? 'small' : 'medium'}
+                  >
+                    {processingAction === friend.id ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      <MoreVertIcon fontSize={isMobile ? 'small' : 'medium'} />
+                    )}
+                  </IconButton>
+                </Box>
+              </ListItem>
+            ))}
+          </List>
+        )
       )}
 
-      <Typography variant="h6" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-        {t('your_friends_count', { count: friends ? friends.length : 0 })}
-      </Typography>
+      {activeMenu === 1 && (
+        pendingRequests && pendingRequests.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            {pendingRequests.map((request, index) => {
+              const requesterData = getRequesterData(request);
+              const requestId = requesterData.id || `request-${index}`;
 
-      {!friends || friends.length === 0 ? (
-        <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-          {t('no_friends_yet')}
-        </Typography>
-      ) : (
-        <List sx={{ p: 0 }}>
-          {friends.map((friend) => (
-            <ListItem
-              key={friend.id}
-              sx={{
-                p: { xs: 1.5, sm: 2 },
-                mb: 1,
-                borderRadius: '12px',
-                border: '1px solid',
-                borderColor: 'divider',
-                transition: 'all 0.2s ease',
-                flexDirection: { xs: 'column', sm: 'row' },
-                alignItems: { xs: 'stretch', sm: 'center' },
-                gap: { xs: 2, sm: 0 },
-                '&:hover': {
-                  transform: { xs: 'none', sm: 'translateY(-2px)' },
-                  boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
-                }
-              }}
-            >
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                width: { xs: '100%', sm: 'auto' }, 
-                flex: 1, 
-                minWidth: 0 
-              }}>
-                <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
-                  <Avatar 
-                    src={getUserAvatar(friend)} 
-                    sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
-                    imgProps={{ 
-                      onError: (e) => { 
-                        e.target.style.display = 'none'; 
-                      } 
+              return (
+                <Box
+                  key={requestId}
+                  sx={{
+                    p: 1,
+                    mb: 1,
+                    borderRadius: '12px',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    backgroundColor: 'white',
+                    transition: 'all 0.2s ease',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    alignItems: { xs: 'stretch', sm: 'center' },
+                    gap: { xs: 2, sm: 0 },
+                    '&:hover': {
+                      transform: { xs: 'none', sm: 'translateY(-2px)' },
+                      boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
+                    },
+                    display: 'flex',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: { xs: '100%', sm: 'auto' },
+                      flex: 1,
+                      minWidth: 0
                     }}
                   >
-                    {getUserInitials(friend.username)}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={
-                    <Typography 
-                      variant="body1" 
-                      fontWeight="500" 
-                      sx={{ 
-                        fontSize: { xs: '0.9rem', sm: '1rem' }, 
-                        overflow: 'hidden', 
-                        textOverflow: 'ellipsis', 
-                        whiteSpace: 'nowrap' 
-                      }}
-                    >
-                      {friend.username}
-                    </Typography>
-                  }
-                  secondary={
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary" 
-                      sx={{ 
-                        fontSize: { xs: '0.8rem', sm: '0.875rem' }, 
-                        overflow: 'hidden', 
-                        textOverflow: 'ellipsis', 
-                        whiteSpace: 'nowrap' 
-                      }}
-                    >
-                      {friend.email}
-                    </Typography>
-                  }
-                  sx={{ my: 0, mr: { xs: 0, sm: 2 }, flex: 1, minWidth: 0 }}
-                />
-              </Box>
+                    <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
+                      <Avatar
+                        src={requesterData.avatarUrl || getUserAvatar(request)}
+                        sx={{
+                          width: { xs: 40, sm: 48 },
+                          height: { xs: 40, sm: 48 },
+                          border: 1,
+                          borderColor: 'divider'
+                        }}
+                        imgProps={{
+                          onError: (e) => {
+                            e.target.style.display = 'none';
+                          }
+                        }}
+                      >
+                        {getUserInitials(requesterData.username)}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <Box sx={{ flexGrow: 1, minWidth: 0, ml: { xs: 1, sm: 2 } }}>
+                      <Typography
+                        variant="body1"
+                        fontWeight="500"
+                        sx={{
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {requesterData.username || t('unknown_user')}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {requesterData.email || ''}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => handleAcceptRequest(requesterData.requesterId)}
+                    disabled={acceptingId === requesterData.requesterId}
+                    sx={{
+                      borderRadius: '8px',
+                      minWidth: { xs: '100%', sm: 100 },
+                      mt: { xs: 1, sm: 0 },
+                      ml: { xs: 0, sm: 2 }
+                    }}
+                  >
+                    {acceptingId === requesterData.requesterId ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : t('accept')}
+                  </Button>
+                </Box>
+              );
+            })}
+          </Box>
+        )
+      )}
 
-              <Box sx={{ 
-                display: 'flex', 
-                gap: 1, 
-                alignItems: 'center', 
-                width: { xs: '100%', sm: 'auto' }, 
-                justifyContent: { xs: 'space-between', sm: 'flex-end' } 
-              }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => handleMessageFriend(friend)}
-                  sx={{ 
-                    borderRadius: '8px', 
-                    minWidth: { xs: 'auto', sm: 100 }, 
-                    px: { xs: 1, sm: 2 }, 
-                    flex: { xs: 1, sm: 'none' } 
-                  }}
-                  startIcon={isMobile ? <MessageIcon /> : null}
-                >
-                  {isMobile ? '' : t('messages')}
-                </Button>
-                <IconButton
-                  onClick={(e) => handleActionMenuOpen(e, friend)}
-                  disabled={processingAction === friend.id}
-                  sx={{ borderRadius: '8px', flex: { xs: 'none', sm: 'none' } }}
-                  aria-label="friend actions"
-                  size={isMobile ? 'small' : 'medium'}
-                >
-                  {processingAction === friend.id ? (
-                    <CircularProgress size={20} />
-                  ) : (
-                    <MoreVertIcon fontSize={isMobile ? 'small' : 'medium'} />
-                  )}
-                </IconButton>
-              </Box>
-            </ListItem>
-          ))}
-        </List>
+      {activeMenu === 2 && (
+        <BlockedUsersTab
+          setError={setError}
+          setSuccess={setSuccess}
+          onDataUpdate={setSuccess}
+        />
       )}
 
       <Menu
         anchorEl={actionMenuAnchor}
         open={Boolean(actionMenuAnchor)}
         onClose={handleActionMenuClose}
-        PaperProps={{ 
-          sx: { 
-            borderRadius: '8px', 
+        PaperProps={{
+          sx: {
+            borderRadius: '8px',
             minWidth: 140,
             boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
-          } 
+          }
         }}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        <MenuItem 
+        <MenuItem
           onClick={handleUnfriend}
           disabled={processingAction === 'unfriend'}
-          sx={{ 
-            color: 'error.main', 
+          sx={{
+            color: 'error.main',
             fontSize: { xs: '0.9rem', sm: '1rem' },
             py: 1.5
           }}
@@ -381,11 +488,11 @@ const FriendsTab = ({
           ) : null}
           {processingAction === 'unfriend' ? t('unfriending') : t('unfriend')}
         </MenuItem>
-        <MenuItem 
+        <MenuItem
           onClick={handleBlock}
           disabled={processingAction === 'block'}
-          sx={{ 
-            color: 'error.main', 
+          sx={{
+            color: 'error.main',
             fontSize: { xs: '0.9rem', sm: '1rem' },
             py: 1.5
           }}

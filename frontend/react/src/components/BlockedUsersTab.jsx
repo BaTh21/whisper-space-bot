@@ -53,7 +53,7 @@ const handleUnblock = async (userId, username) => {
     setBlockedUsers(prev => prev.filter(user => user.id !== userId));
     
     // Notify parent to refresh friends list
-    if (onDataUpdate) onDataUpdate();
+    // if (onDataUpdate) onDataUpdate();
   } catch (err) {
     setError(t('error_unblock'));
   } finally {
@@ -75,9 +75,6 @@ const handleUnblock = async (userId, username) => {
       maxWidth: '100%',
       overflow: 'hidden'
     }}>
-      <Typography variant="h5" gutterBottom fontWeight="600" sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
-        {t('blocked_users')}
-      </Typography>
 
       {blockedUsers.length === 0 ? (
         <Box sx={{ 
