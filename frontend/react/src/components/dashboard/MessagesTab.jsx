@@ -64,7 +64,7 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend }) => {
+const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList }) => {
   // const [selectedFriend, setSelectedFriend] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -1467,9 +1467,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                   sx={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    px: { xs: 0.5, md: 4 },
+                    px: { xs: 2, md: 3 },
                     py: { xs: 1, md: 2 },
-                    boxShadow: 1
+                    boxShadow: 1,
+                    '&:hover': { bgcolor: 'grey.200' },
                   }}>
                   <Box
                     sx={{
@@ -1478,7 +1479,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     }}
                   >
                     <IconButton
-                      // onClick={toggleShowFriend}
+                      edge="start"
+                      color="inherit"
+                      onClick={toggleGroupList}
                       sx={{
                         display: { xs: 'block', md: 'none' }
                       }}
@@ -1490,6 +1493,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                       sx={{
                         width: { xs: 38, md: 44 },
                         height: { xs: 38, md: 44 },
+                        border: 1,
+                        borderColor: 'divider',
+                        p: 0.25
                       }}
                     >
                       {getUserInitials(selectedFriend.username)}

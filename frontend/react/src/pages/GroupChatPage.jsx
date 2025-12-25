@@ -1168,6 +1168,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
               onClick={toggleGroupList}
               sx={{
                 '&:hover': { bgcolor: 'grey.200' },
+                display: { xs: 'block', md: 'none' }
               }}
             >
               <ArrowBackIcon />
@@ -1178,6 +1179,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                 bgcolor: 'primary.main',
                 width: { xs: 38, md: 44 },
                 height: { xs: 38, md: 44 },
+                border: 1,
+                borderColor: 'divider',
+                p: 0.25
               }}
               src={
                 group?.images?.length
@@ -1677,19 +1681,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                             <Box sx={{ mt: 0.5 }}>
                               {message.seen_by?.length > 0 ? (
                                 <Tooltip title={message.seen_by.map(s => s.user?.username).join(', ') || 'Seen'}>
-                                <DoneAllIcon
-                                  fontSize="12"
-                                  color="green"
-                                  sx={{
-                                    color: 'green',
-                                    transition: 'transform 0.2s',
-                                    '&:hover': { transform: 'scale(1.3)' }
-                                  }}
-                                  onClick={() => {
-                                    setSelectedMessageId(message.id);
-                                    setOpenSeenMessage(true);
-                                  }}
-                                />
+                                  <DoneAllIcon
+                                    fontSize="12"
+                                    color="green"
+                                    sx={{
+                                      color: 'green',
+                                      transition: 'transform 0.2s',
+                                      '&:hover': { transform: 'scale(1.3)' }
+                                    }}
+                                    onClick={() => {
+                                      setSelectedMessageId(message.id);
+                                      setOpenSeenMessage(true);
+                                    }}
+                                  />
                                 </Tooltip>
                               ) : (
                                 <CheckIcon fontSize="12" />
