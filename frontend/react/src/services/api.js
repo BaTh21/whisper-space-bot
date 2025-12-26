@@ -291,8 +291,7 @@ export const sendFriendRequest = async (userId) => {
     if (error.response?.status === 409) {
       return {
         success: false, // ✅ FIX
-        message:
-          error.response?.data?.detail || "Friend request already sent",
+        message: error.response?.data?.detail || "Friend request already sent",
         code: "CONFLICT",
         status: 409,
       };
@@ -313,7 +312,7 @@ export const sendFriendRequest = async (userId) => {
 export const getActivityInbox = async () => {
   const res = await api.get("/api/v1/activities/");
   return res.data;
-}
+};
 
 export const deleteActivities = async (data) => {
   try {
@@ -328,8 +327,8 @@ export const deleteActivities = async (data) => {
 
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to delete activities"
+        error.response?.data?.msg ||
+        "Failed to delete activities"
     );
   }
 };
@@ -347,8 +346,8 @@ export const readActivity = async (activityId) => {
 
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      "Failed to read activities"
+        error.response?.data?.msg ||
+        "Failed to read activities"
     );
   }
 };
@@ -446,9 +445,23 @@ export const getPendingRequests = async () => {
   }
 };
 
+export const getPendingFriends = async () => {
+  const res = await api.get("/api/v1/friends/pending");
+  return res.data;
+};
+
 export const acceptFriendRequest = async (requesterId) => {
   const response = await api.post(`/api/v1/friends/accept/${requesterId}`, {});
   return response.data;
+};
+
+export const deletePendingRequest = async (pendingId) => {
+  try {
+    await api.delete(`/api/v1/friends/pending/${pendingId}`);
+    return true;
+  } catch (error) {
+    return error.response?.data?.detail;
+  }
 };
 
 // Diary endpoints
@@ -986,8 +999,8 @@ export const getDiaryForEdit = async (diaryId) => {
 };
 
 export const getDiaryComments = async (diaryId) => {
-    const response = await api.get(`/api/v1/diaries/${diaryId}/comments`);
-    return response.data;
+  const response = await api.get(`/api/v1/diaries/${diaryId}/comments`);
+  return response.data;
 };
 
 export const updateCommentById = async (commentId, data) => {
@@ -1827,7 +1840,7 @@ export const deleteAvatar = async () => {
 export const getChatList = async () => {
   const res = await api.get("/api/v1/chats/");
   return res.data;
-}
+};
 
 export const getMessageInfo = async (messageId) => {
   try {
@@ -2076,6 +2089,8 @@ export const ensureValidToken = async () => {
 
   return true;
 };
-export const forgotPassword = (data) => api.post('/api/v1/auth/forgot-password', data);
-export const resetPassword = (data) => api.post('/api/v1/auth/reset-password', data);
+export const forgotPassword = (data) =>
+  api.post("/api/v1/auth/forgot-password", data);
+export const resetPassword = (data) =>
+  api.post("/api/v1/auth/reset-password", data);
 export default api;

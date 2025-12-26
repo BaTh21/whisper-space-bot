@@ -68,6 +68,6 @@ def search_users(
 def friend_suggestions(
     limit: int = 20,
     db: Session = Depends(get_db),
-    current_user_id: int = 1  # replace with auth later
+    current_user: User = Depends(get_current_user)  # replace with auth later
 ):
-    return get_friend_suggestions(db, current_user_id, limit)
+    return get_friend_suggestions(db, current_user.id, limit)

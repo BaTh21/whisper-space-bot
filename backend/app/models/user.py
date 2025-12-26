@@ -42,3 +42,8 @@ class User(Base):
         back_populates="seen_by_users",
         viewonly=True  # This is read-only
     )
+    
+    activities_sent = relationship("Activity", foreign_keys="Activity.actor_id", back_populates="actor", cascade="all, delete-orphan")
+    activities_received = relationship("Activity", foreign_keys="Activity.recipient_id", back_populates="recipient", cascade="all, delete-orphan")
+
+

@@ -9,57 +9,40 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useImage } from '../hooks/useImage';
-import { getBlockedUsers, unblockUser } from '../services/api';
+import { unblockUser } from '../services/api';
 
-const BlockedUsersTab = ({ setError, setSuccess, onDataUpdate }) => {
-  const [blockedUsers, setBlockedUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+const BlockedUsersTab = ({ setError, setSuccess, onSuccess, blockedUser }) => {
+  const [blockedUsers, setBlockedUsers] = useState(blockedUser);
+  const [loading, setLoading] = useState(false);
   const [unblockingId, setUnblockingId] = useState(null);
-  const { getImageUrl, getOptimizedImageUrl, handleImageError } = useImage();
+  const { getOptimizedImageUrl, handleImageError } = useImage();
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { t } = useTranslation();
 
-  const fetchBlockedUsers = async () => {
-    setLoading(true);
+  const handleUnblock = async (userId, username) => {
+    setUnblockingId(userId);
     try {
-      const users = await getBlockedUsers();
-      setBlockedUsers(users);
+      await unblockUser(userId);
+      setSuccess(t('success_unblocked', { username }));
+      setBlockedUsers(prev => prev.filter(user => user.id !== userId));
+
     } catch (err) {
-      setError(t('error_fetch_blocked'));
+      setError(t('error_unblock'));
     } finally {
-      setLoading(false);
+      setUnblockingId(null);
     }
   };
-
-  useEffect(() => {
-    fetchBlockedUsers();
-  }, []);
-
-const handleUnblock = async (userId, username) => {
-  setUnblockingId(userId);
-  try {
-    await unblockUser(userId);
-    setSuccess(t('success_unblocked', { username }));
-    setBlockedUsers(prev => prev.filter(user => user.id !== userId));
-    
-    // Notify parent to refresh friends list
-    // if (onDataUpdate) onDataUpdate();
-  } catch (err) {
-    setError(t('error_unblock'));
-  } finally {
-    setUnblockingId(null);
-  }
-};
 
   if (loading) {
     return (
@@ -70,31 +53,43 @@ const handleUnblock = async (userId, username) => {
   }
 
   return (
-    <Box sx={{ 
-      p: { xs: 2, sm: 3 },
+    <Box sx={{
       maxWidth: '100%',
       overflow: 'hidden'
     }}>
 
       {blockedUsers.length === 0 ? (
-        <Box sx={{ 
-          textAlign: 'center', 
-          py: 4,
+        <Box sx={{
+          textAlign: 'center',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center'
         }}>
-          <BlockIcon sx={{ 
-            fontSize: { xs: 40, sm: 48 }, 
-            color: 'text.secondary', 
-            mb: 2 
+          <BlockIcon sx={{
+            fontSize: { xs: 40, sm: 48 },
+            color: 'text.secondary',
+            mb: 2
           }} />
           <Typography color="text.secondary">
             {t('no_blocked_users')}
           </Typography>
         </Box>
       ) : (
-        <List sx={{ p: 0 }}>
+        <List
+          sx={{
+            p: 0,
+            mb: 1,
+            transition: 'all 0.2s ease',
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: '1fr 1fr',
+              lg: '1fr 1fr 1fr',
+            },
+            alignItems: 'center',
+            gap: 2,
+
+          }}>
           {blockedUsers.map((user) => {
             const imageUrl = getOptimizedImageUrl(user.avatar_url, {
               width: isMobile ? 80 : 100,
@@ -108,32 +103,41 @@ const handleUnblock = async (userId, username) => {
               <ListItem
                 key={user.id}
                 sx={{
-                  p: { xs: 1.5, sm: 2 },
                   mb: 1,
                   borderRadius: '12px',
                   border: '1px solid',
-                  borderColor: 'error.light',
-                  backgroundColor: 'rgba(211, 47, 47, 0.08)',
+                  borderColor: 'red',
+                  backgroundColor: 'white',
                   transition: 'all 0.2s ease',
-                  flexDirection: { xs: 'column', sm: 'row' },
-                  alignItems: { xs: 'stretch', sm: 'center' },
+                  alignItems: 'center',
                   gap: { xs: 2, sm: 0 },
-                  '&:hover': {
-                    transform: { xs: 'none', sm: 'translateY(-2px)' },
-                    boxShadow: { xs: 'none', sm: '0 4px 12px rgba(0,0,0,0.1)' },
-                  }
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  px: 2
                 }}
               >
                 {/* User Info */}
-                <Box sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  width: { xs: '100%', sm: 'auto' }
-                }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: { xs: '100%', sm: 'auto' },
+                    flex: 1,
+                    minWidth: 0,
+                    gap: 1,
+                  }}
+                >
                   <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
-                    <Avatar 
+                    <Avatar
                       src={imageUrl}
-                      sx={{ width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 } }}
+                      sx={{
+                        width: { xs: 40, sm: 48 },
+                        height: { xs: 40, sm: 48 },
+                        border: 1,
+                        borderColor: 'divider',
+                        color: 'white',
+                        backgroundColor: 'red'
+                      }}
                       imgProps={{
                         crossOrigin: 'anonymous',
                         onError: (e) => handleImageError(user.avatar_url, e)
@@ -145,21 +149,21 @@ const handleUnblock = async (userId, username) => {
 
                   <ListItemText
                     primary={
-                      <Box sx={{ 
-                        display: 'flex', 
-                        flexDirection: { xs: 'column', sm: 'row' },
+                      <Box sx={{
+                        display: 'flex',
+                        flexDirection: 'row',
                         alignItems: { xs: 'flex-start', sm: 'center' },
                         gap: { xs: 0.5, sm: 1 }
                       }}>
-                        <Typography variant="body1" fontWeight="500" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}>
+                        <Typography variant="body1" fontWeight="500" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' }, color: 'red' }}>
                           {user.username}
                         </Typography>
-                        <Chip 
+                        <Chip
                           label={t('blocked')}
-                          size="small" 
-                          color="error" 
+                          size="small"
+                          color="error"
                           variant="outlined"
-                          sx={{ 
+                          sx={{
                             fontSize: { xs: '0.7rem', sm: '0.8rem' },
                             height: { xs: 20, sm: 24 }
                           }}
@@ -167,7 +171,15 @@ const handleUnblock = async (userId, username) => {
                       </Box>
                     }
                     secondary={
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography
+                        variant="body2" color="error.main"
+                        sx={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          width: { xs: 150, md: 190 },
+                        }}
+                      >
                         {user.email}
                       </Typography>
                     }
@@ -175,31 +187,22 @@ const handleUnblock = async (userId, username) => {
                 </Box>
 
                 {/* Unblock Button */}
-                <Button
-                  variant="outlined"
-                  size={isMobile ? 'small' : 'medium'}
-                  startIcon={
-                    unblockingId === user.id ? (
-                      <CircularProgress size={16} />
-                    ) : (
-                      <PersonRemoveIcon fontSize={isSmallMobile ? 'small' : 'medium'} />
-                    )
-                  }
-                  onClick={() => handleUnblock(user.id, user.username)}
-                  disabled={unblockingId === user.id}
-                  color="primary"
-                  sx={{ 
-                    borderRadius: '8px', 
-                    minWidth: { xs: '100%', sm: 120 },
-                    mt: { xs: 1, sm: 0 }
-                  }}
-                >
-                  {unblockingId === user.id 
-                    ? t('unblocking') 
-                    : isMobile 
-                      ? t('unblock') 
-                      : t('unblock_user')}
-                </Button>
+                <Tooltip title='Unblock user'>
+                  <Button
+                    size='small'
+                    onClick={() => handleUnblock(user.id, user.username)}
+                    disabled={unblockingId === user.id}
+                    color="green"
+                    sx={{
+                      borderRadius: '8px',
+                      minWidth: 0,
+                      color: 'green',
+                      border: { xs: 'none', md: 1 }
+                    }}
+                  >
+                    <PersonRemoveIcon />
+                  </Button>
+                </Tooltip>
               </ListItem>
             );
           })}
