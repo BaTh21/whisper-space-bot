@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy import or_, and_
 from app.crud.activity import create_activity
 from app.models.activity import Activity, ActivityType
+from app.schemas.friend import FriendResponse
 
 router = APIRouter()
 
@@ -105,107 +106,37 @@ async def send_friend_request(
 
     
 # ==================== GET PENDING REQUESTS ====================
-@router.get("/pending")
+@router.get("/pending", response_model=list[FriendResponse])
 async def get_pending_friend_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get pending friend requests sent TO current user"""
     try:
-        print(f"Getting pending requests for user {current_user.id}")
-        
-        pending_requests = db.query(Friend).options(
+        result = db.query(Friend).options(
             joinedload(Friend.user)
         ).filter(
-            Friend.friend_id == current_user.id,
+            Friend.user_id == current_user.id,
             Friend.status == FriendshipStatus.pending
         ).all()
-        
-        print(f"Found {len(pending_requests)} pending requests")
-        
-        result = []
-        for req in pending_requests:
-            requester = req.user
-            result.append({
-                "id": req.id,
-                "friend_request_id": req.id,
-                "requester_id": requester.id,
-                "requester_username": requester.username,
-                "requester_avatar_url": requester.avatar_url or "",
-                "requester_email": requester.email,
-                "created_at": req.created_at.isoformat() if req.created_at else None,
-                "status": req.status.value,
-                "message": f"{requester.username} wants to be your friend"
-            })
         
         return result
         
     except Exception as e:
         print(f"Error getting pending requests: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-    
-@router.get("/pending-requests/detailed")
-async def get_my_pending_requests_detailed(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all pending friend requests with complete details"""
-    try:
-        print(f"=== Fetching pending requests for user {current_user.id} ===")
-        
-        # Get friend requests sent TO current user (where current user is the friend_id)
-        friend_requests = db.query(Friend).options(
-            joinedload(Friend.user)
-        ).filter(
-            Friend.friend_id == current_user.id,  # Requests where current user is the recipient
-            Friend.status == FriendshipStatus.pending
-        ).all()
-        
-        print(f"Found {len(friend_requests)} pending requests for user {current_user.id}")
-        
-        result = []
-        for fr in friend_requests:
-            requester = fr.user
-            print(f"Request from {requester.username} (ID: {requester.id}) to {current_user.username}")
-            
-            result.append({
-                "friend_request_id": fr.id,
-                "requester_id": requester.id,
-                "requester_username": requester.username,
-                "requester_avatar_url": requester.avatar_url or "",
-                "requester_email": requester.email,
-                "created_at": fr.created_at.isoformat() if fr.created_at else None,
-                "updated_at": fr.updated_at.isoformat() if fr.updated_at else None,
-                "status": fr.status.value,
-                "message": f"{requester.username} wants to be your friend"
-            })
-        
-        print(f"Returning {len(result)} requests")
-        return result
-        
-    except Exception as e:
-        print(f"Error getting pending requests: {e}")
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
     
 # ==================== DECLINE FRIEND REQUEST ====================
-@router.delete("/decline/{requester_id}")
+@router.delete("/pending/{pending_id}")
 async def decline_friend_request(
-    requester_id: int,
+    pending_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Decline a pending friend request"""
     try:
-        print(f"=== Decline Request: User {current_user.id} declining from {requester_id} ===")
-        
-        # Find the friend request
         friend_request = db.query(Friend).filter(
-            Friend.user_id == requester_id,
-            Friend.friend_id == current_user.id,
+            Friend.id == pending_id,
+            Friend.user_id == current_user.id,
             Friend.status == FriendshipStatus.pending
         ).first()
         
@@ -216,36 +147,7 @@ async def decline_friend_request(
         db.delete(friend_request)
         db.commit()
         
-        print(f"Friend request declined: ID={friend_request.id}")
-        
-        # Notify requester
-        decline_data = {
-            "type": "friend_request_declined",
-            "data": {
-                "friend_request_id": friend_request.id,
-                "declined_by_id": current_user.id,
-                "declined_by_username": current_user.username,
-                "declined_at": datetime.utcnow().isoformat(),
-                "message": f"{current_user.username} declined your friend request"
-            }
-        }
-        
-        requester_room = f"user_{requester_id}"
-        if manager and hasattr(manager, 'broadcast_to_user'):
-            try:
-                asyncio.create_task(
-                    manager.broadcast_to_user(requester_room, decline_data)
-                )
-                print(f"Decline notification sent to {requester_id}")
-            except Exception as ws_error:
-                print(f"WebSocket error: {ws_error}")
-        
-        return {
-            "msg": "Friend request declined successfully",
-            "friend_request_id": friend_request.id,
-            "requester_id": requester_id,
-            "declined_at": datetime.utcnow().isoformat()
-        }
+        return {'detail':'Pending has been deleted'}
         
     except HTTPException:
         raise
@@ -253,41 +155,6 @@ async def decline_friend_request(
         print(f"Server error: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-    
-
-    
-@router.get("/pending-requests")
-async def get_my_pending_requests(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all pending friend requests sent TO the current user"""
-    try:
-        # Get users who sent requests to current user
-        pending_requests = db.query(User).join(
-            Friend, User.id == Friend.user_id
-        ).filter(
-            Friend.friend_id == current_user.id,
-            Friend.status == FriendshipStatus.pending
-        ).all()
-        
-        print(f"Found {len(pending_requests)} pending requests for user {current_user.id}")
-        
-        return [{
-            "id": req.id,
-            "requester_id": req.id,
-            "requester_username": req.username,
-            "requester_avatar_url": req.avatar_url or "",
-            "requester_email": req.email,
-            "friend_request_id": None,  # We'll need to get this from Friend table
-            "created_at": None,  # We'll need to get this from Friend table
-            "status": "pending"
-        } for req in pending_requests]
-        
-    except Exception as e:
-        print(f"Error getting pending requests: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Internal server error")
     
 # ==================== ACCEPT FRIEND REQUEST ====================
 @router.post("/accept/{requester_id}")
@@ -497,7 +364,7 @@ def pending_requests(
         for user in requests:
             # Find the actual friend request record to get request-specific data
             friend_request = db.query(Friend).filter(
-                Friend.user_id == user.id,  # The user who sent the request
+                # Friend.user_id == user.id,
                 Friend.friend_id == current_user.id,  # Current user is the receiver
                 Friend.status == FriendshipStatus.pending
             ).first()
@@ -558,40 +425,6 @@ def get_user_friends(
         return friends
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch friends")
-
-@router.get("/users/search/")
-def search_users(
-    q: str = Query(..., min_length=1, description="Search query for users"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Search for users by name or email"""
-    try:
-        if not q or len(q.strip()) < 1:
-            return []
-            
-        search_query = q.strip().lower()
-        
-        all_users = [
-            {"id": 2, "name": "John Doe", "email": "john@example.com"},
-            {"id": 3, "name": "Jane Smith", "email": "jane@example.com"},
-            {"id": 4, "name": "Mike Johnson", "email": "mike@example.com"},
-            {"id": 5, "name": "Sarah Wilson", "email": "sarah@example.com"},
-        ]
-        
-        # Filter users that match search query and exclude current user
-        results = [
-            user for user in all_users 
-            if (search_query in user["name"].lower() or 
-                search_query in user["email"].lower()) and
-                user["id"] != current_user.id
-        ]
-        
-        return results
-        
-    except Exception as e:
-        print(f"Search error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Search failed")
 
 @router.post("/friends/")
 def add_friend(

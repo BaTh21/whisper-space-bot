@@ -7,19 +7,16 @@ import {
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import BlockedUsersTab from '../components/BlockedUsersTab';
 import CreateGroupDialog from '../components/CreateGroupDialog';
 import FeedTab from '../components/dashboard/FeedTab';
 import FriendsTab from '../components/dashboard/FriendsTab';
-import GroupsTab from '../components/dashboard/GroupsTab';
 import NotesTab from '../components/dashboard/NotesTab';
 import ProfileSection from '../components/dashboard/ProfileSection';
-import SearchUsersTab from '../components/dashboard/SearchUsersTab';
 import CreateDiaryDialog from '../components/dialogs/CreateDiaryDialog';
 import ViewGroupDialog from '../components/dialogs/ViewGroupDialog';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups } from '../services/api';
+import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups, getSuggestFriends, getPendingFriends, getBlockedUsers } from '../services/api';
 import ChatTab from '../components/dashboard/ChatTab';
 
 function TabPanel({ children, value, index, ...other }) {
@@ -37,7 +34,8 @@ function TabPanel({ children, value, index, ...other }) {
 }
 
 const DashboardPage = ({ defaultTab = 0 }) => {
-  const { isAuthenticated, auth, user: currentUser } = useAuth();
+  const { isAuthenticated, auth } = useAuth();
+  const user = auth.user;
   const navigate = useNavigate();
   const location = useLocation();
   const [profile, setProfile] = useState(null);
@@ -47,6 +45,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   const [friends, setFriends] = useState([]);
+  const [pendingFriends, setPendingFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [diaries, setDiaries] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -55,6 +54,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [viewGroupDialogOpen, setViewGroupDialogOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
+  const [suggestFriends, setSuggestFriends] = useState([]);
+  const [blockedUsers, setBlockedUsers] = useState([]);
 
   // Map URL paths to tab indices
   const pathToTabMap = {
@@ -94,21 +95,29 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       if (!profileData) {
         profileData = await getMe();
         setProfile(profileData);
+
       } else {
         setProfile(profileData);
       }
 
-      const [friendsData, pendingData, feedData, groupsData] = await Promise.all([
+      const [friendsData, pendingData, feedData, groupsData, suggestFriendData, pendingFriendData, blockUserData] = await Promise.all([
         getFriends().catch(() => []),
         getPendingRequests().catch(() => []),
         getFeed().catch(() => []),
         getUserGroups().catch(() => []),
+        getSuggestFriends().catch(() => []),
+        getPendingFriends().catch(() => []),
+        getBlockedUsers().catch(() => []),
+        
       ]);
 
       setFriends(friendsData);
       setPendingRequests(pendingData);
       setDiaries(feedData);
       setGroups(groupsData);
+      setSuggestFriends(suggestFriendData);
+      setPendingFriends(pendingFriendData);
+      setBlockedUsers(blockUserData);
     } catch (err) {
       setError(err.message || 'Failed to fetch data');
     } finally {
@@ -124,11 +133,6 @@ const DashboardPage = ({ defaultTab = 0 }) => {
     // Only fetch data on initial load, not on tab changes
     fetchDashboardData();
   }, [isAuthenticated, navigate, fetchDashboardData]);
-
-  const handleViewGroup = (group) => {
-    setSelectedGroup(group);
-    setViewGroupDialogOpen(true);
-  };
 
   // Show loading only during initial page load
   if (initialLoading) {
@@ -230,6 +234,10 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setError={setError}
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}
+              suggestFriends={suggestFriends}
+              pendingFriends={pendingFriends}
+              blockedUsers={blockedUsers}
+              userId={user.id}
             />
           </TabPanel>
 
