@@ -871,8 +871,7 @@ export const getFeed = async () => {
     console.error("Get feed error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to fetch feed"
+        error.response?.data?.msg
     );
   }
 };

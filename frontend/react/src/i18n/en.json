@@ -288,6 +288,19 @@
   "reset_code": "Reset Code",
   "new_password": "New Password",
   "confirm_password": "Confirm Password",
-  "passwords_do_not_match": "Passwords do not match"
-
+  "passwords_do_not_match": "Passwords do not match",
+  "my_diary": "My Diary",
+  "total_diaries": "Total Diaries",
+  "loading_diaries": "Loading diaries...",
+  "my_diaries": "My Diaries",
+  "edit_profile": "Edit Profile",
+  "change_photo": "Change Photo",
+  "delete_photo": "Delete Photo",
+  "upload_new_photo": "Upload New Photo",
+  "start_writing_your_first_diary": "Start writing your first diary",
+  "private_diaries_only_visible_to_you": "Private diaries are only visible to you",
+  "no_private_diaries": "No private diaries yet",
+  "no_bio_yet": "No bio yet",
+  "write_your_bio": "Write your bio",
+  "view_full_diary": "View Full Diary"
 }
