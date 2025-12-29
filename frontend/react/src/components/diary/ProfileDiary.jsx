@@ -1,7 +1,5 @@
-// FeedTab.jsx - COMPLETE FIXED VERSION
+// ProfileDiary.jsx - COMPLETE FIXED VERSION
 import {
-  Article as ArticleIcon,
-  Cancel as CancelIcon,
   Close as CloseIcon,
   Comment as CommentIcon,
   Delete as DeleteIcon,
@@ -46,7 +44,6 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
-  InputAdornment
 } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -54,12 +51,10 @@ import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDi
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { DiaryCard } from '../diary/DairyCard';
 import { convertFilesToBase64, CommentItemWithActions, MediaPlayer, getVideoThumbnail } from '../diary/DiaryHelper';
-import ActivityComponent from '../diary/ActivityComponent';
-import SuggestFriendComponent from '../diary/SuggestFriendComponent';
 import { useAuth } from '../../context/AuthContext';
 
-// Main FeedTab component
-const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends = [], pendingRequests = [] }) => {
+// Main ProfileDiary component
+const ProfileDiary = ({ diaries, onDataUpdate, profile, groups, friends = [], pendingRequests = [] }) => {
   const [expandedDiary, setExpandedDiary] = useState(null);
   const [diaryComments, setDiaryComments] = useState({});
   const [diaryLikes, setDiaryLikes] = useState({});
@@ -783,11 +778,10 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
       '&::-webkit-scrollbar': { display: 'none' },
       scrollbarWidth: 'none',
       display: 'flex',
-      gap: 3
+      gap: 3,
     }}>
 
-      <Box
-      >
+      <Box>
         <Modal
           open={mediaViewerOpen}
           onClose={handleMediaViewerClose}
@@ -957,63 +951,13 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
           </MenuItem>
         </Menu>
 
-        <Box sx={{
-          display: 'flex',
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 2,
-          py: { xs: 3, md: 2 },
-          width: '100%',
-        }}>
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 2,
-              alignItems: 'center',
-              width: { xs: '100%', md: '100%' }
-            }}
-          >
-            <Typography variant="h5" fontWeight="600" sx={{ display: { xs: 'none', md: 'block' } }}>{t('your_feed')}</Typography>
-            <TextField
-              sx={{ width: { xs: '100%', md: "50%" } }}
-              id="outlined-member-search"
-              label="Search feed"
-              variant="outlined"
-              size="small"
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                    >
-                      <SearchIcon />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Box>
-          <Button
-            variant="contained"
-            onClick={onNewDiary}
-            startIcon={<ArticleIcon />}
-            sx={{ borderRadius: '8px', width: { sm: 150 } }}
-          >
-            {isMobile ? t('new') : t('new_diary')}
-          </Button>
-        </Box>
-
         {normalizedDiaries.length === 0 ? (
           <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
             {t('no_diaries_yet')}
           </Typography>
         ) : (
-          <Box sx={{
-            maxHeight: '80vh',
-            overflowY: 'auto',
-            "&::-webkit-scrollbar": { display: "none" },
-            scrollbarWidth: "none",
-          }}>
+          <Box 
+          >
             {normalizedDiaries.map((diary) => {
               const combinedMedia = [
                 ...(diary.images || []).map((src) => ({
@@ -1956,21 +1900,8 @@ const FeedTab = ({ diaries, onNewDiary, onDataUpdate, profile, groups, friends =
           </Box>
         )}
       </Box>
-
-      <Box
-        sx={{
-          mb: 2, width: { xs: '100%' },
-          display: { xs: 'none', md: 'block' },
-          mt: 2,
-          maxWidth: 300
-        }}
-      >
-        <ActivityComponent />
-        <br />
-        <SuggestFriendComponent />
-      </Box>
     </Box>
   );
 };
 
-export default FeedTab;
+export default ProfileDiary;

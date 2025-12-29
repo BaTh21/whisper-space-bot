@@ -889,6 +889,19 @@ export const getFeed = async () => {
   }
 };
 
+export const getMyFeed = async () => {
+  try {
+    const response = await api.get(`/api/v1/diaries/my-feed`);
+    return response.data;
+  } catch (error) {
+    console.error("Get feed error:", error.response?.data);
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg
+    );
+  }
+};
+
 export const likeDiary = async (diaryId) => {
   try {
     const response = await api.post(`/api/v1/diaries/${diaryId}/like`);

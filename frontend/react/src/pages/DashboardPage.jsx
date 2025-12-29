@@ -256,6 +256,11 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setError={setError}
               setSuccess={setSuccess}
               onProfileUpdate={fetchDashboardData}
+              groups={groups}
+              onDataUpdate={fetchDashboardData}
+              friends={friends}
+              pendingRequests={pendingRequests}
+              onNewDiary={() => setDiaryDialogOpen(true)}
             />
           </TabPanel>
         </Box>

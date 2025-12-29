@@ -23,19 +23,9 @@ def create_diary_endpoint(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        print("=== DIARY CREATE REQUEST ===")
-        print(f"User ID: {current_user.id}")
-        print(f"Share Type: {diary_in.share_type}")
-        print(f"Has videos: {bool(diary_in.videos)}")
-        print(f"Videos count: {len(diary_in.videos) if diary_in.videos else 0}")
         
         # Create the diary
         diary = create_diary(db, current_user.id, diary_in)
-        
-        print(f"✅ Diary created with ID: {diary.id}")
-        print(f"Diary videos from DB: {diary.videos}")
-        print(f"Diary video_thumbnails from DB: {diary.video_thumbnails}")
-        print(f"Diary media_type from DB: {diary.media_type}")
         
         # Refresh the diary with all relationships
         diary = db.query(Diary).options(
@@ -43,11 +33,6 @@ def create_diary_endpoint(
             joinedload(Diary.groups),
             joinedload(Diary.likes).joinedload(DiaryLike.user)
         ).filter(Diary.id == diary.id).first()
-        
-        print(f"✅ Diary refreshed from DB:")
-        print(f"  - Videos: {diary.videos}")
-        print(f"  - Video thumbnails: {diary.video_thumbnails}")
-        print(f"  - Media type: {diary.media_type}")
         
         # Ensure arrays are never None
         images = diary.images if diary.images else []
@@ -58,12 +43,6 @@ def create_diary_endpoint(
         filtered_thumbnails = []
         if video_thumbnails:
             filtered_thumbnails = [thumb for thumb in video_thumbnails if thumb is not None]
-        
-        print(f"✅ Final data for response:")
-        print(f"  - Videos count: {len(videos)}")
-        print(f"  - Video thumbnails count: {len(filtered_thumbnails)}")
-        print(f"  - Video URLs: {videos}")
-        print(f"  - Thumbnail URLs: {filtered_thumbnails}")
         
         # Create the response
         response = DiaryOut(
@@ -97,10 +76,6 @@ def create_diary_endpoint(
             created_at=diary.created_at,
             updated_at=diary.updated_at
         )
-        
-        print(f"✅ Response created:")
-        print(f"  - Response videos field: {response.videos}")
-        print(f"  - Response video_thumbnails field: {response.video_thumbnails}")
         
         return response
         
@@ -179,6 +154,65 @@ def get_feed(
         result.append(diary_out)
 
     return result
+
+@router.get("/my-feed", response_model=List[DiaryOut])
+def get_my_diaries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    diaries = (
+        db.query(Diary)
+        .options(
+            joinedload(Diary.author),
+            joinedload(Diary.groups),
+            joinedload(Diary.likes).joinedload(DiaryLike.user)
+        )
+        .filter(Diary.user_id == current_user.id)
+        .order_by(Diary.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for d in diaries:
+        filtered_thumbnails = (
+            [thumb for thumb in d.video_thumbnails if thumb is not None]
+            if d.video_thumbnails else []
+        )
+
+        result.append(
+            DiaryOut(
+                id=d.id,
+                author=CreatorResponse(
+                    id=d.author.id,
+                    username=d.author.username,
+                    avatar_url=d.author.avatar_url
+                ),
+                title=d.title,
+                content=d.content,
+                share_type=d.share_type.value,
+                groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups],
+                images=d.images or [],
+                videos=d.videos or [],
+                video_thumbnails=filtered_thumbnails,
+                media_type=d.media_type,
+                likes=[
+                    DiaryLikeResponse(
+                        id=l.id,
+                        user=CreatorResponse(
+                            id=l.user.id,
+                            username=l.user.username,
+                            avatar_url=l.user.avatar_url
+                        )
+                    ) for l in d.likes
+                ],
+                is_deleted=d.is_deleted,
+                created_at=d.created_at,
+                updated_at=d.updated_at
+            )
+        )
+
+    return result
+
 
 @router.get("/{diary_id}", response_model=DiaryOut)
 def get_diary_by_id(
