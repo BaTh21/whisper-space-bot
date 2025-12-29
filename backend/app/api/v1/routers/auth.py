@@ -1,10 +1,9 @@
-
-from datetime import datetime
-import os
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import random
+from typing import Optional
+
 from app.schemas.base import BaseResponse
 from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, Token, UserCreate, UserLogin, VerifyCodeRequest
 from app.core.database import get_db
@@ -14,12 +13,17 @@ from app.services.email import send_password_reset_email, send_verification_emai
 from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password
 from app.schemas.refresh_token import RefreshTokenRequest
 from app.models.user import User
-from app.core.config import settings
+from app.crud.system_log import log_user_activity
 
 router = APIRouter()
 
+
 @router.post("/refresh", response_model=Token)
-def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
+def refresh_token(
+    req: RefreshTokenRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     rt = get_valid_refresh_token(db, req.refresh_token)
     if not rt:
         raise HTTPException(
@@ -31,6 +35,10 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
     new_access = create_access_token(rt.user_id)
     new_refresh = create_refresh_token(rt.user_id)
     store_refresh_token(db, rt.user_id, new_refresh)
+    
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_user_activity(db, rt.user_id, "refresh_token", ip_address, user_agent)
 
     return Token(
         access_token=new_access, 
@@ -38,13 +46,13 @@ def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
         token_type="bearer"
     )
 
+
 @router.post("/register", response_model=BaseResponse)
 async def register(
     user_in: UserCreate, 
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db), 
 ):
-    # Check existing users
     existing_email = db.query(User).filter(User.email == user_in.email).first()
     if existing_email:
         raise HTTPException(
@@ -59,28 +67,17 @@ async def register(
             detail="Username already taken"
         )
     
-    # Generate 6-digit code
     code = "".join(random.choices("0123456789", k=6))
     
-    # Create user
     new_user = create(db, user_in)
     
-    # Store verification code
     create_verification_code(db, new_user.id, code)
-    # Try to send email
+    
     email_sent = False
     try:
         email_sent = send_verification_email_sync(user_in.email, code)
-        print(f"📧 Email send attempt: {'✅ SUCCESS' if email_sent else '❌ FAILED'}")
-    except Exception as e:
-        print(f"❌ Email error: {e}")
-        # Still try background task
+    except Exception:
         background_tasks.add_task(send_verification_email_sync, user_in.email, code)
-    
-    # Write to log file (platform independent)
-    log_dir = "logs"
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "email_debug.log")
     
     if email_sent:
         return BaseResponse(
@@ -95,8 +92,13 @@ async def register(
             data={"email": user_in.email}
         )
 
+
 @router.post("/verify-code", response_model=Token)
-def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
+def verify_code(
+    req: VerifyCodeRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     user = get_by_email(db, req.email)
     if not user:
         raise HTTPException(
@@ -117,6 +119,10 @@ def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
     access_token = create_access_token(user.id)
     refresh_token_jwt = create_refresh_token(user.id)
     store_refresh_token(db, user.id, refresh_token_jwt)
+    
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_user_activity(db, user.id, "login", ip_address, user_agent)
 
     return Token(
         access_token=access_token,
@@ -124,9 +130,11 @@ def verify_code(req: VerifyCodeRequest, db: Session = Depends(get_db)):
         token_type="bearer"
     )
 
+
 @router.post("/login", response_model=Token)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
+    request: Request = None,
     db: Session = Depends(get_db)
 ):
     user = get_by_email(db, form_data.username)
@@ -151,27 +159,41 @@ def login(
     access_token = create_access_token(user.id)
     refresh_token_jwt = create_refresh_token(user.id)
     store_refresh_token(db, user.id, refresh_token_jwt)
-
+    
+    if request:
+        ip_address = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+        log_user_activity(db, user.id, "login", ip_address, user_agent)
+    
     return Token(
         access_token=access_token,
         refresh_token=refresh_token_jwt,
         token_type="bearer"
     )
 
+
 @router.post("/logout", response_model=BaseResponse)
 def logout(
-    req: RefreshTokenRequest,
+    logout_request: RefreshTokenRequest,  # Use existing RefreshTokenRequest schema
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ):
-    revoke_refresh_token(db, req.refresh_token)
-    return BaseResponse(msg="Logged out")
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    
+    revoke_refresh_token(db, logout_request.refresh_token)
+    
+    log_user_activity(db, current_user.id, "logout", ip_address, user_agent)
+    
+    return BaseResponse(
+        success=True,
+        msg="Logged out successfully"
+    )
+
 
 @router.post("/resend-verification", response_model=BaseResponse)
 async def resend_verification(email: str, db: Session = Depends(get_db)):
-    """
-    Resend verification code to user's email
-    """
     user = get_by_email(db, email)
     if not user:
         raise HTTPException(
@@ -185,14 +207,9 @@ async def resend_verification(email: str, db: Session = Depends(get_db)):
             detail="Email already verified"
         )
     
-    # Generate new verification code
     code = "".join(random.choices("0123456789", k=6))
-    
-    # Delete any existing codes and create new one
-    # (You might need to implement delete_user_codes function)
     create_verification_code(db, user.id, code)
     
-    # Send verification email
     email_sent = await send_verification_email(email, code)
     
     if not email_sent:
@@ -203,6 +220,7 @@ async def resend_verification(email: str, db: Session = Depends(get_db)):
     
     return BaseResponse(msg="Verification code sent")
 
+
 @router.post("/forgot-password", response_model=BaseResponse)
 async def forgot_password(
     req: ForgotPasswordRequest,
@@ -211,13 +229,10 @@ async def forgot_password(
 ):
     user = get_by_email(db, req.email)
     if not user:
-        # Security best practice: don't reveal if email exists
         return BaseResponse(msg="If the email is registered, a reset code has been sent.")
 
-    # Create reset code
     reset_obj = create_password_reset_code(db, user.id)
 
-    # Try to send email
     email_sent = await send_password_reset_email(req.email, reset_obj.code)
     if not email_sent:
         background_tasks.add_task(send_password_reset_email, req.email, reset_obj.code)
@@ -238,11 +253,9 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Update password
     user.password_hash = hash_password(req.new_password)
     db.commit()
 
-    # Invalidate the code
     delete_reset_code(db, reset_obj.id)
 
     return BaseResponse(msg="Password reset successfully. You can now log in.")
