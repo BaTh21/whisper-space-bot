@@ -71,11 +71,18 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
     }
   }
 
-  const handleMenuOpen = (e) => setAnchorEl(e.currentTarget);
+  const handleMenuOpen = (e) => {
+    e.stopPropagation();
+    setAnchorEl(e.currentTarget);
+  };
 
-  const handleMenuClose = () => setAnchorEl(null);
+  const handleMenuClose = (e) => {
+    e.stopPropagation();
+    setAnchorEl(null)
+  };
 
-  const handleEdit = () => {
+  const handleEdit = (e) => {
+    e.stopPropagation();
     if (isOwner || isSharedWithEdit) {
       onEdit(note);
     } else {
@@ -84,12 +91,14 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
     handleMenuClose();
   };
 
-  const handleDeleteClick = () => {
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
     setDeleteDialogOpen(true);
     handleMenuClose();
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = (e) => {
+    e.stopPropagation();
     onDelete(note.id);
     setDeleteDialogOpen(false);
   };
@@ -98,12 +107,14 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
     setDeleteDialogOpen(false);
   };
 
-  const handleTogglePin = () => {
+  const handleTogglePin = (e) => {
+    e.stopPropagation();
     onTogglePin(note.id);
     handleMenuClose();
   };
 
-  const handleToggleArchive = () => {
+  const handleToggleArchive = (e) => {
+    e.stopPropagation();
     if (!isOwner) {
       alert(t("owner_only_archive"));
       handleMenuClose();
@@ -113,7 +124,8 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
     handleMenuClose();
   };
 
-  const handleShare = () => {
+  const handleShare = (e) => {
+    e.stopPropagation();
     if (!isOwner) {
       alert(t("owner_only_share"));
       handleMenuClose();
@@ -123,7 +135,8 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
     handleMenuClose();
   };
 
-  const handleLeaveClick = () => {
+  const handleLeaveClick = (e) => {
+    e.stopPropagation();
     onLeaveNote(note.id);
     handleMenuClose();
   };
@@ -402,7 +415,7 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
                   gap: 0.5
                 }}
               >
-              <Avatar
+                <Avatar
                   src={note?.user?.avatar_url}
                   alt={note.user.username}
                   sx={{
@@ -412,9 +425,9 @@ const NoteCard = ({ note, onEdit, onDelete, onTogglePin, onToggleArchive, onShar
                 >
                   {note.user.username.charAt(0).toUpperCase()}
                 </Avatar>
-              <Typography variant="caption">
-                You
-              </Typography>
+                <Typography variant="caption">
+                  You
+                </Typography>
               </Box>
             ) : (
               <Box
