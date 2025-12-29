@@ -10,7 +10,7 @@ import {
   Tabs,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme, Button
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -18,26 +18,16 @@ import { useAuth } from '../../context/AuthContext';
 import {
   createNote, deleteNote, getNotes,
   getSharedNotes,
+  leaveSharedNote,
   shareNote,
   toggleArchiveNote, togglePinNote, updateNote
 } from '../../services/api';
 import NoteCard from '../notes/NoteCard';
 import NoteEditor from '../notes/NoteEditor';
 import ShareDialog from '../ShareDialog';
-
-function TabPanel({ children, value, index, ...other }) {
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`notes-tabpanel-${index}`}
-      aria-labelledby={`notes-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ py: 2 }}>{children}</Box>}
-    </div>
-  );
-}
+import NoteAltIcon from '@mui/icons-material/NoteAlt';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import StickyNote2Icon from '@mui/icons-material/StickyNote2';
 
 const NotesTab = ({ setError, setSuccess }) => {
   const [notes, setNotes] = useState([]);
@@ -52,11 +42,10 @@ const NotesTab = ({ setError, setSuccess }) => {
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
   // Get current user from auth context
   const { auth } = useAuth();
-  const currentUser = auth.user;
+  const user = auth.user;
 
   useEffect(() => {
     loadNotes();
@@ -82,6 +71,8 @@ const NotesTab = ({ setError, setSuccess }) => {
       setLoading(false);
     }
   };
+
+  console.log("note", notes);
 
   const handleCreateNote = () => {
     setEditingNote(null);
@@ -113,7 +104,7 @@ const NotesTab = ({ setError, setSuccess }) => {
         result = await createNote(noteData);
         showTimedAlert('success', t('note_created') || 'Note created successfully');
       }
-      
+
       setIsEditorOpen(false);
       setEditingNote(null);
       loadNotes();
@@ -170,19 +161,19 @@ const NotesTab = ({ setError, setSuccess }) => {
 
     try {
       await shareNote(sharingNote.id, shareData);
-      
+
       let successMessage = t('sharing_updated') || 'Sharing settings updated';
       if (shareData.share_type === 'public') {
         successMessage = t('note_now_public') || 'Note is now public';
       } else if (shareData.share_type === 'shared') {
         const count = shareData.friend_ids.length;
-        successMessage = count === 1 
+        successMessage = count === 1
           ? t('note_shared_singular') || `Note shared with 1 friend`
           : t('note_shared_plural') || `Note shared with ${count} friends`;
       } else {
         successMessage = t('note_now_private') || 'Note is now private';
       }
-      
+
       showTimedAlert('success', successMessage);
       setShareDialogOpen(false);
       setSharingNote(null);
@@ -192,6 +183,21 @@ const NotesTab = ({ setError, setSuccess }) => {
       showTimedAlert('error', error.message || t('failed_to_share') || 'Failed to update sharing settings');
     }
   };
+
+  const handleLeaveNote = async (noteId) => {
+    try {
+      await leaveSharedNote(noteId);
+      await loadNotes();
+
+      showTimedAlert('success', 'Note has been removed');
+    } catch (error) {
+      showTimedAlert(
+        'error',
+        error.response?.data?.detail ||
+        'Failed to remove the shared note'
+      );
+    }
+  }
 
   const filteredNotes = notes.filter(note => {
     if (activeTab === 0) return !note.is_archived;
@@ -203,29 +209,89 @@ const NotesTab = ({ setError, setSuccess }) => {
   const otherNotes = filteredNotes.filter(note => !note.is_pinned);
 
   return (
-    <Box sx={{ 
-      position: 'relative', 
-      minHeight: 400,
-      p: { xs: 2, sm: 3 },
-      maxWidth: '100%',
-      overflow: 'hidden'
-    }}>
+    <Box
+      sx={{
+        height: '89vh',
+        overflowY: 'auto',
+        '&::-webkit-scrollbar': { display: 'none' },
+        scrollbarWidth: 'none',
+      }}
+    >
       <Typography variant="h5" gutterBottom fontWeight="600">
         {t('my_notes')}
       </Typography>
 
-      <Tabs 
-        value={activeTab} 
-        onChange={(e, newValue) => setActiveTab(newValue)} 
-        sx={{ mb: 3 }}
-        variant={isMobile ? "scrollable" : "standard"}
-        scrollButtons={isMobile ? "auto" : false}
-        allowScrollButtonsMobile
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 3
+        }}
       >
-        <Tab label={t('active_notes')} />
-        <Tab label={t('archived')} />
-        {/* <Tab label={t('shared_with_me')} /> */}
-      </Tabs>
+        <Tabs
+          value={activeTab}
+          onChange={(e, newValue) => setActiveTab(newValue)}
+          sx={{
+            minHeight: 32,
+            '& .MuiTabs-indicator': {
+              height: 3,
+              borderRadius: 1,
+            },
+            borderBottom: 1,
+            borderColor: 'divider'
+          }}
+          variant={isMobile ? "scrollable" : "standard"}
+          scrollButtons={isMobile ? "auto" : false}
+          allowScrollButtonsMobile
+        >
+          <Tab
+            icon={<NoteAltIcon sx={{ fontSize: 22 }} />}
+            iconPosition="start"
+            label={isMobile ? '' : t('active_notes')}
+            sx={{
+              fontWeight: 600,
+              fontSize: 14,
+              minHeight: 36,
+              px: 1,
+            }}
+          />
+          <Tab
+            icon={<ArchiveIcon sx={{ fontSize: 22 }} />}
+            iconPosition="start"
+            label={isMobile ? '' : t('archived')}
+            sx={{
+              fontWeight: 600,
+              fontSize: 14,
+              minHeight: 36,
+              px: 1,
+            }}
+          />
+        </Tabs>
+
+
+        <Button
+          // variant="contained"
+          onClick={handleCreateNote}
+          sx={{
+            borderRadius: '8px',
+            minWidth: 0,
+            bgcolor: 'primary.main',
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
+          <AddIcon />
+          <Typography
+            sx={{
+              mt: 0.25
+            }}
+          >
+            {isMobile ? '' : 'New Note'}
+          </Typography>
+        </Button>
+      </Box>
 
       {loading && (
         <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -242,7 +308,7 @@ const NotesTab = ({ setError, setSuccess }) => {
               </Typography>
               <Grid container spacing={2}>
                 {pinnedNotes.map(note => (
-                  <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
+                  <Grid item key={note.id} xs={12} sm={6} md={4} sx={{ mx: { xs: 'auto', md: 0 } }}>
                     <NoteCard
                       note={note}
                       onEdit={handleEditNote}
@@ -250,6 +316,7 @@ const NotesTab = ({ setError, setSuccess }) => {
                       onTogglePin={handleTogglePin}
                       onToggleArchive={handleToggleArchive}
                       onShare={handleShareNote}
+                      onLeaveNote={handleLeaveNote}
                     />
                   </Grid>
                 ))}
@@ -266,7 +333,7 @@ const NotesTab = ({ setError, setSuccess }) => {
               )}
               <Grid container spacing={2}>
                 {otherNotes.map(note => (
-                  <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
+                  <Grid item key={note.id} xs={12} sm={6} md={4} sx={{ mx: { xs: 'auto', md: 0 } }}>
                     <NoteCard
                       note={note}
                       onEdit={handleEditNote}
@@ -274,6 +341,7 @@ const NotesTab = ({ setError, setSuccess }) => {
                       onTogglePin={handleTogglePin}
                       onToggleArchive={handleToggleArchive}
                       onShare={handleShareNote}
+                      onLeaveNote={handleLeaveNote}
                     />
                   </Grid>
                 ))}
@@ -282,9 +350,9 @@ const NotesTab = ({ setError, setSuccess }) => {
           )}
 
           {filteredNotes.length === 0 && (
-            <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
+            <Card variant="outlined" sx={{ textAlign: 'center', py: 6, bgcolor: 'transparent', border: 'none', boxShadow: 'none' }}>
               <CardContent>
-                <NotesIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
+                <StickyNote2Icon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
                 <Typography variant="h6" color="text.secondary" gutterBottom>
                   {t('no_notes_yet')}
                 </Typography>
@@ -297,12 +365,12 @@ const NotesTab = ({ setError, setSuccess }) => {
         </>
       )}
 
-      {!loading && activeTab === 1 && (
+      {!loading && (activeTab === 1 || activeTab === 2) && (
         <>
-          {filteredNotes.length > 0 ? (
+          {((activeTab === 1 ? filteredNotes : sharedNotes).length > 0) ? (
             <Grid container spacing={2}>
-              {filteredNotes.map(note => (
-                <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
+              {(activeTab === 1 ? filteredNotes : sharedNotes).map(note => (
+                <Grid item key={note.id} xs={12} sm={6} md={4} sx={{ mx: { xs: 'auto', md: 0 } }}>
                   <NoteCard
                     note={note}
                     onEdit={handleEditNote}
@@ -310,73 +378,40 @@ const NotesTab = ({ setError, setSuccess }) => {
                     onTogglePin={handleTogglePin}
                     onToggleArchive={handleToggleArchive}
                     onShare={handleShareNote}
+                    onLeaveNote={handleLeaveNote}
                   />
                 </Grid>
               ))}
             </Grid>
           ) : (
-            <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
+            <Card variant="outlined" sx={{ textAlign: 'center', py: 6, bgcolor: 'transparent', border: 'none', boxShadow: 'none' }}>
               <CardContent>
-                <NotesIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  {t('no_archived_notes')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('archived_notes_will_appear_here')}
-                </Typography>
+                {activeTab === 1 ? (
+                  <>
+                    <StickyNote2Icon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      {t('no_archived_notes')}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('archived_notes_will_appear_here')}
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <GroupIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      {t('no_shared_notes')}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('notes_shared_with_you_will_appear_here')}
+                    </Typography>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
         </>
       )}
-
-      {!loading && activeTab === 2 && (
-        <>
-          {sharedNotes.length > 0 ? (
-            <Grid container spacing={2}>
-              {sharedNotes.map(note => (
-                <Grid item key={note.id} xs={12} sm={6} md={4} lg={3}>
-                  <NoteCard
-                    note={note}
-                    onEdit={handleEditNote}
-                    onDelete={handleDeleteNote}
-                    onTogglePin={handleTogglePin}
-                    onToggleArchive={handleToggleArchive}
-                    onShare={handleShareNote}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          ) : (
-            <Card variant="outlined" sx={{ textAlign: 'center', py: 6 }}>
-              <CardContent>
-                <GroupIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  {t('no_shared_notes')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('notes_shared_with_you_will_appear_here')}
-                </Typography>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
-
-      <Fab
-        color="primary"
-        aria-label={t('new')}
-        sx={{
-          position: 'fixed',
-          bottom: { xs: 16, sm: 24 },
-          right: { xs: 16, sm: 24 },
-          transform: { xs: 'scale(0.9)', sm: 'scale(1)' }
-        }}
-        onClick={handleCreateNote}
-        size={isMobile ? 'small' : 'large'}
-      >
-        <AddIcon />
-      </Fab>
 
       <NoteEditor
         open={isEditorOpen}
@@ -398,6 +433,7 @@ const NotesTab = ({ setError, setSuccess }) => {
         onShare={handleShare}
       />
     </Box>
+
   );
 };
 

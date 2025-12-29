@@ -64,12 +64,19 @@ class PublicNoteOut(BaseModel):
     content: Optional[str] = None
     color: str = "#ffffff"
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
+    
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    avatar_url: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class NoteOut(NoteBase):
     id: int
-    user_id: int
+    user: UserResponse
     share_token: Optional[str] = None
     share_expires: Optional[datetime] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
