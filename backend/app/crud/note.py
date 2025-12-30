@@ -25,8 +25,6 @@ def create_note(db: Session, note: NoteCreate, user_id: int) -> Note:
     return db_note
 
 def get_note_by_id(db: Session, note_id: int, user_id: int) -> Optional[Note]:
-    """Get a note by ID if user owns it or it's shared with them"""
-    # First try to get user's own note
     note = db.query(Note).filter(
         Note.id == note_id,
         Note.user_id == user_id
@@ -35,8 +33,6 @@ def get_note_by_id(db: Session, note_id: int, user_id: int) -> Optional[Note]:
     if note:
         return note
     
-    # If not found, check if it's shared with user
-    # Using text() for raw SQL to handle JSON array querying
     shared_note = db.query(Note).filter(
         Note.id == note_id,
         Note.share_type == "shared",
@@ -52,33 +48,28 @@ def get_notes_by_user(
     limit: int = 100,
     archived: bool = False
 ) -> List[Note]:
-    """Get user's own notes + notes shared with user"""
     try:
-        print(f"🔍 CRUD: Getting notes for user {user_id}, archived={archived}")
-        
-        # Get user's own notes
         user_notes = db.query(Note).filter(
             Note.user_id == user_id,
             Note.is_archived == archived
         ).all()
         
-        print(f"✅ Found {len(user_notes)} user notes")
-        
-        # Get notes shared with user (excluding archived ones for shared notes)
-        # Using text() for raw SQL to handle JSON array querying in PostgreSQL
         shared_notes = db.query(Note).filter(
             Note.share_type == "shared",
             Note.is_archived == False,  # Don't show archived shared notes
             text(f"shared_with::jsonb @> '[{user_id}]'")
         ).all()
         
-        print(f"✅ Found {len(shared_notes)} shared notes")
-        
-        # Combine and sort (pinned first, then by updated_at)
         all_notes = user_notes + shared_notes
-        all_notes.sort(key=lambda x: (x.is_pinned, x.updated_at), reverse=True)
+        all_notes.sort(
+            key=lambda x: (
+                x.is_pinned,
+                x.updated_at or x.created_at
+            ),
+            reverse=True
+        )
+
         
-        print(f"📊 Total notes: {len(all_notes)}")
         return all_notes
         
     except Exception as e:
@@ -88,11 +79,7 @@ def get_notes_by_user(
         return []
 
 def get_shared_notes(db: Session, user_id: int) -> List[Note]:
-    """Get notes shared with current user by friends"""
     try:
-        print(f"🔍 CRUD: Getting shared notes for user {user_id}")
-        
-        # Only get notes where user is in shared_with array AND doesn't own the note
         notes = db.query(Note).filter(
             Note.share_type == "shared",
             Note.user_id != user_id,  # Exclude user's own notes
@@ -100,7 +87,6 @@ def get_shared_notes(db: Session, user_id: int) -> List[Note]:
             text(f"shared_with::jsonb @> '[{user_id}]'")
         ).order_by(Note.updated_at.desc()).all()
         
-        print(f"✅ CRUD: Found {len(notes)} shared notes")
         return notes
     except Exception as e:
         print(f"❌ CRUD Error in get_shared_notes: {str(e)}")
@@ -155,7 +141,7 @@ def toggle_pin_note(db: Session, note_id: int, user_id: int) -> Optional[Note]:
     """Toggle pin status - only owner can pin"""
     db_note = db.query(Note).filter(
         Note.id == note_id,
-        Note.user_id == user_id  # Only owner can pin
+        # Note.user_id == user_id 
     ).first()
     
     if db_note:
@@ -216,6 +202,43 @@ def share_note(db: Session, note_id: int, user_id: int, share_data: ShareNoteReq
     db.commit()
     db.refresh(db_note)
     return db_note
+
+def remove_current_user_from_shared_with(
+    db: Session,
+    note_id: int,
+    current_user_id: int
+) -> Optional[Note]:
+    note = db.query(Note).filter(Note.id == note_id).first()
+    if not note:
+        return None
+
+    # Owner cannot remove themselves
+    if note.user_id == current_user_id:
+        return None
+
+    # Only for shared notes
+    if note.share_type != "shared":
+        return None
+
+    shared_users = note.shared_with or []
+
+    if current_user_id not in shared_users:
+        return None
+
+    # Remove user
+    note.shared_with = [
+        uid for uid in shared_users if uid != current_user_id
+    ]
+
+    # Optional: revert to private if no users left
+    if not note.shared_with:
+        note.share_type = "private"
+        note.can_edit = False
+
+    db.commit()
+    db.refresh(note)
+    return note
+
 
 def get_public_note(db: Session, share_token: str) -> Optional[Note]:
     """Get a publicly shared note by share token"""

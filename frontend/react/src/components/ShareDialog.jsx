@@ -1,216 +1,168 @@
-import { Close, Group, Link, Lock, Public } from '@mui/icons-material';
+import { Close, Group, Lock } from '@mui/icons-material';
 import {
-    Box,
-    Button,
-    Chip,
-    CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    FormControl,
-    FormControlLabel,
-    FormLabel,
-    IconButton,
-    List,
-    ListItem,
-    ListItemIcon,
-    ListItemText,
-    Radio,
-    RadioGroup,
-    Switch,
-    TextField,
-    Typography
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Drawer,
+  FormControl,
+  FormControlLabel,
+  FormLabel,
+  IconButton,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Radio,
+  RadioGroup,
+  Switch,
+  Typography
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { getFriends } from '../services/api';
 
-const ShareDialog = ({ open, note, onClose, onShare }) => {
+const ShareDrawer = ({ open, note, onClose, onShare }) => {
   const [shareType, setShareType] = useState('private');
   const [friendIds, setFriendIds] = useState([]);
   const [canEdit, setCanEdit] = useState(false);
-  const [expires, setExpires] = useState(false);
-  const [expireHours, setExpireHours] = useState(24);
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
+
     const loadFriends = async () => {
-      if (open) {
-        setLoading(true);
-        try {
-          // Fetch real friends from your API
-          const friendsData = await getFriends();
-          console.log('Loaded friends:', friendsData);
-          setFriends(friendsData);
-        } catch (error) {
-          console.error('Error loading friends:', error);
-          // Fallback to empty array if API fails
-          setFriends([]);
-        } finally {
-          setLoading(false);
-        }
-        
-        // Initialize with note's current sharing settings
-        if (note) {
-          setShareType(note.share_type || 'private');
-          setFriendIds(note.shared_with || []);
-          setCanEdit(note.can_edit || false);
-        } else {
-          // Reset for new note
-          setShareType('private');
-          setFriendIds([]);
-          setCanEdit(false);
-        }
+      setLoading(true);
+      try {
+        const friendsData = await getFriends();
+        setFriends(friendsData);
+      } catch (err) {
+        console.error('Error loading friends:', err);
+        setFriends([]);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadFriends();
-  }, [note, open]);
 
-  const handleFriendToggle = (friendId) => {
-    setFriendIds(prev => 
-      prev.includes(friendId) 
-        ? prev.filter(id => id !== friendId)
-        : [...prev, friendId]
+    if (note) {
+      setShareType(note.share_type || 'private');
+      setFriendIds(note.shared_with || []);
+      setCanEdit(note.can_edit || false);
+    } else {
+      setShareType('private');
+      setFriendIds([]);
+      setCanEdit(false);
+    }
+  }, [open, note]);
+
+  const handleFriendToggle = (id) => {
+    setFriendIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
-  const handleShare = () => {
-    const shareData = {
+  const handleApply = () => {
+    onShare({
       share_type: shareType,
       friend_ids: shareType === 'shared' ? friendIds : [],
-      can_edit: canEdit,
-      expires_in_hours: shareType === 'public' && expires ? expireHours : null
-    };
-    onShare(shareData);
+      can_edit: canEdit
+    });
   };
 
-  const shareLink = shareType === 'public' && note?.share_token 
-    ? `${window.location.origin}/notes/public/${note.share_token}`
-    : '';
-
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          Share Note
+    <Drawer anchor="right" open={open} onClose={onClose}>
+      <Box sx={{ width: 380, p: 3, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Header */}
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="h6">Share Note</Typography>
           <IconButton onClick={onClose}>
             <Close />
           </IconButton>
         </Box>
-      </DialogTitle>
-      
-      <DialogContent>
-        <FormControl component="fieldset" sx={{ width: '100%', mb: 3 }}>
-          <FormLabel component="legend">Sharing Options</FormLabel>
+
+        {/* Sharing Options */}
+        <FormControl sx={{ mt: 3 }}>
+          <FormLabel>Sharing Options</FormLabel>
           <RadioGroup value={shareType} onChange={(e) => setShareType(e.target.value)}>
-            <FormControlLabel 
-              value="private" 
-              control={<Radio />} 
+            <FormControlLabel
+              value="private"
+              control={<Radio />}
               label={
                 <Box display="flex" alignItems="center">
-                  <Lock sx={{ mr: 1, fontSize: 20 }} />
-                  <Box>
-                    <Typography>Private</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Only you can access this note
-                    </Typography>
-                  </Box>
+                  <Lock sx={{ mr: 1 }} />
+                  <Typography>Private</Typography>
                 </Box>
-              } 
+              }
             />
-            <FormControlLabel 
-              value="shared" 
-              control={<Radio />} 
+            <FormControlLabel
+              value="shared"
+              control={<Radio />}
               label={
                 <Box display="flex" alignItems="center">
-                  <Group sx={{ mr: 1, fontSize: 20 }} />
-                  <Box>
-                    <Typography>Shared with Friends</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Share with specific friends
-                    </Typography>
-                  </Box>
+                  <Group sx={{ mr: 1 }} />
+                  <Typography>Shared with Friends</Typography>
                 </Box>
-              } 
-            />
-            <FormControlLabel 
-              value="public" 
-              control={<Radio />} 
-              label={
-                <Box display="flex" alignItems="center">
-                  <Public sx={{ mr: 1, fontSize: 20 }} />
-                  <Box>
-                    <Typography>Public</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Anyone with the link can view
-                    </Typography>
-                  </Box>
-                </Box>
-              } 
+              }
             />
           </RadioGroup>
         </FormControl>
 
+        {/* Friends List */}
         {shareType === 'shared' && (
-          <Box sx={{ mb: 2 }}>
+          <Box sx={{ mt: 3, flex: 1 }}>
             <Typography variant="subtitle2" gutterBottom>
-              Select Friends:
+              Select Friends
             </Typography>
-            
+
             {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <Box display="flex" justifyContent="center" py={3}>
                 <CircularProgress />
               </Box>
             ) : friends.length === 0 ? (
-              <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
-                No friends found. Add friends to share notes with them.
+              <Typography color="text.secondary" align="center">
+                No friends found
               </Typography>
             ) : (
               <>
-                <List sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                  {friends.map(friend => (
-                    <ListItem 
+                <List sx={{ maxHeight: 220, overflow: 'auto', border: '1px solid', borderColor: 'divider' }}>
+                  {friends.map((friend) => (
+                    <ListItem
                       key={friend.id}
-                      onClick={() => handleFriendToggle(friend.id)}
+                      button
                       selected={friendIds.includes(friend.id)}
-                      sx={{
-                        '&.Mui-selected': {
-                          backgroundColor: 'primary.light',
-                          '&:hover': {
-                            backgroundColor: 'primary.light',
-                          }
-                        }
-                      }}
+                      onClick={() => handleFriendToggle(friend.id)}
                     >
                       <ListItemIcon>
                         <Group />
                       </ListItemIcon>
-                      <ListItemText 
+                      <ListItemText
                         primary={friend.username || friend.name || friend.email}
                         secondary={friend.email}
                       />
                     </ListItem>
                   ))}
                 </List>
-                
+
                 {friendIds.length > 0 && (
                   <Box sx={{ mt: 1 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      Sharing with: {friendIds.length} friend{friendIds.length !== 1 ? 's' : ''}
+                    <Typography variant="caption">
+                      Sharing with {friendIds.length} friend{friendIds.length !== 1 && 's'}
                     </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-                      {friendIds.map(friendId => {
-                        const friend = friends.find(f => f.id === friendId);
-                        return friend ? (
-                          <Chip
-                            key={friend.id}
-                            label={friend.username || friend.name || friend.email}
-                            size="small"
-                            onDelete={() => handleFriendToggle(friend.id)}
-                          />
-                        ) : null;
+                    <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {friendIds.map((id) => {
+                        const f = friends.find((x) => x.id === id);
+                        return (
+                          f && (
+                            <Chip
+                              key={id}
+                              label={f.username || f.name || f.email}
+                              size="small"
+                              onDelete={() => handleFriendToggle(id)}
+                            />
+                          )
+                        );
                       })}
                     </Box>
                   </Box>
@@ -220,84 +172,34 @@ const ShareDialog = ({ open, note, onClose, onShare }) => {
           </Box>
         )}
 
-        {shareType === 'public' && (
-          <Box sx={{ mb: 2 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={expires}
-                  onChange={(e) => setExpires(e.target.checked)}
-                />
-              }
-              label="Set link expiration"
-            />
-            {expires && (
-              <TextField
-                fullWidth
-                type="number"
-                label="Expires after (hours)"
-                value={expireHours}
-                onChange={(e) => setExpireHours(parseInt(e.target.value))}
-                sx={{ mt: 1 }}
+        {/* Edit Permission */}
+        {(shareType === 'shared') && (
+          <FormControlLabel
+            sx={{ mt: 2 }}
+            control={
+              <Switch
+                checked={canEdit}
+                onChange={(e) => setCanEdit(e.target.checked)}
               />
-            )}
-            
-            {shareLink && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Shareable Link:
-                </Typography>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Link color="primary" />
-                  <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                    {shareLink}
-                  </Typography>
-                  <Button 
-                    size="small" 
-                    onClick={() => navigator.clipboard.writeText(shareLink)}
-                  >
-                    Copy
-                  </Button>
-                </Box>
-              </Box>
-            )}
-          </Box>
+            }
+            label="Allow editing"
+          />
         )}
 
-        {(shareType === 'shared' || shareType === 'public') && (
-          <Box sx={{ mt: 2 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={canEdit}
-                  onChange={(e) => setCanEdit(e.target.checked)}
-                />
-              }
-              label={
-                <Box>
-                  <Typography>Allow editing</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {shareType === 'shared' ? 'Friends can modify this note' : 'Public users can modify this note'}
-                  </Typography>
-                </Box>
-              }
-            />
-          </Box>
-        )}
-      </DialogContent>
-
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button 
-          variant="contained" 
-          onClick={handleShare}
-          disabled={shareType === 'shared' && friendIds.length === 0}
-        >
-          Apply Sharing
-        </Button>
-      </DialogActions>
-    </Dialog>
+        {/* Actions */}
+        <Box sx={{ mt: 'auto', pt: 2 }}>
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={handleApply}
+            disabled={shareType === 'shared' && friendIds.length === 0}
+          >
+            Apply Sharing
+          </Button>
+        </Box>
+      </Box>
+    </Drawer>
   );
 };
 
-export default ShareDialog;
+export default ShareDrawer;

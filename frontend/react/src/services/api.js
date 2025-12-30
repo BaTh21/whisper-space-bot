@@ -1738,6 +1738,11 @@ export const stopSharingNote = async (noteId) => {
   return response.data;
 };
 
+export const leaveSharedNote = async (noteId) => {
+   const response = await api.post(`/api/v1/notes/${noteId}/leave`);
+   return response.data;
+}
+
 export const getSharedNotes = async () => {
   try {
     const response = await api.get("/api/v1/notes/shared/with-me");
