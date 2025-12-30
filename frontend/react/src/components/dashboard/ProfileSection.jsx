@@ -1,5 +1,6 @@
+// ProfileSection.jsx - Complete file with fixes
 import {
-  AccountCircle,
+  Article as ArticleIcon,
   CameraAlt,
   Delete,
   Edit,
@@ -7,10 +8,10 @@ import {
   People,
   PhotoCamera,
   Settings,
-  Verified,
-  Article as ArticleIcon,
+  Verified
 } from '@mui/icons-material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import PublicIcon from '@mui/icons-material/Public';
 import {
   Avatar,
   Box,
@@ -34,17 +35,17 @@ import {
   Tooltip,
   Typography,
   alpha,
-  useTheme,
-  useMediaQuery
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import { useFormik } from 'formik';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as Yup from 'yup';
 import { useAvatar } from '../../hooks/useAvatar';
-import PublicIcon from '@mui/icons-material/Public';
 import { deleteAvatar, getMyFeed, updateMe, uploadAvatar } from '../../services/api';
 import ProfileDiary from '../diary/ProfileDiary';
+import SystemLogs from '../SystemLogs';
 
 const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onDataUpdate, friends, pendingRequests = [], onNewDiary }) => {
   const { t } = useTranslation();
@@ -65,6 +66,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
   const [isEditing, setIsEditing] = useState(false);
   const [editMenuAnchor, setEditMenuAnchor] = useState(null);
   const [diaryCount, setDiaryCount] = useState([]);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   const fileInputRef = useRef(null);
   const { getAvatarUrl, getUserInitials } = useAvatar();
@@ -211,7 +213,6 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
 
   // Calculate statistics
   const getStatistics = () => {
-
     const publicDiaries = diaryCount.filter(d => d.share_type === 'public').length;
 
     return [
@@ -580,10 +581,11 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
                   >
                     {t('edit_profile')}
                   </Button>
-                  <Tooltip title='Setting'>
+                  <Tooltip title={t('settings')}>
                     <IconButton
                       variant="outlined"
                       size='small'
+                      onClick={() => setSettingsDialogOpen(true)}
                       sx={{
                         borderRadius: 2,
                         fontWeight: 600,
@@ -614,7 +616,6 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
         }}
       >
         <Paper
-
           elevation={0}
           sx={{
             borderRadius: 0,
@@ -637,7 +638,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
           >
             <Tab
               icon={<MenuBookIcon />}
-              label={isMobile ? '':t('my_diaries')}
+              label={isMobile ? '' : t('my_diaries')}
               iconPosition="start"
               sx={{
                 fontWeight: 600,
@@ -649,7 +650,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
             />
             <Tab
               icon={<Lock />}
-              label={isMobile? '':t('private')  }
+              label={isMobile ? '' : t('private')}
               iconPosition="start"
               sx={{
                 fontWeight: 600,
@@ -666,8 +667,8 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
           variant="contained"
           onClick={onNewDiary}
           startIcon={<ArticleIcon />}
-          sx={{ 
-            borderRadius: '8px', 
+          sx={{
+            borderRadius: '8px',
             width: { sm: 150 },
             height: 38
           }}
@@ -769,6 +770,54 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
         </DialogActions>
       </Dialog>
 
+      {/* Settings Dialog with System Logs */}
+      <Dialog
+        open={settingsDialogOpen}
+        onClose={() => setSettingsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            height: '80vh',
+            maxHeight: 800,
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          py: 2,
+          px: 3
+        }}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Settings />
+            <Typography variant="h6" fontWeight={600} component="span">
+              {t('settings')}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
+          <SystemLogs />
+        </DialogContent>
+        <DialogActions sx={{
+          borderTop: 1,
+          borderColor: 'divider',
+          p: 2
+        }}>
+          <Button
+            onClick={() => setSettingsDialogOpen(false)}
+            variant="outlined"
+            sx={{ borderRadius: 2 }}
+          >
+            {t('close')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <input
         type="file"
         ref={fileInputRef}
@@ -776,7 +825,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
         accept="image/jpeg,image/jpg,image/png,image/webp"
         style={{ display: 'none' }}
       />
-    </Box >
+    </Box>
   );
 };
 
