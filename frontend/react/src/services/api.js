@@ -309,6 +309,11 @@ export const sendFriendRequest = async (userId) => {
   }
 };
 
+export const getAllSatusFriends = async ()=> {
+  const res = await api.get("/api/v1/friends/all-status");
+  return res.data;
+}
+
 export const getActivityInbox = async () => {
   const res = await api.get("/api/v1/activities/");
   return res.data;

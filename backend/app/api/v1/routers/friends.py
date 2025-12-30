@@ -126,6 +126,16 @@ async def get_pending_friend_requests(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
     
+@router.get("/all-status", response_model=list[FriendResponse])
+async def get_all_status_friends(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    friends = db.query(Friend).filter(
+        Friend.user_id == current_user.id,
+    )
+    return friends
+    
 # ==================== DECLINE FRIEND REQUEST ====================
 @router.delete("/pending/{pending_id}")
 async def decline_friend_request(
@@ -409,22 +419,6 @@ def get_blocked_users_route(
     except Exception as e:
         print(f"Server error in get_blocked_users_route: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
-    
-    
-@router.get("/friends/")
-def get_user_friends(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get current user's friends"""
-    try:
-        friends = [
-            {"id": 2, "name": "John Doe", "email": "john@example.com"},
-            {"id": 3, "name": "Jane Smith", "email": "jane@example.com"},
-        ]
-        return friends
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to fetch friends")
 
 @router.post("/friends/")
 def add_friend(

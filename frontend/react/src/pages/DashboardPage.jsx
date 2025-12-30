@@ -16,7 +16,7 @@ import CreateDiaryDialog from '../components/dialogs/CreateDiaryDialog';
 import ViewGroupDialog from '../components/dialogs/ViewGroupDialog';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups, getSuggestFriends, getPendingFriends, getBlockedUsers } from '../services/api';
+import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups, getSuggestFriends, getPendingFriends, getBlockedUsers, getAllSatusFriends } from '../services/api';
 import ChatTab from '../components/dashboard/ChatTab';
 
 function TabPanel({ children, value, index, ...other }) {
@@ -56,6 +56,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [suggestFriends, setSuggestFriends] = useState([]);
   const [blockedUsers, setBlockedUsers] = useState([]);
+  const [allSatusFriends, setAllSatusFriends] = useState([]);
 
   // Map URL paths to tab indices
   const pathToTabMap = {
@@ -100,7 +101,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
         setProfile(profileData);
       }
 
-      const [friendsData, pendingData, feedData, groupsData, suggestFriendData, pendingFriendData, blockUserData] = await Promise.all([
+      const [friendsData, pendingData, feedData, groupsData, suggestFriendData, pendingFriendData, blockUserData, allSatusFriendData] = await Promise.all([
         getFriends().catch(() => []),
         getPendingRequests().catch(() => []),
         getFeed().catch(() => []),
@@ -108,6 +109,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
         getSuggestFriends().catch(() => []),
         getPendingFriends().catch(() => []),
         getBlockedUsers().catch(() => []),
+        getAllSatusFriends().catch(() => []),
         
       ]);
 
@@ -118,6 +120,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       setSuggestFriends(suggestFriendData);
       setPendingFriends(pendingFriendData);
       setBlockedUsers(blockUserData);
+      setAllSatusFriends(allSatusFriendData);
     } catch (err) {
       setError(err.message || 'Failed to fetch data');
     } finally {
@@ -211,8 +214,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setError={setError}
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}
-              friends={friends}               // ← Correct: use the state you defined
-              pendingRequests={pendingRequests}
+              friends={allSatusFriends}
             />
           </TabPanel>
 
