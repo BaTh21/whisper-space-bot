@@ -169,7 +169,10 @@ export const CommentItemWithActions = ({
           height: level > 0 ? 24 : 28,
           fontSize: level > 0 ? '0.7rem' : '0.8rem',
           flexShrink: 0
-        }}>
+        }}
+        src={comment.user?.avatar_url}
+        alt={comment.user?.username}
+        >
           {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
         </Avatar>
         <Box sx={{ flex: 1 }}>

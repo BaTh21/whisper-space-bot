@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count, update_diary, delete_diary, create_diary_for_group, delete_comment, update_comment, share_diary, delete_share
 from app.models.user import User
-from app.schemas.diary import DiaryCreate, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse, DiaryLikeResponse, DiaryUpdate, CreateDiaryForGroup, CommentUpdate, DiaryShare
+from app.schemas.diary import DiaryCreate, CommentResponse, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse, DiaryLikeResponse, DiaryUpdate, CreateDiaryForGroup, CommentUpdate, DiaryShare
 from app.models.diary import Diary
 from app.models.friend import Friend, FriendshipStatus
 from app.models.diary_like import DiaryLike
@@ -107,6 +107,7 @@ def get_feed(
         .options(
             joinedload(Diary.author),
             joinedload(Diary.groups),
+            joinedload(Diary.comments),
             joinedload(Diary.likes).joinedload(DiaryLike.user)
         )
         .filter(Diary.id.in_([d.id for d in get_visible(db, current_user.id)]))
@@ -129,6 +130,21 @@ def get_feed(
                 username=d.author.username,
                 avatar_url=d.author.avatar_url
             ),
+            comments=[
+                CommentResponse(
+                    content=c.content,
+                    created_at=c.created_at,
+                    user=CreatorResponse(
+                        id=c.user.id,
+                        username=c.user.username,
+                        avatar_url=c.user.avatar_url
+                    ),
+                    images=c.images or [],
+                    parent_id=c.parent_id,
+                    replies=[]  # or populate if you support nested replies
+                )
+                for c in d.comments
+            ] if d.comments else [],
             title=d.title,
             content=d.content,
             share_type=d.share_type.value,

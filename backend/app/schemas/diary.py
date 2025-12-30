@@ -142,6 +142,7 @@ class DiaryOut(BaseModel):
     media_type: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    comments: List[CommentResponse] = Field(default_factory=list)
     
     model_config = ConfigDict(from_attributes=True)
     
