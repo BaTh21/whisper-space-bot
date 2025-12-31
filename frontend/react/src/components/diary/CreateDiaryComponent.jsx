@@ -201,7 +201,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
               <Typography sx={{ ml: 1, display: { xs: 'none', md: 'block' } }}>
                 Photo
               </Typography>
-              ({selectedImages.length})
+              {selectedImages.length ? (selectedImages.length):('')}
               <input hidden multiple type="file" accept="image/*" onChange={handleImageUpload} />
             </Button>
           </Tooltip>
@@ -212,7 +212,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
               <Typography sx={{ ml: 1, display: { xs: 'none', md: 'block' } }}>
                 Video
               </Typography>
-              ({selectedVideos.length})
+              {selectedVideos.length ? (selectedVideos.length): ''}
               <input hidden multiple type="file" accept="video/*" onChange={handleVideoUpload} />
             </Button>
           </Tooltip>

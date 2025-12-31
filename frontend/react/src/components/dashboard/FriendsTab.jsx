@@ -187,16 +187,19 @@ const FriendsTab = ({
       </Typography>
 
       <Box
+        onWheel={(e) => {
+          if (e.deltaY !== 0) {
+            e.currentTarget.scrollLeft += e.deltaY;
+            e.preventDefault();
+          }
+        }}
         sx={{
-          my: 2,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
+          display: 'flex',
           overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch', // smooth scrolling on iOS
-          touchAction: 'pan-x',             // allow horizontal swipe
-          scrollbarWidth: 'none',           // Firefox
-          msOverflowStyle: 'none',          // IE 10+
-          '&::-webkit-scrollbar': { display: 'none' }, // Chrome, Safari, Edge
+          scrollBehavior: 'smooth',
+          whiteSpace: 'nowrap',
+          '&::-webkit-scrollbar': { display: 'none' },
+          my: 2
         }}
       >
         <Box

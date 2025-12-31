@@ -12,6 +12,7 @@ import {
 } from '@mui/icons-material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import PublicIcon from '@mui/icons-material/Public';
+import NorthIcon from '@mui/icons-material/North';
 import {
   Avatar,
   Box,
@@ -47,7 +48,7 @@ import { deleteAvatar, getMyFeed, updateMe, uploadAvatar } from '../../services/
 import ProfileDiary from '../diary/ProfileDiary';
 import SystemLogs from '../SystemLogs';
 
-const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onDataUpdate, friends, pendingRequests = [], onNewDiary }) => {
+const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdate, friends, onNewDiary }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -70,6 +71,36 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
 
   const fileInputRef = useRef(null);
   const { getAvatarUrl, getUserInitials } = useAvatar();
+
+  const scrollRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  const [type, setType] = useState("diary");
+
+  const handleChange = (event, newType) => {
+    if (newType !== null) {
+      setType(newType);
+    }
+  };
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      setVisible(el.scrollTop > 300);
+    };
+
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    scrollRef.current.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
 
   const fetchUserDiaries = async () => {
     try {
@@ -226,6 +257,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
 
   return (
     <Box
+      ref={scrollRef}
       sx={{
         height: '90vh',
         overflowY: 'auto',
@@ -233,7 +265,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
         scrollbarWidth: 'none',
       }}
     >
-
+      <Button onClick={scrollToTop} sx={{ position: "absolute", bottom: 20, right: { xs: 20 }, fontSize: "16px", borderRadius: "50%", border: "none", color: "white", backgroundColor: '#254D70', cursor: "pointer", display: visible ? "flex" : "none", zIndex: 1300, minWidth: 0, width: 45, height: 45 }}><NorthIcon /></Button>
       <Box
         sx={{
           py: { xs: 2 },
@@ -680,13 +712,8 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, groups, onD
       <ProfileDiary
         diaries={diaries}
         profile={profile}
-        groups={groups}
-        onNewDiary={() => setDiaryDialogOpen(true)}
-        setError={setError}
-        setSuccess={setSuccess}
         onDataUpdate={onDataUpdate}
         friends={friends}
-        pendingRequests={pendingRequests}
       />
 
       <Menu

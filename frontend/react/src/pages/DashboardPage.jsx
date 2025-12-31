@@ -215,6 +215,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}
               friends={allSatusFriends}
+              pendingRequests={pendingRequests}
             />
           </TabPanel>
 
@@ -258,10 +259,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setError={setError}
               setSuccess={setSuccess}
               onProfileUpdate={fetchDashboardData}
-              groups={groups}
               onDataUpdate={fetchDashboardData}
               friends={friends}
-              pendingRequests={pendingRequests}
               onNewDiary={() => setDiaryDialogOpen(true)}
             />
           </TabPanel>

@@ -47,7 +47,7 @@ function ActivityComponent() {
                     scrollbarWidth: "none",
                 }}
             >
-                {activities.map((activity) => {
+                {activities.slice(0, 25).map((activity) => {
 
                     return (
                         <ListItem

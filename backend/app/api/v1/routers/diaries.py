@@ -203,6 +203,21 @@ def get_my_diaries(
                     username=d.author.username,
                     avatar_url=d.author.avatar_url
                 ),
+                comments=[
+                    CommentResponse(
+                        content=c.content,
+                        created_at=c.created_at,
+                        user=CreatorResponse(
+                            id=c.user.id,
+                            username=c.user.username,
+                            avatar_url=c.user.avatar_url
+                        ),
+                        images=c.images or [],
+                        parent_id=c.parent_id,
+                        replies=[]  # or populate if you support nested replies
+                    )
+                    for c in d.comments
+                ] if d.comments else [],
                 title=d.title,
                 content=d.content,
                 share_type=d.share_type.value,

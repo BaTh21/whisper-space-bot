@@ -49,7 +49,7 @@ function SuggestFriendComponent() {
                     scrollbarWidth: "none",
                 }}
             >
-                {friends.map((friend) => {
+                {friends.slice(0, 25).map((friend) => {
 
                     return (
                         <ListItem

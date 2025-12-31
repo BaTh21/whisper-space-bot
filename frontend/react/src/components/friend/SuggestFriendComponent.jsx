@@ -26,14 +26,18 @@ function SuggestFriendComponent({ suggestFriends }) {
                 Suggested Friends
             </Typography>
             <Box
+                onWheel={(e) => {
+                    if (e.deltaY !== 0) {
+                        e.currentTarget.scrollLeft += e.deltaY;
+                        e.preventDefault();
+                    }
+                }}
                 sx={{
-                    my: { xs: 1, md: 2 },
+                    display: 'flex',
                     overflowX: 'auto',
-                    WebkitOverflowScrolling: 'touch', // smooth scrolling on iOS
-                    touchAction: 'pan-x',             // allow horizontal swipe
-                    scrollbarWidth: 'none',           // Firefox
-                    msOverflowStyle: 'none',          // IE 10+
-                    '&::-webkit-scrollbar': { display: 'none' }, // Chrome, Safari, Edge
+                    scrollBehavior: 'smooth',
+                    whiteSpace: 'nowrap',
+                    '&::-webkit-scrollbar': { display: 'none' },
                 }}
             >
                 <List

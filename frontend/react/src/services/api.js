@@ -1441,13 +1441,11 @@ export const getGroupDiaries = async (groupId, search = "") => {
     const response = await api.get(`/api/v1/groups/${groupId}/diaries/`, {
       params,
     });
-    console.log(response.data);
     return response.data;
   } catch (error) {
     console.error("Get group diaries error:", error.response?.data);
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
         "Failed to load group feed"
     );
   }
