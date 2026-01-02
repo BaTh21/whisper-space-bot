@@ -6,10 +6,11 @@ import InboxComponent from "../dialogs/InboxComponent";
 function ActivityComponent() {
     const [activities, setActivities] = useState([]);
     const [popup, setPopup] = useState(false);
+    const LIMIT = 20;
 
     const fetchData = async () => {
         try {
-            const acRes = await getActivityInbox();
+            const acRes = await getActivityInbox(LIMIT);
             setActivities(acRes);
         } catch (error) {
             setActivities([]);
@@ -36,7 +37,7 @@ function ActivityComponent() {
                     // width: 250
                 }}
             >
-                <Typography variant='h4'>Activity ({activities.length})</Typography>
+                <Typography variant='h4'>Activity</Typography>
                 <Button onClick={() => setPopup(true)}>See All</Button>
             </Box>
             <List
@@ -47,7 +48,7 @@ function ActivityComponent() {
                     scrollbarWidth: "none",
                 }}
             >
-                {activities.slice(0, 25).map((activity) => {
+                {activities.map((activity) => {
 
                     return (
                         <ListItem

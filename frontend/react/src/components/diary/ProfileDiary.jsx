@@ -754,8 +754,6 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
     openMediaViewer(mediaList, index);
   };
 
-  console.log("friends", friends)
-
   const isFriend = (authorId) =>
     friends?.some(
       f =>

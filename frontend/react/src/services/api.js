@@ -314,8 +314,8 @@ export const getAllSatusFriends = async () => {
   return res.data;
 };
 
-export const getActivityInbox = async () => {
-  const res = await api.get("/api/v1/activities/");
+export const getActivityInbox = async (limit = 20, offset = 0) => {
+  const res = await api.get(`/api/v1/activities/?limit=${limit}&offset=${offset}`);
   return res.data;
 };
 
