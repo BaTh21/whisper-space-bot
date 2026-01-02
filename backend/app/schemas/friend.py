@@ -13,6 +13,6 @@ class UserResponse(BaseModel):
 class FriendResponse(BaseModel):
     id: int
     user: UserResponse
-    friend: UserResponse
+    friend: Optional[UserResponse] = None
     status: str
     created_at: datetime

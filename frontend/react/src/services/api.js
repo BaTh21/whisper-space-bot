@@ -309,10 +309,10 @@ export const sendFriendRequest = async (userId) => {
   }
 };
 
-export const getAllSatusFriends = async ()=> {
+export const getAllSatusFriends = async () => {
   const res = await api.get("/api/v1/friends/all-status");
   return res.data;
-}
+};
 
 export const getActivityInbox = async () => {
   const res = await api.get("/api/v1/activities/");
@@ -881,31 +881,62 @@ export const deleteShareById = async (shareId) => {
   }
 };
 
-export const getFeed = async () => {
+export const getFeed = async (limit = 25, offset = 0) => {
   try {
-    const response = await api.get(`/api/v1/diaries/feed`);
+    const response = await api.get(`/api/v1/diaries/feed`, {
+      params: { limit, offset },
+    });
     return response.data;
   } catch (error) {
     console.error("Get feed error:", error.response?.data);
-    throw new Error(
-      error.response?.data?.detail ||
-        error.response?.data?.msg
-    );
+    throw new Error(error.response?.data?.detail || error.response?.data?.msg);
   }
 };
 
-export const getMyFeed = async () => {
+export const getMyFeed = async (limit = 25, offset = 0) => {
   try {
-    const response = await api.get(`/api/v1/diaries/my-feed`);
+    const response = await api.get(`/api/v1/diaries/my-feed`, {
+      params: { limit, offset },
+    });
     return response.data;
   } catch (error) {
     console.error("Get feed error:", error.response?.data);
-    throw new Error(
-      error.response?.data?.detail ||
-        error.response?.data?.msg
-    );
+    throw new Error(error.response?.data?.detail || error.response?.data?.msg);
   }
 };
+
+export const getMyDiaryStats = async () => {
+  const res = await api.get(`/api/v1/diaries/my-feed/count`);
+  return res.data;
+};
+
+export const getFavoriteDiary = async () => {
+  const res = await api.get(`/api/v1/diaries/favorites`);
+  return res.data;
+};
+
+export const getFavoriteDiaryList = async () => {
+  const res = await api.get(`/api/v1/diaries/favorite-list`);
+  return res.data;
+};
+
+export const handleSaveDiary = async (diaryId) => {
+  try{
+    const res = await api.post(`/api/v1/diaries/${diaryId}/favorites`);
+    return res.data;
+  }catch(error){
+    throw new Error(error.response?.data?.detail);
+  }
+}
+
+export const handleRemoveDiary = async (diaryId) => {
+  try{
+    await api.delete(`/api/v1/diaries/${diaryId}/favorites`);
+    return true;
+  }catch(error){
+    throw new Error(error.response?.data?.detail);
+  }
+}
 
 export const likeDiary = async (diaryId) => {
   try {
@@ -1445,8 +1476,7 @@ export const getGroupDiaries = async (groupId, search = "") => {
   } catch (error) {
     console.error("Get group diaries error:", error.response?.data);
     throw new Error(
-      error.response?.data?.detail ||
-        "Failed to load group feed"
+      error.response?.data?.detail || "Failed to load group feed"
     );
   }
 };
@@ -1742,9 +1772,9 @@ export const stopSharingNote = async (noteId) => {
 };
 
 export const leaveSharedNote = async (noteId) => {
-   const response = await api.post(`/api/v1/notes/${noteId}/leave`);
-   return response.data;
-}
+  const response = await api.post(`/api/v1/notes/${noteId}/leave`);
+  return response.data;
+};
 
 export const getSharedNotes = async () => {
   try {
@@ -2120,95 +2150,95 @@ export const getMyLogs = async (action = null, limit = 50) => {
     if (action) {
       url += `&action=${action}`;
     }
-    
+
     const response = await api.get(url);
-    
+
     // Check if response.data exists and is an array
     if (response.data && Array.isArray(response.data)) {
       return response.data;
     }
-    
+
     // If response.data exists but is not an array, check if it has the expected structure
-    if (response.data && typeof response.data === 'object') {
+    if (response.data && typeof response.data === "object") {
       // If it has a 'message' property (like 'React app not built'), return empty array
       if (response.data.message) {
-        console.warn('API returned message:', response.data.message);
+        console.warn("API returned message:", response.data.message);
         return [];
       }
-      
+
       // If it's an object but not an array, try to extract data
       if (response.data.data && Array.isArray(response.data.data)) {
         return response.data.data;
       }
     }
-    
+
     // Return empty array if no valid data found
     return [];
   } catch (error) {
-    console.error('Get my logs error:', {
+    console.error("Get my logs error:", {
       status: error.response?.status,
       data: error.response?.data,
       message: error.message,
     });
-    
+
     // Return empty array for 404 errors or network issues
-    if (error.response?.status === 404 || error.code === 'ERR_NETWORK') {
-      console.warn('Logs endpoint not available, returning empty array');
+    if (error.response?.status === 404 || error.code === "ERR_NETWORK") {
+      console.warn("Logs endpoint not available, returning empty array");
       return [];
     }
-    
+
     // Throw error for other cases
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      'Failed to fetch logs'
+        error.response?.data?.msg ||
+        "Failed to fetch logs"
     );
   }
 };
 
 export const getMyDevices = async () => {
   try {
-    const response = await api.get('/api/v1/devices/my-devices');
-    
+    const response = await api.get("/api/v1/devices/my-devices");
+
     // Check if response.data exists and is an array
     if (response.data && Array.isArray(response.data)) {
       return response.data;
     }
-    
+
     // If response.data exists but is not an array, check if it has the expected structure
-    if (response.data && typeof response.data === 'object') {
+    if (response.data && typeof response.data === "object") {
       // If it has a 'message' property (like 'React app not built'), return empty array
       if (response.data.message) {
-        console.warn('API returned message:', response.data.message);
+        console.warn("API returned message:", response.data.message);
         return [];
       }
-      
+
       // If it's an object but not an array, try to extract data
       if (response.data.data && Array.isArray(response.data.data)) {
         return response.data.data;
       }
     }
-    
+
     // Return empty array if no valid data found
     return [];
   } catch (error) {
-    console.error('Get my devices error:', {
+    console.error("Get my devices error:", {
       status: error.response?.status,
       data: error.response?.data,
       message: error.message,
     });
-    
+
     // Return empty array for 404 errors or network issues
-    if (error.response?.status === 404 || error.code === 'ERR_NETWORK') {
-      console.warn('Devices endpoint not available, returning empty array');
+    if (error.response?.status === 404 || error.code === "ERR_NETWORK") {
+      console.warn("Devices endpoint not available, returning empty array");
       return [];
     }
-    
+
     // Throw error for other cases
     throw new Error(
       error.response?.data?.detail ||
-      error.response?.data?.msg ||
-      'Failed to fetch devices'
+        error.response?.data?.msg ||
+        "Failed to fetch devices"
     );
   }
 };

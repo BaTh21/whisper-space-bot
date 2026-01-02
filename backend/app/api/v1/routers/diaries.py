@@ -1,18 +1,19 @@
 import traceback
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count, update_diary, delete_diary, create_diary_for_group, delete_comment, update_comment, share_diary, delete_share
+from app.crud.diary import create_diary, get_visible, get_by_id, can_view, create_comment, create_like, get_diary_comments, get_diary_likes_count, update_diary, delete_diary, create_diary_for_group, delete_comment, update_comment, share_diary, delete_share, save_diary_to_favorites, remove_diary_from_favorites, get_favorite_diaries,get_list_favorite_diarie
 from app.models.user import User
-from app.schemas.diary import DiaryCreate, CommentResponse, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse, DiaryLikeResponse, DiaryUpdate, CreateDiaryForGroup, CommentUpdate, DiaryShare
+from app.schemas.diary import DiaryCreate, CommentResponse, DiaryOut, DiaryCommentCreate, DiaryCommentOut, CreatorResponse, GroupResponse, DiaryLikeResponse, DiaryUpdate, CreateDiaryForGroup, CommentUpdate, DiaryShare, DiaryFavoriteResponse
 from app.models.diary import Diary
 from app.models.friend import Friend, FriendshipStatus
 from app.models.diary_like import DiaryLike
 from app.models.group_member import GroupMember
 from app.models.diary_comment import DiaryComment
+from app.models.diary_favorite import DiaryFavorite
 
 router = APIRouter()
 
@@ -70,7 +71,7 @@ def create_diary_endpoint(
                         username=like.user.username,
                         avatar_url=like.user.avatar_url
                     )
-                ) for like in diary.likes
+                ) for like in diary.likes or []
             ] if hasattr(diary, 'likes') and diary.likes else [],
             is_deleted=diary.is_deleted,
             created_at=diary.created_at,
@@ -100,29 +101,30 @@ def create_diary_for_group_(group_id: int,
 @router.get("/feed", response_model=List[DiaryOut])
 def get_feed(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0)  
 ):
+    
+    visible_ids = [d.id for d in get_visible(db, current_user.id)]
     diaries = (
         db.query(Diary)
         .options(
             joinedload(Diary.author),
             joinedload(Diary.groups),
-            joinedload(Diary.comments),
-            joinedload(Diary.likes).joinedload(DiaryLike.user)
+            joinedload(Diary.comments).joinedload(DiaryComment.user),
+            joinedload(Diary.likes).joinedload(DiaryLike.user),
+            joinedload(Diary.favorited_by)
         )
-        .filter(Diary.id.in_([d.id for d in get_visible(db, current_user.id)]))
+        .filter(Diary.id.in_(visible_ids))
         .order_by(Diary.created_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
-
     
     result = []
     for d in diaries:
-        # Filter None values from video_thumbnails
-        filtered_thumbnails = []
-        if d.video_thumbnails:
-            filtered_thumbnails = [thumb for thumb in d.video_thumbnails if thumb is not None]
-        
         diary_out = DiaryOut(
             id=d.id,
             author=CreatorResponse(
@@ -130,42 +132,44 @@ def get_feed(
                 username=d.author.username,
                 avatar_url=d.author.avatar_url
             ),
-            comments=[
-                CommentResponse(
-                    content=c.content,
-                    created_at=c.created_at,
-                    user=CreatorResponse(
-                        id=c.user.id,
-                        username=c.user.username,
-                        avatar_url=c.user.avatar_url
-                    ),
-                    images=c.images or [],
-                    parent_id=c.parent_id,
-                    replies=[]  # or populate if you support nested replies
-                )
-                for c in d.comments
-            ] if d.comments else [],
             title=d.title,
             content=d.content,
             share_type=d.share_type.value,
-            groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups],
-            images=d.images if d.images else [],
-            videos=d.videos if d.videos else [],  # Make sure this is included
-            video_thumbnails=filtered_thumbnails,  # Make sure this is included
+            groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups or []],
+            images=d.images or [],
+            videos=d.videos or [],
+            video_thumbnails=[thumb for thumb in (d.video_thumbnails or []) if thumb],
             media_type=d.media_type,
             likes=[
                 DiaryLikeResponse(
                     id=l.id,
                     user=CreatorResponse(
-                        id=l.user.id,
-                        username=l.user.username,
-                        avatar_url=l.user.avatar_url
+                        id=l.user.id if l.user else -1,
+                        username=l.user.username if l.user else "Deleted User",
+                        avatar_url=l.user.avatar_url if l.user else None
                     )
-                ) for l in d.likes
+                )
+                for l in d.likes or []
             ],
             is_deleted=d.is_deleted,
             created_at=d.created_at,
-            updated_at=d.updated_at
+            updated_at=d.updated_at,
+            favorited_user_ids=[f.user_id for f in d.favorited_by or []],
+            comments=[
+                CommentResponse(
+                    content=c.content,
+                    created_at=c.created_at,
+                    user=CreatorResponse(
+                        id=c.user.id if c.user else -1,
+                        username=c.user.username if c.user else "Deleted User",
+                        avatar_url=c.user.avatar_url if c.user else None
+                    ),
+                    images=c.images or [],
+                    parent_id=c.parent_id,
+                    replies=[]
+                )
+                for c in d.comments or []
+            ]
         )
         result.append(diary_out)
 
@@ -174,76 +178,91 @@ def get_feed(
 @router.get("/my-feed", response_model=List[DiaryOut])
 def get_my_diaries(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0)  
 ):
     diaries = (
         db.query(Diary)
         .options(
             joinedload(Diary.author),
             joinedload(Diary.groups),
-            joinedload(Diary.likes).joinedload(DiaryLike.user)
+            joinedload(Diary.likes).joinedload(DiaryLike.user),
+            joinedload(Diary.comments).joinedload(DiaryComment.user),
+            joinedload(Diary.favorited_by)
         )
         .filter(Diary.user_id == current_user.id)
         .order_by(Diary.created_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
     result = []
     for d in diaries:
-        filtered_thumbnails = (
-            [thumb for thumb in d.video_thumbnails if thumb is not None]
-            if d.video_thumbnails else []
-        )
-
-        result.append(
-            DiaryOut(
-                id=d.id,
-                author=CreatorResponse(
-                    id=d.author.id,
-                    username=d.author.username,
-                    avatar_url=d.author.avatar_url
-                ),
-                comments=[
-                    CommentResponse(
-                        content=c.content,
-                        created_at=c.created_at,
-                        user=CreatorResponse(
-                            id=c.user.id,
-                            username=c.user.username,
-                            avatar_url=c.user.avatar_url
-                        ),
-                        images=c.images or [],
-                        parent_id=c.parent_id,
-                        replies=[]  # or populate if you support nested replies
+        diary_out = DiaryOut(
+            id=d.id,
+            author=CreatorResponse(
+                id=d.author.id,
+                username=d.author.username,
+                avatar_url=d.author.avatar_url
+            ),
+            title=d.title,
+            content=d.content,
+            share_type=d.share_type.value,
+            groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups or []],
+            images=d.images or [],
+            videos=d.videos or [],
+            video_thumbnails=[thumb for thumb in (d.video_thumbnails or []) if thumb],
+            media_type=d.media_type,
+            likes=[
+                DiaryLikeResponse(
+                    id=l.id,
+                    user=CreatorResponse(
+                        id=l.user.id if l.user else -1,
+                        username=l.user.username if l.user else "Deleted User",
+                        avatar_url=l.user.avatar_url if l.user else None
                     )
-                    for c in d.comments
-                ] if d.comments else [],
-                title=d.title,
-                content=d.content,
-                share_type=d.share_type.value,
-                groups=[GroupResponse(id=g.id, name=g.name) for g in d.groups],
-                images=d.images or [],
-                videos=d.videos or [],
-                video_thumbnails=filtered_thumbnails,
-                media_type=d.media_type,
-                likes=[
-                    DiaryLikeResponse(
-                        id=l.id,
-                        user=CreatorResponse(
-                            id=l.user.id,
-                            username=l.user.username,
-                            avatar_url=l.user.avatar_url
-                        )
-                    ) for l in d.likes
-                ],
-                is_deleted=d.is_deleted,
-                created_at=d.created_at,
-                updated_at=d.updated_at
-            )
+                )
+                for l in d.likes or []
+            ],
+            is_deleted=d.is_deleted,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+            favorited_user_ids=[f.user_id for f in d.favorited_by or []],
+            comments=[
+                CommentResponse(
+                    content=c.content,
+                    created_at=c.created_at,
+                    user=CreatorResponse(
+                        id=c.user.id if c.user else -1,
+                        username=c.user.username if c.user else "Deleted User",
+                        avatar_url=c.user.avatar_url if c.user else None
+                    ),
+                    images=c.images or [],
+                    parent_id=c.parent_id,
+                    replies=[]
+                )
+                for c in d.comments or []
+            ]
         )
+        result.append(diary_out)
 
     return result
 
+@router.get("/favorites", response_model=List[DiaryFavoriteResponse])
+def get_favorite_dairy(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return get_favorite_diaries(db, current_user.id)
+
+@router.get("/favorite-list", response_model=List[DiaryOut])
+def get_favorite_dairy(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return get_list_favorite_diarie(db, current_user.id)
 
 @router.get("/{diary_id}", response_model=DiaryOut)
 def get_diary_by_id(
@@ -569,3 +588,42 @@ def get_diary_likes_count_endpoint(
     
     likes_count = get_diary_likes_count(db, diary_id)
     return likes_count
+
+@router.get("/my-feed/count")
+def get_my_diaries_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    total = (
+        db.query(Diary)
+        .filter(Diary.user_id == current_user.id)
+        .count()
+    )
+
+    public_count = (
+        db.query(Diary)
+        .filter(
+            Diary.user_id == current_user.id,
+            Diary.share_type == 'public'
+        )
+        .count()
+    )
+
+    return {
+        "total": total,
+        "public": public_count
+    }
+    
+@router.post("/{diary_id}/favorites", response_model=DiaryFavoriteResponse, status_code=status.HTTP_201_CREATED)
+def save_diary_by_id(diary_id: int, 
+                     current_user: User = Depends(get_current_user),
+                     db: Session = Depends(get_db)
+                     ):
+    return save_diary_to_favorites(db, current_user.id, diary_id)
+
+@router.delete("/{diary_id}/favorites", status_code=status.HTTP_204_NO_CONTENT)
+def remove_saved_diary_by_id(diary_id: int,
+                             current_user: User = Depends(get_current_user),
+                            db: Session = Depends(get_db)
+                             ):
+    return remove_diary_from_favorites(db, current_user.id, diary_id)

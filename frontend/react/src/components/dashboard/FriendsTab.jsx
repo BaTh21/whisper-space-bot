@@ -534,7 +534,7 @@ const FriendsTab = ({
               gap: { xs: 1, md: 2 },
             }}
           >
-            {pendingRequests.map((request, index) => {
+            {pendingRequests?.map((request, index) => {
               const requesterData = getRequesterData(request);
               const requestId = requesterData.id || `request-${index}`;
 
@@ -660,7 +660,7 @@ const FriendsTab = ({
               gap: { xs: 1, md: 2 },
             }}
           >
-            {pendingFriend.map((friend) => (
+            {pendingFriend?.map((friend) => (
               <Box
                 key={friend.id}
                 sx={{
@@ -694,7 +694,7 @@ const FriendsTab = ({
                 >
                   <ListItemAvatar sx={{ minWidth: { xs: 40, sm: 48 } }}>
                     <Avatar
-                      src={friend.friend.avatar_url}
+                      src={friend?.friend?.avatar_url}
                       sx={{
                         width: { xs: 40, sm: 48 },
                         height: { xs: 40, sm: 48 },
@@ -707,7 +707,7 @@ const FriendsTab = ({
                         }
                       }}
                     >
-                      {getUserInitials(friend.friend.username)}
+                      {getUserInitials(friend?.friend?.username)}
                     </Avatar>
                   </ListItemAvatar>
                   <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -721,7 +721,7 @@ const FriendsTab = ({
                         whiteSpace: 'nowrap'
                       }}
                     >
-                      {friend.friend.username || t('unknown_user')}
+                      {friend?.friend?.username || t('unknown_user')}
                     </Typography>
                     <Typography
                       variant="body2"
@@ -733,7 +733,7 @@ const FriendsTab = ({
                         whiteSpace: 'nowrap'
                       }}
                     >
-                      {friend.friend.email || ''}
+                      {friend?.friend?.email || ''}
                     </Typography>
                   </Box>
                 </Box>

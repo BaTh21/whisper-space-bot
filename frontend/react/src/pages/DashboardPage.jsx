@@ -104,13 +104,13 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       const [friendsData, pendingData, feedData, groupsData, suggestFriendData, pendingFriendData, blockUserData, allSatusFriendData] = await Promise.all([
         getFriends().catch(() => []),
         getPendingRequests().catch(() => []),
-        getFeed().catch(() => []),
+        getFeed(25, 0).catch(() => []),
         getUserGroups().catch(() => []),
         getSuggestFriends().catch(() => []),
         getPendingFriends().catch(() => []),
         getBlockedUsers().catch(() => []),
         getAllSatusFriends().catch(() => []),
-        
+
       ]);
 
       setFriends(friendsData);
@@ -133,11 +133,9 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       navigate('/login');
       return;
     }
-    // Only fetch data on initial load, not on tab changes
     fetchDashboardData();
   }, [isAuthenticated, navigate, fetchDashboardData]);
 
-  // Show loading only during initial page load
   if (initialLoading) {
     return (
       <Layout>

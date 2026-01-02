@@ -45,7 +45,7 @@ import {
 } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById } from '../../services/api';
+import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById, getFavoriteDiary, handleSaveDiary, handleRemoveDiary } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { DiaryCard } from '../diary/DairyCard';
 import { convertFilesToBase64, CommentItemWithActions, MediaPlayer, getVideoThumbnail } from '../diary/DiaryHelper';
@@ -53,8 +53,11 @@ import { useAuth } from '../../context/AuthContext';
 import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import TurnedInNotOutlinedIcon from '@mui/icons-material/TurnedInNotOutlined';
+import TurnedInIcon from "@mui/icons-material/TurnedIn";
 
 const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
+  const [diaryList, setDiaryList] = useState(diaries);
+  const [loading, setLoading] = useState(false);
   const [expandedDiary, setExpandedDiary] = useState(null);
   const [diaryComments, setDiaryComments] = useState({});
   const [diaryLikes, setDiaryLikes] = useState({});
@@ -101,11 +104,28 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
   const [currentMediaList, setCurrentMediaList] = useState([]);
   const [sendingRequests, setSendingRequests] = useState(new Set());
 
+  const [favorites, setFavorites] = useState([]);
+
+  console.log("diaries", diaryList)
+  console.log("favorites", favorites)
+
+  const fetchFavorites = async () => {
+    const res = await getFavoriteDiary();
+    setFavorites(res);
+  }
+
   useEffect(() => {
+    setDiaryList(diaries);
+  }, [diaries]);
+
+  useEffect(() => {
+    if (!user?.id) return;
     const initialLiked = new Set();
     const initialLikes = {};
 
-    diaries.forEach(diary => {
+    fetchFavorites();
+
+    diaryList.forEach(diary => {
       if (diary.likes.some(like => like.user.id === user.id)) {
         initialLiked.add(diary.id);
       }
@@ -114,7 +134,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
 
     setLikedDiaries(initialLiked);
     setDiaryLikes(initialLikes);
-  }, [diaries, user.id]);
+  }, [diaryList, user.id]);
 
   const handleSendFriendRequest = async (userId) => {
     if (!userId || !profile || userId === profile.id) return;
@@ -409,7 +429,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
       await deleteDiaryById(diaryToDelete.id);
       showMessage(t('diary_deleted'));
       handleDeleteCancel();
-      if (onDataUpdate) onDataUpdate();
+      onDataUpdate();
     } catch (err) {
       showMessage(err.message || t('failed_delete_diary'), 'error');
       setDeleteLoading(false);
@@ -713,7 +733,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
 
   // Handle media click - FIXED: Pass thumbnails for videos
   const handleMediaClick = (url, type = 'image') => {
-    const diary = diaries.find(d =>
+    const diary = diaryList.find(d =>
       d.images?.includes(url) || d.videos?.includes(url)
     );
 
@@ -929,13 +949,13 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
 
         <Box>
 
-          {diaries.length === 0 ? (
+          {diaryList.length === 0 ? (
             <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
               {t('no_diaries_yet')}
             </Typography>
           ) : (
             <Box>
-              {diaries.map((diary) => {
+              {diaryList.map((diary) => {
                 const combinedMedia = [
                   ...(diary.images || []).map((src) => ({
                     type: 'image',
@@ -949,6 +969,48 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
                 ];
 
                 const visibleMedia = combinedMedia.slice(0, 6);
+
+                const isSaved = (diary) => diary.favorited_user_ids.includes(user.id);
+
+                const handleSave = async (diaryId) => {
+                  try {
+                    setLoading(true);
+                    await handleSaveDiary(diaryId);
+
+                    // update diaryList locally
+                    setDiaryList(prev =>
+                      prev.map(d =>
+                        d.id === diaryId
+                          ? { ...d, favorited_user_ids: [...d.favorited_user_ids, user.id] }
+                          : d
+                      )
+                    );
+                  } catch (err) {
+                    console.error(err.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                };
+
+                const handleRemove = async (diaryId) => {
+                  try {
+                    setLoading(true);
+                    await handleRemoveDiary(diaryId);
+
+                    // update diaryList locally
+                    setDiaryList(prev =>
+                      prev.map(d =>
+                        d.id === diaryId
+                          ? { ...d, favorited_user_ids: d.favorited_user_ids.filter(id => id !== user.id) }
+                          : d
+                      )
+                    );
+                  } catch (err) {
+                    console.error(err.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                };
 
                 return (
                   <Box key={diary.id}>
@@ -1004,7 +1066,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
                                     onChange={(e) => setEditGroupIds(e.target.value)}
                                     disabled={editLoading}
                                   >
-                                    {diaries.map((group) => (
+                                    {diaryList.map((group) => (
                                       <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
                                     ))}
                                   </Select>
@@ -1505,8 +1567,8 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
                               size="small"
                               color={
                                 diary.share_type === 'public' ? 'primary' :
-                                diary.share_type === 'group' ? 'success' :
-                                  diary.share_type === 'friends' ? 'secondary' : 'default'
+                                  diary.share_type === 'group' ? 'success' :
+                                    diary.share_type === 'friends' ? 'secondary' : 'default'
                               }
                             />
                             {profile && diary.author?.id === profile.id && (
@@ -1720,17 +1782,37 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
                               </Button>
                             </Tooltip>
 
-                            <Tooltip title={`Save this post`}>
-                              <Button
-                                size="medium"
-                                sx={{ minWidth: 40, justifyContent: 'center' }}
-                              >
-                                {isMobile ? <TurnedInNotOutlinedIcon sx={{ mb: 0.5 }} /> : <> <TurnedInNotOutlinedIcon sx={{ mb: 0.5 }} /> <Typography ml={1}>Save</Typography> </>}
-                                <Typography ml={1}>
-
-                                </Typography>
-                              </Button>
+                            <Tooltip title={isSaved(diary) ? "Remove from saved" : "Save this post"}>
+                              {isSaved(diary) ? (
+                                <Button
+                                  size="medium"
+                                  color="success"
+                                  disabled={loading}
+                                  onClick={() => handleRemove(diary.id)}
+                                  sx={{ minWidth: 40 }}
+                                >
+                                  <TurnedInIcon />
+                                  {!isMobile && <Typography ml={1}>Saved</Typography>}
+                                  <Typography ml={1}>
+                                    {diary.favorited_user_ids.length || ''}
+                                  </Typography>
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="medium"
+                                  disabled={loading}
+                                  onClick={() => handleSave(diary.id)}
+                                  sx={{ minWidth: 40 }}
+                                >
+                                  <TurnedInNotOutlinedIcon />
+                                  {!isMobile && <Typography ml={1}>Save</Typography>}
+                                  <Typography ml={1}>
+                                    {diary.favorited_user_ids.length || ''}
+                                  </Typography>
+                                </Button>
+                              )}
                             </Tooltip>
+
                           </Box>
 
                           {/* Comments Section */}

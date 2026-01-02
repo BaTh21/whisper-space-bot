@@ -2,7 +2,7 @@ from sqlalchemy import (
     Column, Integer, Enum, ForeignKey,
     Boolean, DateTime, JSON, Index, func, Text
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.models.base import Base
 import enum
 
@@ -28,8 +28,17 @@ class Activity(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     # Relationships
-    actor = relationship("User", foreign_keys=[actor_id], backref="activities_as_actor")
-    recipient = relationship("User", foreign_keys=[recipient_id], backref="activities_as_recipient")
+    actor = relationship(
+        "User",
+        foreign_keys=[actor_id],
+        backref=backref("activities_as_actor", overlaps="activities_sent")
+    )
+
+    recipient = relationship(
+        "User",
+        foreign_keys=[recipient_id],
+        backref=backref("activities_as_recipient", overlaps="activities_received")
+    )
 
     post = relationship("Diary", backref="activities", passive_deletes=True)
     comment = relationship("DiaryComment", backref="activities", passive_deletes=True)

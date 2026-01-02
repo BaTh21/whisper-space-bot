@@ -27,9 +27,9 @@ import {
   ToggleButton,
   ToggleButtonGroup
 } from '@mui/material';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { deleteCommentById, deleteDiaryById, getDiaryById } from '../../services/api';
+import { deleteDiaryById, getFeed } from '../../services/api';
 import { MediaPlayer } from '../diary/DiaryHelper';
 import ActivityComponent from '../diary/ActivityComponent';
 import SuggestFriendComponent from '../diary/SuggestFriendComponent';
@@ -42,9 +42,15 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import GroupDiaryComponent from '../diary/GroupDiaryComponent';
 import ProfileDiary from '../diary/ProfileDiary';
 
-const FeedTab = ({ diaries, onDataUpdate, profile, groups, friends = [], setError, setSuccess, pendingRequests = [] }) => {
+const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, friends = [], setError, setSuccess, pendingRequests = [] }) => {
   const { auth } = useAuth();
   const user = auth?.user;
+
+  const [diaries, setDiaries] = useState(initialDiaries || []);
+  const [offset, setOffset] = useState(initialDiaries?.length || 0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const LIMIT = 25;
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [diaryToDelete, setDiaryToDelete] = useState(null);
@@ -78,18 +84,6 @@ const FeedTab = ({ diaries, onDataUpdate, profile, groups, friends = [], setErro
     }
   };
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const onScroll = () => {
-      setVisible(el.scrollTop > 300);
-    };
-
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
-
   const scrollToTop = () => {
     scrollRef.current.scrollTo({
       top: 0,
@@ -97,13 +91,70 @@ const FeedTab = ({ diaries, onDataUpdate, profile, groups, friends = [], setErro
     });
   };
 
+  const loadMoreDiaries = useCallback(async (reset = false) => {
+    if (!hasMore && !reset || loadingMore) return;
+
+    try {
+      setLoadingMore(true);
+      const currentOffset = reset ? 0 : offset;
+      const newDiaries = await getFeed(LIMIT, currentOffset);
+
+      if (reset) {
+        setDiaries(newDiaries);
+        setOffset(newDiaries.length);
+        setHasMore(newDiaries.length === LIMIT);
+      } else {
+        setDiaries(prev => {
+          const allDiaries = [...prev, ...newDiaries];
+          // Remove duplicates by id
+          const uniqueDiaries = Array.from(new Map(allDiaries.map(d => [d.id, d])).values());
+          return uniqueDiaries;
+        });
+        setOffset(prev => prev + newDiaries.length);
+        if (newDiaries.length < LIMIT) setHasMore(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to load more diaries");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [offset, hasMore, loadingMore, setError]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      setVisible(el.scrollTop > 200);
+
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
+        loadMoreDiaries();
+      }
+    };
+
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [loadMoreDiaries]);
+
+  // Infinite scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+        loadMoreDiaries();
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [loadMoreDiaries]);
+
   // Normalize data
   const normalizedDiaries = diaries.map(diary => ({
     ...diary,
-    groups: Array.isArray(diary.groups) ? diary.groups : [],
-    images: Array.isArray(diary.images) ? diary.images : [],
-    videos: Array.isArray(diary.videos) ? diary.videos : [],
-    video_thumbnails: Array.isArray(diary.video_thumbnails) ? diary.video_thumbnails : [],
+    groups: Array.isArray(diary?.groups) ? diary.groups : [],
+    images: Array.isArray(diary?.images) ? diary.images : [],
+    videos: Array.isArray(diary?.videos) ? diary.videos : [],
+    video_thumbnails: Array.isArray(diary?.video_thumbnails) ? diary.video_thumbnails : [],
   }));
 
   const filteredDiaries = useMemo(() => {
@@ -206,6 +257,14 @@ const FeedTab = ({ diaries, onDataUpdate, profile, groups, friends = [], setErro
     }
   };
 
+  const handleNewDiary = () => {
+    onDataUpdate();
+  };
+
+  useEffect(() => {
+    setDiaries(initialDiaries);
+  }, [initialDiaries]);
+
   return (
     <Box sx={{ maxWidth: '100%', overflow: 'hidden', display: 'flex', gap: 3 }}>
       <Box sx={{ width: '100%' }}>
@@ -251,7 +310,7 @@ const FeedTab = ({ diaries, onDataUpdate, profile, groups, friends = [], setErro
 
         {/* Feed */}
         <Box ref={scrollRef} sx={{ maxHeight: '90vh', overflowY: 'auto', width: { xs: '92vw', md: '63vw' }, mx: 'auto' }}>
-          <CreateDiaryComponent groups={groups} user={user} onSuccess={onDataUpdate} setError={setError} />
+          <CreateDiaryComponent groups={groups} user={user} onSuccess={handleNewDiary} setError={setError} />
 
           {/* Search and Toggle */}
           <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 2, pb: { xs: 3, md: 2 }, width: '100%', left: 0 }}>
@@ -294,9 +353,9 @@ const FeedTab = ({ diaries, onDataUpdate, profile, groups, friends = [], setErro
 
           <Button onClick={scrollToTop} sx={{ position: "absolute", bottom: 20, right: { xs: 20, md: 250, lg: 350 }, fontSize: "16px", borderRadius: "50%", border: "none", color: "white", backgroundColor: '#254D70', cursor: "pointer", display: visible ? "flex" : "none", zIndex: 1300, minWidth: 0, width: 45, height: 45 }}><NorthIcon /></Button>
 
-          {type === 'diary' && <ProfileDiary diaries={filteredDiaries} onDataUpdate={onDataUpdate} profile={profile} friends={friends} />}
-          {type === 'group' && <GroupDiaryComponent groups={groups} profile={profile} setError={setError} setSuccess={setSuccess} onDataUpdate={onDataUpdate} friends={friends} pendingRequests={pendingRequests} search={search}/>}
-          {type === 'video' && <ProfileDiary diaries={filteredDiariesWithVideos} onDataUpdate={onDataUpdate} profile={profile} friends={friends} />}
+          {type === 'diary' && <ProfileDiary diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} />}
+          {type === 'group' && <GroupDiaryComponent groups={groups} profile={profile} setError={setError} setSuccess={setSuccess} onDataUpdate={onDataUpdate} friends={friends} pendingRequests={pendingRequests} search={search} />}
+          {type === 'video' && <ProfileDiary diaries={filteredDiariesWithVideos} onDataUpdate={handleNewDiary} profile={profile} friends={friends} />}
         </Box>
       </Box>
 

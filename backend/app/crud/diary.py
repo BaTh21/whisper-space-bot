@@ -2,6 +2,7 @@ import traceback
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 from app.models.diary import Diary, ShareType
+from app.models.diary_favorite import DiaryFavorite
 from app.models.user import User
 from app.models.activity import ActivityType
 from app.models.diary_comment import DiaryComment
@@ -726,3 +727,61 @@ def update_comment(db: Session,
     db.commit()
     db.refresh(comment)
     return comment
+
+def save_diary_to_favorites(db, user_id: int, diary_id: int):
+    favorite = (
+        db.query(DiaryFavorite)
+        .filter_by(user_id=user_id, diary_id=diary_id)
+        .first()
+    )
+
+    if favorite:
+        return favorite  # already saved
+
+    favorite = DiaryFavorite(
+        user_id=user_id,
+        diary_id=diary_id
+    )
+
+    db.add(favorite)
+    db.commit()
+    db.refresh(favorite)
+
+    return favorite
+
+def remove_diary_from_favorites(db, user_id: int, diary_id: int):
+    favorite = (
+        db.query(DiaryFavorite)
+        .filter_by(user_id=user_id, diary_id=diary_id)
+        .first()
+    )
+
+    if favorite:
+        db.delete(favorite)
+        db.commit()
+        
+    return True
+
+def get_favorite_diaries(db, user_id: int):
+    favovites = (
+        db.query(DiaryFavorite)
+        .filter(DiaryFavorite.user_id == user_id)
+        .order_by(DiaryFavorite.created_at.desc())
+        .all()
+    )
+    
+    return favovites
+
+def get_list_favorite_diarie(db, user_id: int):
+    favovites = (
+        db.query(Diary)
+        .join(DiaryFavorite)
+        .options(
+            joinedload(Diary.favorited_by),
+        )
+        .filter(DiaryFavorite.user_id == user_id)
+        .order_by(DiaryFavorite.created_at.desc())
+        .all()
+    )
+    
+    return favovites

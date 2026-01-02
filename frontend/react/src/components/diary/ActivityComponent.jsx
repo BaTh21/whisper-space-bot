@@ -37,7 +37,7 @@ function ActivityComponent() {
                 }}
             >
                 <Typography variant='h4'>Activity ({activities.length})</Typography>
-                <Button onClick={() => setPopup(true)}>Seen All</Button>
+                <Button onClick={() => setPopup(true)}>See All</Button>
             </Box>
             <List
                 sx={{
@@ -66,7 +66,7 @@ function ActivityComponent() {
                             }}
                         >
                             <ListItemAvatar sx={{ position: 'relative' }}>
-                                <Avatar src={activity.actor.avatar_url} alt="profile img">
+                                <Avatar src={activity?.actor?.avatar_url} alt="profile img">
                                     {activity.actor.username.charAt(0) || "P"}
                                 </Avatar>
                             </ListItemAvatar>

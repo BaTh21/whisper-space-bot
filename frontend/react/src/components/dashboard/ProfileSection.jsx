@@ -13,6 +13,7 @@ import {
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import PublicIcon from '@mui/icons-material/Public';
 import NorthIcon from '@mui/icons-material/North';
+import BookmarksIcon from '@mui/icons-material/Bookmarks';
 import {
   Avatar,
   Box,
@@ -44,7 +45,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as Yup from 'yup';
 import { useAvatar } from '../../hooks/useAvatar';
-import { deleteAvatar, getMyFeed, updateMe, uploadAvatar } from '../../services/api';
+import { deleteAvatar, getMyFeed, updateMe, uploadAvatar, getMyDiaryStats, getFavoriteDiaryList } from '../../services/api';
 import ProfileDiary from '../diary/ProfileDiary';
 import SystemLogs from '../SystemLogs';
 
@@ -66,7 +67,8 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
   const [diariesLoading, setDiariesLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editMenuAnchor, setEditMenuAnchor] = useState(null);
-  const [diaryCount, setDiaryCount] = useState([]);
+  const [diaryCount, setDiaryCount] = useState(0);
+  const [publicCount, setPublicCount] = useState(0);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   const fileInputRef = useRef(null);
@@ -75,25 +77,29 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
   const scrollRef = useRef(null);
   const [visible, setVisible] = useState(false);
 
-  const [type, setType] = useState("diary");
-
-  const handleChange = (event, newType) => {
-    if (newType !== null) {
-      setType(newType);
-    }
-  };
+  const [favorites, setFavorites] = useState([]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
     const onScroll = () => {
+      // show scroll-to-top button
       setVisible(el.scrollTop > 300);
+
+      // infinite scroll
+      if (
+        el.scrollTop + el.clientHeight >= el.scrollHeight - 200 &&
+        !diariesLoading
+      ) {
+        fetchUserDiaries(false);
+      }
     };
 
     el.addEventListener("scroll", onScroll);
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [profile?.id]);
+
 
   const scrollToTop = () => {
     scrollRef.current.scrollTo({
@@ -102,36 +108,49 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
     });
   };
 
-  const fetchUserDiaries = async () => {
+  const fetchUserDiaries = async (reset = false) => {
+    if (diariesLoading) return;
+
     try {
       setDiariesLoading(true);
-      const feedData = await getMyFeed();
-      setDiaryCount(feedData);
+      const offset = reset ? 0 : diaries.length;
 
-      const filteredDiaries = feedData.filter((diary) => {
-        if (diary.author.id !== profile?.id) return false;
+      const feedData = await getMyFeed(25, offset);
 
-        if (activeTab === 1) {
-          return diary.share_type === 'personal'
-        }
+      const filtered = feedData.filter(
+        d =>
+          d.author.id === profile?.id &&
+          (activeTab !== 1 || d.share_type === 'personal')
+      );
 
-        return true;
+      setDiaries(prev => {
+        const all = reset ? filtered : [...prev, ...filtered];
+        return Array.from(new Map(all.map(d => [d.id, d])).values());
       });
-
-      setDiaries(filteredDiaries);
-      setDiariesLoading(false);
     } catch (err) {
-      console.error('Fetch diaries error:', err);
       setError(err.message || t('failed_to_load_diaries'));
+    } finally {
       setDiariesLoading(false);
     }
   };
 
+  const fetchStats = async () => {
+    const favoriteList = await getFavoriteDiaryList();
+
+    setFavorites(favoriteList);
+
+    const data = await getMyDiaryStats();
+    setDiaryCount(data.total);
+    setPublicCount(data.public);
+  };
+
   useEffect(() => {
-    if (profile?.id) {
-      fetchUserDiaries();
-    }
+    if (!profile?.id) return;
+
+    fetchUserDiaries(true);
+    fetchStats();
   }, [profile?.id, activeTab]);
+
 
   const formik = useFormik({
     initialValues: {
@@ -193,7 +212,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
       return;
     }
 
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
       setError(t('image_too_large'));
       return;
@@ -242,14 +261,27 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
 
   const currentAvatarUrl = imagePreview || getAvatarUrl(profile?.avatar_url);
 
-  // Calculate statistics
   const getStatistics = () => {
-    const publicDiaries = diaryCount.filter(d => d.share_type === 'public').length;
 
     return [
-      { label: t('total_diaries'), value: diaryCount.length, icon: <MenuBookIcon />, color: 'primary' },
-      { label: t('public'), value: publicDiaries, icon: <PublicIcon />, color: 'success' },
-      { label: t('friends'), value: friends.length, icon: <People />, color: 'secondary' },
+      {
+        label: t('total_diaries'),
+        value: diaryCount,
+        icon: <MenuBookIcon />,
+        color: 'primary'
+      },
+      {
+        label: t('public'),
+        value: publicCount,
+        icon: <PublicIcon />,
+        color: 'success'
+      },
+      {
+        label: t('friends'),
+        value: friends.length,
+        icon: <People />,
+        color: 'secondary'
+      }
     ];
   };
 
@@ -261,8 +293,8 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
       sx={{
         height: '90vh',
         overflowY: 'auto',
-        '&::-webkit-scrollbar': { display: 'none' },
-        scrollbarWidth: 'none',
+        // '&::-webkit-scrollbar': { display: 'none' },
+        // scrollbarWidth: 'none',
       }}
     >
       <Button onClick={scrollToTop} sx={{ position: "absolute", bottom: 20, right: { xs: 20 }, fontSize: "16px", borderRadius: "50%", border: "none", color: "white", backgroundColor: '#254D70', cursor: "pointer", display: visible ? "flex" : "none", zIndex: 1300, minWidth: 0, width: 45, height: 45 }}><NorthIcon /></Button>
@@ -654,7 +686,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
             bgcolor: 'transparent',
             borderBottom: 2,
             borderColor: 'divider',
-            width: { xs: '50%', md: 400 }
+            width: { xs: '50%', md: 500 }
           }}
         >
           <Tabs
@@ -692,6 +724,18 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
                 minWidth: { xs: 10, sm: 120 },
               }}
             />
+            <Tab
+              icon={<BookmarksIcon />}
+              label={isMobile ? '' : 'Saved'}
+              iconPosition="start"
+              sx={{
+                fontWeight: 600,
+                fontSize: 14,
+                textTransform: 'none',
+                minHeight: 40,
+                minWidth: { xs: 10, sm: 120 },
+              }}
+            />
           </Tabs>
         </Paper>
 
@@ -709,12 +753,23 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
         </Button>
       </Box>
 
-      <ProfileDiary
-        diaries={diaries}
-        profile={profile}
-        onDataUpdate={onDataUpdate}
-        friends={friends}
-      />
+      {(activeTab === 0 || activeTab === 1) && (
+        <ProfileDiary
+          diaries={diaries}
+          profile={profile}
+          onDataUpdate={onDataUpdate}
+          friends={friends}
+        />
+      )}
+
+      {activeTab === 2 && (
+        <ProfileDiary
+          diaries={favorites}
+          profile={profile}
+          onDataUpdate={onDataUpdate}
+          friends={friends}
+        />
+      )}
 
       <Menu
         anchorEl={avatarMenuAnchor}

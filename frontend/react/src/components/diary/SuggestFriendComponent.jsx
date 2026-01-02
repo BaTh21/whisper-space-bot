@@ -3,9 +3,11 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { getSuggestFriends, sendFriendRequest } from '../../services/api';
 import { useEffect, useState } from "react";
 import { toast } from 'react-toastify';
+import {useNavigate} from 'react-router-dom';
 
 function SuggestFriendComponent() {
     const [friends, setFriends] = useState([]);
+    const router = useNavigate();
 
     const fetchData = async () => {
         const res = await getSuggestFriends();
@@ -39,7 +41,7 @@ function SuggestFriendComponent() {
                 }}
             >
                 <Typography variant='h4'>Suggested for you</Typography>
-                <Button>Seen All</Button>
+                <Button onClick={()=> router("/friends")}>See More</Button>
             </Box>
             <List
                 sx={{
@@ -68,7 +70,7 @@ function SuggestFriendComponent() {
                             }}
                         >
                             <ListItemAvatar sx={{ position: 'relative' }}>
-                                <Avatar src={friend.avatar_url} alt="profile img">
+                                <Avatar src={friend?.avatar_url} alt="profile img">
                                     {friend.username.charAt(0) || "P"}
                                 </Avatar>
                             </ListItemAvatar>

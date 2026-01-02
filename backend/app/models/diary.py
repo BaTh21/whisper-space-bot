@@ -35,3 +35,13 @@ class Diary(Base):
     
     likes = relationship("DiaryLike", back_populates="diary", cascade="all, delete-orphan")
     comments = relationship("DiaryComment", back_populates="diary", cascade="all, delete-orphan")
+    
+    favorited_by = relationship(
+        "DiaryFavorite",
+        back_populates="diary",
+        cascade="all, delete-orphan"
+    )
+    
+    @property
+    def favorited_user_ids(self) -> list[int]:
+        return [fav.user_id for fav in self.favorited_by]
