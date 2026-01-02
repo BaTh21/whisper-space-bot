@@ -131,20 +131,23 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, on
       setDiariesLoading(true);
       const offset = reset ? 0 : diaries.length;
 
-      const feedData = await getMyFeed(25, offset);
+      let feedData = await getMyFeed(25, offset);
 
-      const filtered = feedData.filter(
-        d =>
-          d.author.id === profile?.id &&
-          (activeTab !== 1 || d.share_type === 'personal')
-      );
+      if (activeTab === 1) {
+        feedData = feedData.filter(d => d.author.id === profile?.id && d.share_type === 'personal');
+      } else {
+        feedData = feedData.filter(d => d.author.id === profile?.id);
+      }
 
       setDiaries(prev => {
-        const all = reset ? filtered : [...prev, ...filtered];
+        const all = reset ? feedData : [...prev, ...feedData];
         return Array.from(new Map(all.map(d => [d.id, d])).values());
       });
+
+      return feedData;
     } catch (err) {
       setError(err.message || t('failed_to_load_diaries'));
+      return [];
     } finally {
       setDiariesLoading(false);
     }
