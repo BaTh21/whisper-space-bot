@@ -12,13 +12,15 @@ router = APIRouter()
 def get_my_activities(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    limit: int = 20
+    limit: int = 20,
+    offset: int = 0
 ):
     activities = (
         db.query(Activity)
         .filter(Activity.recipient_id == current_user.id)
         .order_by(Activity.created_at.desc())
         .limit(limit)
+        .offset(offset)
         .all()
     )
 

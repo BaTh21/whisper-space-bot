@@ -122,7 +122,6 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       setBlockedUsers(blockUserData);
       setAllSatusFriends(allSatusFriendData);
 
-      console.log("allSatusFriends", allSatusFriendData)
     } catch (err) {
       setError(err.message || 'Failed to fetch data');
     } finally {

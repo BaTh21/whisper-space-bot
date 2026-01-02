@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef, useMemo } from "react";
+import { useState, useEffect, forwardRef, useMemo, useRef } from "react";
 import {
   Dialog,
   AppBar,
@@ -38,16 +38,59 @@ function InboxComponent({ open, onClose }) {
   const [deletePopup, setDeletePopup] = useState(false);
   const [activities, setActivities] = useState([]);
 
-  const fetchData = async () => {
-    const acRes = await getActivityInbox();
-    setActivities(acRes);
-  }
+  const [limit, setLimit] = useState(20);
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const scrollRef = useRef(null);
 
   useEffect(() => {
-    if (open) {
-      fetchData();
-    }
+    const container = scrollRef.current;
+    if (!container) return;
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [activities, offset]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setActivities([]);
+    setOffset(0);
+    setHasMore(true);
+    setLoading(false);
+
+    fetchData(20, 0);
   }, [open]);
+
+  const fetchData = async (newLimit = limit, newOffset = offset) => {
+    if (loading || !hasMore) return;
+    setLoading(true);
+
+    try {
+      const acRes = await getActivityInbox(newLimit, newOffset);
+
+      // Append activities
+      setActivities(prev => [...prev, ...acRes]);
+
+      // Update offset
+      setOffset(prev => prev + acRes.length);
+
+      // Check if more data
+      setHasMore(acRes.length === newLimit);
+
+      // Mark as read ONLY for activities that are NOT friend requests or group invites
+      acRes.forEach(a => {
+        if (!a.is_read && a.type !== "friend_request" && a.type !== "group_invite") {
+          handleReadActivity(a.id);
+        }
+      });
+
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleFilterChange = (event, newFilter) => {
     if (newFilter !== null) {
@@ -60,12 +103,6 @@ function InboxComponent({ open, onClose }) {
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
-
-  const filteredActivities = useMemo(() => {
-    if (filter === "unread") return activities.filter(a => !a.is_read);
-    if (filter === "read") return activities.filter(a => a.is_read);
-    return activities;
-  }, [activities, filter]);
 
   const handleAccept = async (activity) => {
     try {
@@ -108,19 +145,32 @@ function InboxComponent({ open, onClose }) {
     }
   };
 
-  const handleReadActivity = async (activityId)=> {
-    await readActivity(activityId);
-  }
+  const handleReadActivity = async (activityId) => {
+    try {
+      await readActivity(activityId);
+      setActivities(prev =>
+        prev.map(a => (a.id === activityId ? { ...a, is_read: true } : a))
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-  const unreadCount = useMemo(
-    () => activities.filter(a => !a.is_read).length,
-    [activities]
-  );
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    if (scrollHeight - scrollTop <= clientHeight + 50) {
+      fetchData(limit, offset);
+    }
+  };
 
-  const readCount = useMemo(
-    () => activities.filter(a => a.is_read).length,
-    [activities]
-  );
+  const filteredActivities = useMemo(() => {
+    if (filter === "unread") return activities.filter(a => !a.is_read);
+    if (filter === "read") return activities.filter(a => a.is_read);
+    return activities;
+  }, [activities, filter]);
+
+  const unreadCount = useMemo(() => activities.filter(a => !a.is_read).length, [activities]);
+  const readCount = useMemo(() => activities.filter(a => a.is_read).length, [activities]);
 
   const handleCloseDialog = () => setConfirmDialog({ open: false, activity: null });
 
@@ -168,67 +218,78 @@ function InboxComponent({ open, onClose }) {
         </Box>
 
         {/* Activity List */}
-        <List disablePadding>
-          {filteredActivities.map((activity, index) => (
-            <Box key={activity.id}>
-              <ListItemButton
-                alignItems="flex-start"
-                sx={{
-                  px: 2,
-                  py: 1.5,
-                  backgroundColor: activity.is_read ? "transparent" : "rgba(0,128,255,0.08)",
-                }}
-              >
-                <Checkbox
-                  checked={selectedIds.includes(activity.id)}
-                  onChange={() => handleSelectToggle(activity.id)}
-                  sx={{
-                    mt: 0.5
-                  }}
-                />
+        <Box
+          sx={{ overflowY: "auto", height: "calc(100vh - 112px)" }} // Adjust height
+          onScroll={scrollRef}
+        >
+          <List disablePadding>
+            {filteredActivities.length === 0 ?
+              (
+                <Typography sx={{ p: 2, textAlign: 'center' }}>No activity found</Typography>
+              ) :
+              (filteredActivities.map((activity, index) => (
+                <Box key={activity.id}>
+                  <ListItemButton
+                    alignItems="flex-start"
+                    sx={{
+                      px: 2,
+                      py: 1.5,
+                      backgroundColor: activity.is_read ? "grey.50" : "rgba(0,128,255,0.08)",
+                    }}
+                  >
+                    <Checkbox
+                      checked={selectedIds.includes(activity.id)}
+                      onChange={() => handleSelectToggle(activity.id)}
+                      sx={{
+                        mt: 0.5
+                      }}
+                    />
 
-                <ListItemAvatar>
-                  <Avatar src={activity.actor.avatar_url}>
-                    {activity.actor.username?.charAt(0).toUpperCase()}
-                  </Avatar>
-                </ListItemAvatar>
+                    <ListItemAvatar>
+                      <Avatar src={activity.actor.avatar_url}>
+                        {activity.actor.username?.charAt(0).toUpperCase()}
+                      </Avatar>
+                    </ListItemAvatar>
 
-                <Box sx={{ flex: 1, ml: 1, mt: 0.75 }}>
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Typography component="span" fontWeight={activity.is_read ? 500 : 700} noWrap>
-                      {activity.actor.username}
-                    </Typography>
-                    <Typography component="span" variant="caption" color="text.secondary">
-                      {new Date(activity.created_at).toLocaleDateString()}
-                    </Typography>
-                  </Box>
+                    <Box sx={{ flex: 1, ml: 1, mt: 0.75 }}>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Typography component="span" fontWeight={activity.is_read ? 500 : 700} noWrap>
+                          {activity.actor.username}
+                        </Typography>
+                        <Typography component="span" variant="caption" color="text.secondary">
+                          {new Date(activity.created_at).toLocaleDateString()}
+                        </Typography>
+                      </Box>
 
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Typography component="span" variant="body2" color="text.secondary" noWrap>
-                      {activity.extra_data}
-                    </Typography>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Typography component="span" variant="body2" color="text.secondary" noWrap>
+                          {activity.extra_data}
+                        </Typography>
 
-                    {(activity.type === "friend_request" || activity.type === "group_invite") && (
-                      <Button size="small" variant="contained"
-                        onClick={() => {
-                          setSelectedActivity(activity);
-                          setConfirmDialog({ open: true, activity: activity })
-                        }}
-                        disabled={activity.is_read === true}
-                      >
-                        Accept
-                      </Button>
-                    )}
-                  </Box>
+                        {(activity.type === "friend_request" || activity.type === "group_invite") && (
+                          <Button size="small" variant="contained"
+                            onClick={() => {
+                              setSelectedActivity(activity);
+                              setConfirmDialog({ open: true, activity: activity })
+                            }}
+                            disabled={activity.is_read === true}
+                          >
+                            Accept
+                          </Button>
+                        )}
+                      </Box>
+                    </Box>
+
+
+                  </ListItemButton>
+
+                  {index < filteredActivities.length - 1 && <Divider />}
                 </Box>
-
-
-              </ListItemButton>
-
-              {index < filteredActivities.length - 1 && <Divider />}
-            </Box>
-          ))}
-        </List>
+              )))
+            }
+            {loading && <Typography sx={{ p: 2 }}>Loading...</Typography>}
+          </List>
+        </Box>
 
         <Dialog open={confirmDialog.open} onClose={handleCloseDialog}>
           <DialogTitle>Confirm Accept</DialogTitle>
