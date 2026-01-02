@@ -49,7 +49,7 @@ import { deleteAvatar, getMyFeed, updateMe, uploadAvatar, getMyDiaryStats, getFa
 import ProfileDiary from '../diary/ProfileDiary';
 import SystemLogs from '../SystemLogs';
 
-const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdate, friends, onNewDiary }) => {
+const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, onNewDiary }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -79,27 +79,43 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
 
   const [favorites, setFavorites] = useState([]);
 
+  const handleSuccess = async () => {
+    const feedData = await fetchUserDiaries(true);
+    setDiaries(feedData);
+  };
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
-    const onScroll = () => {
-      // show scroll-to-top button
-      setVisible(el.scrollTop > 300);
+    let timeout = null;
 
-      // infinite scroll
-      if (
-        el.scrollTop + el.clientHeight >= el.scrollHeight - 200 &&
-        !diariesLoading
-      ) {
-        fetchUserDiaries(false);
-      }
+    const onScroll = () => {
+      if (timeout) return;
+      timeout = setTimeout(() => {
+        const scrollTop = el.scrollTop;
+        const scrollHeight = el.scrollHeight;
+        const clientHeight = el.clientHeight;
+
+        setVisible(prev => {
+          if ((scrollTop > 300) !== prev) return scrollTop > 300;
+          return prev;
+        });
+
+        if (scrollTop + clientHeight >= scrollHeight - 200 && !diariesLoading) {
+          fetchUserDiaries(false);
+        }
+
+        timeout = null;
+      }, 200);
     };
 
     el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [profile?.id]);
-
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [profile?.id, diariesLoading]);
 
   const scrollToTop = () => {
     scrollRef.current.scrollTo({
@@ -757,8 +773,9 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
         <ProfileDiary
           diaries={diaries}
           profile={profile}
-          onDataUpdate={onDataUpdate}
+          onDataUpdate={handleSuccess}
           friends={friends}
+          fetchStats={fetchStats}
         />
       )}
 
@@ -766,8 +783,9 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, onDataUpdat
         <ProfileDiary
           diaries={favorites}
           profile={profile}
-          onDataUpdate={onDataUpdate}
+          onDataUpdate={handleSuccess}
           friends={friends}
+          fetchStats={fetchStats}
         />
       )}
 

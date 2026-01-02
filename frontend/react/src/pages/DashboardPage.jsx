@@ -256,7 +256,6 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               success={success}
               setError={setError}
               setSuccess={setSuccess}
-              onProfileUpdate={fetchDashboardData}
               onDataUpdate={fetchDashboardData}
               friends={friends}
               onNewDiary={() => setDiaryDialogOpen(true)}

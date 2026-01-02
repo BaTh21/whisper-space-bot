@@ -55,8 +55,8 @@ import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import TurnedInNotOutlinedIcon from '@mui/icons-material/TurnedInNotOutlined';
 import TurnedInIcon from "@mui/icons-material/TurnedIn";
 
-const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
-  const [diaryList, setDiaryList] = useState(diaries);
+const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [], fetchStats }) => {
+  const [diaryList, setDiaryList] = useState(diaries || []);
   const [loading, setLoading] = useState(false);
   const [expandedDiary, setExpandedDiary] = useState(null);
   const [diaryComments, setDiaryComments] = useState({});
@@ -104,37 +104,30 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
   const [currentMediaList, setCurrentMediaList] = useState([]);
   const [sendingRequests, setSendingRequests] = useState(new Set());
 
-  const [favorites, setFavorites] = useState([]);
-
-  console.log("diaries", diaryList)
-  console.log("favorites", favorites)
-
-  const fetchFavorites = async () => {
-    const res = await getFavoriteDiary();
-    setFavorites(res);
-  }
-
   useEffect(() => {
     setDiaryList(diaries);
   }, [diaries]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !Array.isArray(diaryList)) return;
+
     const initialLiked = new Set();
     const initialLikes = {};
 
-    fetchFavorites();
-
     diaryList.forEach(diary => {
-      if (diary.likes.some(like => like.user.id === user.id)) {
+      if (!diary) return;
+      const likes = diary.likes || [];
+
+      if (likes.some(like => like?.user?.id === user.id)) {
         initialLiked.add(diary.id);
       }
-      initialLikes[diary.id] = diary.likes.length;
+
+      initialLikes[diary.id] = likes.length;
     });
 
     setLikedDiaries(initialLiked);
     setDiaryLikes(initialLikes);
-  }, [diaryList, user.id]);
+  }, [diaryList, user?.id]);
 
   const handleSendFriendRequest = async (userId) => {
     if (!userId || !profile || userId === profile.id) return;
@@ -428,10 +421,15 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
     try {
       await deleteDiaryById(diaryToDelete.id);
       showMessage(t('diary_deleted'));
+
+      setDiaryList(prev => (prev || []).filter(d => d?.id !== diaryToDelete.id));
+
+      fetchStats?.();
+
       handleDeleteCancel();
-      onDataUpdate();
     } catch (err) {
       showMessage(err.message || t('failed_delete_diary'), 'error');
+    } finally {
       setDeleteLoading(false);
     }
   };
@@ -949,7 +947,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
 
         <Box>
 
-          {diaryList.length === 0 ? (
+          {(!diaryList || diaryList.length === 0) ? (
             <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
               {t('no_diaries_yet')}
             </Typography>
@@ -977,7 +975,6 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
                     setLoading(true);
                     await handleSaveDiary(diaryId);
 
-                    // update diaryList locally
                     setDiaryList(prev =>
                       prev.map(d =>
                         d.id === diaryId
@@ -997,7 +994,6 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [] }) => {
                     setLoading(true);
                     await handleRemoveDiary(diaryId);
 
-                    // update diaryList locally
                     setDiaryList(prev =>
                       prev.map(d =>
                         d.id === diaryId

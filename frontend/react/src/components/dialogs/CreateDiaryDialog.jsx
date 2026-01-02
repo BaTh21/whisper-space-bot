@@ -71,7 +71,6 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
       try {
         setUploading(true);
 
-        // Prepare the data object
         const formData = {
           title: values.title,
           content: values.content,
@@ -79,27 +78,16 @@ const CreateDiaryDialog = ({ open, onClose, groups, onSuccess, setError }) => {
           group_ids: values.share_type === 'group' ? values.group_ids : [],
         };
 
-        // Add images if any
         if (selectedImages.length > 0) {
-          formData.images = selectedImages; // Pass the File objects directly
+          formData.images = selectedImages;
         }
 
-        // Add videos if any
         if (selectedVideos.length > 0) {
-          formData.videos = selectedVideos; // Pass the File objects directly
+          formData.videos = selectedVideos;
         }
 
-        console.log('=== SENDING TO API ===');
-        console.log('Form data structure:', {
-          ...formData,
-          images: formData.images ? `Array of ${formData.images.length} File objects` : 'none',
-          videos: formData.videos ? `Array of ${formData.videos.length} File objects` : 'none',
-        });
-
-        // The API function will convert File objects to base64
         await createDiary(formData);
 
-        // Reset and close
         resetForm();
         setSelectedImages([]);
         setSelectedVideos([]);
