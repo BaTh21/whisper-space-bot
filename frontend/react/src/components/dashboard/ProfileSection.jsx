@@ -239,6 +239,8 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, on
     reader.readAsDataURL(file);
     setSelectedFile(file);
     setError(null);
+
+    setIsEditing(true);
   };
 
   const confirmDeleteAvatar = async () => {

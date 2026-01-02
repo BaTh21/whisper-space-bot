@@ -45,7 +45,7 @@ import {
 } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById, getFavoriteDiary, handleSaveDiary, handleRemoveDiary } from '../../services/api';
+import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById, handleSaveDiary, handleRemoveDiary } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { DiaryCard } from '../diary/DairyCard';
 import { convertFilesToBase64, CommentItemWithActions, MediaPlayer, getVideoThumbnail } from '../diary/DiaryHelper';
@@ -55,7 +55,7 @@ import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import TurnedInNotOutlinedIcon from '@mui/icons-material/TurnedInNotOutlined';
 import TurnedInIcon from "@mui/icons-material/TurnedIn";
 
-const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [], fetchStats }) => {
+const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) => {
   const [diaryList, setDiaryList] = useState(diaries || []);
   const [loading, setLoading] = useState(false);
   const [expandedDiary, setExpandedDiary] = useState(null);
@@ -753,6 +753,8 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends = [], fetchStats
 
     openMediaViewer(mediaList, index);
   };
+
+  console.log("friends", friends)
 
   const isFriend = (authorId) =>
     friends?.some(
