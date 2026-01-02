@@ -121,6 +121,8 @@ const DashboardPage = ({ defaultTab = 0 }) => {
       setPendingFriends(pendingFriendData);
       setBlockedUsers(blockUserData);
       setAllSatusFriends(allSatusFriendData);
+
+      console.log("allSatusFriends", allSatusFriendData)
     } catch (err) {
       setError(err.message || 'Failed to fetch data');
     } finally {
@@ -257,7 +259,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               setError={setError}
               setSuccess={setSuccess}
               onDataUpdate={fetchDashboardData}
-              friends={friends}
+              friends={allSatusFriends}
               onNewDiary={() => setDiaryDialogOpen(true)}
             />
           </TabPanel>
