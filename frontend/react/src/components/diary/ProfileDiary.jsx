@@ -837,7 +837,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                   '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
                 }}
               >
-                <ArrowBackIcon sx={{fontSize: {xs: 16, md: 22}}} />
+                <ArrowBackIcon sx={{ fontSize: { xs: 16, md: 22 } }} />
               </IconButton>
             )}
 
@@ -856,7 +856,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                   '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
                 }}
               >
-                <ArrowForwardIcon sx={{fontSize: {xs: 16, md: 22}}}/>
+                <ArrowForwardIcon sx={{ fontSize: { xs: 16, md: 22 } }} />
               </IconButton>
             )}
 
@@ -1745,7 +1745,8 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                   justifyContent: 'center',
                                   '&:hover': { transform: 'scale(1.05)' },
                                   display: 'flex',
-                                  gap: 1
+                                  gap: 1,
+                                  alignItems: 'center'
                                 }}
                               >
                                 {isMobile ? (
@@ -1761,7 +1762,9 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                     {t('like')}
                                   </>
                                 )}
-                                {diaryLikes[diary.id] > 0 ? diaryLikes[diary.id] : ''}
+                                <Typography ml={0.5}>
+                                  {diaryLikes[diary.id] > 0 ? diaryLikes[diary.id] : ''}
+                                </Typography>
                               </Button>
                             </Tooltip>
 
