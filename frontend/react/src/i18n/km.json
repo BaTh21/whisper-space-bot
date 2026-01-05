@@ -319,5 +319,6 @@
   "delete_photo_confirmation": "តើអ្នកប្រាកដថាចង់លុបរូបថតទម្រង់នេះមែនទេ?",
   "failed_to_load_diaries": "មិនអាចទាញយកសំណេរបាន",
   "failed_to_load_data": "មិនអាចទាញយកទិន្នន័យបាន",
-  "view_full_diary": "មើលសំណេរពេញ"
+  "view_full_diary": "មើលសំណេរពេញ",
+  "active_devices_description": "គ្រប់គ្រងនិងចាកចេញនៅលើឧបករណ៍ផ្សេងទៀត"
 }

@@ -1,68 +1,43 @@
-// components/SystemLogs.jsx - Fixed hydration errors
+
 import {
-    Computer,
-    Delete,
-    DesktopWindows,
-    Edit,
-    FilterList,
-    Info,
-    Login,
-    Logout,
-    PhoneAndroid,
-    Refresh,
-    Search,
-    Security,
-    Tablet
+  Computer,
+  DesktopWindows,
+  KeyboardArrowDown,
+  KeyboardArrowUp,
+  PhoneAndroid,
+  Tablet,
 } from '@mui/icons-material';
 import {
-    Alert,
-    Box,
-    Chip,
-    CircularProgress,
-    Divider,
-    IconButton,
-    InputAdornment,
-    List,
-    ListItem,
-    ListItemIcon,
-    ListItemText,
-    Menu,
-    MenuItem,
-    Paper,
-    Stack,
-    TextField,
-    Tooltip,
-    Typography,
+  Alert,
+  Box,
+  Chip,
+  CircularProgress,
+  Divider,
+  Fab,
+  List,
+  ListItem,
+  ListItemIcon,
+  Stack,
+  Typography,
+  Zoom
 } from '@mui/material';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getMyDevices, getMyLogs } from '../services/api';
-// Import your date utilities - adjust the path based on where your file is
-import { formatCambodiaTime } from '../utils/dateUtils'; // Adjust this path
+import { getMyDevices } from '../services/api';
+import { formatCambodiaTime } from '../utils/dateUtils';
 
 const SystemLogs = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [logs, setLogs] = useState([]);
   const [devices, setDevices] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterMenuAnchor, setFilterMenuAnchor] = useState(null);
-  const [selectedAction, setSelectedAction] = useState('all');
+  const [showScrollButtons, setShowScrollButtons] = useState(false);
 
-  const actionTypes = [
-    { value: 'all', label: t('all_actions') },
-    { value: 'login', label: t('login'), icon: <Login /> },
-    { value: 'logout', label: t('logout'), icon: <Logout /> },
-    { value: 'profile_update', label: t('profile_update'), icon: <Edit /> },
-    { value: 'password_change', label: t('password_change'), icon: <Security /> },
-    { value: 'diary_created', label: t('diary_created'), icon: <Edit /> },
-    { value: 'diary_deleted', label: t('diary_deleted'), icon: <Delete /> },
-  ];
+  const scrollContainerRef = useRef(null);
 
   const getDeviceIcon = (deviceType) => {
     if (!deviceType) return <Computer />;
-    
+
     switch (deviceType.toLowerCase()) {
       case 'mobile':
         return <PhoneAndroid />;
@@ -75,78 +50,15 @@ const SystemLogs = () => {
     }
   };
 
-  const getActionColor = (action) => {
-    if (!action) return 'default';
-    
-    switch (action) {
-      case 'login':
-        return 'success';
-      case 'logout':
-        return 'warning';
-      case 'profile_update':
-        return 'info';
-      case 'password_change':
-        return 'primary';
-      case 'diary_created':
-        return 'success';
-      case 'diary_deleted':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
-  const getActionIcon = (action) => {
-    if (!action) return <Info />;
-    
-    switch (action) {
-      case 'login':
-        return <Login />;
-      case 'logout':
-        return <Logout />;
-      case 'profile_update':
-        return <Edit />;
-      case 'password_change':
-        return <Security />;
-      case 'diary_created':
-        return <Edit />;
-      case 'diary_deleted':
-        return <Delete />;
-      default:
-        return <Info />;
-    }
-  };
-
-  const getTranslatedAction = (action) => {
-    if (!action) return t('unknown_action');
-    const translationKey = `action_${action}`;
-    const translation = t(translationKey);
-    // If translation doesn't exist, return the action itself
-    return translation === translationKey ? action : translation;
-  };
-
-  const fetchData = async () => {
+  const fetchDevices = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Fetch logs and devices in parallel
-      const [logsData, devicesData] = await Promise.all([
-        getMyLogs(selectedAction === 'all' ? null : selectedAction, 100),
-        getMyDevices()
-      ]);
-      
-      console.log('=== Raw API Response ===');
-      console.log('Logs data:', logsData);
-      console.log('Devices data:', devicesData);
-      
-      // Ensure logs and devices are always arrays
-      setLogs(Array.isArray(logsData) ? logsData : []);
+      const devicesData = await getMyDevices();
       setDevices(Array.isArray(devicesData) ? devicesData : []);
     } catch (err) {
-      console.error('Fetch system logs error:', err);
-      setError(err.message || t('failed_to_load_system_logs'));
-      setLogs([]);
+      console.error('Fetch devices error:', err);
+      setError(err.message || t('failed_to_load_devices'));
       setDevices([]);
     } finally {
       setLoading(false);
@@ -154,34 +66,43 @@ const SystemLogs = () => {
   };
 
   useEffect(() => {
-    fetchData();
-  }, [selectedAction]);
+    fetchDevices();
+  }, []);
 
-  // Ensure filteredLogs is always an array
-  const filteredLogs = Array.isArray(logs) ? logs.filter(log => {
-    if (!log || typeof log !== 'object') return false;
-    
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      (log.action && log.action.toLowerCase().includes(searchLower)) ||
-      (log.device_name && log.device_name.toLowerCase().includes(searchLower)) ||
-      (log.ip_address && log.ip_address.toLowerCase().includes(searchLower)) ||
-      (log.browser && log.browser.toLowerCase().includes(searchLower)) ||
-      (log.os && log.os.toLowerCase().includes(searchLower))
-    );
-  }) : [];
+  // Detect if scrolling is needed and show/hide buttons
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-  const handleFilterClick = (event) => {
-    setFilterMenuAnchor(event.currentTarget);
+    const checkScroll = () => {
+      const hasOverflow = container.scrollHeight > container.clientHeight + 20;
+      setShowScrollButtons(hasOverflow);
+    };
+
+    checkScroll();
+
+    const resizeObserver = new ResizeObserver(checkScroll);
+    resizeObserver.observe(container);
+
+    container.addEventListener('scroll', checkScroll);
+    window.addEventListener('resize', checkScroll);
+
+    return () => {
+      resizeObserver.disconnect();
+      container.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [devices]);
+
+  const scrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleFilterClose = () => {
-    setFilterMenuAnchor(null);
-  };
-
-  const handleActionSelect = (action) => {
-    setSelectedAction(action);
-    handleFilterClose();
+  const scrollToBottom = () => {
+    scrollContainerRef.current?.scrollTo({
+      top: scrollContainerRef.current.scrollHeight,
+      behavior: 'smooth',
+    });
   };
 
   if (loading) {
@@ -193,39 +114,49 @@ const SystemLogs = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom fontWeight={600}>
-        {t('system_logs')}
-      </Typography>
-      
-      <Typography variant="body2" color="text.secondary" paragraph>
-        {t('system_logs_description')}
-      </Typography>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-
-      {/* Devices Section */}
-      <Paper elevation={0} sx={{ mb: 4, p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* Header */}
+      <Box sx={{ p: 3, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6" fontWeight={600}>
             {t('active_devices')}
           </Typography>
-          <Chip 
-            label={`${devices.length} ${t('devices')}`} 
-            color="primary" 
+          <Chip
+            label={`${devices.length} ${t('devices')}`}
+            color="primary"
             variant="outlined"
             size="small"
           />
         </Box>
-        
-        <Divider sx={{ mb: 2 }} />
-        
+        <Typography variant="body2" color="text.secondary" mt={1}>
+          {t('active_devices_description') || 'View all devices currently logged into your account.'}
+        </Typography>
+      </Box>
+
+      {/* Scrollable Device List */}
+      <Box
+        ref={scrollContainerRef}
+        sx={{
+          flex: 1,
+          overflowY: 'auto',
+          px: 3,
+          py: 2,
+          '&::-webkit-scrollbar': { width: 8 },
+          '&::-webkit-scrollbar-track': { background: 'transparent' },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'action.active',
+            borderRadius: 4,
+          },
+        }}
+      >
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+
         {devices.length === 0 ? (
-          <Typography color="text.secondary" align="center" py={3}>
+          <Typography color="text.secondary" align="center" py={8}>
             {t('no_devices_found')}
           </Typography>
         ) : (
@@ -234,174 +165,76 @@ const SystemLogs = () => {
               <React.Fragment key={device.id || index}>
                 <ListItem
                   sx={{
-                    borderRadius: 1,
-                    mb: 1,
-                    bgcolor: 'transparent',
-                    border: 'none',
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    }
+                    borderRadius: 2,
+                    mb: 2,
+                    bgcolor: 'background.paper',
+                    boxShadow: 1,
+                    '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
-                  <ListItemIcon sx={{ minWidth: 40 }}>
+                  <ListItemIcon sx={{ minWidth: 48 }}>
                     {getDeviceIcon(device.device_type)}
                   </ListItemIcon>
+
                   <Box sx={{ flex: 1 }}>
-                    <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-                      <Typography variant="subtitle1" fontWeight={500} component="div">
-                        {device.device_name || t('unknown_device')}
-                      </Typography>
-                    </Box>
-                    <Stack spacing={0.5}>
-                      <Typography variant="body2" color="text.secondary" component="div">
+                    <Typography variant="subtitle1" fontWeight={600}>
+                      {device.device_name || t('unknown_device')}
+                    </Typography>
+
+                    <Stack spacing={0.5} mt={0.5}>
+                      <Typography variant="body2" color="text.secondary">
                         {device.browser || 'Unknown'} • {device.os || 'Unknown'}
                       </Typography>
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" component="div">
-                        <Typography variant="caption" color="text.secondary" component="span">
+
+                      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+                        <Typography variant="caption" color="text.secondary">
                           <strong>IP:</strong> {device.ip_address || 'Unknown'}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" component="span">
-                          •
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" component="span">
+                        <Typography variant="caption" color="text.secondary">
                           <strong>{t('last_login')}:</strong> {formatCambodiaTime(device.last_login)}
                         </Typography>
                       </Stack>
                     </Stack>
                   </Box>
+
                   <Chip
                     icon={getDeviceIcon(device.device_type)}
-                    label={device.device_type || t('unknown')}
+                    label={device.device_type?.charAt(0).toUpperCase() + device.device_type?.slice(1) || t('unknown')}
                     size="small"
                     variant="outlined"
-                    sx={{ ml: 1 }}
+                    color="default"
                   />
                 </ListItem>
-                {index < devices.length - 1 && <Divider variant="inset" component="li" />}
+
+                {index < devices.length - 1 && <Divider />}
               </React.Fragment>
             ))}
           </List>
         )}
-      </Paper>
+      </Box>
 
-      {/* Activity Logs Section */}
-      {/* <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6" fontWeight={600}>
-            {t('recent_activity')}
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <TextField
-              size="small"
-              placeholder={t('search_activity')}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search fontSize="small" />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ width: 200 }}
-            />
-            <Tooltip title={t('filter_actions')}>
-              <IconButton onClick={handleFilterClick} size="small">
-                <FilterList />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={t('refresh')}>
-              <IconButton onClick={fetchData} size="small">
-                <Refresh />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        </Box>
-
-        <Menu
-          anchorEl={filterMenuAnchor}
-          open={Boolean(filterMenuAnchor)}
-          onClose={handleFilterClose}
+      {/* Floating Scroll Buttons - Only show when needed */}
+      <Zoom in={showScrollButtons}>
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 16,
+            right: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            zIndex: 10,
+          }}
         >
-          {actionTypes.map((action) => (
-            <MenuItem
-              key={action.value}
-              onClick={() => handleActionSelect(action.value)}
-              selected={selectedAction === action.value}
-            >
-              {action.icon && <ListItemIcon>{action.icon}</ListItemIcon>}
-              <ListItemText>{action.label}</ListItemText>
-            </MenuItem>
-          ))}
-        </Menu>
+          <Fab size="small" color="primary" onClick={scrollToBottom} aria-label="scroll to bottom">
+            <KeyboardArrowDown />
+          </Fab>
 
-        {selectedAction !== 'all' && (
-          <Chip
-            label={actionTypes.find(a => a.value === selectedAction)?.label}
-            onDelete={() => setSelectedAction('all')}
-            size="small"
-            sx={{ mb: 2 }}
-          />
-        )}
-
-        <Divider sx={{ mb: 2 }} />
-
-        {filteredLogs.length === 0 ? (
-          <Typography color="text.secondary" align="center" py={3}>
-            {searchTerm ? t('no_activity_found_for_search') : t('no_activity_found')}
-          </Typography>
-        ) : (
-          <List disablePadding>
-            {filteredLogs.map((log, index) => (
-              <React.Fragment key={log.id || index}>
-                <ListItem 
-                  sx={{ 
-                    borderRadius: 1, 
-                    mb: 1,
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    }
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 40 }}>
-                    {getActionIcon(log.action)}
-                  </ListItemIcon>
-                  <Box sx={{ flex: 1 }}>
-                    <Box display="flex" alignItems="center" gap={1} mb={0.5} flexWrap="wrap">
-                      <Typography variant="subtitle1" fontWeight={500} component="div">
-                        {getTranslatedAction(log.action)}
-                      </Typography>
-                      <Chip
-                        label={log.action || 'unknown'}
-                        color={getActionColor(log.action)}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </Box>
-                    <Stack spacing={0.5}>
-                      <Typography variant="body2" color="text.secondary" component="div">
-                        {log.device_name || 'Unknown device'} • {log.browser || 'Unknown'} • {log.os || 'Unknown'}
-                      </Typography>
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" component="div">
-                        <Typography variant="caption" color="text.secondary" component="span">
-                          <strong>IP:</strong> {log.ip_address || 'Unknown'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" component="span">
-                          •
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" component="span">
-                          <strong>Time:</strong> {formatCambodiaTime(log.created_at)}
-                        </Typography>
-                      </Stack>
-                    </Stack>
-                  </Box>
-                </ListItem>
-                {index < filteredLogs.length - 1 && <Divider variant="inset" component="li" />}
-              </React.Fragment>
-            ))}
-          </List>
-        )}
-      </Paper> */}
+          <Fab size="small" color="primary" onClick={scrollToTop} aria-label="scroll to top">
+            <KeyboardArrowUp />
+          </Fab>
+        </Box>
+      </Zoom>
     </Box>
   );
 };

@@ -321,5 +321,6 @@
   "diary_created": "Diary Created",
   "no_activity_found": "No activity found",
   "no_activity_found_for_search": "No activity found for your search",
-  "failed_to_load_system_logs": "Failed to load system logs"
+  "failed_to_load_system_logs": "Failed to load system logs",
+  "active_devices_description": "Manage and log out of active sessions on other devices"
 }
