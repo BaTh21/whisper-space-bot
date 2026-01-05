@@ -23,6 +23,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from '@mui/icons-material/Delete';
+import { useTranslation } from 'react-i18next'; 
 import { acceptFriendRequest, acceptGroupInvite, deleteActivities, getActivityInbox, readActivity } from "../../services/api";
 import { toast } from 'react-toastify';
 
@@ -31,6 +32,8 @@ const Transition = forwardRef(function Transition(props, ref) {
 });
 
 function InboxComponent({ open, onClose }) {
+  const { t } = useTranslation();
+
   const [filter, setFilter] = useState("all");
   const [selectedIds, setSelectedIds] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, activity: null });
@@ -69,16 +72,10 @@ function InboxComponent({ open, onClose }) {
     try {
       const acRes = await getActivityInbox(newLimit, newOffset);
 
-      // Append activities
       setActivities(prev => [...prev, ...acRes]);
-
-      // Update offset
       setOffset(prev => prev + acRes.length);
-
-      // Check if more data
       setHasMore(acRes.length === newLimit);
 
-      // Mark as read ONLY for activities that are NOT friend requests or group invites
       acRes.forEach(a => {
         if (!a.is_read && a.type !== "friend_request" && a.type !== "group_invite") {
           handleReadActivity(a.id);
@@ -108,10 +105,10 @@ function InboxComponent({ open, onClose }) {
     try {
       if (activity.type === "friend_request") {
         await acceptFriendRequest(activity.actor.id);
-        toast.success("Friend request has been accepted");
+        toast.success(t('accept_success_friend'));
       } else if (activity.type === "group_invite") {
         await acceptGroupInvite(activity.group_id);
-        toast.success("Invite has been accepted");
+        toast.success(t('accept_success_group'));
       }
 
       handleReadActivity(activity.id);
@@ -124,7 +121,7 @@ function InboxComponent({ open, onClose }) {
       handleCloseDialog();
     } catch (err) {
       console.error(err);
-      toast.error(`Failed: ${err.message}`);
+      toast.error(t('accept_failed', { message: err.message || 'Unknown error' }));
       handleCloseDialog();
     }
   };
@@ -138,9 +135,10 @@ function InboxComponent({ open, onClose }) {
       );
       setSelectedIds([]);
       setDeletePopup(false);
+      toast.success(t('delete_success')); 
     } catch (err) {
       console.error(err);
-      toast.error(`Failed ${err.message}`);
+      toast.error(t('delete_failed', { message: err.message }));
       setDeletePopup(false);
     }
   };
@@ -177,7 +175,6 @@ function InboxComponent({ open, onClose }) {
   return (
     <>
       <Dialog fullScreen open={open} onClose={onClose} TransitionComponent={Transition}>
-        {/* AppBar */}
         <AppBar sx={{ position: "relative" }}>
           <Toolbar>
             <IconButton edge="start" color="inherit" onClick={onClose}>
@@ -185,25 +182,20 @@ function InboxComponent({ open, onClose }) {
             </IconButton>
 
             <Typography sx={{ ml: 2, flex: 1 }} variant="h6">
-              Inbox
+              {t('inbox')}
             </Typography>
 
             {selectedIds.length > 0 && (
-              <Button color="inherit" onClick={() => setDeletePopup(true)}
-                startIcon={<DeleteIcon />}
-              >
-                <Typography
-                  sx={{ mt: 0.5 }}
-                >
-                  Delete ({selectedIds.length})
+              <Button color="inherit" onClick={() => setDeletePopup(true)} startIcon={<DeleteIcon />}>
+                <Typography sx={{ mt: 0.5 }}>
+                  {t('delete_selected', { count: selectedIds.length })}
                 </Typography>
               </Button>
             )}
           </Toolbar>
         </AppBar>
 
-        {/* Filter */}
-        <Box >
+        <Box>
           <ToggleButtonGroup
             value={filter}
             exclusive
@@ -211,23 +203,23 @@ function InboxComponent({ open, onClose }) {
             size="small"
             fullWidth
           >
-            <ToggleButton value="all">All ({activities.length})</ToggleButton>
-            <ToggleButton value="unread">Unread ({unreadCount})</ToggleButton>
-            <ToggleButton value="read">Read ({readCount})</ToggleButton>
+            <ToggleButton value="all">{t('all')} ({activities.length})</ToggleButton>
+            <ToggleButton value="unread">{t('unread')} ({unreadCount})</ToggleButton>
+            <ToggleButton value="read">{t('read')} ({readCount})</ToggleButton>
           </ToggleButtonGroup>
         </Box>
 
-        {/* Activity List */}
         <Box
-          sx={{ overflowY: "auto", height: "calc(100vh - 112px)" }} // Adjust height
-          onScroll={scrollRef}
+          ref={scrollRef}
+          sx={{ overflowY: "auto", height: "calc(100vh - 112px)" }}
         >
           <List disablePadding>
-            {filteredActivities.length === 0 ?
-              (
-                <Typography sx={{ p: 2, textAlign: 'center' }}>No activity found</Typography>
-              ) :
-              (filteredActivities.map((activity, index) => (
+            {filteredActivities.length === 0 ? (
+              <Typography sx={{ p: 2, textAlign: 'center' }}>
+                {t('no_activity_found')}
+              </Typography>
+            ) : (
+              filteredActivities.map((activity, index) => (
                 <Box key={activity.id}>
                   <ListItemButton
                     alignItems="flex-start"
@@ -240,9 +232,7 @@ function InboxComponent({ open, onClose }) {
                     <Checkbox
                       checked={selectedIds.includes(activity.id)}
                       onChange={() => handleSelectToggle(activity.id)}
-                      sx={{
-                        mt: 0.5
-                      }}
+                      sx={{ mt: 0.5 }}
                     />
 
                     <ListItemAvatar>
@@ -267,56 +257,57 @@ function InboxComponent({ open, onClose }) {
                         </Typography>
 
                         {(activity.type === "friend_request" || activity.type === "group_invite") && (
-                          <Button size="small" variant="contained"
+                          <Button
+                            size="small"
+                            variant="contained"
                             onClick={() => {
                               setSelectedActivity(activity);
-                              setConfirmDialog({ open: true, activity: activity })
+                              setConfirmDialog({ open: true, activity });
                             }}
-                            disabled={activity.is_read === true}
+                            disabled={activity.is_read}
                           >
-                            Accept
+                            {t('accept')}
                           </Button>
                         )}
                       </Box>
                     </Box>
-
-
                   </ListItemButton>
 
                   {index < filteredActivities.length - 1 && <Divider />}
                 </Box>
-              )))
-            }
-            {loading && <Typography sx={{ p: 2 }}>Loading...</Typography>}
+              ))
+            )}
+            {loading && <Typography sx={{ p: 2 }}>{t('loading')}</Typography>}
           </List>
         </Box>
 
         <Dialog open={confirmDialog.open} onClose={handleCloseDialog}>
-          <DialogTitle>Confirm Accept</DialogTitle>
+          <DialogTitle>{t('confirm_accept')}</DialogTitle>
           <DialogContent>
             <DialogContentText>
-              Are you sure you want to accept this {confirmDialog.activity?.type.replace("_", " ")}?
+              {t('confirm_accept_message', {
+                type: t(confirmDialog.activity?.type === 'friend_request' ? 'friend_request' : 'group_invite')
+              })}
             </DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
+            <Button onClick={handleCloseDialog}>{t('cancel')}</Button>
             <Button onClick={() => handleAccept(selectedActivity)} autoFocus>
-              Accept
+              {t('accept')}
             </Button>
           </DialogActions>
         </Dialog>
 
-        <Dialog open={deletePopup} onClose={() => { setDeletePopup(false) }}>
-          <DialogTitle>Confirm delete</DialogTitle>
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deletePopup} onClose={() => setDeletePopup(false)}>
+          <DialogTitle>{t('confirm_delete')}</DialogTitle>
           <DialogContent>
-            <DialogContentText>
-              Are you sure you want to delete selected activities?
-            </DialogContentText>
+            <DialogContentText>{t('confirm_delete_message')}</DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => { setDeletePopup(false) }}>Cancel</Button>
-            <Button onClick={() => handleDeleteSelected()} autoFocus>
-              Confirm
+            <Button onClick={() => setDeletePopup(false)}>{t('cancel')}</Button>
+            <Button onClick={handleDeleteSelected} color="error" autoFocus>
+              {t('confirm')}
             </Button>
           </DialogActions>
         </Dialog>

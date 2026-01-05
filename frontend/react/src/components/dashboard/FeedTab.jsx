@@ -45,6 +45,7 @@ import ProfileDiary from '../diary/ProfileDiary';
 const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, friends = [], setError, setSuccess, pendingRequests = [] }) => {
   const { auth } = useAuth();
   const user = auth?.user;
+  const { t } = useTranslation();
 
   const [diaries, setDiaries] = useState(initialDiaries || []);
   const [offset, setOffset] = useState(initialDiaries?.length || 0);
@@ -71,7 +72,6 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
   const [selectedMediaType, setSelectedMediaType] = useState('image');
   const [currentMediaList, setCurrentMediaList] = useState([]);
   const [search, setSearch] = useState("");
-  const { t } = useTranslation();
 
   const scrollRef = useRef(null);
   const [visible, setVisible] = useState(false);
@@ -106,7 +106,6 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
       } else {
         setDiaries(prev => {
           const allDiaries = [...prev, ...newDiaries];
-          // Remove duplicates by id
           const uniqueDiaries = Array.from(new Map(allDiaries.map(d => [d.id, d])).values());
           return uniqueDiaries;
         });
@@ -114,11 +113,11 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
         if (newDiaries.length < LIMIT) setHasMore(false);
       }
     } catch (err) {
-      setError(err.message || "Failed to load more diaries");
+      setError(err.message || t('failed_load_diaries'));
     } finally {
       setLoadingMore(false);
     }
-  }, [offset, hasMore, loadingMore, setError]);
+  }, [offset, hasMore, loadingMore, setError, t]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -136,7 +135,6 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
     return () => el.removeEventListener("scroll", onScroll);
   }, [loadMoreDiaries]);
 
-  // Infinite scroll
   useEffect(() => {
     const handleScroll = () => {
       if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
@@ -148,7 +146,6 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
     return () => window.removeEventListener("scroll", handleScroll);
   }, [loadMoreDiaries]);
 
-  // Normalize data
   const normalizedDiaries = diaries.map(diary => ({
     ...diary,
     groups: Array.isArray(diary?.groups) ? diary.groups : [],
@@ -176,7 +173,6 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
     return filteredDiaries.filter(diary => diary.videos && diary.videos.length > 0);
   }, [filteredDiaries]);
 
-  // Show notification message
   const showMessage = (message, severity = 'success') => {
     setSnackbarMessage(message);
     setSnackbarSeverity(severity);
@@ -230,7 +226,6 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
     handleMenuClose();
   };
 
-  // Diary operations
   const handleDeleteClick = (diaryId, diaryTitle) => {
     setDiaryToDelete({ id: diaryId, title: diaryTitle });
     setDeleteDialogOpen(true);
@@ -268,7 +263,7 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
   return (
     <Box sx={{ maxWidth: '100%', overflow: 'hidden', display: 'flex', gap: 3 }}>
       <Box sx={{ width: '100%' }}>
-        {/* Media Viewer */}
+        {/* Media Viewer Modal */}
         <Modal open={mediaViewerOpen} onClose={handleMediaViewerClose} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none' }}>
           <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', outline: 'none' }}>
             <MediaPlayer url={selectedMedia} type={selectedMediaType} thumbnail={selectedThumbnail} onClose={handleMediaViewerClose} />
@@ -283,12 +278,10 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
           </Box>
         </Modal>
 
-        {/* Snackbar */}
         <Snackbar open={snackbarOpen} autoHideDuration={2000} onClose={handleSnackbarClose} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
           <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>{snackbarMessage}</Alert>
         </Snackbar>
 
-        {/* Delete Diary Dialog */}
         <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
           <DialogTitle>{t('delete_title')}</DialogTitle>
           <DialogContent>
@@ -302,22 +295,20 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
           </DialogActions>
         </Dialog>
 
-        {/* Menu */}
+
         <Menu anchorEl={menuAnchorEl} open={menuOpen} onClose={handleMenuClose}>
           <MenuItem onClick={handleEditDiaryClick}><EditIcon fontSize="small" sx={{ mr: 1 }} /> {t('edit')}</MenuItem>
           <MenuItem onClick={handleDeleteDiaryClick}><DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} /><Typography color="error">{t('delete')}</Typography></MenuItem>
         </Menu>
 
-        {/* Feed */}
+  
         <Box ref={scrollRef} sx={{ maxHeight: '90vh', overflowY: 'auto', width: { xs: '92vw', md: '63vw' }, mx: 'auto' }}>
           <CreateDiaryComponent groups={groups} user={user} onSuccess={handleNewDiary} setError={setError} />
 
-          {/* Search and Toggle */}
-          <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 2, pb: { xs: 3, md: 2 }, width: '100%', left: 0 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2, pb: { xs: 3, md: 2 }, width: '100%' }}>
             <TextField
-              sx={{ width: { xs: '100%', md: "50%" } }}
-              id="outlined-member-search"
-              label="Search diary"
+              sx={{ width: { xs: '100%', sm: "50%" } }}
+              label={t('search_diary')}
               variant="outlined"
               size="small"
               value={search}
@@ -325,33 +316,74 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    {search && <IconButton size="small" onClick={() => setSearch("")} edge="end"><CloseIcon fontSize="small" /></IconButton>}
-                    <IconButton size="small" edge="end"><SearchIcon /></IconButton>
+                    {search && (
+                      <IconButton size="small" onClick={() => setSearch("")} edge="end">
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                    <IconButton size="small" edge="end">
+                      <SearchIcon />
+                    </IconButton>
                   </InputAdornment>
                 ),
               }}
             />
 
-            <ToggleButtonGroup value={type} exclusive onChange={handleChange} aria-label="entry type" size="small" sx={{ borderBottom: 1, borderRadius: 0, borderColor: "divider" }}>
+            <ToggleButtonGroup
+              value={type}
+              exclusive
+              onChange={handleChange}
+              aria-label={t('entry_type')}
+              size="small"
+              sx={{ borderBottom: 1, borderRadius: 0, borderColor: "divider" }}
+            >
               {[
-                { value: "diary", label: "All Diaries", icon: <MenuBookIcon sx={{ mr: { xs: 0, md: 1 }, mx: { xs: 1, md: 0 } }} /> },
-                { value: "group", label: "Groups", icon: <GroupIcon sx={{ mr: { xs: 0, md: 1 }, mx: { xs: 1, md: 0 } }} /> },
-                { value: "video", label: "Videos", icon: <VideoLibraryIcon sx={{ mr: { xs: 0, md: 1 }, mx: { xs: 1, md: 0 } }} /> },
+                { value: "diary", key: "all_diaries", icon: <MenuBookIcon sx={{ mr: { xs: 0, md: 1 }, mx: { xs: 1, md: 0 } }} /> },
+                { value: "group", key: "groups", icon: <GroupIcon sx={{ mr: { xs: 0, md: 1 }, mx: { xs: 1, md: 0 } }} /> },
+                { value: "video", key: "videos", icon: <VideoLibraryIcon sx={{ mr: { xs: 0, md: 1 }, mx: { xs: 1, md: 0 } }} /> },
               ].map((item) => (
-                <ToggleButton key={item.value} value={item.value} aria-label={item.value} sx={{
-                  border: "none", borderRadius: 0, px: { xs: 0, md: 2 }, color: "text.secondary",
-                  "&.Mui-selected": { color: "primary.main", backgroundColor: "transparent", borderBottom: 3 },
-                  "&.Mui-selected:hover": { backgroundColor: "transparent" },
-                  "&:hover": { backgroundColor: "action.hover" },
-                }}>
+                <ToggleButton
+                  key={item.value}
+                  value={item.value}
+                  aria-label={item.value}
+                  sx={{
+                    border: "none",
+                    borderRadius: 0,
+                    px: { xs: 0, md: 2 },
+                    color: "text.secondary",
+                    "&.Mui-selected": { color: "primary.main", backgroundColor: "transparent", borderBottom: 3 },
+                    "&.Mui-selected:hover": { backgroundColor: "transparent" },
+                    "&:hover": { backgroundColor: "action.hover" },
+                  }}
+                >
                   {item.icon}
-                  <Typography sx={{ display: { xs: 'none', md: 'block' } }}>{item.label}</Typography>
+                  <Typography sx={{ display: { xs: 'none', md: 'block' } }}>
+                    {t(item.key)}
+                  </Typography>
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
           </Box>
 
-          <Button onClick={scrollToTop} sx={{ position: "absolute", bottom: 20, right: { xs: 20, md: 250, lg: 350 }, fontSize: "16px", borderRadius: "50%", border: "none", color: "white", backgroundColor: '#254D70', cursor: "pointer", display: visible ? "flex" : "none", zIndex: 1300, minWidth: 0, width: 45, height: 45 }}><NorthIcon /></Button>
+          <Button
+            onClick={scrollToTop}
+            sx={{
+              position: "absolute",
+              bottom: 20,
+              right: { xs: 20, md: 250, lg: 350 },
+              borderRadius: "50%",
+              color: "white",
+              backgroundColor: '#254D70',
+              display: visible ? "flex" : "none",
+              zIndex: 1300,
+              minWidth: 0,
+              width: 45,
+              height: 45,
+              '&:hover': { backgroundColor: '#1e3d59' }
+            }}
+          >
+            <NorthIcon />
+          </Button>
 
           {type === 'diary' && <ProfileDiary diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} />}
           {type === 'group' && <GroupDiaryComponent groups={groups} profile={profile} setError={setError} setSuccess={setSuccess} onDataUpdate={onDataUpdate} friends={friends} pendingRequests={pendingRequests} search={search} />}

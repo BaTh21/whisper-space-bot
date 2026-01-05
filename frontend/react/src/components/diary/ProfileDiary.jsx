@@ -13,7 +13,11 @@ import {
 } from '@mui/icons-material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
+import TurnedInIcon from "@mui/icons-material/TurnedIn";
+import TurnedInNotOutlinedIcon from '@mui/icons-material/TurnedInNotOutlined';
 import {
   Alert,
   Avatar,
@@ -38,22 +42,18 @@ import {
   Select,
   Snackbar,
   TextField,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
-  Tooltip,
 } from '@mui/material';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById, handleSaveDiary, handleRemoveDiary } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, handleRemoveDiary, handleSaveDiary, likeDiary, sendFriendRequest, updateComment, updateDiaryById } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { DiaryCard } from '../diary/DairyCard';
-import { convertFilesToBase64, CommentItemWithActions, MediaPlayer, getVideoThumbnail } from '../diary/DiaryHelper';
-import { useAuth } from '../../context/AuthContext';
-import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
-import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
-import TurnedInNotOutlinedIcon from '@mui/icons-material/TurnedInNotOutlined';
-import TurnedInIcon from "@mui/icons-material/TurnedIn";
+import { CommentItemWithActions, MediaPlayer, convertFilesToBase64, getVideoThumbnail } from '../diary/DiaryHelper';
 
 const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) => {
   const [diaryList, setDiaryList] = useState(diaries || []);
@@ -1539,7 +1539,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
 
                                     {profile && diary.author?.id === profile.id && (
                                       <Chip
-                                        label="You"
+                                        label={t('you')}
                                         size="small"
                                         color="primary"
                                         variant="outlined"
@@ -1737,7 +1737,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                       ? <Favorite color="error" />
                                       : <FavoriteBorder />
                                     }
-                                    {t('like ')}
+                                    {t('like')}
                                   </>
                                 )}
                                 {diaryLikes[diary.id] > 0 ? diaryLikes[diary.id] : ''}
@@ -1771,7 +1771,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                 size="medium"
                                 sx={{ minWidth: 40, justifyContent: 'center' }}
                               >
-                                {isMobile ? <ShareOutlinedIcon sx={{ mb: 0.5 }} /> : <> <ShareOutlinedIcon sx={{ mb: 0.5 }} /> <Typography ml={1}>Share</Typography> </>}
+                                {isMobile ? <ShareOutlinedIcon sx={{ mb: 0.5 }} /> : <> <ShareOutlinedIcon sx={{ mb: 0.5 }} /> <Typography ml={1}>{t('share')}</Typography> </>}
                                 <Typography ml={1}>
 
                                 </Typography>
@@ -1788,7 +1788,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                   sx={{ minWidth: 40 }}
                                 >
                                   <TurnedInIcon />
-                                  {!isMobile && <Typography ml={1}>Saved</Typography>}
+                                  {!isMobile && <Typography ml={1}>{t('saved')}</Typography>}
                                   <Typography ml={1}>
                                     {diary.favorited_user_ids.length || ''}
                                   </Typography>
@@ -1801,7 +1801,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                   sx={{ minWidth: 40 }}
                                 >
                                   <TurnedInNotOutlinedIcon />
-                                  {!isMobile && <Typography ml={1}>Save</Typography>}
+                                  {!isMobile && <Typography ml={1}>{t('save')}</Typography>}
                                   <Typography ml={1}>
                                     {diary.favorited_user_ids.length || ''}
                                   </Typography>

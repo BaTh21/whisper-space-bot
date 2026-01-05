@@ -747,7 +747,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, on
             />
             <Tab
               icon={<BookmarksIcon />}
-              label={isMobile ? '' : 'Saved'}
+              label={isMobile ? '' : t('saved')}
               iconPosition="start"
               sx={{
                 fontWeight: 600,
