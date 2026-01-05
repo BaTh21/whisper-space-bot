@@ -1,11 +1,9 @@
-// FeedTab.jsx - COMPLETE FIXED VERSION
 import {
   Close as CloseIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   Image as ImageIcon,
   MoreVert as MoreVertIcon,
-  PlayArrow as PlayArrowIcon,
   Reply as ReplyIcon,
 } from '@mui/icons-material';
 import {
@@ -17,36 +15,16 @@ import {
   Menu,
   MenuItem,
   TextField,
+  Tooltip,
+  Divider,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatCambodiaDate } from '../../utils/dateUtils';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import { DiaryReplyComponent } from './DiaryReplyComponent';
 
-// Helper function to convert files to base64
-export const convertFilesToBase64 = (files, type = 'image') => {
-  return Promise.all(
-    Array.from(files).map(file => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          resolve({
-            data: e.target.result,
-            name: file.name,
-            type: file.type,
-            size: file.size
-          });
-        };
-        reader.onerror = (error) => {
-          reject(new Error(`Failed to read file: ${file.name}`));
-        };
-        reader.readAsDataURL(file);
-      });
-    })
-  );
-};
-
-// Enhanced CommentItemWithActions component
 export const CommentItemWithActions = ({
   comment,
   diaryId,
@@ -65,13 +43,12 @@ export const CommentItemWithActions = ({
   const [localReplying, setLocalReplying] = useState(false);
   const [localEditing, setLocalEditing] = useState(false);
   const [localEditText, setLocalEditText] = useState(comment.content);
-  const [localEditImages, setLocalEditImages] = useState(comment.images || []);
+  const [localEditImages, setLocalEditImages] = useState([]);
   const [localReplyText, setLocalReplyText] = useState('');
   const [commentMenuAnchorEl, setCommentMenuAnchorEl] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
   const commentMenuOpen = Boolean(commentMenuAnchorEl);
   const { t, i18n } = useTranslation();
-
 
   const isCommentOwner = profile && comment.user?.id === profile.id;
   const maxDepth = 5;
@@ -89,7 +66,14 @@ export const CommentItemWithActions = ({
   const handleCommentEdit = () => {
     setLocalEditing(true);
     setLocalEditText(comment.content);
-    setLocalEditImages(comment.images || []);
+
+    setLocalEditImages(
+      (comment.images || []).map(url => ({
+        preview: url,
+        data: url
+      }))
+    );
+
     handleCommentMenuClose();
   };
 
@@ -98,9 +82,14 @@ export const CommentItemWithActions = ({
     handleCommentMenuClose();
   };
 
-  const handleReply = () => {
-    setReplyingTo(comment.id);
+  const handleReply = (commentId) => {
+    setReplyingTo(commentId);
     setLocalReplying(true);
+
+    const username = comment.user?.username;
+    if (username) {
+      setLocalReplyText(`@${username} `);
+    }
   };
 
   const handleCancelReply = () => {
@@ -129,7 +118,8 @@ export const CommentItemWithActions = ({
 
     setEditLoading(true);
     try {
-      await onEditComment(comment.id, localEditText, localEditImages);
+      const imagesForBackend = localEditImages.map(img => img.data);
+      await onEditComment(comment.id, localEditText, imagesForBackend);
       setLocalEditing(false);
     } catch (err) {
       console.error('Failed to edit comment:', err);
@@ -142,17 +132,32 @@ export const CommentItemWithActions = ({
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    try {
-      const base64Images = await convertFilesToBase64(files);
-      const imageUrls = base64Images.map(img => img.data);
-      setLocalEditImages(prev => [...prev, ...imageUrls]);
-    } catch (err) {
-      console.error('Failed to upload images:', err);
-    }
+    const newImages = await Promise.all(
+      Array.from(files).map(file =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({
+              preview: URL.createObjectURL(file), // UI
+              data: reader.result                // BASE64 for backend
+            });
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        })
+      )
+    );
+
+    setLocalEditImages(prev => [...prev, ...newImages]);
   };
 
-  const removeEditImage = (index) => {
-    setLocalEditImages(prev => prev.filter((_, i) => i !== index));
+  const highlightMentions = (text) => {
+    if (!text) return '';
+
+    return text.replace(
+      /(@\w+)/g,
+      '<span style="color:#1976d2;font-weight:500">$1</span>'
+    );
   };
 
   return (
@@ -170,8 +175,8 @@ export const CommentItemWithActions = ({
           fontSize: level > 0 ? '0.7rem' : '0.8rem',
           flexShrink: 0
         }}
-        src={comment.user?.avatar_url}
-        alt={comment.user?.username}
+          src={comment.user?.avatar_url}
+          alt={comment.user?.username}
         >
           {comment.user?.username?.charAt(0)?.toUpperCase() || 'U'}
         </Avatar>
@@ -185,9 +190,6 @@ export const CommentItemWithActions = ({
           }}>
             <Typography variant="body2" fontWeight="600" color="green" component="span">
               {comment.user?.username}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" component="span">
-              {formatCambodiaDate(comment.created_at)}
             </Typography>
 
             {isCommentOwner && !localEditing && (
@@ -215,38 +217,43 @@ export const CommentItemWithActions = ({
               </Box>
             )}
 
-            {profile && !isTooDeep && !isCommentOwner && !localEditing && (
-              <Button
-                size="small"
-                startIcon={<ReplyIcon fontSize="small" />}
-                onClick={handleReply}
-                sx={{ minWidth: 'auto', ml: isCommentOwner ? 0 : 'auto' }}
-              >
-                Reply
-              </Button>
-            )}
           </Box>
 
           {localEditing && isCommentOwner ? (
-            <Box sx={{ mb: 2 }}>
+            <Box
+              sx={{
+                mb: 1,
+                border: 1,
+                borderRadius: 2
+              }}
+            >
               <TextField
                 fullWidth
                 size="small"
                 value={localEditText}
                 onChange={(e) => setLocalEditText(e.target.value)}
-                sx={{ mb: 1 }}
                 multiline
                 rows={2}
                 autoFocus
+                sx={{
+                  '& textarea': {
+                    background: 'transparent',
+                    position: 'relative',
+                    zIndex: 1
+                  },
+                  '& fieldset': { border: 'none' }
+                }}
               />
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
+              <Divider />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1 }}>
                 <Button
-                  variant="outlined"
                   component="label"
                   size="small"
-                  startIcon={<ImageIcon />}
+                  sx={{
+                    minWidth: 0
+                  }}
                 >
-                  {t('add_images')}
+                  <ImageIcon />
                   <input
                     type="file"
                     hidden
@@ -255,127 +262,251 @@ export const CommentItemWithActions = ({
                     onChange={handleEditImageUpload}
                   />
                 </Button>
-                {localEditImages.length > 0 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
-                    {localEditImages.map((img, idx) => (
-                      <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    p: 1
+                  }}
+                >
+
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleCancelEdit}
+                    disabled={editLoading}
+                  >
+                    {t('cancel')}
+                  </Button>
+
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={handleSaveEdit}
+                    disabled={editLoading || !localEditText.trim()}
+                    startIcon={editLoading ? <CircularProgress size={16} /> : null}
+                  >
+                    {editLoading ? t('saving...') : t('save')}
+                  </Button>
+                </Box>
+              </Box>
+
+              {localEditImages.length > 0 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', p: 1 }}>
+                  {localEditImages.map((img, idx) => (
+                    <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
+                      <img
+                        src={img.preview}
+                        alt={`Edit ${idx}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          borderRadius: 2
+                        }}
+                      />
+                      <IconButton
+                        size="small"
+                        onClick={() =>
+                          setLocalEditImages(prev => prev.filter((_, i) => i !== idx))
+                        }
+                        sx={{
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          bgcolor: 'rgba(0,0,0,0.5)',
+                          color: 'white',
+                          width: 16,
+                          height: 16
+                        }}
+                      >
+                        <CloseIcon sx={{ fontSize: 12 }} />
+                      </IconButton>
+                    </Box>
+                  ))}
+
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}
+            >
+              <Box>
+                <Typography
+                  variant="body2"
+                  sx={{ mb: 1, whiteSpace: 'pre-wrap' }}
+                  dangerouslySetInnerHTML={{ __html: highlightMentions(comment.content) }}
+                />
+                {comment.images && comment.images.length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                    {comment.images.map((img, idx) => (
+                      <Box key={idx} sx={{ position: 'relative' }}>
                         <img
                           src={img}
-                          alt={`Edit ${idx}`}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 2 }}
-                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
-                          className="clickable-image"
-                        />
-                        <IconButton
-                          size="small"
-                          onClick={() => removeEditImage(idx)}
-                          sx={{
-                            position: 'absolute',
-                            top: -4,
-                            right: -4,
-                            bgcolor: 'rgba(0,0,0,0.5)',
-                            color: 'white',
-                            width: 16,
-                            height: 16,
-                            '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }
+                          alt={`Comment ${idx + 1}`}
+                          style={{
+                            width: 100,
+                            height: 100,
+                            objectFit: 'cover',
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s'
                           }}
-                        >
-                          <CloseIcon sx={{ fontSize: 12 }} />
-                        </IconButton>
+                          onClick={() => onMediaClick && onMediaClick(img, 'image')}
+                          onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                          onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                          className="clickable-media"
+                        />
                       </Box>
                     ))}
                   </Box>
                 )}
               </Box>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleSaveEdit}
-                  disabled={editLoading || !localEditText.trim()}
-                  startIcon={editLoading ? <CircularProgress size={16} /> : null}
-                >
-                  {editLoading ? t('saving...') : t('save')}
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleCancelEdit}
-                  disabled={editLoading}
-                >
-                  {t('cancel')}
-                </Button>
-              </Box>
-            </Box>
-          ) : (
-            <>
-              <Typography variant="body2" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
-                {comment.content}
-              </Typography>
-              {comment.images && comment.images.length > 0 && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
-                  {comment.images.map((img, idx) => (
-                    <Box key={idx} sx={{ position: 'relative' }}>
-                      <img
-                        src={img}
-                        alt={`Comment ${idx + 1}`}
-                        style={{
-                          width: 50,
-                          height: 50,
-                          objectFit: 'cover',
-                          borderRadius: 4,
-                          cursor: 'pointer',
-                          transition: 'transform 0.2s'
-                        }}
-                        onClick={() => onMediaClick && onMediaClick(img, 'image')}
-                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        className="clickable-media"
-                      />
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </>
-          )}
-
-          {(replyingTo === comment.id || localReplying) && !isTooDeep && !localEditing && (
-            <Box sx={{ mb: 2, mt: 1 }}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder={t('reply_to', { username: comment.user?.username })}
-                value={localReplyText}
-                onChange={(e) => setLocalReplyText(e.target.value)}
-                sx={{ mb: 1 }}
-                multiline
-                rows={2}
-                autoFocus
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmitReply();
+              <Button
+                sx={{
+                  minWidth: 0,
+                  height: 18,
+                  '&:hover':{
+                    backgroundColor: 'transparent'
                   }
                 }}
-              />
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+              >
+                <FavoriteBorderIcon sx={{ fontSize: 18 }} />
+                <Typography sx={{ fontSize: 12 }}>10</Typography>
+              </Button>
+            </Box>
+          )}
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 2,
+              alignItems: 'center'
+            }}
+          >
+            <Typography variant="caption" color="text.secondary" component="span" sx={{ mt: 0.25 }}>
+              {formatCambodiaDate(comment.created_at)}
+            </Typography>
+
+            {profile && !isTooDeep && !localEditing && (
+
+              <Tooltip title={`Reply to ${comment.user?.username}`}>
                 <Button
-                  variant="outlined"
-                  component="label"
                   size="small"
-                  startIcon={<ImageIcon />}
+                  onClick={() => handleReply(comment.id)}
+                  sx={{ minWidth: 0, fontSize: 12, '&:hover': { backgroundColor: 'transparent' } }}
                 >
-                  {t('add_images_max', { max: 10 })}
-                  <input
-                    type="file"
-                    hidden
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)}
-                  />
+                  <ReplyIcon fontSize="small" />
+                  Reply
                 </Button>
+              </Tooltip>
+            )}
+          </Box>
+
+          {(replyingTo === comment.id || localReplying) && !isTooDeep && !localEditing && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                border: 1,
+                borderRadius: 2,
+                mt: 1
+              }}
+            >
+
+              <Box sx={{ position: 'relative', flex: 1 }}>
+                {/* Highlight layer */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    inset: 0,
+                    fontSize: '0.95rem',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    pointerEvents: 'none',
+                    zIndex: 0
+                  }}
+
+                />
+
+                {/* Real input */}
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={localReplyText}
+                  onChange={(e) => setLocalReplyText(e.target.value)}
+                  multiline
+                  rows={1}
+                  sx={{
+                    '& textarea': {
+                      background: 'transparent',
+                      position: 'relative',
+                      zIndex: 1
+                    },
+                    '& fieldset': { border: 'none' }
+                  }}
+                />
+                <Divider />
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 1,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    justifyContent: 'space-between',
+                    p: 1
+                  }}>
+                  <Button
+                    component="label"
+                    size="small"
+                    sx={{
+                      minWidth: 0
+                    }}
+                  >
+                    <ImageIcon />
+                    <input
+                      type="file"
+                      hidden
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)}
+                    />
+                  </Button>
+
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1
+                    }}
+                  >
+
+                    <Button
+                      variant="text"
+                      size="small"
+                      onClick={handleCancelReply}
+                    >
+                      {t('cancel')}
+                    </Button>
+
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={handleSubmitReply}
+                      disabled={!localReplyText?.trim()}
+                    >
+                      {t('send')}
+                    </Button>
+                  </Box>
+                </Box>
+
                 {selectedCommentImages[`reply-${comment.id}`]?.length > 0 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center', p: 1 }}>
                     {selectedCommentImages[`reply-${comment.id}`].map((img, idx) => (
                       <Box key={idx} sx={{ position: 'relative', width: 40, height: 40 }}>
                         <img
@@ -410,29 +541,16 @@ export const CommentItemWithActions = ({
                     ))}
                   </Box>
                 )}
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleSubmitReply}
-                  disabled={!localReplyText?.trim()}
-                >
-                  {t('send')}
-                </Button>
-                <Button
-                  variant="text"
-                  size="small"
-                  onClick={handleCancelReply}
-                >
-                  {t('cancel')}
-                </Button>
               </Box>
+
             </Box>
           )}
 
           {comment.replies && comment.replies.length > 0 && !isTooDeep && (
             <Box sx={{ mt: 2 }}>
               {comment.replies.map((reply) => (
-                <CommentItemWithActions
+                <DiaryReplyComponent
+                  mainCommentId={comment.id}
                   key={reply.id}
                   comment={reply}
                   diaryId={diaryId}
@@ -457,124 +575,3 @@ export const CommentItemWithActions = ({
   );
 };
 
-// Media Player Component - FIXED: Images now show
-export const MediaPlayer = ({ url, type, thumbnail, onClose }) => {
-  const [playing, setPlaying] = useState(false);
-
-  if (type === 'image') {
-    return (
-      <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-        <img
-          src={url}
-          alt='image'
-          style={{
-            maxWidth: '100%',
-            maxHeight: '90vh',
-            objectFit: 'contain',
-            borderRadius: 8
-          }}
-        />
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-      {playing ? (
-        <video
-          controls
-          autoPlay
-          style={{
-            maxWidth: '100%',
-            maxHeight: '90vh',
-            borderRadius: 8
-          }}
-          onEnded={() => setPlaying(false)}
-        >
-          <source src={url} type="video/mp4" />
-          Your browser does not support the video tag.
-        </video>
-      ) : (
-        <Box
-          sx={{
-            position: 'relative',
-            width: '100%',
-            height: '60vh',
-            cursor: 'pointer'
-          }}
-          onClick={() => setPlaying(true)}
-        >
-          {thumbnail ? (
-            <>
-              <img
-                src={thumbnail}
-                alt="Video thumbnail"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  borderRadius: 8
-                }}
-              />
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: 80,
-                  height: 80,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(0,0,0,0.6)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'transform 0.2s',
-                  '&:hover': {
-                    transform: 'translate(-50%, -50%) scale(1.1)',
-                    bgcolor: 'rgba(0,0,0,0.8)'
-                  }
-                }}
-              >
-                <PlayArrowIcon sx={{ fontSize: 40, color: 'white' }} />
-              </Box>
-            </>
-          ) : (
-            <Box
-              sx={{
-                width: '100%',
-                height: '100%',
-                bgcolor: '#333',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <PlayArrowIcon sx={{ fontSize: 60, color: 'white' }} />
-            </Box>
-          )}
-        </Box>
-      )}
-    </Box>
-  );
-};
-
-// Helper function to get video thumbnail - FIXED VERSION
-export const getVideoThumbnail = (videoUrl, diary) => {
-  if (!videoUrl || !diary || !diary.video_thumbnails) return null;
-
-  const videoIndex = diary.videos?.indexOf(videoUrl);
-
-  if (videoIndex !== -1 && videoIndex < diary.video_thumbnails.length) {
-    const thumbnail = diary.video_thumbnails[videoIndex];
-
-    // Check if thumbnail exists and is a valid string
-    if (thumbnail && typeof thumbnail === 'string' && thumbnail.trim() !== '') {
-      // Debug log
-      return thumbnail;
-    }
-  }
-
-  return null;
-};

@@ -72,8 +72,6 @@ const NotesTab = ({ setError, setSuccess }) => {
     }
   };
 
-  console.log("note", notes);
-
   const handleCreateNote = () => {
     setEditingNote(null);
     setIsEditorOpen(true);

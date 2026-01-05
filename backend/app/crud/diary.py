@@ -20,12 +20,6 @@ from app.services.image_service_sync import image_service_sync
 from app.crud.activity import create_activity
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
-    """Create a new diary with GUARANTEED video thumbnails"""
-    print(f"=== DIARY CREATE ===")
-    print(f"User ID: {user_id}")
-    print(f"Share Type: {diary_in.share_type}")
-    print(f"Images: {len(diary_in.images) if diary_in.images else 0}")
-    print(f"Videos: {len(diary_in.videos) if diary_in.videos else 0}")
     
     # Handle images
     image_urls = []
@@ -45,8 +39,6 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     video_urls = []
     video_thumbnails = []
     if diary_in.videos:
-        print(f"🎬 Uploading {len(diary_in.videos)} videos")
-        print(f"⚠️ Processing videos one by one for thumbnail guarantee")
         
         try:
             # Process each video individually
@@ -77,11 +69,6 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
                 while len(video_thumbnails) < len(video_urls):
                     video_thumbnails.append(None)
             
-            print(f"✅ VIDEO PROCESSING COMPLETE:")
-            print(f"  Videos: {len(video_urls)}")
-            print(f"  Thumbnails: {len(video_thumbnails)}")
-            print(f"  Valid thumbnails: {len([t for t in video_thumbnails if t])}")
-            
             # Debug output
             for i in range(len(video_urls)):
                 thumb_status = "✅" if video_thumbnails[i] else "❌"
@@ -107,12 +94,6 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
         media_type = 'image'
     else:
         media_type = 'text'
-    
-    print(f"📱 Final media type: {media_type}")
-    print(f"📦 FINAL DATA FOR DIARY:")
-    print(f"  Images: {len(image_urls)}")
-    print(f"  Videos: {len(video_urls)}")
-    print(f"  Video thumbnails: {len(video_thumbnails)}")
     
     # Create diary
     diary = Diary(
@@ -143,15 +124,7 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     db.commit()
     db.refresh(diary)
     
-    print(f"✅ DIARY CREATED SUCCESSFULLY - ID: {diary.id}")
-    print(f"📋 Database stored data:")
-    print(f"  Videos: {diary.videos}")
-    print(f"  Video thumbnails: {diary.video_thumbnails}")
-    print(f"  Video count match: {len(diary.videos) == len(diary.video_thumbnails)}")
-    
     return diary
-
-
 
 def create_diary_for_group(db: Session, group_id: int, diary_data: CreateDiaryForGroup, current_user_id: int):
     group = db.query(Group).filter(Group.id == group_id).first()
@@ -683,12 +656,12 @@ def delete_comment(db: Session, comment_id: int, current_user_id: int):
                            detail="Only owner can delete this comment")
     
     if comment.images:
-        image_service_sync.cleanup_images(comment.images)
+        image_service_sync.cleanup_media(comment.images)
     
     if comment.replies:
         for reply in comment.replies:
             if reply.images:
-                image_service_sync.cleanup_images(reply.images)
+                image_service_sync.cleanup_media(reply.images)
     
     db.delete(comment)
     db.commit()
@@ -713,7 +686,7 @@ def update_comment(db: Session,
     
     if 'images' in update_data:
         if comment.images:
-            image_service_sync.cleanup_images(comment.images)
+            image_service_sync.cleanup_media(comment.images)
         
         if update_data['images']:
             image_urls = image_service_sync.save_multiple_images(update_data['images'], is_diary=False)
