@@ -20,10 +20,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { createDiary } from '../../services/api';
-import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import CloseIcon from '@mui/icons-material/Close';
 
 const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
@@ -31,7 +28,8 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
   const [uploading, setUploading] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedVideos, setSelectedVideos] = useState([]);
-  const [editingStep, setEditingStep] = useState(0);
+  const [showContent, setShowContent] = useState(false);
+  const getPreviewUrl = (file) => URL.createObjectURL(file);
 
   const formik = useFormik({
     initialValues: {
@@ -44,7 +42,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
       title: Yup.string().required(t('title_required')),
       content: Yup.string()
         .required(t('content_required'))
-        .min(1, t('content_required')), // allow long content
+        .min(1, t('content_required')),
       group_ids: Yup.array().when('share_type', {
         is: 'group',
         then: (schema) => schema.min(1, t('select_group')),
@@ -68,7 +66,6 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
         resetForm();
         setSelectedImages([]);
         setSelectedVideos([]);
-        setEditingStep(0);
         onSuccess();
       } catch (err) {
         setError(err.message || 'Failed to create diary');
@@ -78,24 +75,22 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
     }
   });
 
-  const handleNext = () => {
-    if (editingStep < 1) setEditingStep(editingStep + 1);
-  };
-
-  const handlePrev = () => {
-    if (editingStep > 0) setEditingStep(editingStep - 1);
-  };
-
   const handleImageUpload = (e) => {
-    if (!formik.values.title || !formik.values.content) return; // disable if empty
     const files = Array.from(e.target.files).slice(0, 10 - selectedImages.length);
     setSelectedImages((prev) => [...prev, ...files]);
   };
 
   const handleVideoUpload = (e) => {
-    if (!formik.values.title || !formik.values.content) return; // disable if empty
     const files = Array.from(e.target.files).slice(0, 3 - selectedVideos.length);
     setSelectedVideos((prev) => [...prev, ...files]);
+  };
+
+  const removeImage = (index) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeVideo = (index) => {
+    setSelectedVideos((prev) => prev.filter((_, i) => i !== index));
   };
 
   const isPostDisabled =
@@ -108,61 +103,60 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
     formik.resetForm();
     setSelectedImages([]);
     setSelectedVideos([]);
-    setEditingStep(0);
+    setShowContent(false);
   };
 
   return (
-    <Box sx={{ bgcolor: 'background.paper', borderRadius: 3 , border: 1, borderColor: 'divider', p: 2, mb: 2, position: 'relative' }}>
+    <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: 1, borderColor: 'divider', p: 2, mb: 2, position: 'relative' }}>
       <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
         <Avatar src={user?.avatar_url} alt={user.username}>
           {user.username.charAt(0).toUpperCase()}
         </Avatar>
 
-        {editingStep === 0 ? (
+        <Box sx={{ flex: 1 }}>
+
           <TextField
             placeholder="What's on your mind?"
             name="title"
             value={formik.values.title}
             onChange={formik.handleChange}
+            onFocus={() => setShowContent(true)}
             variant="standard"
             fullWidth
-            InputProps={{ disableUnderline: true, sx: { fontSize: '1.1rem', fontWeight: 'bold' } }}
+            InputProps={{
+              disableUnderline: true,
+              sx: { fontSize: '1.1rem', fontWeight: 'bold' }
+            }}
           />
-        ) : (
-          <TextField
-            placeholder="Enter content"
-            name="content"
-            multiline
-            minRows={3}
-            value={formik.values.content}
-            onChange={formik.handleChange}
-            variant="standard"
-            fullWidth
-            InputProps={{ disableUnderline: true, sx: { fontSize: '1.1rem' } }}
-          />
-        )}
+
+          {showContent && (
+            <TextField
+              placeholder="Enter decription"
+              name="content"
+              multiline
+              minRows={3}
+              maxRows={10}
+              value={formik.values.content}
+              onChange={formik.handleChange}
+              variant="standard"
+              fullWidth
+              InputProps={{
+                disableUnderline: true,
+                sx: { fontSize: '1rem' }
+              }}
+              sx={{ mt: 1 }}
+            />
+          )}
+
+        </Box>
       </Box>
 
       <Box sx={{ position: 'absolute', top: 0, right: 0, display: 'flex' }}>
-        {(formik.values.title || formik.values.content) && (
+        {showContent && (
           <Tooltip title="Clear all">
             <IconButton onClick={handleCancel} sx={{ minWidth: 0, '&:hover': { backgroundColor: 'transparent', transform: 'scale(1.1)' } }}>
-              <CloseIcon sx={{ fontSize: 28 }} />
+              <CloseIcon sx={{ fontSize: { xs: 24, md: 28 }, color: 'error.main' }} />
             </IconButton>
-          </Tooltip>
-        )}
-        {editingStep === 0 && (
-          <Tooltip title="Next to content">
-            <Button sx={{ minWidth: 0, '&:hover': { backgroundColor: 'transparent' } }} onClick={handleNext}>
-              <ArrowForwardIosIcon />
-            </Button>
-          </Tooltip>
-        )}
-        {editingStep === 1 && (
-          <Tooltip title="Back to title">
-            <Button sx={{ minWidth: 0, '&:hover': { backgroundColor: 'transparent' } }} onClick={handlePrev}>
-              <ArrowBackIosIcon />
-            </Button>
           </Tooltip>
         )}
       </Box>
@@ -194,25 +188,32 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
       )}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title='Please enter title and content first'>
-            <Button component="label" sx={{ minWidth: 0 }} disabled={!formik.values.title || !formik.values.content}>
+            <Button component="label" sx={{ minWidth: 0 }}
+            >
               <ImageIcon color="success" />
               <Typography sx={{ ml: 1, display: { xs: 'none', md: 'block' } }}>
                 Photo
               </Typography>
-              {selectedImages.length ? (selectedImages.length):('')}
+              <Typography sx={{ ml: 1 }}>
+                {selectedImages.length ? (selectedImages.length) : ('')}
+              </Typography>
               <input hidden multiple type="file" accept="image/*" onChange={handleImageUpload} />
             </Button>
           </Tooltip>
 
           <Tooltip title='Please enter title and content first'>
-            <Button component="label" sx={{ minWidth: 0 }} disabled={!formik.values.title || !formik.values.content}>
+            <Button component="label" sx={{ minWidth: 0 }}
+            >
               <VideocamIcon color="error" />
               <Typography sx={{ ml: 1, display: { xs: 'none', md: 'block' } }}>
                 Video
               </Typography>
-              {selectedVideos.length ? (selectedVideos.length): ''}
+              <Typography sx={{ ml: 1 }}>
+                {selectedVideos.length ? (selectedVideos.length) : ''}
+              </Typography>
               <input hidden multiple type="file" accept="video/*" onChange={handleVideoUpload} />
             </Button>
           </Tooltip>
@@ -238,11 +239,93 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
             onClick={formik.handleSubmit}
             sx={{ borderRadius: 1, minWidth: 0 }}
           >
-            {uploading ? 'Posting' : 'Post'}
+            {uploading ? 'Publishing' : 'Publish'}
           </Button>
         </Box>
       </Box>
-    </Box>
+
+      {(selectedImages.length > 0 || selectedVideos.length > 0) && (
+        <Box sx={{ mt: 2 }}>
+          {/* Image previews */}
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {selectedImages.map((file, index) => (
+              <Box
+                key={index}
+                sx={{
+                  position: 'relative',
+                  width: 100,
+                  height: 100,
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  border: 1,
+                  borderColor: 'divider'
+                }}
+              >
+                <img
+                  src={getPreviewUrl(file)}
+                  alt="preview"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+
+                <IconButton
+                  size="small"
+                  onClick={() => removeImage(index)}
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    bgcolor: 'rgba(0,0,0,0.6)',
+                    color: '#fff',
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' }
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
+          </Box>
+
+          {/* Video previews */}
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+            {selectedVideos.map((file, index) => (
+              <Box
+                key={index}
+                sx={{
+                  position: 'relative',
+                  width: 160,
+                  height: 100,
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  border: 1,
+                  borderColor: 'divider'
+                }}
+              >
+                <video
+                  src={getPreviewUrl(file)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  muted
+                />
+
+                <IconButton
+                  size="small"
+                  onClick={() => removeVideo(index)}
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    bgcolor: 'rgba(0,0,0,0.6)',
+                    color: '#fff',
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' }
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+    </Box >
   );
 };
 

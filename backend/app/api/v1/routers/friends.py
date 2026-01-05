@@ -131,8 +131,15 @@ async def get_all_status_friends(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    friends = db.query(Friend).filter(
-        Friend.user_id == current_user.id,
+    friends = (
+        db.query(Friend)
+        .filter(
+            or_(
+                Friend.user_id == current_user.id,
+                Friend.friend_id == current_user.id
+            )
+        )
+        .all()
     )
     return friends
     

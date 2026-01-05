@@ -48,12 +48,16 @@ import { useTranslation } from 'react-i18next';
 import { commentOnDiary, deleteCommentById, deleteDiaryById, getDiaryById, getDiaryComments, getDiaryLikes, likeDiary, sendFriendRequest, updateComment, updateDiaryById, handleSaveDiary, handleRemoveDiary } from '../../services/api';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { DiaryCard } from '../diary/DairyCard';
-import { convertFilesToBase64, CommentItemWithActions, MediaPlayer, getVideoThumbnail } from '../diary/DiaryHelper';
+import { CommentItemWithActions } from '../diary/DiaryHelper';
 import { useAuth } from '../../context/AuthContext';
 import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import TurnedInNotOutlinedIcon from '@mui/icons-material/TurnedInNotOutlined';
 import TurnedInIcon from "@mui/icons-material/TurnedIn";
+import AlternateEmailIcon from '@mui/icons-material/AlternateEmail';
+import { MediaPlayer } from './MediaPlayer';
+import { convertFilesToBase64 } from './convertFilesToBase64';
+import { getVideoThumbnail } from './getVideoThumbnail';
 
 const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) => {
   const [diaryList, setDiaryList] = useState(diaries || []);
@@ -103,6 +107,12 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
   const [selectedMediaType, setSelectedMediaType] = useState('image');
   const [currentMediaList, setCurrentMediaList] = useState([]);
   const [sendingRequests, setSendingRequests] = useState(new Set());
+
+  const [showButton, setShowButton] = useState(false);
+
+  const toggleShowButton = () => {
+    setShowButton(prev => !prev);
+  }
 
   useEffect(() => {
     setDiaryList(diaries);
@@ -780,31 +790,39 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
           open={mediaViewerOpen}
           onClose={handleMediaViewerClose}
           sx={{
+            bgcolor: 'black/1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             outline: 'none',
-            '&::-webkit-scrollbar': { display: 'none' },
-            scrollbarWidth: 'none',
           }}
         >
           <Box
             sx={{
               position: 'relative',
-              maxWidth: '90vw',
-              maxHeight: '90vh',
-              outline: 'none',
+              width: '100vw',
+              height: '100vh',
+              overflow: 'hidden',
             }}
           >
-            {/* Media Player */}
-            <MediaPlayer
-              url={selectedMedia}
-              type={selectedMediaType}
-              thumbnail={selectedThumbnail}
-              onClose={handleMediaViewerClose}
-            />
+            {/* Media */}
+            <Box
+              sx={{
+                width: '100%',
+                height: '100vh',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <MediaPlayer
+                url={selectedMedia}
+                type={selectedMediaType}
+                thumbnail={selectedThumbnail}
+              />
+            </Box>
 
-            {/* Prev Button */}
+            {/* Prev */}
             {currentMediaList.length > 1 && (
               <IconButton
                 onClick={handlePrevMedia}
@@ -813,16 +831,17 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                   left: 16,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  bgcolor: 'rgba(0,0,0,0.5)',
+                  bgcolor: 'rgba(189, 189, 189, 0.5)',
                   color: 'white',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                  zIndex: 10,
+                  '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
                 }}
               >
-                <ArrowBackIcon />
+                <ArrowBackIcon sx={{fontSize: {xs: 16, md: 22}}} />
               </IconButton>
             )}
 
-            {/* Next Button */}
+            {/* Next */}
             {currentMediaList.length > 1 && (
               <IconButton
                 onClick={handleNextMedia}
@@ -831,12 +850,13 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                   right: 16,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  bgcolor: 'rgba(0,0,0,0.5)',
+                  bgcolor: 'rgba(189, 189, 189, 0.5)',
                   color: 'white',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                  zIndex: 10,
+                  '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
                 }}
               >
-                <ArrowForwardIcon />
+                <ArrowForwardIcon sx={{fontSize: {xs: 16, md: 22}}}/>
               </IconButton>
             )}
 
@@ -845,7 +865,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
               <Typography
                 sx={{
                   position: 'absolute',
-                  bottom: 16,
+                  bottom: 24,
                   left: '50%',
                   transform: 'translateX(-50%)',
                   bgcolor: 'rgba(0,0,0,0.5)',
@@ -854,29 +874,30 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                   py: 0.5,
                   borderRadius: 2,
                   fontSize: '0.875rem',
+                  zIndex: 10,
                 }}
               >
                 {selectedMediaIndex + 1} / {currentMediaList.length}
               </Typography>
             )}
 
-            {/* Close Button */}
+            {/* Close */}
             <IconButton
               onClick={handleMediaViewerClose}
               sx={{
                 position: 'absolute',
                 top: 16,
                 right: 16,
-                bgcolor: 'rgba(0,0,0,0.5)',
+                bgcolor: 'rgba(189, 189, 189, 0.5)',
                 color: 'white',
-                '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                zIndex: 10,
+                '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
               }}
             >
               <CloseIcon />
             </IconButton>
           </Box>
         </Modal>
-
 
         <Snackbar
           open={snackbarOpen}
@@ -1771,7 +1792,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                 size="medium"
                                 sx={{ minWidth: 40, justifyContent: 'center' }}
                               >
-                                {isMobile ? <ShareOutlinedIcon sx={{ mb: 0.5 }} /> : <> <ShareOutlinedIcon sx={{ mb: 0.5 }} /> <Typography ml={1}>Share</Typography> </>}
+                                {isMobile ? <ShareOutlinedIcon /> : <> <ShareOutlinedIcon sx={{ mb: 0.5 }} /> <Typography ml={1}>Share</Typography> </>}
                                 <Typography ml={1}>
 
                                 </Typography>
@@ -1811,16 +1832,12 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
 
                           </Box>
 
-                          {/* Comments Section */}
                           <Collapse in={expandedDiary === diary.id}>
-                            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: '12px', border: "1px solid" }}>
-                              {/* Comment Input */}
+                            <Box sx={{ mt: 2 }}>
                               <Box sx={{
-                                display: 'flex',
-                                flexDirection: { xs: 'column', sm: 'row' },
-                                gap: 1.5,
-                                mb: 2,
-                                alignItems: { xs: 'stretch', sm: 'flex-start' }
+                                position: 'relative',
+                                border: 1,
+                                borderRadius: '8px',
                               }}>
                                 <TextField
                                   fullWidth
@@ -1839,140 +1856,147 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                   sx={{
                                     '& .MuiOutlinedInput-root': {
                                       fontSize: '0.95rem',
-                                      borderRadius: '8px',
+                                      '& fieldset': {
+                                        border: 'none',
+                                      },
+                                      '&:hover fieldset': {
+                                        border: 'none',
+                                      },
+                                      '&.Mui-focused fieldset': {
+                                        border: 'none',
+                                      },
                                     }
                                   }}
+                                  onFocus={toggleShowButton}
                                 />
-                                <Box sx={{
-                                  display: 'flex',
-                                  gap: 1,
-                                  flexDirection: { xs: 'row', sm: 'column' },
-                                  width: { xs: '100%', sm: 'auto' }
-                                }}>
-                                  <Button
-                                    variant="outlined"
-                                    component="label"
-                                    disabled={commentLoading[diary.id]}
-                                    startIcon={<ImageIcon />}
-                                    sx={{
-                                      minWidth: { xs: 'auto', sm: '120px' },
-                                      px: 2,
-                                      borderRadius: '8px',
-                                      '& .MuiButton-startIcon': {
-                                        mr: 1
-                                      }
-                                    }}
-                                    size="medium"
-                                  >
-                                    {t('image')}
-                                    <input
-                                      type="file"
-                                      hidden
-                                      multiple
-                                      accept="image/*"
-                                      onChange={(e) => handleMediaUpload(e, diary.id)}
-                                    />
-                                  </Button>
-                                  <Button
-                                    variant="contained"
-                                    onClick={() => handleAddComment(diary.id)}
-                                    disabled={!commentTexts[diary.id]?.trim() || commentLoading[diary.id]}
-                                    sx={{
-                                      minWidth: { xs: 'auto', sm: '120px' },
-                                      px: 3,
-                                      borderRadius: '8px',
-                                      fontWeight: 500
-                                    }}
-                                    size="medium"
-                                  >
-                                    {commentLoading[diary.id] ? (
-                                      <CircularProgress size={24} color="inherit" />
-                                    ) : (
-                                      t('send')
-                                    )}
-                                  </Button>
-                                </Box>
-                              </Box>
-
-                              {/* Selected Images Preview for Comments - Compact */}
-                              {selectedCommentImages[diary.id]?.length > 0 && (
-                                <Box sx={{
-                                  mb: 2,
-                                  p: 1,
-                                  bgcolor: 'background.paper',
-                                  borderRadius: '8px',
-                                  border: '1px solid',
-                                  borderColor: 'divider'
-                                }}>
-                                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                                    Selected images ({selectedCommentImages[diary.id].length})
-                                  </Typography>
+                                <Divider />
+                                {showButton && (
                                   <Box sx={{
                                     display: 'flex',
-                                    flexWrap: 'wrap',
-                                    gap: 0.5
+                                    justifyContent: 'space-between',
+                                    gap: 1,
+                                    right: 5,
+                                    bottom: 5,
+                                    p: 1,
                                   }}>
-                                    {selectedCommentImages[diary.id].map((img, index) => (
-                                      <Box key={index} sx={{
-                                        position: 'relative',
-                                        width: 50,
-                                        height: 50,
-                                        borderRadius: 4,
-                                        overflow: 'hidden'
-                                      }}>
-                                        <img
-                                          src={img}
-                                          alt={`Preview ${index}`}
-                                          style={{
-                                            width: '100%',
-                                            height: '100%',
-                                            objectFit: 'cover'
-                                          }}
+
+                                    <Tooltip title='Comment as image?'>
+                                      <Button
+                                        component='label'
+                                        sx={{
+                                          minWidth: 0
+                                        }}
+                                      >
+                                        <ImageIcon />
+                                        <input
+                                          type="file"
+                                          hidden
+                                          multiple
+                                          accept="image/*"
+                                          onChange={(e) => handleMediaUpload(e, diary.id)}
                                         />
-                                        <IconButton
-                                          size="small"
-                                          onClick={() => removeMedia(index, null, diary.id, 'image')}
+                                      </Button>
+                                    </Tooltip>
+                                    <Box
+                                      sx={{
+                                        display: 'flex',
+                                        gap: 1,
+                                        alignItems: 'center'
+                                      }}
+                                    >
+                                      <Tooltip title='Tag your friend?'>
+                                        <Button
                                           sx={{
-                                            position: 'absolute',
-                                            top: -4,
-                                            right: -4,
-                                            bgcolor: 'error.main',
-                                            color: 'white',
-                                            width: 20,
-                                            height: 20,
-                                            '&:hover': {
-                                              bgcolor: 'error.dark'
-                                            }
+                                            minWidth: 0
                                           }}
                                         >
-                                          <CloseIcon sx={{ fontSize: 12 }} />
-                                        </IconButton>
-                                      </Box>
-                                    ))}
+                                          <AlternateEmailIcon />
+                                        </Button>
+                                      </Tooltip>
+                                      <Button
+                                        variant="contained"
+                                        onClick={() => handleAddComment(diary.id)}
+                                        disabled={!commentTexts[diary.id]?.trim() || commentLoading[diary.id]}
+                                        sx={{
+                                          px: 3,
+                                          borderRadius: '8px',
+                                          fontWeight: 500
+                                        }}
+                                        size="medium"
+                                      >
+                                        {commentLoading[diary.id] ? (
+                                          <CircularProgress size={24} color="inherit" />
+                                        ) : (
+                                          t('send')
+                                        )}
+                                      </Button>
+                                    </Box>
                                   </Box>
-                                </Box>
-                              )}
+                                )}
+
+                                {selectedCommentImages[diary.id]?.length > 0 && (
+                                  <Box sx={{
+                                    p: 1,
+                                    borderRadius: 0,
+                                    borderTop: '1px solid',
+                                    borderColor: 'divider'
+                                  }}>
+                                    <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                                      Selected images ({selectedCommentImages[diary.id].length})
+                                    </Typography>
+                                    <Box sx={{
+                                      display: 'flex',
+                                      flexWrap: 'wrap',
+                                      gap: 0.5
+                                    }}>
+                                      {selectedCommentImages[diary.id].map((img, index) => (
+                                        <Box key={index}
+                                          sx={{
+                                            position: 'relative',
+                                            width: 50,
+                                            height: 50,
+                                          }}
+                                        >
+                                          <img
+                                            src={img}
+                                            alt={`Preview ${index}`}
+                                            style={{
+                                              width: '100%',
+                                              height: '100%',
+                                              objectFit: 'cover',
+                                              borderRadius: 4,
+                                            }}
+                                          />
+                                          <IconButton
+                                            size="small"
+                                            onClick={() => removeMedia(index, null, diary.id, 'image')}
+                                            sx={{
+                                              position: 'absolute',
+                                              top: -4,
+                                              right: -4,
+                                              bgcolor: 'error.main',
+                                              color: 'white',
+                                              width: 20,
+                                              height: 20,
+                                              '&:hover': {
+                                                bgcolor: 'error.dark'
+                                              },
+                                            }}
+                                          >
+                                            <CloseIcon sx={{ fontSize: 12 }} />
+                                          </IconButton>
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  </Box>
+                                )}
+                              </Box>
+
+                              <Divider textAlign="left" sx={{ py: 2, color: 'primary.main' }}>Comments {diary.comments.length ? (diary.comments.length) : ('')}</Divider>
 
                               {/* Comments List */}
                               {diaryComments[diary.id]?.length > 0 ? (
-                                <Box sx={{
-                                  maxHeight: 300,
-                                  overflowY: 'auto',
-                                  '&::-webkit-scrollbar': {
-                                    width: '8px',
-                                  },
-                                  '&::-webkit-scrollbar-track': {
-                                    background: '#f1f1f1',
-                                    borderRadius: '4px',
-                                  },
-                                  '&::-webkit-scrollbar-thumb': {
-                                    background: '#888',
-                                    borderRadius: '4px',
-                                  },
-                                  '&::-webkit-scrollbar-thumb:hover': {
-                                    background: '#555',
-                                  }
-                                }}>
+                                <Box>
                                   {diaryComments[diary.id].map((comment) => (
                                     <CommentItemWithActions
                                       key={comment.id}

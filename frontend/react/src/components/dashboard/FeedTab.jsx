@@ -30,7 +30,7 @@ import {
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { deleteDiaryById, getFeed } from '../../services/api';
-import { MediaPlayer } from '../diary/DiaryHelper';
+import { MediaPlayer } from '../diary/MediaPlayer';
 import ActivityComponent from '../diary/ActivityComponent';
 import SuggestFriendComponent from '../diary/SuggestFriendComponent';
 import { useAuth } from '../../context/AuthContext';

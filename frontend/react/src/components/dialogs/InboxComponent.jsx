@@ -274,7 +274,7 @@ function InboxComponent({ open, onClose }) {
                             }}
                             disabled={activity.is_read === true}
                           >
-                            Accept
+                            {activity.is_read === true ? 'Accepted' : 'Accept'}
                           </Button>
                         )}
                       </Box>

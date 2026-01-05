@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
 from app.schemas.auth import UserCreate
 from app.models.user import User
-from app.models.friend import Friend
+from app.models.friend import Friend, FriendshipStatus
 from app.schemas.user import UserUpdate
 from app.core.security import hash_password
 from typing import List
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_, func, case, union, union_all
 
 def get_by_id(db: Session, user_id: int) -> User:
     return db.query(User).filter(User.id == user_id).first()
@@ -53,29 +53,41 @@ def verify(db: Session, user_id: int) -> User:
         db.refresh(user)  # ✅ Refresh to get updated data
     return user  # ✅ Return the user object
 
-def get_friend_suggestions(
-    db: Session,
-    current_user_id: int,
-    limit: int = 20
-):
-    # Subquery of all connected users
-    connected_users = (
-        db.query(Friend.user_id.label("uid"))
-        .filter(Friend.friend_id == current_user_id)
-        .union(
-            db.query(Friend.friend_id.label("uid"))
-            .filter(Friend.user_id == current_user_id)
-        )
+def get_friend_suggestions(db: Session, current_user_id: int, limit: int = 20):
+    # Step 1: Get current user's friends
+    my_friends = union_all(
+        select(Friend.user_id).where(Friend.friend_id == current_user_id, Friend.status == FriendshipStatus.accepted),
+        select(Friend.friend_id).where(Friend.user_id == current_user_id, Friend.status == FriendshipStatus.accepted)
+    ).subquery()
+
+    # Step 2: Get friends of friends (mutuals)
+    mutual_candidates = union_all(
+        select(Friend.user_id).where(Friend.friend_id.in_(select(my_friends.c.user_id)), Friend.status == FriendshipStatus.accepted),
+        select(Friend.friend_id).where(Friend.user_id.in_(select(my_friends.c.user_id)), Friend.status == FriendshipStatus.accepted)
+    ).subquery()
+
+    # Count mutual connections
+    mutual_counts = (
+        select(mutual_candidates.c.user_id.label("user_id"), func.count().label("mutual_count"))
+        .where(mutual_candidates.c.user_id != current_user_id)  # exclude self
+        .group_by(mutual_candidates.c.user_id)
         .subquery()
     )
 
-    # Main query
-    users = (
+    # Step 3: Exclude already friends
+    related_users = union_all(
+        select(Friend.user_id).where(Friend.friend_id == current_user_id),
+        select(Friend.friend_id).where(Friend.user_id == current_user_id)
+    ).subquery()
+
+    # Step 4: Final suggestions
+    suggestions = (
         db.query(User)
-        .filter(User.id != current_user_id)
-        .filter(~User.id.in_(connected_users))
+        .join(mutual_counts, User.id == mutual_counts.c.user_id)
+        .filter(~User.id.in_(select(related_users.c.user_id)))
+        .order_by(mutual_counts.c.mutual_count.desc())
         .limit(limit)
         .all()
     )
 
-    return users
+    return suggestions
