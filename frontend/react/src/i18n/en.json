@@ -223,7 +223,7 @@
   "videos_preview": "Videos ({{count}})",
   "images_selected_info": "{{count}} / 10 selected • Max 10MB each",
   "videos_selected_info": "{{count}} / 3 selected • Max 50MB each • MP4, MOV, AVI, WebM, MKV",
-  "video": "VIDEO",
+  "video": "Video",
   "uploading": "Uploading...",
   "inbox": "Inbox",
   "friend_requests": "Friend Requests",
@@ -362,6 +362,7 @@
   "title_required": "Title is required",
   "content_required": "Content is required",
   "select_group": "Please select at least one group",
-  "you": "You"
+  "you": "You",
+  "publish": "Publish"
 
 }

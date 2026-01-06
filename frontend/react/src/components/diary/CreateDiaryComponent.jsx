@@ -131,7 +131,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
 
           {showContent && (
             <TextField
-              placeholder="Enter decription"
+              placeholder={t('enter_content')}
               name="content"
               multiline
               minRows={3}
@@ -198,7 +198,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
             >
               <ImageIcon color="success" />
               <Typography sx={{ ml: 1, display: { xs: 'none', md: 'block' } }}>
-                Photo
+                {t('photo')}
               </Typography>
               <Typography sx={{ ml: 1 }}>
                 {selectedImages.length ? (selectedImages.length) : ('')}
@@ -212,7 +212,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
             >
               <VideocamIcon color="error" />
               <Typography sx={{ ml: 1, display: { xs: 'none', md: 'block' } }}>
-                Video
+                {t('video')}
               </Typography>
               <Typography sx={{ ml: 1 }}>
                 {selectedVideos.length ? (selectedVideos.length) : ''}
@@ -242,7 +242,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
             disabled={isPostDisabled}
             onClick={formik.handleSubmit}
           >
-            {uploading ? 'Publishing' : 'Publish'}
+            {uploading ? t('publishing') : t('publish')}
           </Button>
         </Box>
       </Box>
