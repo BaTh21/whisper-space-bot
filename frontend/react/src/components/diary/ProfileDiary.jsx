@@ -58,8 +58,9 @@ import AlternateEmailIcon from '@mui/icons-material/AlternateEmail';
 import { MediaPlayer } from './MediaPlayer';
 import { convertFilesToBase64 } from './convertFilesToBase64';
 import { getVideoThumbnail } from './getVideoThumbnail';
+import ShareComponent from './ShareComponent';
 
-const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) => {
+const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchStats, isLinkedDiary = () => false }) => {
   const [diaryList, setDiaryList] = useState(diaries || []);
   const [loading, setLoading] = useState(false);
   const [expandedDiary, setExpandedDiary] = useState(null);
@@ -109,6 +110,8 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
   const [sendingRequests, setSendingRequests] = useState(new Set());
 
   const [showButton, setShowButton] = useState(false);
+  const [sharePopup, setSharePopup] = useState(false);
+  const [copyLink, setCopyLink] = useState(null);
 
   const toggleShowButton = () => {
     setShowButton(prev => !prev);
@@ -437,6 +440,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
       fetchStats?.();
 
       handleDeleteCancel();
+      onDataUpdate();
     } catch (err) {
       showMessage(err.message || t('failed_delete_diary'), 'error');
     } finally {
@@ -489,37 +493,38 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
   };
 
   const handleEditSave = async (diaryId) => {
-    if (!editTitle.trim() || !editContent.trim()) {
-      showMessage(t('title_content_required'), 'error');
-      return;
-    }
-
     setEditLoading(true);
 
     try {
-      const updateData = {
-        title: editTitle.trim(),
-        content: editContent.trim(),
-        share_type: editShareType.toLowerCase().trim(),
-      };
+      const updateData = {};
 
-      if (editShareType === 'group') {
-        updateData.group_ids = editGroupIds;
+      // --- Title & Content ---
+      updateData.title = editTitle?.trim() === '' ? null : editTitle?.trim();
+      updateData.content = editContent?.trim() === '' ? null : editContent?.trim();
+
+      // --- Share Type & Groups ---
+      if (editShareType) {
+        updateData.share_type = editShareType.toLowerCase().trim();
+        if (editShareType === 'group') {
+          updateData.group_ids = editGroupIds; // can be empty array
+        }
       }
 
-      // Prepare images: existing URLs + new base64 images
+      // --- Images ---
       const existingImageUrls = editImages.filter(img => img.startsWith('http'));
       const newBase64Images = editImages.filter(img => img.startsWith('data:image/'));
+      updateData.images = [...existingImageUrls, ...newBase64Images]; // can be empty array
 
-      // For videos: existing URLs + new base64 videos
+      // --- Videos ---
       const existingVideoUrls = editVideos.filter(vid => vid.startsWith('http'));
       const newBase64Videos = editVideos.filter(vid => vid.startsWith('data:video/'));
+      updateData.videos = [...existingVideoUrls, ...newBase64Videos]; // can be empty array
 
-      // Send all images (existing URLs + new base64)
-      updateData.images = [...existingImageUrls, ...newBase64Images];
-
-      // Send all videos (existing URLs + new base64)
-      updateData.videos = [...existingVideoUrls, ...newBase64Videos];
+      if (Object.keys(updateData).length === 0) {
+        showMessage(t('nothing_to_update'), 'error');
+        setEditLoading(false);
+        return;
+      }
 
       await updateDiaryById(diaryId, updateData);
       showMessage(t('diary_updated'));
@@ -778,6 +783,13 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
         (f.user.id === authorId || f.friend.id === authorId)
     );
 
+  const isSaveDisabled = editLoading ||
+    !editShareType ||
+    (editShareType === 'group' && editGroupIds.length === 0) ||
+    (
+      (!editTitle?.trim() && !editContent?.trim() && editImages.length === 0 && editVideos.length === 0)
+    );
+
   return (
     <Box>
 
@@ -1029,12 +1041,22 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                   }
                 };
 
+                const handleCopyLink = (diaryId) => {
+                  navigator.clipboard.writeText(
+                    `${window.location.origin}/feed#diary-${diaryId}`
+                  );
+                  setCopyLink(`${window.location.origin}/feed#diary-${diaryId}`);
+                };
+
                 return (
-                  <Box key={diary.id}>
+                  <Box key={diary.id} id={`diary-${diary.id}`} sx={{ scrollMarginTop: { xs: '80px', md: '10px' } }}>
                     <Card
                       sx={{
                         p: { xs: 1, sm: 2 },
                         mb: 2, width: '100%',
+                        border: isLinkedDiary(diary) ? '2px solid #faab00ff' : '1px solid #ddd',
+                        backgroundColor: isLinkedDiary(diary) ? '#faab001b' : '#fff',
+                        transition: 'background-color 0.3s, border 0.3s'
                       }}>
                       {/* Diary Header */}
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, }}>
@@ -1083,7 +1105,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                     onChange={(e) => setEditGroupIds(e.target.value)}
                                     disabled={editLoading}
                                   >
-                                    {diaryList.map((group) => (
+                                    {groups.map((group) => (
                                       <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>
                                     ))}
                                   </Select>
@@ -1310,7 +1332,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                             cursor: 'pointer',
                                             '&:hover .media-overlay': {
                                               opacity: 1
-                                            }
+                                            },
                                           }}
                                         >
                                           {/* Video Thumbnail or Placeholder */}
@@ -1483,7 +1505,7 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                                 <Button
                                   variant="contained"
                                   onClick={() => handleEditSave(diary.id)}
-                                  disabled={editLoading || !editTitle.trim() || !editContent.trim()}
+                                  disabled={isSaveDisabled}
                                   startIcon={editLoading ? <CircularProgress size={24} /> : <SaveIcon />}
                                   size="medium"
                                 >
@@ -1794,6 +1816,10 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
                               <Button
                                 size="medium"
                                 sx={{ minWidth: 40, justifyContent: 'center' }}
+                                onClick={() => {
+                                  handleCopyLink(diary.id);
+                                  setSharePopup(true);
+                                }}
                               >
                                 {isMobile ? <ShareOutlinedIcon sx={{ mb: 0.5 }} /> : <> <ShareOutlinedIcon sx={{ mb: 0.5 }} /> <Typography ml={1}>{t('share')}</Typography> </>}
                                 <Typography ml={1}>
@@ -2044,6 +2070,14 @@ const ProfileDiary = ({ diaries, onDataUpdate, profile, friends, fetchStats }) =
 
         </Box>
       </Box>
+
+      <ShareComponent
+        open={sharePopup}
+        onClose={() => setSharePopup(false)}
+        friends={friends}
+        copyLink={copyLink}
+        showMessage={showMessage}
+      />
 
     </Box>
   );

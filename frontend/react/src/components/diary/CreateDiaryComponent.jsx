@@ -38,10 +38,8 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
       group_ids: []
     },
     validationSchema: Yup.object({
-      title: Yup.string().required(t('title_required')),
-      content: Yup.string()
-        .required(t('content_required'))
-        .min(1, t('content_required')),
+      title: Yup.string(),
+      content: Yup.string(),
       group_ids: Yup.array().when('share_type', {
         is: 'group',
         then: (schema) => schema.min(1, t('select_group')),
@@ -93,10 +91,13 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
   };
 
   const isPostDisabled =
-    !formik.values.title ||
-    !formik.values.content ||
-    !formik.isValid ||
-    uploading;
+    uploading ||
+    !(
+      formik.values.title ||
+      formik.values.content ||
+      selectedImages.length > 0 ||
+      selectedVideos.length > 0
+    );
 
   const handleCancel = () => {
     formik.resetForm();
@@ -104,8 +105,6 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
     setSelectedVideos([]);
     setShowContent(false);
   };
-
-  const hasContent = formik.values.title || formik.values.content;
 
   return (
     <Box sx={{ bgcolor: 'background.paper', borderRadius: 3, border: 1, borderColor: 'divider', p: 2, mb: 2, position: 'relative' }}>

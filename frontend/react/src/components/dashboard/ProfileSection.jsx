@@ -49,7 +49,7 @@ import { deleteAvatar, getMyFeed, updateMe, uploadAvatar, getMyDiaryStats, getFa
 import ProfileDiary from '../diary/ProfileDiary';
 import SystemLogs from '../SystemLogs';
 
-const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, onNewDiary }) => {
+const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, onNewDiary, groups }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -776,6 +776,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, on
 
       {(activeTab === 0 || activeTab === 1) && (
         <ProfileDiary
+          groups={groups}
           diaries={diaries}
           profile={profile}
           onDataUpdate={handleSuccess}
@@ -786,6 +787,7 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, on
 
       {activeTab === 2 && (
         <ProfileDiary
+          groups={groups}
           diaries={favorites}
           profile={profile}
           onDataUpdate={handleSuccess}
