@@ -91,3 +91,9 @@ def get_friend_suggestions(db: Session, current_user_id: int, limit: int = 20):
     )
 
     return suggestions
+
+def get_by_email_or_username(db: Session, identifier: str) -> User:
+    """Find user by email OR username"""
+    return db.query(User).filter(
+        (User.email == identifier) | (User.username == identifier)
+    ).first()
