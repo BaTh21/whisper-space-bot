@@ -293,175 +293,90 @@ def can_view(db: Session, diary: Diary, user_id: int) -> bool:
     
     return False
 
-def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_user_id: int):
-    """Update existing diary - FIXED share_type update"""
+def update_diary(db: Session, diary_id: int, diary_data: DiaryUpdate, current_user_id: int) -> Diary:
+    
     diary = db.query(Diary).filter(Diary.id == diary_id, Diary.is_deleted == False).first()
     if not diary:
         raise HTTPException(status_code=404, detail="Diary not found")
-    
     if diary.user_id != current_user_id:
         raise HTTPException(status_code=403, detail="Only creator can edit this diary")
     
-    update_dict = diary_data.dict(exclude_unset=True, exclude_none=True)
+    update_dict = diary_data.dict(exclude_unset=True)
     
+    if "title" in update_dict:
+        diary.title = update_dict["title"]
+    if "content" in update_dict:
+        diary.content = update_dict["content"]
     
-    # FIX: Handle share_type update
-    if 'share_type' in update_dict:
-        new_share_type = update_dict['share_type']
-        
+    if "share_type" in update_dict:
+        new_share_type = update_dict["share_type"]
         try:
             diary.share_type = ShareType(new_share_type.lower().strip())
-            
-            # If changing TO group, ensure group_ids are provided
-            if new_share_type.lower() == 'group' and 'group_ids' in update_dict:
-                group_ids = update_dict['group_ids']
-                print(f"📝 Setting groups: {group_ids}")
-                
-                # Clear existing groups
-                db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
-                
-                # Add new groups
-                if group_ids:
-                    diary_groups = [
-                        DiaryGroup(diary_id=diary_id, group_id=group_id)
-                        for group_id in group_ids
-                    ]
-                    db.add_all(diary_groups)
-            
-            # If changing FROM group, remove all group associations
-            elif diary.share_type != ShareType.group and new_share_type.lower() != 'group':
-                db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
-                
-        except ValueError as e:
-            print(f"❌ Invalid share_type: {new_share_type}")
+        except ValueError:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid share_type. Must be one of: {[t.value for t in ShareType]}"
             )
-    
-    # FIX: Handle group_ids separately (for when share_type is already 'group')
-    if 'group_ids' in update_dict and diary.share_type == ShareType.group:
-        group_ids = update_dict['group_ids']
-        print(f"📝 Updating groups for existing group diary: {group_ids}")
         
-        # Clear existing groups
         db.query(DiaryGroup).filter(DiaryGroup.diary_id == diary_id).delete()
         
-        # Add new groups
-        if group_ids:
-            diary_groups = [
-                DiaryGroup(diary_id=diary_id, group_id=group_id)
-                for group_id in group_ids
-            ]
-            db.add_all(diary_groups)
-        else:
-            print(f"⚠️ Warning: group diary with no groups specified")
+        if diary.share_type == ShareType.group:
+            group_ids = update_dict.get("group_ids") or []
+            if group_ids:
+                diary_groups = [DiaryGroup(diary_id=diary_id, group_id=gid) for gid in group_ids]
+                db.add_all(diary_groups)
     
-    # Handle images update (keep existing)
-    if 'images' in update_dict:
-        new_images = update_dict['images']
-        
-        if new_images == []:
-            # Clear all images
-            if diary.images:
-                image_service_sync.cleanup_media(diary.images)
-            diary.images = []
-        elif new_images:
-            # Separate existing URLs from new base64 data
-            existing_urls = [img for img in new_images if img.startswith(('http://', 'https://'))]
-            new_base64 = [img for img in new_images if img.startswith('data:image/')]
-            
-            # Remove old images not in new list
-            if diary.images:
-                to_remove = [old for old in diary.images if old not in existing_urls]
-                if to_remove:
-                    image_service_sync.cleanup_media(to_remove)
-            
-            # Upload new images
-            new_urls = []
-            if new_base64:
-                try:
-                    new_urls = image_service_sync.save_multiple_images(new_base64, is_diary=True)
-                except Exception as e:
-                    raise HTTPException(status_code=400, detail=f"Failed to upload images: {str(e)}")
-            
-            diary.images = existing_urls + new_urls
+    if "images" in update_dict:
+        new_images = update_dict["images"] or []
+        if diary.images:
+            to_remove = [img for img in diary.images if img not in new_images]
+            if to_remove:
+                image_service_sync.cleanup_media(to_remove)
+        diary.images = new_images
     
-    # Handle videos update (keep existing)
-    if 'videos' in update_dict:
-        new_videos = update_dict['videos']
-        
-        if new_videos == []:
-            # Clear all videos and thumbnails
-            if diary.videos:
-                image_service_sync.cleanup_media(diary.videos)
-            if diary.video_thumbnails:
-                image_service_sync.cleanup_media([t for t in diary.video_thumbnails if t])
-            diary.videos = []
-            diary.video_thumbnails = []
-        elif new_videos:
-            # Separate existing URLs from new base64 data
-            existing_videos = [vid for vid in new_videos if vid.startswith(('http://', 'https://'))]
-            new_base64 = [vid for vid in new_videos if vid.startswith('data:video/')]
-            
-            # Remove old videos not in new list
-            if diary.videos:
-                to_remove = []
-                thumbnails_to_remove = []
-                
-                for i, old_vid in enumerate(diary.videos):
-                    if old_vid not in existing_videos:
-                        to_remove.append(old_vid)
-                        if i < len(diary.video_thumbnails):
-                            thumbnails_to_remove.append(diary.video_thumbnails[i])
-                
-                if to_remove:
-                    image_service_sync.cleanup_media(to_remove)
-                if thumbnails_to_remove:
-                    image_service_sync.cleanup_media([t for t in thumbnails_to_remove if t])
-            
-            # Upload new videos
-            new_video_urls = []
-            new_thumbnails = []
-            if new_base64:
-                try:
-                    new_video_urls, new_thumbnails = image_service_sync.save_multiple_videos(new_base64, is_diary=True)
-                except Exception as e:
-                    raise HTTPException(status_code=400, detail=f"Failed to upload videos: {str(e)}")
-            
-            diary.videos = existing_videos + new_video_urls
-            
-            # Handle thumbnails
-            existing_thumbnails = []
-            if diary.video_thumbnails:
-                for i, vid_url in enumerate(diary.videos):
-                    if vid_url in existing_videos and i < len(diary.video_thumbnails):
-                        existing_thumbnails.append(diary.video_thumbnails[i])
-            
-            diary.video_thumbnails = existing_thumbnails + new_thumbnails
+    if "videos" in update_dict:
+        new_videos = update_dict["videos"] or []
+
+        # Find videos that are being removed
+        to_remove_vids = [vid for vid in diary.videos if vid not in new_videos]
+        to_remove_thumbs = []
+        if diary.video_thumbnails:
+            for i, vid in enumerate(diary.videos):
+                if vid in to_remove_vids and i < len(diary.video_thumbnails):
+                    to_remove_thumbs.append(diary.video_thumbnails[i])
+
+        # Cleanup removed media
+        if to_remove_vids:
+            image_service_sync.cleanup_media(to_remove_vids)
+        if to_remove_thumbs:
+            image_service_sync.cleanup_media(to_remove_thumbs)
+
+        # Generate thumbnails for new videos only
+        updated_thumbnails = []
+        for vid in new_videos:
+            if vid in diary.videos:  # existing video, preserve thumbnail
+                idx = diary.videos.index(vid)
+                updated_thumbnails.append(diary.video_thumbnails[idx])
+            else:
+                # New video, generate thumbnail
+                _, thumbnail = image_service_sync.save_single_media(vid, is_diary=True)
+                updated_thumbnails.append(thumbnail)
+
+        diary.videos = new_videos
+        diary.video_thumbnails = updated_thumbnails
     
-    # Update other fields
-    if 'title' in update_dict:
-        diary.title = update_dict['title']
-    
-    if 'content' in update_dict:
-        diary.content = update_dict['content']
-    
-    # Update media type
     if diary.images and diary.videos:
-        diary.media_type = 'mixed'
+        diary.media_type = "mixed"
     elif diary.videos:
-        diary.media_type = 'video'
+        diary.media_type = "video"
     elif diary.images:
-        diary.media_type = 'image'
+        diary.media_type = "image"
     else:
-        diary.media_type = 'text'
+        diary.media_type = "text"
     
     diary.updated_at = datetime.now(timezone.utc)
-    
     db.commit()
     db.refresh(diary)
-    
     return diary
 
 def delete_diary(db: Session, diary_id: int, current_user_id: int):

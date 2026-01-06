@@ -472,14 +472,6 @@ export const deletePendingRequest = async (pendingId) => {
 // Diary endpoints
 export const createDiary = async (data) => {
   try {
-    console.log("=== CREATE DIARY API CALL ===");
-    console.log("Original data:", {
-      title: data.title,
-      content: data.content,
-      share_type: data.share_type,
-      images_count: data.images?.length || 0,
-      videos_count: data.videos?.length || 0,
-    });
 
     // Prepare the data - ALWAYS include images and videos arrays
     const diaryData = {
@@ -493,7 +485,6 @@ export const createDiary = async (data) => {
 
     // Handle images
     if (data.images && data.images.length > 0) {
-      console.log(`Processing ${data.images.length} images`);
 
       // If images are already base64 strings, use them directly
       if (
@@ -501,10 +492,7 @@ export const createDiary = async (data) => {
         data.images[0].startsWith("data:image/")
       ) {
         diaryData.images = data.images;
-        console.log("Images are already base64 format");
       } else {
-        // Convert File objects to base64
-        console.log("Converting image files to base64");
         const imagePromises = data.images.map(async (image) => {
           if (image instanceof File) {
             validateMediaFile(image, "image", 10, 10);
@@ -513,24 +501,18 @@ export const createDiary = async (data) => {
           return image; // Already base64 or some other format
         });
 
-        diaryData.images = await Promise.all(imagePromises);
-        console.log(`Converted ${diaryData.images.length} images to base64`);
-      }
+        diaryData.images = await Promise.all(imagePromises);      }
     }
 
     // Handle videos
     if (data.videos && data.videos.length > 0) {
-      console.log(`Processing ${data.videos.length} videos`);
 
       if (
         typeof data.videos[0] === "string" &&
         data.videos[0].startsWith("data:video/")
       ) {
         diaryData.videos = data.videos;
-        console.log("Videos are already base64 format");
       } else {
-        // Convert File objects to base64
-        console.log("Converting video files to base64");
         const videoPromises = data.videos.map(async (video) => {
           if (video instanceof File) {
             validateMediaFile(video, "video", 50, 3);
@@ -540,46 +522,16 @@ export const createDiary = async (data) => {
         });
 
         diaryData.videos = await Promise.all(videoPromises);
-        console.log(`Converted ${diaryData.videos.length} videos to base64`);
       }
     }
-
-    // Log the final payload structure
-    console.log("Final request payload:", {
-      title: diaryData.title,
-      content: diaryData.content,
-      share_type: diaryData.share_type,
-      group_ids:
-        diaryData.group_ids.length > 0 ? diaryData.group_ids : "empty array",
-      images:
-        diaryData.images.length > 0
-          ? `Array of ${diaryData.images.length} base64 images`
-          : "empty array",
-      videos:
-        diaryData.videos.length > 0
-          ? `Array of ${diaryData.videos.length} base64 videos`
-          : "empty array",
-    });
-
-    console.log(
-      "First video sample (first 100 chars):",
-      diaryData.videos[0]?.substring(0, 100) || "none"
-    );
 
     const response = await api.post("/api/v1/diaries/", diaryData, {
       headers: {
         "Content-Type": "application/json",
       },
     });
-
-    console.log("=== CREATE DIARY SUCCESS ===");
-    console.log("Response:", response.data);
     return response.data;
   } catch (error) {
-    console.error("=== CREATE DIARY ERROR ===");
-    console.error("Error status:", error.response?.status);
-    console.error("Error data:", error.response?.data);
-    console.error("Error message:", error.message);
 
     let errorMessage = "Failed to create diary";
     const errorData = error.response?.data;
@@ -682,17 +634,6 @@ const validateMediaFile = (file, type, maxSizeMB, maxCount) => {
 
 export const updateDiaryById = async (diaryId, data) => {
   try {
-    console.log("=== UPDATE DIARY API CALL ===");
-    console.log("Diary ID:", diaryId);
-    console.log("Request Data Structure:", {
-      ...data,
-      images: data.images
-        ? `Array of ${data.images.length} items`
-        : "No images",
-      videos: data.videos
-        ? `Array of ${data.videos.length} items`
-        : "No videos",
-    });
 
     // Prepare update data
     const updateData = {};
@@ -706,7 +647,6 @@ export const updateDiaryById = async (diaryId, data) => {
     // Handle images
     if (data.images !== undefined) {
       if (Array.isArray(data.images)) {
-        console.log(`Processing ${data.images.length} images for update`);
 
         // Filter out any null/undefined values
         const validImages = data.images.filter((img) => img != null);
@@ -754,7 +694,6 @@ export const updateDiaryById = async (diaryId, data) => {
     // Handle videos
     if (data.videos !== undefined) {
       if (Array.isArray(data.videos)) {
-        console.log(`Processing ${data.videos.length} videos for update`);
 
         const validVideos = data.videos.filter((vid) => vid != null);
 
@@ -791,30 +730,14 @@ export const updateDiaryById = async (diaryId, data) => {
       }
     }
 
-    console.log("Sending update data:", {
-      ...updateData,
-      images: updateData.images
-        ? `Array of ${updateData.images.length} images`
-        : "Not sending images",
-      videos: updateData.videos
-        ? `Array of ${updateData.videos.length} videos`
-        : "Not sending videos",
-    });
-
     const response = await api.patch(`/api/v1/diaries/${diaryId}`, updateData, {
       headers: {
         "Content-Type": "application/json",
       },
     });
 
-    console.log("=== UPDATE SUCCESS ===");
-    console.log("Response:", response.data);
     return response.data;
   } catch (error) {
-    console.error("=== UPDATE ERROR ===");
-    console.error("Status:", error.response?.status);
-    console.error("Status Text:", error.response?.statusText);
-    console.error("Response Data:", error.response?.data);
 
     // Extract detailed error message
     let errorMessage = "Failed to update diary";
@@ -841,7 +764,6 @@ export const updateDiaryById = async (diaryId, data) => {
       }
     }
 
-    console.error("Parsed Error Message:", errorMessage);
     throw new Error(errorMessage);
   }
 };

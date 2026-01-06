@@ -21,8 +21,8 @@ class DiaryLikeResponse(BaseModel):
     user: CreatorResponse
 
 class DiaryCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=255)
-    content: str = Field(..., min_length=1)
+    title: Optional[str] = Field(None, max_length=255)
+    content: Optional[str] = None
     share_type: str = Field(..., pattern="^(public|friends|group|personal)$")
     group_ids: Optional[List[int]] = None
     images: Optional[List[str]] = Field(None, max_length=10)
@@ -87,13 +87,12 @@ class DiaryCreate(BaseModel):
         
         return v
 
-
 class DiaryShare(BaseModel):
     group_ids: List[int] = None
 
 class CreateDiaryForGroup(BaseModel):
-    title: str
-    content: str
+    title: Optional[str] = None
+    content: Optional[str] = None
     images: Optional[List[str]] = None
     
     @validator('images')
@@ -129,8 +128,8 @@ class CommentResponse(BaseModel):
 class DiaryOut(BaseModel):
     id: int
     author: CreatorResponse
-    title: str
-    content: str
+    title: Optional[str] = None
+    content: Optional[str] = None
     share_type: str
     groups: Optional[List[GroupResponse]] = None
     likes: Optional[List[DiaryLikeResponse]] = None

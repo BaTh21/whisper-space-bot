@@ -260,6 +260,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               onDataUpdate={fetchDashboardData}
               friends={allSatusFriends}
               onNewDiary={() => setDiaryDialogOpen(true)}
+              groups={groups}
             />
           </TabPanel>
         </Box>

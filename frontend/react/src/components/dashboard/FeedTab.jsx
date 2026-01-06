@@ -29,7 +29,7 @@ import {
 } from '@mui/material';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { deleteDiaryById, getFeed } from '../../services/api';
+import { deleteDiaryById, getFeed, getDiaryById } from '../../services/api';
 import { MediaPlayer } from '../diary/MediaPlayer';
 import ActivityComponent from '../diary/ActivityComponent';
 import SuggestFriendComponent from '../diary/SuggestFriendComponent';
@@ -75,6 +75,7 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
 
   const scrollRef = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [diaryIdFromHash, setDiaryIdFromHash] = useState(null);
 
   const [type, setType] = useState("diary");
 
@@ -84,6 +85,21 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
     }
   };
 
+  useEffect(() => {
+    const readHash = () => {
+      const match = window.location.hash.match(/^#diary-(\d+)$/);
+      setDiaryIdFromHash(match ? Number(match[1]) : null);
+    };
+
+    readHash();
+    window.addEventListener("hashchange", readHash);
+
+    return () => window.removeEventListener("hashchange", readHash);
+  }, []);
+
+
+  const isSingleDiaryView = Boolean(diaryIdFromHash);
+
   const scrollToTop = () => {
     scrollRef.current.scrollTo({
       top: 0,
@@ -92,6 +108,7 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
   };
 
   const loadMoreDiaries = useCallback(async (reset = false) => {
+    // if (diaryIdFromHash) return;
     if (!hasMore && !reset || loadingMore) return;
 
     try {
@@ -257,8 +274,67 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
   };
 
   useEffect(() => {
+    if (isSingleDiaryView) return;
     setDiaries(initialDiaries);
-  }, [initialDiaries]);
+  }, [initialDiaries, isSingleDiaryView]);
+
+  useEffect(() => {
+    if (isSingleDiaryView) return;
+
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      setVisible(el.scrollTop > 200);
+
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
+        loadMoreDiaries();
+      }
+    };
+
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [loadMoreDiaries, isSingleDiaryView]);
+
+  useEffect(() => {
+    if (isSingleDiaryView) return;
+
+    const handleScroll = () => {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+        loadMoreDiaries();
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [loadMoreDiaries, isSingleDiaryView]);
+
+  useEffect(() => {
+    if (!diaryIdFromHash) return;
+
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+
+    const fetchSingleDiary = async () => {
+      try {
+        const diary = await getDiaryById(diaryIdFromHash);
+
+        setDiaries(prev => {
+          if (prev.length === 0) return [diary];
+          return [diary, ...prev.slice(1)];
+        });
+
+        setOffset(prev => prev);
+        setHasMore(true);
+
+      } catch (err) {
+        setError(err.message || t('failed_load_diaries'));
+      }
+    };
+
+    fetchSingleDiary();
+  }, [diaryIdFromHash]);
+
+  const isLinkedDiary = (diary) => diary.id === diaryIdFromHash;
 
   return (
     <Box sx={{ maxWidth: '100%', overflow: 'hidden', display: 'flex', gap: 3 }}>
@@ -301,11 +377,11 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
           <MenuItem onClick={handleDeleteDiaryClick}><DeleteIcon fontSize="small" sx={{ mr: 1, color: 'error.main' }} /><Typography color="error">{t('delete')}</Typography></MenuItem>
         </Menu>
 
-  
+
         <Box ref={scrollRef} sx={{ maxHeight: '90vh', overflowY: 'auto', width: { xs: '92vw', md: '63vw' }, mx: 'auto' }}>
           <CreateDiaryComponent groups={groups} user={user} onSuccess={handleNewDiary} setError={setError} />
 
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2, pb: { xs: 3, md: 2 }, width: '100%' }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2, pb: { xs: 3, md: 2 }, width: '100%' }}>
             <TextField
               sx={{ width: { xs: '100%', sm: "50%" } }}
               label={t('search_diary')}
@@ -385,9 +461,9 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
             <NorthIcon />
           </Button>
 
-          {type === 'diary' && <ProfileDiary diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} />}
+          {type === 'diary' && <ProfileDiary groups={groups} diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} isLinkedDiary={isLinkedDiary}/>}
           {type === 'group' && <GroupDiaryComponent groups={groups} profile={profile} setError={setError} setSuccess={setSuccess} onDataUpdate={onDataUpdate} friends={friends} pendingRequests={pendingRequests} search={search} />}
-          {type === 'video' && <ProfileDiary diaries={filteredDiariesWithVideos} onDataUpdate={handleNewDiary} profile={profile} friends={friends} />}
+          {type === 'video' && <ProfileDiary groups={groups} diaries={filteredDiariesWithVideos} onDataUpdate={handleNewDiary} profile={profile} friends={friends} />}
         </Box>
       </Box>
 

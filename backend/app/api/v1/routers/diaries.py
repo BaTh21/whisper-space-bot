@@ -333,7 +333,7 @@ def update_diary_by_id(
     """Update diary endpoint with debugging"""
     try:
         # Check what fields are actually being updated
-        update_dict = diary_data.dict(exclude_unset=True, exclude_none=True)
+        update_dict = diary_data.dict(exclude_unset=True)
         
         diary = update_diary(db, diary_id, diary_data, current_user.id)
 
