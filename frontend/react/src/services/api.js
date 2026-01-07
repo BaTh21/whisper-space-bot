@@ -469,96 +469,53 @@ export const deletePendingRequest = async (pendingId) => {
   }
 };
 
-// Diary endpoints
 export const createDiary = async (data) => {
   try {
-
-    // Prepare the data - ALWAYS include images and videos arrays
     const diaryData = {
-      title: data.title,
-      content: data.content,
+      title: data.title || null,
+      content: data.content || null,
       share_type: data.share_type,
       group_ids: data.group_ids || [],
-      images: [], // ALWAYS include empty array
-      videos: [], // ALWAYS include empty array
+      parent_id: data.parent_id || null,
+      images: [],
+      videos: [],
     };
 
-    // Handle images
-    if (data.images && data.images.length > 0) {
+    if (!data.parent_id) {
 
-      // If images are already base64 strings, use them directly
-      if (
-        typeof data.images[0] === "string" &&
-        data.images[0].startsWith("data:image/")
-      ) {
-        diaryData.images = data.images;
-      } else {
-        const imagePromises = data.images.map(async (image) => {
-          if (image instanceof File) {
-            validateMediaFile(image, "image", 10, 10);
-            return await fileToBase64(image);
-          }
-          return image; // Already base64 or some other format
-        });
+      if (data.images?.length > 0) {
+        diaryData.images = await Promise.all(
+          data.images.map(async (image) => {
+            if (image instanceof File) {
+              validateMediaFile(image, "image", 10, 10);
+              return await fileToBase64(image);
+            }
+            return image;
+          })
+        );
+      }
 
-        diaryData.images = await Promise.all(imagePromises);      }
-    }
-
-    // Handle videos
-    if (data.videos && data.videos.length > 0) {
-
-      if (
-        typeof data.videos[0] === "string" &&
-        data.videos[0].startsWith("data:video/")
-      ) {
-        diaryData.videos = data.videos;
-      } else {
-        const videoPromises = data.videos.map(async (video) => {
-          if (video instanceof File) {
-            validateMediaFile(video, "video", 50, 3);
-            return await fileToBase64(video);
-          }
-          return video; // Already base64 or some other format
-        });
-
-        diaryData.videos = await Promise.all(videoPromises);
+      if (data.videos?.length > 0) {
+        diaryData.videos = await Promise.all(
+          data.videos.map(async (video) => {
+            if (video instanceof File) {
+              validateMediaFile(video, "video", 50, 3);
+              return await fileToBase64(video);
+            }
+            return video;
+          })
+        );
       }
     }
 
-    const response = await api.post("/api/v1/diaries/", diaryData, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await api.post("/api/v1/diaries/", diaryData);
     return response.data;
+
   } catch (error) {
-
-    let errorMessage = "Failed to create diary";
-    const errorData = error.response?.data;
-
-    if (errorData) {
-      if (typeof errorData === "string") {
-        errorMessage = errorData;
-      } else if (errorData.detail) {
-        if (typeof errorData.detail === "string") {
-          errorMessage = errorData.detail;
-        } else if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail
-            .map((err) => `${err.loc?.join(".") || "unknown"}: ${err.msg}`)
-            .join(", ");
-        } else if (typeof errorData.detail === "object") {
-          errorMessage = JSON.stringify(errorData.detail);
-        }
-      } else if (errorData.message) {
-        errorMessage = errorData.message;
-      } else if (errorData.errors) {
-        errorMessage = JSON.stringify(errorData.errors);
-      }
-    }
-
-    throw new Error(errorMessage);
+    throw new Error(error.response?.data?.detail || "Failed to create diary");
   }
 };
+
 
 export const createDiaryForGroup = async (groupId, data) => {
   try {

@@ -42,6 +42,14 @@ class Diary(Base):
         cascade="all, delete-orphan"
     )
     
+    parent_id = Column(Integer, ForeignKey("diaries.id", ondelete="SET NULL"), nullable=True)
+    
+    parent = relationship(
+        "Diary",
+        remote_side=[id],
+        backref="shares"
+    )
+    
     @property
     def favorited_user_ids(self) -> list[int]:
         return [fav.user_id for fav in self.favorited_by]

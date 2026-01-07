@@ -21,41 +21,29 @@ from app.crud.activity import create_activity
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     
-    # Handle images
     image_urls = []
     if diary_in.images:
-        print(f"📷 Uploading {len(diary_in.images)} images")
         try:
             image_urls = image_service_sync.save_multiple_images(diary_in.images, is_diary=True)
-            print(f"✅ {len(image_urls)} images uploaded successfully")
         except Exception as e:
-            print(f"❌ Image upload failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to upload images: {str(e)}"
             )
     
-    # Handle videos - PROCESS INDIVIDUALLY FOR THUMBNAIL GUARANTEE
     video_urls = []
     video_thumbnails = []
     if diary_in.videos:
         
         try:
-            # Process each video individually
             for idx, video_data in enumerate(diary_in.videos):
-                print(f"  Processing video {idx+1}/{len(diary_in.videos)}")
-                
                 try:
                     # This method GUARANTEES a thumbnail for videos
                     video_url, video_thumbnail = image_service_sync.save_single_media(video_data, is_diary=True)
                     
                     if video_url:
                         video_urls.append(video_url)
-                        video_thumbnails.append(video_thumbnail)  # Could be None, but array position preserved
-                        print(f"  ✅ Video {idx+1} - URL: {video_url[:50]}...")
-                        print(f"  📸 Thumbnail: {'PRESENT' if video_thumbnail else 'NONE'}")
-                    else:
-                        print(f"  ⚠️ Video {idx+1} returned no URL")
+                        video_thumbnails.append(video_thumbnail)
                         
                 except Exception as video_error:
                     print(f"  ❌ Video {idx+1} error: {str(video_error)}")
@@ -94,10 +82,25 @@ def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
         media_type = 'image'
     else:
         media_type = 'text'
+        
+    parent_diary = None
+
+    if diary_in.parent_id:
+        parent_diary = db.query(Diary).filter(
+            Diary.id == diary_in.parent_id,
+            Diary.is_deleted == False
+        ).first()
+
+        if not parent_diary:
+            raise HTTPException(
+                status_code=404,
+                detail="Original diary not found"
+            )
     
     # Create diary
     diary = Diary(
         user_id=user_id,
+        parent_id=diary_in.parent_id,
         title=diary_in.title,
         content=diary_in.content,
         share_type=ShareType(diary_in.share_type),

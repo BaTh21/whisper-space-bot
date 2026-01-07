@@ -363,6 +363,10 @@
   "content_required": "Content is required",
   "select_group": "Please select at least one group",
   "you": "You",
-  "publish": "Publish"
+  "publish": "Publish",
+  "share_this_diary": "Share this diary",
+  "shared_successfully": "Shared successfully",
+  "link_copied": "Link copied",
+  "linked_diary_not_found": "Linked diary not found"
 
 }

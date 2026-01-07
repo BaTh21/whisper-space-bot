@@ -23,6 +23,7 @@ class DiaryLikeResponse(BaseModel):
 class DiaryCreate(BaseModel):
     title: Optional[str] = Field(None, max_length=255)
     content: Optional[str] = None
+    parent_id: Optional[int] = None
     share_type: str = Field(..., pattern="^(public|friends|group|personal)$")
     group_ids: Optional[List[int]] = None
     images: Optional[List[str]] = Field(None, max_length=10)
@@ -142,6 +143,7 @@ class DiaryOut(BaseModel):
     updated_at: datetime
     comments: List[CommentResponse] = Field(default_factory=list)
     favorited_user_ids: List[int] = Field(default_factory=list)
+    parent: "DiaryOut | None" = None
     
     class Config:
         from_attributes=True

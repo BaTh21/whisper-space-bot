@@ -3,7 +3,7 @@ import { Box, Typography } from '@mui/material';
 
 const MAX_LINES = 3;
 
-export const DiaryCard = ({ diary }) => {
+export const  DiaryCard = ({ content }) => {
   const [expanded, setExpanded] = useState(false);
   const [showToggle, setShowToggle] = useState(false);
   const textRef = useRef(null);
@@ -19,11 +19,11 @@ export const DiaryCard = ({ diary }) => {
     const lines = el.scrollHeight / lineHeight;
 
     setShowToggle(lines > MAX_LINES);
-  }, [diary.content]);
+  }, [content]);
 
   return (
     <Box sx={{ mb: 2, bgcolor: 'transparent' }}>
-      {diary.content && (
+      {content && (
         <Box>
           <Typography
             ref={textRef}
@@ -37,7 +37,7 @@ export const DiaryCard = ({ diary }) => {
               whiteSpace: 'pre-wrap',
             }}
           >
-            {diary.content}
+            {content}
           </Typography>
 
           {showToggle && (

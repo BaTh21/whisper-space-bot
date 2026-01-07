@@ -271,6 +271,7 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
 
   const handleNewDiary = () => {
     onDataUpdate();
+
   };
 
   useEffect(() => {
@@ -309,32 +310,39 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
     return () => window.removeEventListener("scroll", handleScroll);
   }, [loadMoreDiaries, isSingleDiaryView]);
 
+  const fetchSingleDiary = async () => {
+    try {
+      const diary = await getDiaryById(diaryIdFromHash);
+
+      if (diary) {
+        setDiaries(prev => {
+          if (prev.length === 0) return [diary];
+          return [diary, ...prev.slice(1)];
+        });
+      } 
+      
+
+      setOffset(prev => prev);
+      setHasMore(true);
+
+    } catch (err) {
+      setError(err.message || t('failed_load_diaries'));
+    }
+  };
+
   useEffect(() => {
     if (!diaryIdFromHash) return;
 
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
 
-    const fetchSingleDiary = async () => {
-      try {
-        const diary = await getDiaryById(diaryIdFromHash);
-
-        setDiaries(prev => {
-          if (prev.length === 0) return [diary];
-          return [diary, ...prev.slice(1)];
-        });
-
-        setOffset(prev => prev);
-        setHasMore(true);
-
-      } catch (err) {
-        setError(err.message || t('failed_load_diaries'));
-      }
-    };
-
     fetchSingleDiary();
   }, [diaryIdFromHash]);
 
   const isLinkedDiary = (diary) => diary.id === diaryIdFromHash;
+
+  const handleDiaryDeleted = (deletedId) => {
+    setDiaries(prev => prev.filter(d => d.id !== deletedId));
+  };
 
   return (
     <Box sx={{ maxWidth: '100%', overflow: 'hidden', display: 'flex', gap: 3 }}>
@@ -461,9 +469,9 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
             <NorthIcon />
           </Button>
 
-          {type === 'diary' && <ProfileDiary groups={groups} diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} isLinkedDiary={isLinkedDiary}/>}
+          {type === 'diary' && <ProfileDiary groups={groups} diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} isLinkedDiary={isLinkedDiary} onDiaryDeleted={handleDiaryDeleted}/>}
           {type === 'group' && <GroupDiaryComponent groups={groups} profile={profile} setError={setError} setSuccess={setSuccess} onDataUpdate={onDataUpdate} friends={friends} pendingRequests={pendingRequests} search={search} />}
-          {type === 'video' && <ProfileDiary groups={groups} diaries={filteredDiariesWithVideos} onDataUpdate={handleNewDiary} profile={profile} friends={friends} />}
+          {type === 'video' && <ProfileDiary groups={groups} diaries={filteredDiariesWithVideos} onDataUpdate={handleNewDiary} profile={profile} friends={friends} onDiaryDeleted={handleDiaryDeleted}/>}
         </Box>
       </Box>
 

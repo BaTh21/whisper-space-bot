@@ -241,6 +241,9 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
             variant="contained"
             disabled={isPostDisabled}
             onClick={formik.handleSubmit}
+            sx={{
+              borderRadius: 1
+            }}
           >
             {uploading ? t('publishing') : t('publish')}
           </Button>

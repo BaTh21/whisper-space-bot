@@ -361,6 +361,10 @@
   "content_required": "ត្រូវការខ្លឹមសារ",
   "select_group": "សូមជ្រើសរើសក្រុមយ៉ាងហោចណាស់មួយ",
   "you": "អ្នក",
-  "publish": "បង្ហោះ"
+  "publish": "បង្ហោះ",
+  "share_this_diary": "ចែករំលែកឥឡូវនេះ",
+  "shared_successfully": "បានចែករំលែកដោយជោគជ័យ",
+  "link_copied": "បានចម្លងតំណរភ្ជាប់",
+  "linked_diary_not_found": "តំណរភ្ជាប់កំណត់ហេតុមិនមានទេ"
 
 }

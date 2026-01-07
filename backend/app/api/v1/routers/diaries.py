@@ -90,6 +90,7 @@ def create_diary_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {str(e)}"
         )
+        
 @router.post("/groups/{group_id}", response_model=DiaryOut)
 def create_diary_for_group_(group_id: int,
                             diary_data: CreateDiaryForGroup,
@@ -114,6 +115,7 @@ def get_feed(
             joinedload(Diary.groups),
             joinedload(Diary.comments).joinedload(DiaryComment.user),
             joinedload(Diary.likes).joinedload(DiaryLike.user),
+            joinedload(Diary.parent).joinedload(Diary.author),
             joinedload(Diary.favorited_by)
         )
         .filter(Diary.id.in_(visible_ids))
@@ -169,7 +171,24 @@ def get_feed(
                     replies=[]
                 )
                 for c in d.comments or []
-            ]
+            ],
+            parent=DiaryOut(
+                id=d.parent.id,
+                author=CreatorResponse(
+                    id=d.parent.author.id,
+                    username=d.parent.author.username,
+                    avatar_url=d.parent.author.avatar_url
+                ),
+                title=d.parent.title,
+                content=d.parent.content,
+                share_type=d.parent.share_type.value,
+                images=d.parent.images or [],
+                videos=d.parent.videos or [],
+                video_thumbnails=d.parent.video_thumbnails or [],
+                media_type=d.parent.media_type,
+                created_at=d.parent.created_at,
+                updated_at=d.parent.updated_at,
+            ) if d.parent else None
         )
         result.append(diary_out)
 
@@ -189,6 +208,7 @@ def get_my_diaries(
             joinedload(Diary.groups),
             joinedload(Diary.likes).joinedload(DiaryLike.user),
             joinedload(Diary.comments).joinedload(DiaryComment.user),
+            joinedload(Diary.parent).joinedload(Diary.author),
             joinedload(Diary.favorited_by)
         )
         .filter(Diary.user_id == current_user.id)
@@ -244,7 +264,24 @@ def get_my_diaries(
                     replies=[]
                 )
                 for c in d.comments or []
-            ]
+            ],
+            parent=DiaryOut(
+                id=d.parent.id,
+                author=CreatorResponse(
+                    id=d.parent.author.id,
+                    username=d.parent.author.username,
+                    avatar_url=d.parent.author.avatar_url
+                ),
+                title=d.parent.title,
+                content=d.parent.content,
+                share_type=d.parent.share_type.value,
+                images=d.parent.images or [],
+                videos=d.parent.videos or [],
+                video_thumbnails=d.parent.video_thumbnails or [],
+                media_type=d.parent.media_type,
+                created_at=d.parent.created_at,
+                updated_at=d.parent.updated_at,
+            ) if d.parent else None
         )
         result.append(diary_out)
 
@@ -273,7 +310,8 @@ def get_diary_by_id(
     diary = db.query(Diary).options(
         joinedload(Diary.author),
         joinedload(Diary.groups),
-        joinedload(Diary.likes).joinedload(DiaryLike.user)
+        joinedload(Diary.likes).joinedload(DiaryLike.user),
+        joinedload(Diary.parent).joinedload(Diary.author),
     ).filter(Diary.id == diary_id).first()
     
     if not diary:
@@ -320,7 +358,24 @@ def get_diary_by_id(
         ],
         is_deleted=diary.is_deleted,
         created_at=diary.created_at,
-        updated_at=diary.updated_at
+        updated_at=diary.updated_at,
+        parent=DiaryOut(
+            id=diary.parent.id,
+            author=CreatorResponse(
+                id=diary.parent.author.id,
+                username=diary.parent.author.username,
+                avatar_url=diary.parent.author.avatar_url
+            ),
+            title=diary.parent.title,
+            content=diary.parent.content,
+            share_type=diary.parent.share_type.value,
+            images=diary.parent.images or [],
+            videos=diary.parent.videos or [],
+            video_thumbnails=diary.parent.video_thumbnails or [],
+            media_type=diary.parent.media_type,
+            created_at=diary.parent.created_at,
+            updated_at=diary.parent.updated_at,
+        ) if diary.parent else None
     )
 
 @router.patch("/{diary_id}", response_model=DiaryOut)

@@ -59,8 +59,9 @@ import { MediaPlayer } from './MediaPlayer';
 import { convertFilesToBase64 } from './convertFilesToBase64';
 import { getVideoThumbnail } from './getVideoThumbnail';
 import ShareComponent from './ShareComponent';
+import ParentDiaryComponent from './ParentDiaryComponent';
 
-const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchStats, isLinkedDiary = () => false }) => {
+const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchStats, isLinkedDiary = () => false, onDiaryDeleted=()=> false }) => {
   const [diaryList, setDiaryList] = useState(diaries || []);
   const [loading, setLoading] = useState(false);
   const [expandedDiary, setExpandedDiary] = useState(null);
@@ -112,6 +113,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
   const [showButton, setShowButton] = useState(false);
   const [sharePopup, setSharePopup] = useState(false);
   const [copyLink, setCopyLink] = useState(null);
+  const [selectedDiaryId, setSelectedDiaryId] = useState(null);
 
   const toggleShowButton = () => {
     setShowButton(prev => !prev);
@@ -439,8 +441,11 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
 
       fetchStats?.();
 
-      handleDeleteCancel();
+      
       onDataUpdate();
+
+      onDiaryDeleted?.(diaryToDelete.id);
+      handleDeleteCancel();
     } catch (err) {
       showMessage(err.message || t('failed_delete_diary'), 'error');
     } finally {
@@ -1750,7 +1755,8 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                             </Typography>
                           )}
 
-                          <DiaryCard diary={diary} />
+                          <DiaryCard content={diary.content} />
+                          <ParentDiaryComponent parent={diary.parent} friends={friends} profile={profile}/>
 
                           <Divider />
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: { md: 2 }, mb: expandedDiary === diary.id ? 0 : 2 }}>
@@ -1818,6 +1824,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                 sx={{ minWidth: 40, justifyContent: 'center' }}
                                 onClick={() => {
                                   handleCopyLink(diary.id);
+                                  setSelectedDiaryId(diary.id);
                                   setSharePopup(true);
                                 }}
                               >
@@ -2077,6 +2084,10 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
         friends={friends}
         copyLink={copyLink}
         showMessage={showMessage}
+        profile={profile}
+        diaryId={selectedDiaryId}
+        groups={groups}
+        onDataUpdate={onDataUpdate}
       />
 
     </Box>
