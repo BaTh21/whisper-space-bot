@@ -7,7 +7,7 @@ from typing import Optional
 from app.schemas.base import BaseResponse
 from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, Token, UserCreate, UserLogin, VerifyCodeRequest
 from app.core.database import get_db
-from app.crud.user import get_by_email, create, verify
+from app.crud.user import get_by_email, create, get_by_email_or_username, verify
 from app.crud.auth import create_password_reset_code, create_verification_code, delete_code, delete_reset_code, get_valid_code, get_valid_refresh_token, get_valid_reset_code, revoke_refresh_token, store_refresh_token
 from app.services.email import send_password_reset_email, send_verification_email, send_verification_email_sync
 from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password
@@ -137,7 +137,8 @@ def login(
     request: Request = None,
     db: Session = Depends(get_db)
 ):
-    user = get_by_email(db, form_data.username)
+    user = get_by_email_or_username(db, form_data.username)
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -170,7 +171,6 @@ def login(
         refresh_token=refresh_token_jwt,
         token_type="bearer"
     )
-
 
 @router.post("/logout", response_model=BaseResponse)
 def logout(
