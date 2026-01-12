@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from app.models.group import Group
 from app.services.image_service_sync import image_service_sync
 from app.crud.activity import create_activity
+from app.models.comment_like import DiaryCommentLike
 
 def create_diary(db: Session, user_id: int, diary_in: DiaryCreate) -> Diary:
     
@@ -676,3 +677,39 @@ def get_list_favorite_diarie(db, user_id: int):
     )
     
     return favovites
+
+def get_like_instance(db: Session, comment_id: int, user_id: int):
+    return (
+        db.query(DiaryCommentLike)
+        .filter(
+            DiaryCommentLike.comment_id == comment_id,
+            DiaryCommentLike.user_id == user_id,
+        )
+        .first()
+    )
+
+
+def create_comment_like(db: Session, comment_id: int, user_id: int):
+    like = DiaryCommentLike(
+        comment_id=comment_id,
+        user_id=user_id,
+    )
+    db.add(like)
+    db.commit()
+    db.refresh(like)
+    return like
+
+
+def delete_comment_like(db: Session, like: DiaryCommentLike):
+    db.delete(like)
+    db.commit()
+    
+def toggle_comment_like(db: Session, comment_id: int, user_id: int) -> bool:
+    like = get_like_instance(db, comment_id, user_id)
+
+    if like:
+        delete_comment_like(db, like)
+        return False
+    else:
+        create_comment_like(db, comment_id, user_id)
+        return True

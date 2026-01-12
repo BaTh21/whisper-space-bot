@@ -315,7 +315,9 @@ export const getAllSatusFriends = async () => {
 };
 
 export const getActivityInbox = async (limit = 20, offset = 0) => {
-  const res = await api.get(`/api/v1/activities/?limit=${limit}&offset=${offset}`);
+  const res = await api.get(
+    `/api/v1/activities/?limit=${limit}&offset=${offset}`
+  );
   return res.data;
 };
 
@@ -482,7 +484,6 @@ export const createDiary = async (data) => {
     };
 
     if (!data.parent_id) {
-
       if (data.images?.length > 0) {
         diaryData.images = await Promise.all(
           data.images.map(async (image) => {
@@ -510,12 +511,10 @@ export const createDiary = async (data) => {
 
     const response = await api.post("/api/v1/diaries/", diaryData);
     return response.data;
-
   } catch (error) {
     throw new Error(error.response?.data?.detail || "Failed to create diary");
   }
 };
-
 
 export const createDiaryForGroup = async (groupId, data) => {
   try {
@@ -591,7 +590,6 @@ const validateMediaFile = (file, type, maxSizeMB, maxCount) => {
 
 export const updateDiaryById = async (diaryId, data) => {
   try {
-
     // Prepare update data
     const updateData = {};
 
@@ -604,7 +602,6 @@ export const updateDiaryById = async (diaryId, data) => {
     // Handle images
     if (data.images !== undefined) {
       if (Array.isArray(data.images)) {
-
         // Filter out any null/undefined values
         const validImages = data.images.filter((img) => img != null);
 
@@ -651,7 +648,6 @@ export const updateDiaryById = async (diaryId, data) => {
     // Handle videos
     if (data.videos !== undefined) {
       if (Array.isArray(data.videos)) {
-
         const validVideos = data.videos.filter((vid) => vid != null);
 
         if (validVideos.length === 0) {
@@ -695,7 +691,6 @@ export const updateDiaryById = async (diaryId, data) => {
 
     return response.data;
   } catch (error) {
-
     // Extract detailed error message
     let errorMessage = "Failed to update diary";
     const errorData = error.response?.data;
@@ -800,22 +795,22 @@ export const getFavoriteDiaryList = async () => {
 };
 
 export const handleSaveDiary = async (diaryId) => {
-  try{
+  try {
     const res = await api.post(`/api/v1/diaries/${diaryId}/favorites`);
     return res.data;
-  }catch(error){
+  } catch (error) {
     throw new Error(error.response?.data?.detail);
   }
-}
+};
 
 export const handleRemoveDiary = async (diaryId) => {
-  try{
+  try {
     await api.delete(`/api/v1/diaries/${diaryId}/favorites`);
     return true;
-  }catch(error){
+  } catch (error) {
     throw new Error(error.response?.data?.detail);
   }
-}
+};
 
 export const likeDiary = async (diaryId) => {
   try {
@@ -838,6 +833,16 @@ export const likeDiary = async (diaryId) => {
   }
 };
 
+export const toggleCommentLike = async (commentId) => {
+  const res = await api.post(`/api/v1/diaries/comments/${commentId}/like`);
+  return res.data;
+};
+
+export const getCommentLike = async (commentId) => {
+  const res = await api.get(`/api/v1/diaries/comments/${commentId}/like`);
+  return res.data;
+};
+
 export const commentOnDiary = async (
   diaryId,
   content,
@@ -849,12 +854,10 @@ export const commentOnDiary = async (
       content,
     };
 
-    // Add parent_id if it exists (for replies)
     if (parentId !== null) {
       payload.parent_id = parentId;
     }
 
-    // Add images if they exist
     if (images !== null && images.length > 0) {
       payload.images = images;
     }
@@ -873,6 +876,7 @@ export const commentOnDiary = async (
     );
   }
 };
+
 export const updateComment = async (commentId, content, images = null) => {
   try {
     const payload = {
@@ -925,9 +929,30 @@ export const getDiaryForEdit = async (diaryId) => {
   }
 };
 
-export const getDiaryComments = async (diaryId) => {
-  const response = await api.get(`/api/v1/diaries/${diaryId}/comments`);
+export const getDiaryComments = async (diaryId, limit = 10, offset = 0) => {
+  const response = await api.get(`/api/v1/diaries/${diaryId}/comments`, {
+    params: { limit, offset },
+  });
   return response.data;
+};
+
+export const getCommentReplies = async (commentId, limit = 2, offset = 0) => {
+  try {
+    const response = await api.get(
+      `/api/v1/diaries/comments/${commentId}/replies`,
+      {
+        params: { limit, offset },
+      }
+    );
+
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return response.data?.replies || [];
+  } catch (error) {
+    console.error("Failed to fetch replies:", error);
+    return [];
+  }
 };
 
 export const updateCommentById = async (commentId, data) => {

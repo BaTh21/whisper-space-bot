@@ -170,6 +170,7 @@ class DiaryCommentOut(TimestampMixin):
     images: Optional[List[str]] = None
     parent_id: Optional[int] = None
     replies: Optional[List['DiaryCommentOut']] = None
+    replies_count: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -339,3 +340,16 @@ class DiaryFavoriteResponse(BaseModel):
     
     class Config:
         from_attributes = True 
+        
+class DiaryCommentReplyOut(BaseModel):
+    id: int
+    diary_id: int
+    user: CreatorResponse
+    content: str
+    images: Optional[List[str]] = None
+    created_at: datetime
+    
+class CommentLikeResponse(BaseModel):
+    comment_id: int
+    liked: bool
+    like_count: int 

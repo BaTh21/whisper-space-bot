@@ -2,6 +2,7 @@ from sqlalchemy import ARRAY, Column, String, Text, DateTime, ForeignKey, Intege
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.models.base import Base
+from app.models.comment_like import DiaryCommentLike
 
 class DiaryComment(Base):
     __tablename__ = "diary_comments"
@@ -18,3 +19,17 @@ class DiaryComment(Base):
     diary = relationship("Diary", back_populates="comments")
     user = relationship("User", backref="diary_comments")
     parent = relationship("DiaryComment", remote_side=[id], backref="replies")
+    
+    likes = relationship(
+        DiaryCommentLike,
+        back_populates="comment",
+        cascade="all, delete-orphan"
+    )
+
+    @property
+    def like_count(self) -> int:
+        return len(self.likes)
+
+    @property
+    def liked_user_ids(self) -> list[int]:
+        return [like.user_id for like in self.likes]
