@@ -279,7 +279,8 @@ export const DiaryReplyComponent = ({
           {/* Reply Input */}
           {(replyingTo === comment.id || localReplying) && !isTooDeep && !localEditing && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, border: 1, borderRadius: 2, mt: 1, p: 1 }}>
-              <TextField fullWidth size="small" multiline rows={1} value={localReplyText} onChange={(e) => setLocalReplyText(e.target.value)} sx={{ '& fieldset': { border: 'none' } }} />
+              <TextField fullWidth size="small" multiline rows={2} value={localReplyText} onChange={(e) => setLocalReplyText(e.target.value)} sx={{ '& fieldset': { border: 'none' } }} />
+              <Divider/>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'space-between' }}>
                 <Button component="label" size="small"><ImageIcon /><input type="file" hidden multiple accept="image/*" onChange={(e) => handleImageUpload(e, null, `reply-${comment.id}`)} /></Button>
                 <Box sx={{ display: 'flex', gap: 1 }}>

@@ -18,6 +18,7 @@ import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getFeed, getFriends, getMe, getPendingRequests, getUserGroups, getSuggestFriends, getPendingFriends, getBlockedUsers, getAllSatusFriends } from '../services/api';
 import ChatTab from '../components/dashboard/ChatTab';
+import SettingTab from '../components/dashboard/SettingTab';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -65,6 +66,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
     '/friends': 2,
     '/notes': 3,
     '/profile': 4,
+    '/setting': 5,
   };
 
   // Map tab indices to URL paths
@@ -74,6 +76,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
     2: '/friends',
     3: '/notes',
     4: '/profile',
+    5: '/setting',
   };
 
   // Handle URL-based tab navigation
@@ -261,7 +264,11 @@ const DashboardPage = ({ defaultTab = 0 }) => {
               friends={allSatusFriends}
               onNewDiary={() => setDiaryDialogOpen(true)}
               groups={groups}
+              onSetting={() => navigate('/setting')}
             />
+          </TabPanel>
+          <TabPanel value={activeTab} index={5}>
+            <SettingTab />
           </TabPanel>
         </Box>
       </Box>
