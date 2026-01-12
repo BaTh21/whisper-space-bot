@@ -66,7 +66,7 @@ const App = () => (
               }
             />
             <Route
-              path="/groups"
+              path="/notes"
               element={
                 <ProtectedRoute>
                   <DashboardPage defaultTab={3} />
@@ -74,7 +74,7 @@ const App = () => (
               }
             />
             <Route
-              path="/notes"
+              path="/profile"
               element={
                 <ProtectedRoute>
                   <DashboardPage defaultTab={4} />
@@ -82,31 +82,14 @@ const App = () => (
               }
             />
             <Route
-              path="/search"
+              path="/setting"
               element={
                 <ProtectedRoute>
                   <DashboardPage defaultTab={5} />
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/blocked"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={6} />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={7} />
-                </ProtectedRoute>
-              }
-            />
            
-
             {/* Redirect root to feed */}
             <Route path="/" element={<Navigate to="/feed" replace />} />
 

@@ -350,7 +350,7 @@ export const CommentItemWithActions = ({
           {(replyingTo === comment.id || localReplying) && !isTooDeep && !localEditing && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, border: 1, borderRadius: 2, mt: 1 }}>
               <Box sx={{ position: 'relative', flex: 1 }}>
-                <TextField fullWidth size="small" value={localReplyText} onChange={(e) => setLocalReplyText(e.target.value)} multiline rows={1} sx={{ '& textarea': { background: 'transparent', zIndex: 1 }, '& fieldset': { border: 'none' } }} />
+                <TextField fullWidth size="small" value={localReplyText} onChange={(e) => setLocalReplyText(e.target.value)} multiline rows={2} sx={{ '& textarea': { background: 'transparent', zIndex: 1 }, '& fieldset': { border: 'none' } }} />
                 <Divider />
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', p: 1 }}>
                   <Button component="label" size="small" sx={{ minWidth: 0 }}>

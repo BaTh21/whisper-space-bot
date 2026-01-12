@@ -49,7 +49,7 @@ import { deleteAvatar, getMyFeed, updateMe, uploadAvatar, getMyDiaryStats, getFa
 import ProfileDiary from '../diary/ProfileDiary';
 import SystemLogs from '../SystemLogs';
 
-const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, onNewDiary, groups }) => {
+const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, onNewDiary, groups, onSetting }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -670,7 +670,8 @@ const ProfileSection = ({ profile, setProfile, setError, setSuccess, friends, on
                     <IconButton
                       variant="outlined"
                       size='small'
-                      onClick={() => setSettingsDialogOpen(true)}
+                      // onClick={() => setSettingsDialogOpen(true)}
+                      onClick={onSetting}
                       sx={{
                         borderRadius: 2,
                         fontWeight: 600,

@@ -10,7 +10,6 @@ import LogoImg from '/whisperspace.png';
 
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import HomeIcon from '@mui/icons-material/Home';
-import LanguageIcon from '@mui/icons-material/Language';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MailIcon from '@mui/icons-material/Mail';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -19,6 +18,9 @@ import PersonIcon from '@mui/icons-material/Person';
 import StickyNote2Icon from '@mui/icons-material/StickyNote2';
 import InboxComponent from './dialogs/InboxComponent';
 import AssistantIcon from '@mui/icons-material/Assistant';
+import SettingsIcon from '@mui/icons-material/Settings';
+import CambodiaImg from '../assets/cambodia.png';
+import EnglishImg from '../assets/english.png';
 
 const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const { t, i18n } = useTranslation();
@@ -49,6 +51,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
     '/friends': 2,
     '/notes': 3,
     '/profile': 4,
+    '/setting': 5
   };
 
   const [activeTab, setActiveTab] = useState(pathToTabMap[location.pathname] || 0);
@@ -147,11 +150,14 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
       2: '/friends',
       3: '/notes',
       4: '/profile',
+      5: '/setting'
     };
     const newPath = tabToPathMap[newValue] || '/feed';
     navigate(newPath);
     if (setNewActiveTab) setNewActiveTab(newValue);
   };
+
+  const isEnglish = localStorage.getItem("i18nextLng");
 
   const drawer = (
     <Box
@@ -176,6 +182,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
         onChange={handleTabChange}
         sx={{
           width: "100%",
+          position: 'relative',
           "& .MuiTab-root": {
             display: "flex",
             flexDirection: "row",
@@ -206,7 +213,8 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
         <Tab icon={<AssistantIcon />} label={showLabel ? t("messages") : null} />
         <Tab icon={<PeopleIcon />} label={showLabel ? t("friends") : null} />
         <Tab icon={<StickyNote2Icon />} label={showLabel ? t("notes") : null} />
-        <Tab icon={<PersonIcon />} label={showLabel ? t("profile") : null} />
+        <Tab icon={<PersonIcon />} label={showLabel ? t("profile") : null} sx={{ mt: 35 }} />
+        <Tab icon={<SettingsIcon />} label={showLabel ? t("setting") : null} />
       </Tabs>
     </Box>
   );
@@ -296,19 +304,35 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
               {/* Language Button */}
               {isAuthenticated && (
                 <>
-                  <IconButton
-                    color="inherit"
-                    onClick={handleLangMenuOpen}
-                    sx={{
-                      '&:hover': {
-                        bgcolor: 'rgba(255, 255, 255, 0.1)',
-                        transform: 'scale(1.05)'
-                      },
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <LanguageIcon />
-                  </IconButton>
+                  {isEnglish === 'km' ? (
+                    <img
+                      src={CambodiaImg}
+                      alt="Cambodia"
+                      style={{
+                        width: 24,
+                        height: 16,
+                        marginLeft: 4,
+                        transition: 'transform 0.2s',  // smooth transition
+                        cursor: 'pointer',             // optional, shows pointer
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      onClick={handleLangMenuOpen} />
+                  ) : (
+                    <img
+                      src={EnglishImg}
+                      alt="Cambodia"
+                      style={{
+                        width: 24,
+                        height: 16,
+                        marginLeft: 4,
+                        transition: 'transform 0.2s',  // smooth transition
+                        cursor: 'pointer',             // optional, shows pointer
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      onClick={handleLangMenuOpen} />
+                  )}
                   <Menu
                     anchorEl={langAnchorEl}
                     open={langMenuOpen}
@@ -404,7 +428,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
 
                   {/* User Menu */}
                   <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose} PaperProps={{ sx: { mt: 1, minWidth: 180 } }}>
-                    <MenuItem onClick={() => { handleMenuClose(); navigate('/profile'); if (onProfileClick) onProfileClick(7); }}>
+                    <MenuItem onClick={() => { handleMenuClose(); navigate('/profile'); if (onProfileClick) onProfileClick(4); }}>
                       <PersonIcon sx={{ mr: 1.5 }} /> {t("profile")}
                     </MenuItem>
                     <MenuItem onClick={() => { handleMenuClose(); setOpen(true); }}>

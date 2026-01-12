@@ -159,7 +159,7 @@ function ShareComponent({
                 fullWidth
                 variant="standard"
                 InputProps={{ disableUnderline: true, fontSize: '1.1rem' }}
-                onFocus={toggleShowContent}
+                onFocus={()=> {setShowContent(true)}}
               />
 
               {showContent && (
