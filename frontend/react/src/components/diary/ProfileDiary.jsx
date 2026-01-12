@@ -60,8 +60,9 @@ import { convertFilesToBase64 } from './convertFilesToBase64';
 import { getVideoThumbnail } from './getVideoThumbnail';
 import ShareComponent from './ShareComponent';
 import ParentDiaryComponent from './ParentDiaryComponent';
+import ExpandMoreSharpIcon from '@mui/icons-material/ExpandMoreSharp';
 
-const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchStats, isLinkedDiary = () => false, onDiaryDeleted=()=> false }) => {
+const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchStats, isLinkedDiary = () => false, onDiaryDeleted = () => false }) => {
   const [diaryList, setDiaryList] = useState(diaries || []);
   const [loading, setLoading] = useState(false);
   const [expandedDiary, setExpandedDiary] = useState(null);
@@ -114,6 +115,8 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
   const [sharePopup, setSharePopup] = useState(false);
   const [copyLink, setCopyLink] = useState(null);
   const [selectedDiaryId, setSelectedDiaryId] = useState(null);
+  const [diaryCommentsOffset, setDiaryCommentsOffset] = useState({});
+  const COMMENTS_PREVIEW_LIMIT = 2;
 
   const toggleShowButton = () => {
     setShowButton(prev => !prev);
@@ -441,7 +444,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
 
       fetchStats?.();
 
-      
+
       onDataUpdate();
 
       onDiaryDeleted?.(diaryToDelete.id);
@@ -580,10 +583,14 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
       const newComment = await commentOnDiary(diaryId, commentText, null, images);
 
       setDiaryComments(prev => {
-        const existingComments = prev[diaryId] || [];
+        const diaryEntry = prev[diaryId] || { all: [], visibleCount: 5 };
+
         return {
           ...prev,
-          [diaryId]: [...existingComments, newComment]
+          [diaryId]: {
+            ...diaryEntry,
+            all: [...diaryEntry.all, newComment],
+          }
         };
       });
 
@@ -597,49 +604,6 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
     }
   };
 
-  // Add reply
-  const handleAddReply = async (diaryId, parentCommentId, replyText, images = []) => {
-    if (!replyText?.trim()) return;
-
-    try {
-      const reply = await commentOnDiary(diaryId, replyText, parentCommentId, images);
-
-      // Update comments state
-      setDiaryComments(prev => {
-        const updateWithReply = (comments) => {
-          return comments.map(comment => {
-            if (comment.id === parentCommentId) {
-              return {
-                ...comment,
-                replies: [...(comment.replies || []), reply]
-              };
-            }
-            if (comment.replies) {
-              return {
-                ...comment,
-                replies: updateWithReply(comment.replies)
-              };
-            }
-            return comment;
-          });
-        };
-
-        return {
-          ...prev,
-          [diaryId]: updateWithReply(prev[diaryId] || [])
-        };
-      });
-
-      // Clear reply form
-      setSelectedCommentImages(prev => ({ ...prev, [`reply-${parentCommentId}`]: [] }));
-      setReplyingTo(null);
-      showMessage(t('reply_added'));
-    } catch (err) {
-      showMessage(err.message || 'Failed to add reply', 'error');
-    }
-  };
-
-  // Expand diary
   const handleExpandDiary = async (diaryId) => {
     if (expandedDiary === diaryId) {
       setExpandedDiary(null);
@@ -650,15 +614,51 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
 
     try {
       const [comments, likesCount] = await Promise.all([
-        getDiaryComments(diaryId).catch(() => []),
+        getDiaryComments(diaryId, COMMENTS_PREVIEW_LIMIT, 0).catch(() => []),
         getDiaryLikes(diaryId).catch(() => 0),
       ]);
 
-      setDiaryComments(prev => ({ ...prev, [diaryId]: comments }));
+      setDiaryComments(prev => ({
+        ...prev,
+        [diaryId]: {
+          all: comments,
+          visibleCount: COMMENTS_PREVIEW_LIMIT,
+        },
+      }));
+
+      setDiaryCommentsOffset(prev => ({
+        ...prev,
+        [diaryId]: comments.length,
+      }));
+
       setDiaryLikes(prev => ({ ...prev, [diaryId]: likesCount }));
     } catch (err) {
       console.error('Failed to fetch diary details:', err);
     }
+  };
+
+  const handleLoadMoreComments = async (diaryId) => {
+    const offset = diaryCommentsOffset[diaryId] || 0;
+
+    const newComments = await getDiaryComments(
+      diaryId,
+      COMMENTS_PREVIEW_LIMIT,
+      offset
+    );
+
+    setDiaryComments(prev => ({
+      ...prev,
+      [diaryId]: {
+        ...prev[diaryId],
+        all: [...prev[diaryId].all, ...newComments],
+        visibleCount: prev[diaryId].visibleCount + COMMENTS_PREVIEW_LIMIT,
+      },
+    }));
+
+    setDiaryCommentsOffset(prev => ({
+      ...prev,
+      [diaryId]: offset + newComments.length,
+    }));
   };
 
   // Edit comment
@@ -666,29 +666,37 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
     try {
       const updatedComment = await updateComment(commentId, content, images);
 
-      // Update state
       setDiaryComments(prev => {
-        const updateCommentRecursive = (comments) => {
+        const updateCommentRecursive = (comments = []) => {
           return comments.map(comment => {
             if (comment.id === commentId) {
               return {
+                ...comment,
                 ...updatedComment,
-                replies: comment.replies
+                replies: comment.replies || [],
               };
             }
-            if (comment.replies) {
+
+            if (comment.replies?.length) {
               return {
                 ...comment,
-                replies: updateCommentRecursive(comment.replies)
+                replies: updateCommentRecursive(comment.replies),
               };
             }
+
             return comment;
           });
         };
 
-        const updatedState = { ...prev };
-        Object.keys(updatedState).forEach(diaryId => {
-          updatedState[diaryId] = updateCommentRecursive(updatedState[diaryId]);
+        const updatedState = {};
+
+        Object.keys(prev).forEach(diaryId => {
+          const diaryEntry = prev[diaryId];
+
+          updatedState[diaryId] = {
+            ...diaryEntry,
+            all: updateCommentRecursive(diaryEntry.all),
+          };
         });
 
         return updatedState;
@@ -721,21 +729,27 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
     try {
       await deleteCommentById(commentId);
 
-      // Remove from state
       setDiaryComments(prev => {
-        const removeCommentRecursive = (comments) => {
-          return comments.filter(comment => {
-            if (comment.id === commentId) return false;
-            if (comment.replies) {
-              comment.replies = removeCommentRecursive(comment.replies);
-            }
-            return true;
-          });
+        const removeCommentRecursive = (comments = []) => {
+          return comments
+            .filter(comment => comment.id !== commentId)
+            .map(comment => ({
+              ...comment,
+              replies: comment.replies
+                ? removeCommentRecursive(comment.replies)
+                : [],
+            }));
         };
 
-        const updatedState = { ...prev };
-        Object.keys(updatedState).forEach(diaryId => {
-          updatedState[diaryId] = removeCommentRecursive(updatedState[diaryId]);
+        const updatedState = {};
+
+        Object.keys(prev).forEach(diaryId => {
+          const diaryEntry = prev[diaryId];
+
+          updatedState[diaryId] = {
+            ...diaryEntry,
+            all: removeCommentRecursive(diaryEntry.all),
+          };
         });
 
         return updatedState;
@@ -1052,6 +1066,9 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                   );
                   setCopyLink(`${window.location.origin}/feed#diary-${diaryId}`);
                 };
+
+                const comments = diaryComments[diary.id];
+                const rootCommentsCount = diary.comments.filter(c => c.parent_id === null).length;
 
                 return (
                   <Box key={diary.id} id={`diary-${diary.id}`} sx={{ scrollMarginTop: { xs: '80px', md: '10px' } }}>
@@ -1756,7 +1773,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                           )}
 
                           <DiaryCard content={diary.content} />
-                          <ParentDiaryComponent parent={diary.parent} friends={friends} profile={profile}/>
+                          <ParentDiaryComponent parent={diary.parent} friends={friends} profile={profile} />
 
                           <Divider />
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: { md: 2 }, mb: expandedDiary === diary.id ? 0 : 2 }}>
@@ -1771,7 +1788,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                   fontWeight: likedDiaries.has(diary.id) ? 'bold' : 'normal',
                                   transition: 'color 0.2s, transform 0.2s',
                                   justifyContent: 'center',
-                                  '&:hover': { transform: 'scale(1.05)' },
+                                  '&:hover': { transform: 'scale(1.05)', backgroundColor: 'transparent' },
                                   display: 'flex',
                                   gap: 1,
                                   alignItems: 'center'
@@ -1800,7 +1817,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                               <Button
                                 onClick={() => handleExpandDiary(diary.id)}
                                 size="medium"
-                                sx={{ minWidth: 40, justifyContent: 'center' }}
+                                sx={{ minWidth: 40, justifyContent: 'center', '&:hover': {backgroundColor: 'transparent'} }}
                               >
                                 {isMobile ? (
                                   <ChatBubbleOutlineOutlinedIcon />
@@ -1821,7 +1838,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                             <Tooltip title={`Share this post`}>
                               <Button
                                 size="medium"
-                                sx={{ minWidth: 40, justifyContent: 'center' }}
+                                sx={{ minWidth: 40, justifyContent: 'center', '&:hover': {backgroundColor: 'transparent'} }}
                                 onClick={() => {
                                   handleCopyLink(diary.id);
                                   setSelectedDiaryId(diary.id);
@@ -1842,7 +1859,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                   color="success"
                                   disabled={loading}
                                   onClick={() => handleRemove(diary.id)}
-                                  sx={{ minWidth: 40 }}
+                                  sx={{ minWidth: 40, '&:hover': {backgroundColor: 'transparent'} }}
                                 >
                                   <TurnedInIcon />
                                   {!isMobile && <Typography ml={1}>{t('saved')}</Typography>}
@@ -1855,7 +1872,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                   size="medium"
                                   disabled={loading}
                                   onClick={() => handleSave(diary.id)}
-                                  sx={{ minWidth: 40 }}
+                                  sx={{ minWidth: 40, '&:hover': {backgroundColor: 'transparent'} }}
                                 >
                                   <TurnedInNotOutlinedIcon />
                                   {!isMobile && <Typography ml={1}>{t('save')}</Typography>}
@@ -2030,26 +2047,47 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
 
                               <Divider textAlign="left" sx={{ py: 2, color: 'primary.main' }}>Comments {diary.comments.length ? (diary.comments.length) : ('')}</Divider>
 
-                              {/* Comments List */}
-                              {diaryComments[diary.id]?.length > 0 ? (
+                              {diaryComments[diary.id]?.all?.length > 0 ? (
                                 <Box>
-                                  {diaryComments[diary.id].map((comment) => (
-                                    <CommentItemWithActions
-                                      key={comment.id}
-                                      comment={comment}
-                                      diaryId={diary.id}
-                                      profile={profile}
-                                      onAddReply={handleAddReply}
-                                      handleImageUpload={handleMediaUpload}
-                                      selectedCommentImages={selectedCommentImages}
-                                      setSelectedCommentImages={setSelectedCommentImages}
-                                      onEditComment={handleEditComment}
-                                      onDeleteComment={handleCommentDeleteClick}
-                                      replyingTo={replyingTo}
-                                      setReplyingTo={setReplyingTo}
-                                      onMediaClick={handleMediaClick}
-                                    />
-                                  ))}
+                                  {diaryComments[diary.id]?.all
+                                    ?.slice(0, diaryComments[diary.id].visibleCount)
+                                    .map(comment => (
+                                      <CommentItemWithActions
+                                        key={comment.id}
+                                        comment={comment}
+                                        diaryId={diary.id}
+                                        profile={profile}
+                                        handleImageUpload={handleMediaUpload}
+                                        selectedCommentImages={selectedCommentImages}
+                                        setSelectedCommentImages={setSelectedCommentImages}
+                                        onEditComment={handleEditComment}
+                                        onDeleteComment={handleCommentDeleteClick}
+                                        replyingTo={replyingTo}
+                                        setReplyingTo={setReplyingTo}
+                                        onMediaClick={handleMediaClick}
+                                      />
+                                    ))}
+
+                                  {rootCommentsCount  > comments.visibleCount && (
+                                    <Box>
+                                      <Button
+                                        size="small"
+                                        onClick={() => handleLoadMoreComments(diary.id)}
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                        }}
+                                        startIcon={<ExpandMoreSharpIcon />}
+                                        color='success'
+                                      >
+
+                                        <Typography>
+                                          See more comments ({rootCommentsCount - comments.visibleCount})
+                                        </Typography>
+                                      </Button>
+                                    </Box>
+                                  )}
+
                                 </Box>
                               ) : (
                                 <Typography

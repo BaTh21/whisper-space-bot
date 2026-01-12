@@ -169,6 +169,7 @@ function ShareComponent({
                   onChange={(e) => setContent(e.target.value)}
                   multiline
                   rows={3}
+                  maxRows={10}
                   fullWidth
                   variant="standard"
                   InputProps={{ disableUnderline: true }}
@@ -236,6 +237,9 @@ function ShareComponent({
             </Box>
           )}
         </Box>
+        <Typography mt={2}>
+          Share with link
+        </Typography>
 
         {/* Copy link */}
         <Box sx={{ display: "flex", gap: 1 }}>

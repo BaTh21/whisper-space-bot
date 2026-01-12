@@ -1260,28 +1260,17 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
               }}
               onClick={handleStartGroupCall}
             />
-            <AutoStoriesIcon
-              sx={{
-                fontSize: { xs: 22, md: 26 },
-                color: 'primary.main',
-                transition: 'transform 1s',
-                '&:hover': {
-                  scale: 1.1
-                }
-              }}
-              onClick={toggleDiary}
-            />
           </Box>
         </Toolbar>
       </AppBar>
 
 
       <Box sx={{ display: 'flex', height: '80vh' }}>
-        {(isMobile || !showDiaries && (
+        {/* {(isMobile || !showDiaries && (
           <GroupSideComponent
             groupId={groupId}
           />
-        ))}
+        ))} */}
 
         <Drawer
           anchor='right'
