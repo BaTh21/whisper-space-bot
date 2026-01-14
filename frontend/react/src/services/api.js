@@ -2294,7 +2294,7 @@ export const verifyEmailTwoFac = async ({ code }) => {
     throw new Error("Session expired. Please login again.");
   }
 
-   console.log("TEMP TOKEN SENT:", tempToken);
+  console.log("TEMP TOKEN SENT:", tempToken);
 
   try {
     const res = await axios.post(
@@ -2317,5 +2317,30 @@ export const verifyEmailTwoFac = async ({ code }) => {
     );
   }
 };
+
+export const storePlayerId = async (playerId) => {
+  try {
+    const res = api.post(`/api/v1/users/save-player-id/${playerId}`);
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to enable notification"
+    );
+  }
+};
+
+export const removePlayerId = async () => {
+  try {
+    const res = await api.delete("/api/v1/users/remove-player-id");
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail ||
+      "Failed to disable notifications"
+    );
+  }
+};  
 
 export default api;

@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { getMe, getActivityInbox } from '../services/api';
 import DeleteDialog from './dialogs/DeleteDialog';
 import LogoImg from '/whisperspace.png';
+import { initOneSignal } from '../hooks/oneSignal';
 
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import HomeIcon from '@mui/icons-material/Home';
@@ -158,6 +159,10 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   };
 
   const isEnglish = localStorage.getItem("i18nextLng");
+
+  useEffect(() => {
+    initOneSignal();
+  }, []);
 
   const drawer = (
     <Box

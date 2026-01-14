@@ -56,8 +56,8 @@ def create_activity(
     if player_ids:
         # Build a message based on activity type
         activity_messages = {
-            ActivityType.like: f"User {actor_id} liked your post.",
-            ActivityType.comment: f"User {actor_id} commented on your post.",
+            ActivityType.post_like: f"User {actor_id} liked your post.",
+            ActivityType.post_comment: f"User {actor_id} commented on your post.",
             ActivityType.friend_request: f"User {actor_id} sent you a friend request.",
             ActivityType.group_invite: f"User {actor_id} invited you to a group.",
         }

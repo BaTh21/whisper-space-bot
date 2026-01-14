@@ -3,7 +3,7 @@ import {
     useTheme,
 } from "@mui/material";
 import { getChatList } from "../../services/api"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import SearchIcon from '@mui/icons-material/Search';
 import MessagesTab from "./MessagesTab";
 import GroupChatPage from "../../pages/GroupChatPage";
@@ -24,19 +24,28 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-    // Resizable Sidebar
     const [chatWidth, setChatWidth] = useState(300);
     const [isResizing, setIsResizing] = useState(false);
+    const sidebarRef = useRef(null);
+
+    const handleMouseDown = (e) => {
+        setIsResizing(true);
+        e.preventDefault();
+    };
 
     useEffect(() => {
+        if (!isResizing) return;
+
         const handleMouseMove = (e) => {
-            if (isResizing) {
-                const newWidth = e.clientX;
-                if (newWidth > 200 && newWidth < 600) {
-                    setChatWidth(newWidth);
-                }
+            if (!sidebarRef.current) return;
+            const containerLeft = sidebarRef.current.getBoundingClientRect().left;
+            const newWidth = e.clientX - containerLeft;
+
+            if (newWidth > 300 && newWidth < 800) {
+                setChatWidth(newWidth);
             }
         };
+
         const handleMouseUp = () => setIsResizing(false);
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -72,22 +81,18 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
 
     return (
         <Box sx={{ display: 'flex', width: '100%', height: '100vh', position: 'relative' }}>
-            {/* --- Sidebar --- */}
             {(showGroupList || !isMobile) && (
                 <Box
+                    ref={sidebarRef}
                     sx={{
-                        position: 'relative', // important for resizer positioning
+                        position: 'relative',
                         width: { xs: '100%', md: chatWidth },
-                        minWidth: 200,
-                        maxWidth: 600,
-                        transition: 'width 0.1s',
-                        borderRight: 1,
-                        borderColor: 'divider',
+                        transition: isResizing ? 'none' : 'width 0.1s',
                         display: 'flex',
                         flexDirection: 'column',
                     }}
                 >
-                    <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Typography variant="h6" sx={{ fontWeight: 600 }}>
                             All Chats ({chats.length})
                         </Typography>
@@ -102,7 +107,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         </Button>
                     </Box>
 
-                    <Box sx={{ p: 2, pt: 0 }}>
+                    <Box sx={{ py: 2 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -124,7 +129,6 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         sx={{
                             flex: 1,
                             overflowY: 'auto',
-                            px: 2,
                             '&::-webkit-scrollbar': { display: 'none' },
                             scrollbarWidth: 'none',
                         }}
@@ -187,26 +191,24 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                     {!isMobile && (
                         <Box
                             sx={{
-                                width: 12,
+                                width: 8,
                                 cursor: 'col-resize',
                                 position: 'absolute',
                                 top: 0,
                                 right: 0,
                                 bottom: 0,
                                 zIndex: 1000,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                '&:hover .handle': { backgroundColor: 'divider' },
+                                backgroundColor: 'transparent',
+                                '&:hover': { backgroundColor: 'divider' },
                             }}
-                            onMouseDown={() => setIsResizing(true)}
-                            onTouchStart={() => setIsResizing(true)}
+                            onMouseDown={handleMouseDown}
+                            onTouchStart={handleMouseDown}
                         />
                     )}
                 </Box>
             )}
 
-            <Box sx={{ flex: 1, position: 'relative' }}>
+            <Box sx={{ flex: 1, position: 'relative', ml: { xs: 0, md: 2 } }}>
                 {showFriend && (
                     <MessagesTab
                         friends={friends}

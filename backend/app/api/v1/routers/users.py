@@ -65,10 +65,30 @@ def friend_suggestions(
 ):
     return get_friend_suggestions(db, current_user.id, limit)
 
-@router.post("/save-player-id")
-def save_player_id(player_id: str, 
-                   db: Session = Depends(get_db), 
-                   current_user: User = Depends(get_current_user)):
+@router.post("/save-player-id/{player_id}")
+def save_player_id(
+    player_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.onesignal_player_id == player_id:
+        return {"msg": "Player ID already saved"}
+
     current_user.onesignal_player_id = player_id
     db.commit()
+
     return {"msg": "Player ID saved"}
+
+@router.delete("/remove-player-id")
+def remove_player_id(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.onesignal_player_id:
+        return {"msg": "No player ID to remove"}
+
+    current_user.onesignal_player_id = None
+    db.commit()
+
+    return {"msg": "Notifications disabled"}
+
