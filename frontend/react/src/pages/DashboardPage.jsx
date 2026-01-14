@@ -268,7 +268,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
             />
           </TabPanel>
           <TabPanel value={activeTab} index={5}>
-            <SettingTab />
+            <SettingTab profile={profile} onDataUpdate={fetchDashboardData}/>
           </TabPanel>
         </Box>
       </Box>

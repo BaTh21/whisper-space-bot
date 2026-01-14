@@ -5,7 +5,10 @@ import random
 from app.core.config import settings
 from app.models.refresh_token import RefreshToken
 from app.models.password_reset import PasswordResetCode
-
+import pyotp
+import base64
+import qrcode
+from io import BytesIO
 
 def store_refresh_token(db: Session, user_id: int, token: str):
     expires_at = datetime.utcnow() + timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
@@ -73,3 +76,19 @@ def get_valid_reset_code(db: Session, code: str) -> PasswordResetCode | None:
 def delete_reset_code(db: Session, code_id: int):
     db.query(PasswordResetCode).filter(PasswordResetCode.id == code_id).delete()
     db.commit()
+    
+def revoke_all_user_refresh_tokens(db: Session, user_id: int):
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user_id
+    ).delete()
+    db.commit()
+    
+def generate_2fa_secret():
+    return pyotp.random_base32()
+
+def verify_2fa_code(user, code: str) -> bool:
+    if not user.twofa_secret:
+        return False  # user doesn't have 2FA enabled
+
+    totp = pyotp.TOTP(user.twofa_secret)
+    return totp.verify(code, valid_window=1) 

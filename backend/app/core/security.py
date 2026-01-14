@@ -55,17 +55,29 @@ def verify_token(token: str) -> Optional[dict]:
         print(f"❌ Token verification error: {e}")
         return None
 
-def create_access_token(user_id: int) -> str:
-    """
-    Create JWT access token
-    """
-    expire = datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
+def create_access_token(
+    user_id: int,
+    expires_delta: timedelta | None = None,
+    token_type: str = "access",
+    scope: str | None = None
+) -> str:
+    
+    expire = datetime.utcnow() + (
+        expires_delta
+        if expires_delta
+        else timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
+    )
+
     payload = {
-        "sub": str(user_id),  # JWT standard requires string for 'sub'
+        "sub": str(user_id),
         "exp": expire,
-        "type": "access",
-        "iat": datetime.utcnow()  # Issued at time
+        "type": token_type,   # access | refresh | 2fa
+        "iat": datetime.utcnow()
     }
+
+    if scope:
+        payload["scope"] = scope
+
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 def create_refresh_token(user_id: int) -> str:
@@ -200,3 +212,21 @@ async def get_current_user_ws(
     except Exception as e:
         print(f"WebSocket auth error: {e}")
         return None
+    
+def verify_2fa_token(token: str) -> int:
+    """
+    Verify a temporary 2FA token and return the user_id
+    """
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Make sure it's a 2FA token
+    if payload.get("type") != "2fa":
+        raise HTTPException(status_code=403, detail="Invalid 2FA token")
+
+    user_id_str = payload.get("sub")
+    if not user_id_str:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return int(user_id_str)

@@ -13,7 +13,9 @@ class UserOut(UserBase, TimestampMixin):
     is_verified: bool
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
-
+    is_2fa_enabled: bool
+    is_activate: Optional[bool] = None
+    is_email_2sa_enabled : Optional[bool] = None
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None

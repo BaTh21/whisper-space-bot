@@ -61,7 +61,6 @@ import { getVideoThumbnail } from './getVideoThumbnail';
 import ShareComponent from './ShareComponent';
 import ParentDiaryComponent from './ParentDiaryComponent';
 import ExpandMoreSharpIcon from '@mui/icons-material/ExpandMoreSharp';
-import ShareIconImg from '/share-icon.png';
 
 const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchStats, isLinkedDiary = () => false, onDiaryDeleted = () => false }) => {
   const [diaryList, setDiaryList] = useState(diaries || []);

@@ -107,7 +107,6 @@ api.interceptors.response.use(
   }
 );
 
-// Fixed Login endpoint - Use form data format
 export const login = async (data) => {
   try {
     const formData = new URLSearchParams();
@@ -124,25 +123,33 @@ export const login = async (data) => {
       }
     );
 
-    // Store tokens with consistent naming
-    const tokens = {
-      access_token: response.data.access_token,
-      refresh_token: response.data.refresh_token,
-      token_type: response.data.token_type,
+    // 🔐 2FA REQUIRED
+    if (response.data.requires_2fa) {
+      const { temp_token, method } = response.data;
+
+      // ✅ STORE ONCE, CORRECT KEY
+      localStorage.setItem("temp_token", temp_token);
+      localStorage.setItem("2fa_method", method);
+
+      return {
+        requires_2fa: true,
+        temp_token,
+        method,
+      };
+    }
+
+    // ✅ NORMAL LOGIN
+    const { access_token, refresh_token, token_type } = response.data;
+
+    localStorage.setItem("access_token", access_token);
+    localStorage.setItem("refresh_token", refresh_token);
+
+    return {
+      access_token,
+      refresh_token,
+      token_type,
     };
-
-    localStorage.setItem("access_token", tokens.access_token);
-    localStorage.setItem("accessToken", tokens.access_token); // For compatibility
-    localStorage.setItem("refresh_token", tokens.refresh_token);
-    localStorage.setItem("refreshToken", tokens.refresh_token); // For compatibility
-
-    return tokens;
   } catch (error) {
-    console.error("Login error details:", {
-      status: error.response?.status,
-      data: error.response?.data,
-    });
-
     let errorMessage = "Login failed";
 
     if (error.response?.status === 401) {
@@ -2048,6 +2055,45 @@ export const forgotPassword = (data) =>
 export const resetPassword = (data) =>
   api.post("/api/v1/auth/reset-password", data);
 
+export const resetPasswordWithOldPassword = async (data) => {
+  try {
+    const res = await api.post("/api/v1/auth/change-password", data);
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to change password"
+    );
+  }
+};
+
+export const requestChangeEmail = async (data) => {
+  try {
+    const res = await api.post("/api/v1/auth/change-email/request", data);
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error?.response?.data?.detail ||
+        error?.response?.data?.msg ||
+        "Request failed"
+    );
+  }
+};
+
+export const changeEmailVerify = async (data) => {
+  try {
+    const res = await api.post("/api/v1/auth/change-email/verify", data);
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error?.response?.data?.detail ||
+        error?.response?.data?.msg ||
+        "Verification failed"
+    );
+  }
+};
+
 export const getMyLogs = async (action = null, limit = 50) => {
   try {
     let url = `/api/v1/devices/logs?limit=${limit}`;
@@ -2146,4 +2192,130 @@ export const getMyDevices = async () => {
     );
   }
 };
+
+export const setUp2Factor = async () => {
+  try {
+    const res = await api.post("/api/v1/auth/2fa/setup");
+    return res.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || "Failed to setup 2FA");
+  }
+};
+
+export const enable2Factor = async (data) => {
+  try {
+    const res = await api.post("/api/v1/auth/2fa/enable", data);
+    return res.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.response?.data?.msg);
+  }
+};
+
+export const verify2Factor = async ({ code }) => {
+  const tempToken = localStorage.getItem("temp_token");
+
+  if (!tempToken) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/api/v1/auth/2fa/verify`,
+      { code },
+      {
+        headers: {
+          Authorization: `Bearer ${tempToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return res.data;
+  } catch (err) {
+    console.error("2FA verification failed", err.response?.data || err);
+    throw new Error(
+      err.response?.data?.detail || "Failed to verify two-factor authentication"
+    );
+  }
+};
+
+export const disable2Factor = async (data) => {
+  try {
+    const res = await api.post("/api/v1/auth/2fa/disable", data);
+    return res.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.detail || error.response?.data?.msg);
+  }
+};
+
+export const deactivateAccount = async (data) => {
+  try {
+    const res = await api.post("/api/v1/auth/deactivate-account", data);
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to deactivate account"
+    );
+  }
+};
+
+export const enableEmailVerify = async () => {
+  try {
+    const res = await api.post("/api/v1/auth/2sa/email/enable");
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to email verify"
+    );
+  }
+};
+
+export const disableEmailVerify = async () => {
+  try {
+    const res = await api.post("/api/v1/auth/2sa/email/disable");
+    return res.data;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.detail ||
+        error.response?.data?.msg ||
+        "Failed to email verify"
+    );
+  }
+};
+
+export const verifyEmailTwoFac = async ({ code }) => {
+  const tempToken = localStorage.getItem("temp_token");
+
+  if (!tempToken) {
+    throw new Error("Session expired. Please login again.");
+  }
+
+   console.log("TEMP TOKEN SENT:", tempToken);
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/api/v1/auth/2sa/email/verify`,
+      { code },
+      {
+        headers: {
+          Authorization: `Bearer ${tempToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return res.data;
+  } catch (err) {
+    console.error("Email 2SA verification failed", err.response?.data || err);
+    throw new Error(
+      err.response?.data?.detail ||
+        "Failed to verify email two-factor authentication"
+    );
+  }
+};
+
 export default api;
