@@ -24,6 +24,39 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+    // Resizable Sidebar
+    const [chatWidth, setChatWidth] = useState(300);
+    const [isResizing, setIsResizing] = useState(false);
+
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            if (isResizing) {
+                const newWidth = e.clientX;
+                if (newWidth > 200 && newWidth < 600) {
+                    setChatWidth(newWidth);
+                }
+            }
+        };
+        const handleMouseUp = () => setIsResizing(false);
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizing]);
+
+    const fetchData = async () => {
+        const res = await getChatList();
+        setChats(res);
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
     const toggleGroupList = () => {
         if (isMobile) {
             setShowGroupList(true);
@@ -32,54 +65,49 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
         }
     };
 
-    const fetchData = async () => {
-        const res = await getChatList();
-        setChats(res);
-    }
-
-    useEffect(() => {
-        fetchData();
-    }, []);
-
     const handleSuccess = () => {
         setOpenCreateGroup(false);
         fetchData();
-    }
+    };
 
     return (
-        <Box
-            sx={{
-                display: 'flex',
-                width: '100%',
-                gap: 3,
-            }}
-        >
+        <Box sx={{ display: 'flex', width: '100%', height: '100vh', position: 'relative' }}>
+            {/* --- Sidebar --- */}
             {(showGroupList || !isMobile) && (
-                <Box sx={{ width: { xs: '100%', md: 300 } }}>
-                    <Box sx={{ pb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box
+                    sx={{
+                        position: 'relative', // important for resizer positioning
+                        width: { xs: '100%', md: chatWidth },
+                        minWidth: 200,
+                        maxWidth: 600,
+                        transition: 'width 0.1s',
+                        borderRight: 1,
+                        borderColor: 'divider',
+                        display: 'flex',
+                        flexDirection: 'column',
+                    }}
+                >
+                    <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Typography variant="h6" sx={{ fontWeight: 600 }}>
                             All Chats ({chats.length})
                         </Typography>
                         <Button
                             variant="contained"
                             startIcon={<AddBoxIcon />}
-                            sx={{
-                                borderRadius: '8px',
-                                minWidth: { xs: 10, sm: 'auto' }
-                            }}
+                            sx={{ borderRadius: '8px', minWidth: { xs: 10, sm: 'auto' } }}
                             size={isMobile ? 'small' : 'medium'}
                             onClick={() => setOpenCreateGroup(true)}
                         >
                             {t('create')}
                         </Button>
                     </Box>
-                    <Box>
+
+                    <Box sx={{ p: 2, pt: 0 }}>
                         <TextField
-                            sx={{ width: "100%" }}
-                            id="outlined-member-search"
-                            label='Search chat'
-                            variant="outlined"
+                            fullWidth
                             size="small"
+                            label="Search chat"
+                            variant="outlined"
                             InputProps={{
                                 endAdornment: (
                                     <InputAdornment position="end">
@@ -94,38 +122,36 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
 
                     <Box
                         sx={{
-                            mt: 2,
-                            height: '74vh',
+                            flex: 1,
                             overflowY: 'auto',
+                            px: 2,
                             '&::-webkit-scrollbar': { display: 'none' },
                             scrollbarWidth: 'none',
-                        }}>
+                        }}
+                    >
                         <List>
                             {chats.map((chat) => (
                                 <ListItem
                                     key={`${chat.type}-${chat.id}`}
                                     onClick={() => {
                                         if (isMobile) setShowGroupList(false);
-
                                         if (chat.type === 'private') {
                                             setShowFriend(true);
                                             setSelectedFriend({
-                                                id: chat.id,      // Use friend/user ID here
+                                                id: chat.id,
                                                 name: chat.name,
                                                 avatar: chat.avatar,
                                             });
-                                            setSelectedGroupId(null); // deselect any group
-                                        }
-
-                                        if (chat.type === 'group') {
+                                            setSelectedGroupId(null);
+                                        } else if (chat.type === 'group') {
                                             setShowFriend(false);
                                             setSelectedGroupId(chat.id);
-                                            setSelectedFriend(null); // deselect any private chat
+                                            setSelectedFriend(null);
                                         }
                                     }}
                                     sx={{
-                                        p: 1,
                                         mb: 1,
+                                        p: 1,
                                         borderRadius: '12px',
                                         cursor: 'pointer',
                                         backgroundColor:
@@ -145,128 +171,78 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                         },
                                     }}
                                 >
-                                    <ListItemText
-                                        sx={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            right: 0,
-                                            fontSize: 12,
-                                            backgroundColor:
-                                                (chat.type === 'private' && selectedFriend?.id === chat.id) ||
-                                                    (chat.type === 'group' && selectedGroupId === chat.id)
-                                                    ? 'white'
-                                                    : 'primary.main',
-                                            color:
-                                                (chat.type === 'private' && selectedFriend?.id === chat.id) ||
-                                                    (chat.type === 'group' && selectedGroupId === chat.id)
-                                                    ? 'black'
-                                                    : 'white',
-                                            borderRadius: '2px 9px 2px 2px',
-                                            width: 50,
-                                            textAlign: 'center',
-                                            transform: 'translateY(-2px)'
-                                        }}
-                                    >
-                                        {(chat.type === 'group' ? ('Group') : ('Friend'))}
-                                    </ListItemText>
-                                    <ListItemAvatar sx={{ position: 'relative' }}>
-                                        <Avatar src={chat.avatar}
-                                            sx={{
-                                                border: 1,
-                                                borderColor: 'divider',
-                                                p: 0.25
-                                            }}
-                                        >
-                                            {chat.name.charAt(0)}
-                                        </Avatar>
+                                    <ListItemAvatar>
+                                        <Avatar src={chat.avatar}>{chat.name.charAt(0)}</Avatar>
                                     </ListItemAvatar>
                                     <ListItemText
-                                        primary={
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                {chat.name}
-                                            </Box>
-                                        }
-                                        secondary={chat.last_message ? chat.last_message : 'Tap to start new message'}
-                                        secondaryTypographyProps={{
-                                            sx: {
-                                                fontSize: '0.75rem',
-                                                maxWidth: 150,
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                color:
-                                                    (chat.type === 'private' && selectedFriend?.id === chat.id) ||
-                                                        (chat.type === 'group' && selectedGroupId === chat.id)
-                                                        ? 'primary.contrastText'
-                                                        : 'inherit',
-                                            }
-                                        }}
+                                        primary={chat.name}
+                                        secondary={chat.last_message || 'Tap to start new message'}
+                                        secondaryTypographyProps={{ sx: { fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}
                                     />
                                 </ListItem>
                             ))}
                         </List>
                     </Box>
-                </Box>
 
-            )}
-            {(showFriend || selectedGroupId) && (
-                <Box
-                    sx={{
-                        width: '100%'
-                    }}
-                >
-                    {showFriend && (
-                        <MessagesTab
-                            friends={friends}
-                            profile={profile}
-                            setError={setError}
-                            setSuccess={setSuccess}
-                            showFriend={showFriend}
-                            selectedFriend={selectedFriend}
-                            toggleGroupList={toggleGroupList}
-                        />
-                    )}
-                    {selectedGroupId && (
-                        <GroupChatPage
-                            groupId={selectedGroupId}
-                            toggleGroupList={toggleGroupList}
+                    {!isMobile && (
+                        <Box
+                            sx={{
+                                width: 12,
+                                cursor: 'col-resize',
+                                position: 'absolute',
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                zIndex: 1000,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                '&:hover .handle': { backgroundColor: 'divider' },
+                            }}
+                            onMouseDown={() => setIsResizing(true)}
+                            onTouchStart={() => setIsResizing(true)}
                         />
                     )}
                 </Box>
             )}
-            {(!showFriend) && !isMobile && !selectedGroupId && (
-                <Box
-                    sx={{
-                        width: '100%',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        flexDirection: 'column',
-                        border: 1,
-                        borderColor: 'divider',
-                        height: '89vh'
-                    }}
-                >
-                    <img src={Logo} alt="logo" width={150} />
-                    <Typography
+
+            <Box sx={{ flex: 1, position: 'relative' }}>
+                {showFriend && (
+                    <MessagesTab
+                        friends={friends}
+                        profile={profile}
+                        setError={setError}
+                        setSuccess={setSuccess}
+                        showFriend={showFriend}
+                        selectedFriend={selectedFriend}
+                        toggleGroupList={toggleGroupList}
+                    />
+                )}
+                {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} />}
+                {!showFriend && !selectedGroupId && !isMobile && (
+                    <Box
                         sx={{
-                            fontSize: 20,
-                            color: 'primary.main',
-                            mt: 1
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            flexDirection: 'column',
+                            border: 1,
+                            borderColor: 'divider',
                         }}
                     >
-                        Tab a chat to start new message
-                    </Typography>
-                </Box>
-            )}
-            <CreateGroupDialog
-                open={openCreateGroup}
-                onClose={() => setOpenCreateGroup(false)}
-                onSuccess={handleSuccess}
-                friends={friends}
-            />
+                        <img src={Logo} alt="logo" width={150} />
+                        <Typography sx={{ fontSize: 20, color: 'primary.main', mt: 1 }}>
+                            Tap a chat to start new message
+                        </Typography>
+                    </Box>
+                )}
+            </Box>
+
+            <CreateGroupDialog open={openCreateGroup} onClose={() => setOpenCreateGroup(false)} onSuccess={handleSuccess} friends={friends} />
         </Box>
-    )
+    );
 }
 
-export default ChatTab
+export default ChatTab;

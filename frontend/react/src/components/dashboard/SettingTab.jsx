@@ -5,13 +5,15 @@ import {
     Stack,
     useMediaQuery,
     useTheme,
-    Avatar
+    Avatar,
+    Divider
 } from "@mui/material"
 import NotificationsIcon from "@mui/icons-material/Notifications"
 import SecurityIcon from "@mui/icons-material/Security"
 import PrivacyTipIcon from "@mui/icons-material/PrivacyTip"
 import { useState } from "react"
 import SecuritySettings from '../setting/SecuritySettings';
+import NotificationComponent from "../notification/NotificationComponent"
 
 function SettingTab({ profile, onDataUpdate }) {
 
@@ -79,6 +81,8 @@ function SettingTab({ profile, onDataUpdate }) {
                         </Avatar>
                         <Typography mt={1}>{profile.email}</Typography>
                     </Box>
+
+                    <Divider/>
                     {menuItems.map(item => (
                         <Paper
                             key={item.key}
@@ -115,6 +119,7 @@ function SettingTab({ profile, onDataUpdate }) {
                     ))}
                 </Stack>
             )}
+            
 
             {(!isMobile || showContent) && (
                 <Paper
@@ -131,9 +136,7 @@ function SettingTab({ profile, onDataUpdate }) {
                 >
 
                     {active === "notifications" && (
-                        <Typography>
-                            Notification settings content goes here.
-                        </Typography>
+                        <NotificationComponent onBack={() => setShowContent(false)}/>
                     )}
 
                     {active === "security" && (

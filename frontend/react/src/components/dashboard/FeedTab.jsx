@@ -109,6 +109,7 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
 
   const loadMoreDiaries = useCallback(async (reset = false) => {
     // if (diaryIdFromHash) return;
+    if (loadingMore) return;
     if (!hasMore && !reset || loadingMore) return;
 
     try {
@@ -319,8 +320,8 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
           if (prev.length === 0) return [diary];
           return [diary, ...prev.slice(1)];
         });
-      } 
-      
+      }
+
 
       setOffset(prev => prev);
       setHasMore(true);
@@ -469,9 +470,16 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
             <NorthIcon />
           </Button>
 
-          {type === 'diary' && <ProfileDiary groups={groups} diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} isLinkedDiary={isLinkedDiary} onDiaryDeleted={handleDiaryDeleted}/>}
+          {type === 'diary' && <ProfileDiary groups={groups} diaries={filteredDiaries} onDataUpdate={handleNewDiary} profile={profile} friends={friends} isLinkedDiary={isLinkedDiary} onDiaryDeleted={handleDiaryDeleted} />}
           {type === 'group' && <GroupDiaryComponent groups={groups} profile={profile} setError={setError} setSuccess={setSuccess} onDataUpdate={onDataUpdate} friends={friends} pendingRequests={pendingRequests} search={search} />}
-          {type === 'video' && <ProfileDiary groups={groups} diaries={filteredDiariesWithVideos} onDataUpdate={handleNewDiary} profile={profile} friends={friends} onDiaryDeleted={handleDiaryDeleted}/>}
+          {type === 'video' && <ProfileDiary groups={groups} diaries={filteredDiariesWithVideos} onDataUpdate={handleNewDiary} profile={profile} friends={friends} onDiaryDeleted={handleDiaryDeleted} />}
+
+          {loadingMore && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+
         </Box>
       </Box>
 

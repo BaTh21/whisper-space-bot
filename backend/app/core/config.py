@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str
     CLOUDINARY_UPLOAD_FOLDER: str = "whisper_space"
     
+    ONESIGNAL_APP_ID: str
+    ONESIGNAL_REST_API_KEY: str
+    ONESIGNAL_API_URL: str
+    
     # Environment
     ENVIRONMENT: str = "production"
     

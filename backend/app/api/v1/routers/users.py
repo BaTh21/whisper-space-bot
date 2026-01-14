@@ -64,3 +64,11 @@ def friend_suggestions(
     current_user: User = Depends(get_current_user)
 ):
     return get_friend_suggestions(db, current_user.id, limit)
+
+@router.post("/save-player-id")
+def save_player_id(player_id: str, 
+                   db: Session = Depends(get_db), 
+                   current_user: User = Depends(get_current_user)):
+    current_user.onesignal_player_id = player_id
+    db.commit()
+    return {"msg": "Player ID saved"}
