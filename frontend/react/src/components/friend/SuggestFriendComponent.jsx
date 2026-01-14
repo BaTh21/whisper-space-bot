@@ -4,19 +4,19 @@ import {
 } from "@mui/material"
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { sendFriendRequest } from "../../services/api";
-import { toast } from 'react-toastify';
 import { useState } from "react";
 
 function SuggestFriendComponent({ suggestFriends }) {
     const [friends, setFriends] = useState(suggestFriends);
+    const [error, setError] = useState("");
 
     const handleSendFriendRequest = async (userId) => {
         const result = await sendFriendRequest(userId);
         if (result.success) {
-            toast.success(result.message);
+            setError(result.message);
             setFriends(prev => prev.filter(f => f.id !== userId));
         } else {
-            toast.error(result.message);
+            setError(result.message);
         }
     };
 
@@ -25,6 +25,11 @@ function SuggestFriendComponent({ suggestFriends }) {
             <Typography variant="h5" gutterBottom fontWeight="600" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
                 Suggested Friends
             </Typography>
+            {error && (
+                <Typography variant="body2" color="error">
+                    {error}
+                </Typography>
+            )}
             <Box
                 onWheel={(e) => {
                     if (e.deltaY !== 0) {

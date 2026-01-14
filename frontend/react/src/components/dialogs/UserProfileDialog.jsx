@@ -13,7 +13,6 @@ import { useAuth } from '../../context/AuthContext';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import DeleteDialog from '../dialogs/DeleteDialog';
 import { removeGroupMember } from '../../services/api';
-import { toast } from 'react-toastify';
 
 function UserProfileDialog({ open, onClose, userData, group, onSuccess, creatorId }) {
   const { auth } = useAuth();
@@ -24,18 +23,20 @@ function UserProfileDialog({ open, onClose, userData, group, onSuccess, creatorI
 
   const isOwner = currentUser?.id === (group?.creator_id ?? creatorId);
   const isSelf = currentUser?.id === userData?.id;
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleConfirmRemove = async () => {
     setIsLoading(true);
     try {
       await removeGroupMember(group.id, userData.id);
-      toast.success("Member has been removed");
+      setSuccess("Member has been removed");
       onSuccess();
       setOpenDelete(false);
-      onClose(); 
+      onClose();
     } catch (error) {
       console.error(error);
-      toast.error(`Failed to remove member ${error.message}`);
+      setError(`Failed to remove member ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -57,6 +58,16 @@ function UserProfileDialog({ open, onClose, userData, group, onSuccess, creatorI
             p: 3,
           }}
         >
+          {error && (
+            <Typography variant="body2" color="error.main">
+              {error}
+            </Typography>
+          )}
+          {success && (
+            <Typography variant="body2" color="success">
+              {success}
+            </Typography>
+          )}
           {/* Profile Info */}
           <Box
             sx={{
@@ -86,30 +97,30 @@ function UserProfileDialog({ open, onClose, userData, group, onSuccess, creatorI
           {/* Kick Member Option (Only visible to group owner, not self) */}
           {isOwner && !isSelf && (
             <>
-            <Divider sx={{ my: 1.5 }} />
-            <ListItemButton
-              onClick={() => setOpenDelete(true)}
-              sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                mt: 2,
-                borderRadius: 1,
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 0, 0, 0.1)',
-                },
-              }}
-            >
-              <ListItemIcon>
-                <PersonRemoveIcon sx={{ color: 'red' }} />
-              </ListItemIcon>
-              <ListItemText
-                primary="Kick this member"
-                primaryTypographyProps={{
-                  color: 'red',
-                  fontWeight: 500,
+              <Divider sx={{ my: 1.5 }} />
+              <ListItemButton
+                onClick={() => setOpenDelete(true)}
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  mt: 2,
+                  borderRadius: 1,
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                  },
                 }}
-              />
-            </ListItemButton>
+              >
+                <ListItemIcon>
+                  <PersonRemoveIcon sx={{ color: 'red' }} />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Kick this member"
+                  primaryTypographyProps={{
+                    color: 'red',
+                    fontWeight: 500,
+                  }}
+                />
+              </ListItemButton>
             </>
           )}
         </Box>

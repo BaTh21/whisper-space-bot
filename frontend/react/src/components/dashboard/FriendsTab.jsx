@@ -77,11 +77,11 @@ const FriendsTab = ({
   const handleSendFriendRequest = async (userId) => {
     const result = await sendFriendRequest(userId);
     if (result.success) {
-      toast.success(result.message);
+      setSuccess(result.message);
       setSuggestFriend(prev => prev.filter(f => f.id !== userId));
       onDataUpdate();
     } else {
-      toast.error(result.message);
+      setError(result.message);
     }
   };
 
@@ -89,11 +89,11 @@ const FriendsTab = ({
     const res = await deletePendingRequest(pendingId);
 
     if (res === true) {
-      toast.success("Pending has been canceled");
+      setSuccess("Pending has been canceled");
       setPendingFriend(prev => prev.filter(f => f.id !== pendingId));
       onDataUpdate();
     } else {
-      toast.error(res);
+      setError(res);
     }
   };
 

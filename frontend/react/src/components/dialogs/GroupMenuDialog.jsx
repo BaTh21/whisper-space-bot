@@ -43,6 +43,8 @@ function GroupMenuDialog({ open, onClose, group, onSuccess, members }) {
   const [leavePopup, setLeavePopup] = useState(false);
   const [viewMember, setViewMember] = useState(false);
   const [selectedCreatorId, setSelectedCreatorId] = useState(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   // Fetch group covers
   useEffect(() => {
@@ -94,12 +96,12 @@ function GroupMenuDialog({ open, onClose, group, onSuccess, members }) {
 
     try {
       await uploadCover(group.id, file);
-      toast.success('Group cover uploaded!');
+      setSuccess('Group cover uploaded!');
       await fetchCovers();
       onSuccess?.();
     } catch (error) {
       console.error('Upload failed:', error);
-      toast.error(`Failed: ${error}` || "Maxed size is 3MB");
+      setError(`Failed: ${error}` || "Maxed size is 3MB");
     } finally {
       setLoading(false);
     }
@@ -110,12 +112,12 @@ function GroupMenuDialog({ open, onClose, group, onSuccess, members }) {
     setLoading(true);
     try {
       await deleteCoverById(coverId);
-      toast.success('Cover deleted!');
+      setSuccess('Cover deleted!');
       await fetchCovers();
       onSuccess?.();
     } catch (error) {
       console.error('Delete failed:', error);
-      toast.error('Failed to delete cover');
+      setError('Failed to delete cover');
     } finally {
       setLoading(false);
     }
@@ -124,10 +126,10 @@ function GroupMenuDialog({ open, onClose, group, onSuccess, members }) {
   const handleDeleteGroup = async () => {
     try {
       await deleteGroupById(group.id);
-      toast.success("Group has been deleted");
+      setSuccess("Group has been deleted");
       router("/dashboard");
     } catch (error) {
-      toast.error('Failed to delete group');
+      setError('Failed to delete group');
     }
   }
 
@@ -157,6 +159,17 @@ function GroupMenuDialog({ open, onClose, group, onSuccess, members }) {
             p: 3,
           }}
         >
+
+          {error && (
+            <Typography variant="body2" color="error.main">
+              {error}
+            </Typography>
+          )}
+          {success && (
+            <Typography variant="body2" color="success">
+              {success}
+            </Typography>
+          )}
           <List component="nav">
             <Box
               sx={{

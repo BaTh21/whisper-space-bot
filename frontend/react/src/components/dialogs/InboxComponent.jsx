@@ -25,7 +25,6 @@ import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useTranslation } from 'react-i18next'; 
 import { acceptFriendRequest, acceptGroupInvite, deleteActivities, getActivityInbox, readActivity } from "../../services/api";
-import { toast } from 'react-toastify';
 
 const Transition = forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
@@ -46,6 +45,8 @@ function InboxComponent({ open, onClose }) {
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const scrollRef = useRef(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -105,10 +106,10 @@ function InboxComponent({ open, onClose }) {
     try {
       if (activity.type === "friend_request") {
         await acceptFriendRequest(activity.actor.id);
-        toast.success(t('accept_success_friend'));
+        setSuccess(t('accept_success_friend'));
       } else if (activity.type === "group_invite") {
         await acceptGroupInvite(activity.group_id);
-        toast.success(t('accept_success_group'));
+        setSuccess(t('accept_success_group'));
       }
 
       handleReadActivity(activity.id);
@@ -121,7 +122,7 @@ function InboxComponent({ open, onClose }) {
       handleCloseDialog();
     } catch (err) {
       console.error(err);
-      toast.error(t('accept_failed', { message: err.message || 'Unknown error' }));
+      (t('accept_failed', { message: err.message || 'Unknown error' }));
       handleCloseDialog();
     }
   };
@@ -135,10 +136,10 @@ function InboxComponent({ open, onClose }) {
       );
       setSelectedIds([]);
       setDeletePopup(false);
-      toast.success(t('delete_success')); 
+      setSuccess(t('delete_success')); 
     } catch (err) {
       console.error(err);
-      toast.error(t('delete_failed', { message: err.message }));
+      setError(t('delete_failed', { message: err.message }));
       setDeletePopup(false);
     }
   };
@@ -208,6 +209,16 @@ function InboxComponent({ open, onClose }) {
             <ToggleButton value="read">{t('read')} ({readCount})</ToggleButton>
           </ToggleButtonGroup>
         </Box>
+        {error && (
+          <Typography variant="body2" color="error.main">
+            {error}
+          </Typography>
+        )}
+        {success && (
+          <Typography variant="body2" color="success">
+            {success}
+          </Typography>
+        )}
 
         <Box
           ref={scrollRef}

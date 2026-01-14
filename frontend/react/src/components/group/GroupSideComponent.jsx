@@ -33,7 +33,6 @@ import {
     Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 import {
     commentOnDiary,
@@ -86,6 +85,8 @@ const GroupSideComponent = ({ groupId }) => {
     const [openDeletePopup, setOpenDeletePopup] = useState(false);
     const [anchorElForShare, setAnchorElForShare] = useState(null);
     const [selectedShareId, setSelectedSharedId] = useState(null);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
 
     const handleMenuClose = () => {
         setAnchorEl(null);
@@ -124,12 +125,12 @@ const GroupSideComponent = ({ groupId }) => {
     const handleDelete = async (diaryId) => {
         try {
             await deleteDiaryById(diaryId);
-            toast.success("Diary has been deleted")
+            setSuccess("Diary has been deleted")
             fetchGroupData();
         } catch (error) {
             setSelectedDiary(null);
             setDeletePopup(false);
-            toast.error("Failed to delete diary");
+            setError("Failed to delete diary");
         }
     }
 
@@ -201,9 +202,9 @@ const GroupSideComponent = ({ groupId }) => {
     const handleDeleteCommentId = async () => {
         try {
             await deleteCommentById(selectedComment.id);
-            toast.success("Comment has been deleted");
+            setSuccess("Comment has been deleted");
         } catch (error) {
-            toast.error(`Error: ${error.message}`)
+            setError(`Error: ${error.message}`)
             console.log("error", error);
         }
     }
@@ -263,10 +264,10 @@ const GroupSideComponent = ({ groupId }) => {
     const handleDeleteShare = async () => {
         try {
             await deleteShareById(selectedShareId);
-            toast.success("Share has been removed");
+            setSuccess("Share has been removed");
             fetchGroupData();
         } catch (error) {
-            toast.error(`Error ${error.message}`);
+            setError(`Error ${error.message}`);
         }
     }
 
