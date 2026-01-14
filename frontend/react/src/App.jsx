@@ -7,12 +7,12 @@ import DebugAuth from './components/DebugAuth';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import DashboardPage from './pages/DashboardPage';
-import GroupChatPage from './pages/GroupChatPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VerifyCodePage from './pages/VerifyCodePage';
 import theme from './theme';
 import AuthRedirect from './guards/AuthRedirect';
+import { TwoFactorAuthPage } from './pages/TwoFactorAuthPage';
 
 const App = () => (
   <ThemeProvider theme={theme}>
@@ -31,6 +31,12 @@ const App = () => (
               element={
                 <AuthRedirect>
                   <RegisterPage />
+                </AuthRedirect>
+              } />
+            <Route path="/2fa"
+              element={
+                <AuthRedirect>
+                  <TwoFactorAuthPage />
                 </AuthRedirect>
               } />
             <Route path="/verify-code/:email"
@@ -89,7 +95,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-           
+
             {/* Redirect root to feed */}
             <Route path="/" element={<Navigate to="/feed" replace />} />
 

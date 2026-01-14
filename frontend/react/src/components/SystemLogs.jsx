@@ -116,7 +116,7 @@ const SystemLogs = () => {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {/* Header */}
-      <Box sx={{ p: 3, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ p: 0, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6" fontWeight={600}>
             {t('active_devices')}
@@ -139,14 +139,11 @@ const SystemLogs = () => {
         sx={{
           flex: 1,
           overflowY: 'auto',
-          px: 3,
+          height: '80vh',
+          px: 0,
           py: 2,
-          '&::-webkit-scrollbar': { width: 8 },
-          '&::-webkit-scrollbar-track': { background: 'transparent' },
-          '&::-webkit-scrollbar-thumb': {
-            backgroundColor: 'action.active',
-            borderRadius: 4,
-          },
+          '&::-webkit-scrollbar': { display: 'none' },
+          scrollbarWidth: 'none',
         }}
       >
         {error && (
@@ -168,7 +165,8 @@ const SystemLogs = () => {
                     borderRadius: 2,
                     mb: 2,
                     bgcolor: 'background.paper',
-                    boxShadow: 1,
+                    border: 1,
+                    borderColor: 'divider',
                     '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >

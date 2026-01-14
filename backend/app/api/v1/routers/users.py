@@ -31,30 +31,23 @@ def search_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Search for users by username or email"""
     try:
         if len(q) < 2:
             return []
             
-        # Search in username and email fields
         users = db.query(User).filter(
             (User.username.ilike(f"%{q}%")) | (User.email.ilike(f"%{q}%"))
         ).limit(10).all()
         
-        # Return user data with avatar URL
         results = []
         for user in users:
             user_data = {
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
-                "avatar_url": user.avatar_url  # Make sure this is included
+                "avatar_url": user.avatar_url
             }
             results.append(user_data)
-        
-        print(f"🔍 Search results for '{q}': {len(results)} users found")
-        for user in results:
-            print(f"   - {user['username']} (avatar: {user['avatar_url']})")
         
         return results
         
@@ -68,6 +61,6 @@ def search_users(
 def friend_suggestions(
     limit: int = 20,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)  # replace with auth later
+    current_user: User = Depends(get_current_user)
 ):
     return get_friend_suggestions(db, current_user.id, limit)

@@ -24,19 +24,19 @@ import { useAuth } from '../context/AuthContext';
 import { forgotPassword, login as loginApi, resetPassword } from '../services/api';
 
 function DraggablePaper(props) {
-    const nodeRef = useRef(null);
+  const nodeRef = useRef(null);
 
-    return (
-        <Draggable
-            nodeRef={nodeRef}
-            handle="#draggable-dialog-title"
-            cancel={'[class*="MuiDialogContent-root"]'}
-        >
-            <div ref={nodeRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                <Paper {...props} />
-            </div>
-        </Draggable>
-    );
+  return (
+    <Draggable
+      nodeRef={nodeRef}
+      handle="#draggable-dialog-title"
+      cancel={'[class*="MuiDialogContent-root"]'}
+    >
+      <div ref={nodeRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+        <Paper {...props} />
+      </div>
+    </Draggable>
+  );
 }
 
 const LoginForm = () => {
@@ -67,20 +67,33 @@ const LoginForm = () => {
     onSubmit: async (values) => {
       setError(null);
       setLoading(true);
+
       try {
-        const response = await loginApi({
+        const result = await loginApi({
           email: values.username,
           password: values.password,
         });
-        await login(response);
-        navigate('/dashboard');
+
+        if (result.requires_2fa) {
+          localStorage.setItem("temp_token", result.temp_token);
+          localStorage.setItem("2fa_method", result.method || "totp");
+
+          navigate("/2fa");
+          return;
+        }
+
+        await login(result);
+
+        navigate("/dashboard");
+
       } catch (err) {
-        setError(err.message || t('login_failed'));
-        toast.error(`${t('failed')}: ${err.message}`);
+        setError(err.message || "Login failed");
+        toast.error(err.message || "Login failed");
       } finally {
         setLoading(false);
       }
     },
+
   });
 
   const handleForgotPassword = async () => {
@@ -386,8 +399,8 @@ const LoginForm = () => {
               {resetLoading
                 ? t('sending') || 'Sending...'
                 : resetStep === 'email'
-                ? t('send_code') || 'Send Code'
-                : t('reset_password') || 'Reset Password'}
+                  ? t('send_code') || 'Send Code'
+                  : t('reset_password') || 'Reset Password'}
             </Button>
           </Box>
         </DialogContent>

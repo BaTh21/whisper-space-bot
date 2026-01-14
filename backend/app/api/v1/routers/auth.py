@@ -2,23 +2,27 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, 
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import random
-from typing import Optional
+from typing import Optional, Union
 
 from app.schemas.base import BaseResponse
-from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, Token, UserCreate, UserLogin, VerifyCodeRequest
+from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, Token, UserCreate, UserLogin, VerifyCodeRequest, ChangePasswordRequest, ChangeEmailRequest, VerifyChangeEmailRequest, Enable2FARequest, Verify2FARequest, LoginResponse, DeactivateAccountRequest, VerifyEmail2SARequest
 from app.core.database import get_db
 from app.crud.user import get_by_email, create, get_by_email_or_username, verify
-from app.crud.auth import create_password_reset_code, create_verification_code, delete_code, delete_reset_code, get_valid_code, get_valid_refresh_token, get_valid_reset_code, revoke_refresh_token, store_refresh_token
+from app.crud.auth import create_password_reset_code, create_verification_code, delete_code, delete_reset_code, get_valid_code, get_valid_refresh_token, get_valid_reset_code, revoke_refresh_token, store_refresh_token, revoke_all_user_refresh_tokens, generate_2fa_secret, verify_2fa_code
 from app.services.email import send_password_reset_email, send_verification_email, send_verification_email_sync
-from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password
+from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_password, hash_password, verify_2fa_token, verify_token
 from app.schemas.refresh_token import RefreshTokenRequest
 from app.models.user import User
 from app.crud.system_log import log_user_activity
+import pyotp
+import base64
+import qrcode
+from io import BytesIO
+from datetime import timedelta
 
 router = APIRouter()
 
-
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=LoginResponse)
 def refresh_token(
     req: RefreshTokenRequest,
     request: Request,
@@ -130,8 +134,7 @@ def verify_code(
         token_type="bearer"
     )
 
-
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Union[Token, LoginResponse])
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     request: Request = None,
@@ -155,6 +158,48 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified"
+        )
+        
+    if not user.is_active:
+        user.is_active = True
+        db.commit()
+
+        ip_address = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+        log_user_activity(db, user.id, "reactivate_account", ip_address, user_agent)
+        
+    if user.is_2fa_enabled:
+        temp_token = create_access_token(
+            user.id,
+            expires_delta=timedelta(minutes=5),
+            token_type="2fa",
+            scope="2fa"
+        )
+        return LoginResponse(
+            requires_2fa=True,
+            temp_token=temp_token,
+            method="totp"
+        )
+        
+    if user.is_email_2sa_enabled:
+        code = "".join(random.choices("0123456789", k=6))
+        create_verification_code(db, user.id, code)
+
+        send_verification_email_sync(
+            user.email,
+            f"Your login verification code is {code}"
+        )
+
+        temp_token = create_access_token(
+            user.id,
+            expires_delta=timedelta(minutes=5),
+            scope="email_2sa"
+        )
+
+        return LoginResponse(
+            requires_2fa=True,
+            temp_token=temp_token,
+            method="email"
         )
 
     access_token = create_access_token(user.id)
@@ -190,7 +235,6 @@ def logout(
         success=True,
         msg="Logged out successfully"
     )
-
 
 @router.post("/resend-verification", response_model=BaseResponse)
 async def resend_verification(email: str, db: Session = Depends(get_db)):
@@ -259,3 +303,296 @@ def reset_password(
     delete_reset_code(db, reset_obj.id)
 
     return BaseResponse(msg="Password reset successfully. You can now log in.")
+
+@router.post("/change-password", response_model=BaseResponse)
+def change_password(
+    req: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(req.old_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Old password is incorrect"
+        )
+
+    if verify_password(req.new_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from old password"
+        )
+
+    current_user.password_hash = hash_password(req.new_password)
+    db.commit()
+
+    revoke_all_user_refresh_tokens(db, current_user.id)
+    
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_user_activity(db, current_user.id, "change_password", ip_address, user_agent)
+
+    return BaseResponse(
+        success=True,
+        msg="Password changed successfully. Please log in again."
+    )
+
+@router.post("/change-email/request", response_model=BaseResponse)
+async def request_change_email(
+    req: ChangeEmailRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.email == req.new_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New email must be different from current email"
+        )
+
+    if db.query(User).filter(User.email == req.new_email).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already in use"
+        )
+
+    code = "".join(random.choices("0123456789", k=6))
+
+    create_verification_code(db, current_user.id, code)
+
+    try:
+        sent = await send_verification_email(req.new_email, code)
+        if not sent:
+            background_tasks.add_task(send_verification_email_sync, req.new_email, code)
+    except Exception:
+        background_tasks.add_task(send_verification_email_sync, req.new_email, code)
+
+    return BaseResponse(
+        success=True,
+        msg="Verification code sent to new email address"
+    )
+
+@router.post("/change-email/verify", response_model=BaseResponse)
+def verify_change_email(
+    req: VerifyChangeEmailRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    code_obj = get_valid_code(db, current_user.id, req.code)
+    if not code_obj:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code"
+        )
+
+    current_user.email = req.new_email
+    db.commit()
+
+    delete_code(db, code_obj.id)
+
+    revoke_all_user_refresh_tokens(db, current_user.id)
+
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_user_activity(db, current_user.id, "change_email", ip_address, user_agent)
+
+    return BaseResponse(
+        success=True,
+        msg="Email changed successfully. Please log in again."
+    )
+    
+@router.post("/2fa/setup")
+def setup_2fa(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.is_2fa_enabled:
+        raise HTTPException(400, "2FA already enabled")
+
+    secret = generate_2fa_secret()
+    current_user.twofa_secret = secret
+    db.commit()
+
+    uri = pyotp.TOTP(secret).provisioning_uri(
+        name=current_user.email,
+        issuer_name="WhisperSpace"
+    )
+
+    return {
+        "secret": secret,
+        "qr_uri": uri
+    }
+
+@router.post("/2fa/enable")
+def enable_2fa(
+    req: Enable2FARequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not current_user.twofa_secret:
+        raise HTTPException(400, "2FA setup not started")
+
+    if not verify_2fa_code(current_user, req.code):
+        raise HTTPException(400, "Invalid 2FA code")
+
+    current_user.is_2fa_enabled = True
+    db.commit()
+
+    revoke_all_user_refresh_tokens(db, current_user.id)
+
+    return BaseResponse(msg="Two-factor authentication enabled")
+
+@router.post("/2fa/verify")
+def verify_2fa(
+    payload: Verify2FARequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    temp_token = request.headers.get("Authorization")
+    if not temp_token:
+        raise HTTPException(status_code=401, detail="Missing temp token")
+
+    temp_token = temp_token.replace("Bearer ", "")
+
+    payload_data = verify_token(temp_token)
+    if not payload_data or payload_data.get("scope") != "2fa":
+        raise HTTPException(status_code=401, detail="Invalid or expired temp token")
+
+    user_id = int(payload_data["sub"])
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_2fa_code(user, payload.code):
+        raise HTTPException(status_code=400, detail="Invalid 2FA code")
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+
+    store_refresh_token(db, user.id, refresh_token)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
+
+@router.post("/2fa/disable")
+def disable_2fa(
+    req: Verify2FARequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_2fa_code(current_user, req.code):
+        raise HTTPException(status_code=400, detail="Invalid 2FA code")
+
+    current_user.is_2fa_enabled = False
+    current_user.twofa_secret = None
+    db.commit()
+
+    revoke_all_user_refresh_tokens(db, current_user.id)
+
+    return BaseResponse(msg="2FA disabled")
+
+@router.post("/deactivate-account", response_model=BaseResponse)
+def deactivate_account(
+    req: DeactivateAccountRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(req.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is incorrect"
+        )
+
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account already deactivated"
+        )
+
+    current_user.is_active = False
+    db.commit()
+
+    revoke_all_user_refresh_tokens(db, current_user.id)
+
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    log_user_activity(db, current_user.id, "deactivate_account", ip_address, user_agent)
+
+    return BaseResponse(
+        success=True,
+        msg="Account deactivated successfully"
+    )
+
+@router.post("/2sa/email/enable", response_model=BaseResponse)
+def enable_email_2sa(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.is_email_2sa_enabled = True
+    db.commit()
+
+    revoke_all_user_refresh_tokens(db, current_user.id)
+
+    return BaseResponse(msg="Email two-step authentication enabled")
+
+@router.post("/2sa/email/disable", response_model=BaseResponse)
+def disable_email_2sa(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.is_email_2sa_enabled = False
+    db.commit()
+
+    revoke_all_user_refresh_tokens(db, current_user.id)
+
+    return BaseResponse(msg="Email two-step authentication disabled")
+
+@router.post("/2sa/email/verify", response_model=Token)
+def verify_email_2sa(
+    payload: VerifyEmail2SARequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    temp_token = request.headers.get("Authorization")
+    if not temp_token:
+        raise HTTPException(401, "Missing temp token")
+
+    temp_token = temp_token.replace("Bearer ", "")
+    payload_data = verify_token(temp_token)
+
+    if not payload_data or payload_data.get("scope") != "email_2sa":
+        raise HTTPException(401, "Invalid or expired temp token")
+
+    user_id = int(payload_data["sub"])
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    code_obj = get_valid_code(db, user.id, payload.code)
+    if not code_obj:
+        raise HTTPException(400, "Invalid or expired code")
+
+    delete_code(db, code_obj.id)
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+    store_refresh_token(db, user.id, refresh_token)
+
+    log_user_activity(
+        db,
+        user.id,
+        "email_2sa_login",
+        request.client.host if request.client else None,
+        request.headers.get("user-agent"),
+    )
+
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer"
+    )

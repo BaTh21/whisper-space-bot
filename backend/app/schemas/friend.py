@@ -12,7 +12,10 @@ class UserResponse(BaseModel):
 
 class FriendResponse(BaseModel):
     id: int
-    user: UserResponse
+    user: Optional[UserResponse] = None
     friend: Optional[UserResponse] = None
     status: str
     created_at: datetime
+    
+    class Config:
+        from_attributes = True
