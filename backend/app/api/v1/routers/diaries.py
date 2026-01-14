@@ -427,7 +427,8 @@ def update_diary_by_id(
                         username=l.user.username,
                         avatar_url=l.user.avatar_url
                     )
-                ) for l in diary.likes
+                )
+                for l in diary.likes if l.user is not None
             ],
             is_deleted=diary.is_deleted,
             created_at=diary.created_at,

@@ -28,6 +28,7 @@ class User(Base):
     is_2fa_enabled = Column(Boolean, default=False)
     is_email_2sa_enabled = Column(Boolean, default=False)
     twofa_secret = Column(String, nullable=True)
+    onesignal_player_id = Column(String, nullable=True)
 
     message_reactions = relationship("MessageReaction", 
                                  back_populates="user", 

@@ -383,13 +383,16 @@ def invite_user(group_id: int, user_id: int, db: Session, current_user: User):
     db.commit()
     db.refresh(new_invite)
     
+    player_ids = [user.onesignal_player_id] if user.onesignal_player_id else None
+    
     activity = create_activity(
         db,
         actor_id=current_user.id,
         recipient_id=user_id,
         activity_type=ActivityType.group_invite,
         group_id=group_id,
-        extra_data = f"{current_user.username} invite you to the group"
+        extra_data = f"{current_user.username} invite you to the group",
+        player_ids=player_ids
     )
     
     return new_invite

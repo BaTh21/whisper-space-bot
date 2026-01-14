@@ -97,6 +97,31 @@ function SettingMenuComponent({ onNavigate, onBack, profile }) {
             }}
         >
             <Stack spacing={1} mb={3}>
+                <Button
+                    sx={{
+                        mb: 2,
+                        fontSize: 16,
+                        width: '100%',
+                        display: { xs: 'flex', sm: 'none' },
+                        justifyContent: 'start',
+                        color: 'primary.contrastText',
+                        backgroundImage: 'linear-gradient(90deg, #254D70, #1e78c7ff, #198d17e7)',
+                        backgroundSize: '200% 100%',
+                        backgroundPosition: '0% 50%',
+
+                        transition: 'background-position 0.4s ease, box-shadow 0.3s ease',
+
+                        '&:hover': {
+                            backgroundPosition: '100% 50%',
+                            boxShadow: '0 6px 16px rgba(25, 118, 210, 0.4)',
+                            transform: 'scale(1)'
+                        },
+                    }}
+                    onClick={onBack}
+                >
+                    <ArrowBackIcon sx={{ mr: 1 }} />
+                    BACK TO MENU PAGE
+                </Button>
                 <Box
                     sx={{
                         display: 'flex',
@@ -104,14 +129,7 @@ function SettingMenuComponent({ onNavigate, onBack, profile }) {
                         gap: 1
                     }}
                 >
-                    <IconButton
-                        onClick={onBack}
-                        sx={{
-                            display: { xs: 'block', md: 'none' }
-                        }}
-                    >
-                        <ArrowBackIcon />
-                    </IconButton>
+
                     <Typography variant="h5" fontWeight={600}>
                         Security and Privacy
                     </Typography>

@@ -80,13 +80,16 @@ async def send_friend_request(
         db.commit()
         db.refresh(friendship)
         
+        player_ids = [target_user.onesignal_player_id] if target_user.onesignal_player_id else None
+        
         activity = create_activity(
         db,
         actor_id=current_user.id,
         recipient_id=user_id,
         activity_type=ActivityType.friend_request,
         friend_request_id=friendship.id,
-        extra_data = f"{current_user.username} sent you a friend request"
+        extra_data = f"{current_user.username} sent you a friend request",
+        player_ids=player_ids
         )
         
     except Exception:

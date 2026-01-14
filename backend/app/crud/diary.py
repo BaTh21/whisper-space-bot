@@ -500,13 +500,17 @@ def create_comment(db: Session, diary_id: int, current_user: User , content: str
     db.commit()
     db.refresh(comment)
     
+    recipient_user = db.query(User).filter(User.id == diary.user_id).first()
+    player_ids = [recipient_user.onesignal_player_id] if recipient_user and recipient_user.onesignal_player_id else None
+    
     activity = create_activity(
         db,
         actor_id=current_user.id,
         recipient_id=diary.user_id,
         activity_type=ActivityType.post_comment,
         post_id=diary_id,
-        extra_data = f"{current_user.username} comment on your status"
+        extra_data = f"{current_user.username} comment on your status",
+        player_ids=player_ids
     )
     
     comment = db.query(DiaryComment).options(joinedload(DiaryComment.user)).filter(DiaryComment.id == comment.id).first()

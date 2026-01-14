@@ -134,15 +134,14 @@ export const CommentItemWithActions = ({
   const handleSubmitReply = async () => {
     if (localReplyText?.trim()) {
       const images = selectedCommentImages[`reply-${comment.id}`] || [];
-      const newReply = await commentOnDiary(diaryId, comment.id, localReplyText, images);
-
-      setRepliesData(prev => ({
+      const newReply = await commentOnDiary(diaryId, localReplyText, comment.id, images);
+      setRepliesData((prev) => ({
         ...prev,
         [comment.id]: [newReply, ...(prev[comment.id] || [])],
       }));
-
       setLocalReplying(false);
-      setLocalReplyText('');
+      setLocalReplyText("");
+      setSelectedCommentImages(prev => ({ ...prev, [`reply-${comment.id}`]: [] }));
     }
   };
 
@@ -197,24 +196,28 @@ export const CommentItemWithActions = ({
     }
   };
 
-  const handleAddCommentReply = async (diaryId, mainCommentId, localReplyText) => {
-    if (!localReplyText.trim()) return;
-    const images = selectedCommentImages[`reply-${comment.id}`] || [];
+  const handleAddCommentReply = async (diaryId, mainCommentId, replyText) => {
+    if (!replyText?.trim()) return;
+
+    const images = selectedCommentImages[`reply-${mainCommentId}`] || [];
+    const imagesForBackend = images.map(img => typeof img === 'string' ? img : img.data);
+
     try {
-      const newReply = await commentOnDiary(diaryId, localReplyText, mainCommentId, images);
+      const newReply = await commentOnDiary(diaryId, replyText, mainCommentId, imagesForBackend);
 
       setRepliesData(prev => ({
         ...prev,
-        [comment.id]: [newReply, ...(prev[comment.id] || [])],
+        [mainCommentId]: [newReply, ...(prev[mainCommentId] || [])],
       }));
 
       setLocalReplying(false);
       setLocalReplyText('');
       setReplyingTo(null);
+      setSelectedCommentImages(prev => ({ ...prev, [`reply-${mainCommentId}`]: [] }));
     } catch (err) {
-      console.error("Failed to add reply:", err);
+      console.error("Failed to add reply:", err.message);
     }
-  }
+  };
 
   const handleDeleteReply = async (replyId) => {
     await onDeleteComment(replyId);
@@ -333,7 +336,7 @@ export const CommentItemWithActions = ({
               onClick={() => handleToggleCommentLike(comment.id)}
             >
               {commentLike?.liked ?
-                (<FavoriteIcon  sx={{fontSize: 18, color: 'red'}}/>) :
+                (<FavoriteIcon sx={{ fontSize: 18, color: 'red' }} />) :
                 (<FavoriteBorderIcon
                   sx={{
                     fontSize: 18,
@@ -341,7 +344,7 @@ export const CommentItemWithActions = ({
                   }}
                 />)}
               <Typography sx={{ fontSize: 12, ml: 0.5, color: commentLike?.liked ? 'red' : 'inherit' }}>
-                {commentLike?.like_count ? (commentLike?.like_count): ''}
+                {commentLike?.like_count ? (commentLike?.like_count) : ''}
               </Typography>
             </Button>
           </Box>
