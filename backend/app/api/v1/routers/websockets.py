@@ -22,7 +22,7 @@ from app.crud.message import handle_forward_message, update_message, delete_mess
 from app.helpers.to_utc_iso import to_local_iso
 from app.crud.reaction import create_reaction, delete_reaction
 from app.schemas.reaction import ReactionCreate
-from app.crud.chat_gateway import create_forwarded_private_message
+from app.crud.chat_gateway import forward_message
 
 router = APIRouter()
 
@@ -34,6 +34,7 @@ async def handle_websocket_private(
 ):
     
     from app.services.websocket_manager import manager
+    from app.services.ws_manager_group import manager as group_manager
 
     current_user = None
     heartbeat_task = None
@@ -589,87 +590,28 @@ async def handle_websocket_private(
                     pass
 
                 elif msg_type == "forward":
-                    message_id = data.get("message_id")
-                    target_user_ids = data.get("target_user_ids", [])
+                    result = await forward_message(
+                        db=db,
+                        current_user=current_user,
+                        source="private",
+                        message_id=data["message_id"],
+                        target_user_ids=data.get("targets", {}).get("users", []),
+                        target_group_ids=data.get("targets", {}).get("groups", []),
+                    )
 
-                    if not message_id or not target_user_ids:
-                        await websocket.send_json({
-                            "type": "error",
-                            "error": "Message ID and target users are required"
-                        })
-                        continue
+                    # 🔹 Send to users
+                    for uid, payload in result["users"]:
+                        for chat_id in manager.get_user_chats(uid):
+                            await manager.send_to_user(chat_id, uid, payload)
 
-                    try:
-                        original_msg = db.query(PrivateMessage).filter(
-                            PrivateMessage.id == message_id
-                        ).first()
-                        if not original_msg:
-                            raise Exception("Original message not found")
+                    # 🔹 Send to groups
+                    for gid, payload in result["groups"]:
+                        await group_manager.broadcast(f"group_{gid}", payload)
 
-                        forwarded_to = []
-
-                        for target_user_id in target_user_ids:
-                            if target_user_id == current_user.id:
-                                continue  # Skip self
-                            if not is_friend(db, current_user.id, target_user_id):
-                                continue  # Skip non-friends
-
-                            # Create forwarded message
-                            forwarded_msg = create_private_message(
-                                db=db,
-                                sender_id=current_user.id,
-                                receiver_id=target_user_id,
-                                content=original_msg.content,
-                                message_type=original_msg.message_type.value,
-                                voice_duration=original_msg.voice_duration,
-                                file_size=original_msg.file_size,
-                                is_forwarded=True,
-                                forwarded_from_id=original_msg.sender_id,
-                                original_sender=original_msg.sender.username if original_msg.sender else None,
-                                original_sender_avatar=original_msg.sender.avatar_url if original_msg.sender else None,
-                            )
-
-                            # Send to the specific user using your manager
-                            payload = {
-                                "type": "message",
-                                "id": forwarded_msg.id,
-                                "content": forwarded_msg.content,
-                                "message_type": forwarded_msg.message_type.value,
-                                "sender_id": current_user.id,
-                                "sender_username": current_user.username,
-                                "is_forwarded": True,
-                                "forwarded_from_id": original_msg.sender_id,
-                                "voice_duration": forwarded_msg.voice_duration,
-                                "file_size": forwarded_msg.file_size,
-                                "created_at": forwarded_msg.created_at.isoformat(),
-                                "is_read": False,
-                                "original_sender": forwarded_msg.original_sender,
-                                "original_sender_avatar": forwarded_msg.original_sender_avatar
-                            }
-
-                            # Use your WebSocketManager method to send directly to the user
-                            user_chats = manager.get_user_chats(target_user_id)
-                            for chat_id in user_chats:
-                                await manager.send_to_user(chat_id, target_user_id, payload)
-
-                            forwarded_to.append(target_user_id)
-
-                        if not forwarded_to:
-                            raise Exception("No valid recipients to forward message")
-
-                        await websocket.send_json({
-                            "type": "forward_success",
-                            "forwarded_to": forwarded_to
-                        })
-
-                    except Exception as e:
-                        import traceback
-                        traceback.print_exc()
-                        await websocket.send_json({
-                            "type": "error",
-                            "error": str(e)
-                        })
-
+                    await websocket.send_json({
+                        "type": "forward_success"
+                    })
+                    pass
                 
                 elif msg_type == "call_start":
                     call_type = data.get("call_type")
@@ -1056,27 +998,28 @@ async def websocket_group_chat(
                     })
                     continue
 
-                if action == "forward": 
-                    message_id = data.get("message_id")
-                    target_group_ids = [int(g) for g in data.get("group_ids", [])]
-                    target_group_ids = [gid for gid in target_group_ids if gid != group_id]
-                    
-                    if not target_group_ids:
-                        continue
-                    
-                    forwarded_msgs = await handle_forward_message(
-                        db,
-                        current_user_id=current_user.id,
-                        message_id=message_id,
-                        target_group_ids=target_group_ids
+                if action == "forward":
+                    result = await forward_message(
+                        db=db,
+                        current_user=current_user,
+                        source="group",
+                        message_id=data["message_id"],
+                        target_user_ids=data.get("targets", {}).get("users", []),
+                        target_group_ids=data.get("targets", {}).get("groups", []),
                     )
 
-                    for gid, fwd_msg in zip(target_group_ids, forwarded_msgs):
-                        target_chat_id = f"group_{gid}"
-                        await manager.broadcast(target_chat_id, {
-                            "action": "new_message",
-                            **fwd_msg
-                        })
+                    # 🔹 Send to private users
+                    for uid, payload in result["users"]:
+                        for chat_id in private_manager.get_user_chats(uid):
+                            await private_manager.send_to_user(chat_id, uid, payload)
+
+                    # 🔹 Send to groups
+                    for gid, payload in result["groups"]:
+                        await manager.broadcast(f"group_{gid}", payload)
+
+                    await websocket.send_json({
+                        "action": "forward_success"
+                    })
                     continue
 
                 if action == "edit":

@@ -218,7 +218,7 @@ async def get_private_chat(
             ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
             ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
         )
-        .order_by(PrivateMessage.created_at.asc())
+        .order_by(PrivateMessage.created_at.desc())
         .offset(offset)
         .limit(limit)
         .all()

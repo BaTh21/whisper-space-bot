@@ -1,39 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Box, Avatar, Typography, Card, Button } from "@mui/material";
 import { formatCambodiaTime } from '../../utils/dateUtils';
-import { getUserGroups } from "../../services/api";
 
-function GroupListComponent({ message, onForward, onClose }) {
-    const [groups, setGroups] = useState([]);
+function GroupListComponent({ message, onForward, onClose, chats }) {
     const [selectedGroups, setSelectedGroups] = useState([]);
 
-    const fetchUserGroups = async () => {
-        try {
-            const res = await getUserGroups();
-            setGroups(res || []);
-        } catch (error) {
-            setGroups([]);
-            console.log("Failed to fetch groups:", error.message);
-        }
-    }
+    console.log("chats", chats)
 
-    useEffect(() => {
-        fetchUserGroups();
-    }, []);
-
-    const getLatestCover = (group) => {
-        if (!group.images || group.images.length === 0) return null;
-
-        return group.images.reduce((latest, current) =>
-            new Date(current.created_at) > new Date(latest.created_at) ? current : latest
-        ).url;
-    };
-
-    const handleToggleGroup = (groupId) => {
+    const handleToggleGroup = (chatId) => {
         setSelectedGroups(prev =>
-            prev.includes(groupId)
-                ? prev.filter(id => id !== groupId)
-                : [...prev, groupId]
+            prev.includes(chatId)
+                ? prev.filter(id => id !== chatId)
+                : [...prev, chatId]
         );
     };
 
@@ -46,18 +24,18 @@ function GroupListComponent({ message, onForward, onClose }) {
 
     return (
         <Box sx={{ p: 2 }}>
-            {groups.length === 0 ? (
+            {chats.length === 0 ? (
                 <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-                    No groups yet. Create one to get started!
+                    No chats yet. Create one to get started!
                 </Typography>
             ) : (
                 <>
-                    {groups.map((group) => {
-                        const isSelected = selectedGroups.includes(group.id);
+                    {chats.map((chat) => {
+                        const isSelected = selectedGroups.includes(chat.id);
                         return (
                             <Card
-                                key={group.id}
-                                onClick={() => handleToggleGroup(group.id)}
+                                key={`${chat.type}-${chat.id}`}
+                                onClick={() => handleToggleGroup(chat.id)}
                                 sx={{
                                     p: 1,
                                     mb: 1,
@@ -80,15 +58,15 @@ function GroupListComponent({ message, onForward, onClose }) {
                                     alignItems: 'center',
                                     gap: { xs: 1, sm: 2 }
                                 }}>
-                                    <Avatar src={getLatestCover(group)}>
-                                        {!group.images || group.images.length === 0 ? group.name[0] : null}
+                                    <Avatar src={chat.avatar} alt={chat.name}>
+                                        {chat.name.charAt(0).toUpperCase()}
                                     </Avatar>
                                     <Box sx={{ flex: 1 }}>
                                         <Typography variant="h6" fontWeight="600" sx={{ fontSize: { xs: '0.9rem', sm: '1rem' }, }}>
-                                            {group.name}
+                                            {chat.name}
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 10, sm: 12 }, }}>
-                                            Created {formatCambodiaTime(group.created_at)}
+                                            Created {formatCambodiaTime(chat.created_at)}
                                         </Typography>
                                     </Box>
                                 </Box>
@@ -102,7 +80,7 @@ function GroupListComponent({ message, onForward, onClose }) {
                         disabled={selectedGroups.length === 0}
                         onClick={handleConfirmForward}
                     >
-                        Forward to {selectedGroups.length} group(s)
+                        Forward to {selectedGroups.length} chat(s)
                     </Button>
                 </>
             )}

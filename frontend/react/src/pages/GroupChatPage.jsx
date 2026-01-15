@@ -48,7 +48,7 @@ import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
 import VoiceRecorder from '../components/group/VoiceRecorder';
 import EmojiPicker from '../components/EmojiPicker';
 
-const GroupChatPage = ({ groupId, toggleGroupList }) => {
+const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
 
   const { auth } = useAuth();
   const user = auth?.user;
@@ -88,6 +88,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [showTextbox, setShowTextbox] = useState(false);
   const emojiButtonRef = useRef(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const isPrependingRef = useRef(false);
 
   const LIMIT = 30;
 
@@ -108,9 +109,19 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const usernamesRef = useRef({});
   const avatarRef = useRef({});
 
-  const toggleShowTextbox = () => {
-    setShowTextbox(prev => !prev);
-  }
+  const mergeMessages = (newMessages, existingMessages) => {
+    const allMessages = [...existingMessages, ...newMessages];
+    const map = new Map();
+
+    allMessages.forEach(msg => {
+      const id = msg.id ?? msg.temp_id;
+      if (!map.has(id)) map.set(id, msg);
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(a.created_at || a.temp_created_at) - new Date(b.created_at || b.temp_created_at)
+    );
+  };
 
   const loadMoreMessages = async () => {
     if (loadingMore || !hasMore) return;
@@ -119,24 +130,25 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     if (!container) return;
 
     setLoadingMore(true);
-
     const prevScrollHeight = container.scrollHeight;
 
-    const data = await getGroupMessage(groupId, LIMIT, page * LIMIT);
+    try {
+      const offset = page * LIMIT;
+      const data = await getGroupMessage(groupId, LIMIT, offset);
 
-    if (data.length < LIMIT) setHasMore(false);
+      if (data.length < LIMIT) setHasMore(false);
 
-    data.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      setMessages(prev => mergeMessages(data, prev));
+      setPage(prev => prev + 1);
 
-    setMessages(prev => [...data, ...prev]);
-    setPage(prev => prev + 1);
-
-    requestAnimationFrame(() => {
-      container.scrollTop =
-        container.scrollHeight - prevScrollHeight;
-    });
-
-    setLoadingMore(false);
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight - prevScrollHeight;
+      });
+    } catch (err) {
+      console.error("Failed to load more messages:", err);
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   const toggleDrawer = () => {
@@ -153,10 +165,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <GroupListComponent
         onClose={() => setOpenDrawer(false)}
         message={selectedMessage}
-        onForward={(msg, groupIds) => {
-          handleForwardMessage(msg, groupIds);
+        onForward={(msg, targets) => {
+          handleForwardMessage(msg, targets);
           setOpenDrawer(false);
         }}
+        chats={chats}
       />
     </Box>
   )
@@ -172,34 +185,21 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-  const handleForwardMessage = (message, targetGroupIds) => {
-    if (!wsRef.current || !targetGroupIds?.length) return;
+  const handleForwardMessage = (message, targets) => {
+    if (
+      !wsRef.current ||
+      (!targets?.users?.length && !targets?.groups?.length)
+    ) return;
 
     wsRef.current.send(JSON.stringify({
-      action: 'forward',
+      action: "forward",
       message_id: message.id,
-      group_ids: targetGroupIds
+      targets: {
+        users: targets.users || [],
+        groups: targets.groups || []
+      }
     }));
   };
-
-  const handleScroll = () => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    if (container.scrollTop < 50) {
-      loadMoreMessages();
-    }
-
-    markVisibleMessagesAsSeen();
-  };
-
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [page, hasMore, loadingMore]);
 
   const scrollToBottom = () => {
     const container = messagesEndRef.current;
@@ -220,10 +220,12 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   };
 
   useEffect(() => {
-    const handle = requestAnimationFrame(() => autoScrollToBottom());
-    return () => cancelAnimationFrame(handle);
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+    if (isAtBottom) autoScrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -277,18 +279,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       console.error("Failed to send delete via WS:", err);
     }
   };
-
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const onScroll = () => markVisibleMessagesAsSeen();
-    container.addEventListener("scroll", onScroll);
-
-    markVisibleMessagesAsSeen();
-
-    return () => container.removeEventListener("scroll", onScroll);
-  }, [messages, seenMessages]);
 
   useEffect(() => {
     fetchGroupData();
@@ -347,6 +337,32 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       }
     });
   }, [seenMessages, user]);
+
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container || loadingMore || !hasMore) return;
+
+    if (container.scrollTop <= 0) {
+      loadMoreMessages();
+    }
+    markVisibleMessagesAsSeen();
+  }, [loadingMore, hasMore, loadMoreMessages, markVisibleMessagesAsSeen]);
+
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const onScroll = () => {
+      if (container.scrollTop < 50) {
+        loadMoreMessages();
+      }
+      markVisibleMessagesAsSeen();
+    };
+
+    container.addEventListener("scroll", onScroll);
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
 
   const handleWSMessage = async (event) => {
     const data = JSON.parse(event.data);
@@ -1333,8 +1349,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
               display: 'flex',
               flexDirection: 'column',
               gap: 1.5,
-              '&::-webkit-scrollbar': { display: 'none' },
-              scrollbarWidth: 'none',
+              // '&::-webkit-scrollbar': { display: 'none' },
+              // scrollbarWidth: 'none',
             }}
             ref={messagesContainerRef}
             onScroll={handleScroll}
@@ -1739,124 +1755,134 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
                       </Box>
 
-                      <Menu
-                        anchorEl={secondAnchorEl}
-                        open={Boolean(secondAnchorEl)}
-                        onClose={closeSecondMenu}
-                      >
-                        {activeMessage &&
-                          [
-                            <MenuItem
-                              key="reply"
-                              onClick={() => {
-                                setReplyTo(activeMessage);
-                                closeSecondMenu();
-                              }}
-                            >
-                              <ReplyIcon /> Reply
-                            </MenuItem>,
-
-                            !activeMessage.call_content
-                              ? (
-                                <MenuItem
-                                  key="forward"
-                                  onClick={() => {
-                                    setSelectedMessage(activeMessage);
-                                    toggleDrawer();
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <ShortcutIcon /> Forward
-                                </MenuItem>
-                              )
-                              : null,
-
-                            activeMessage.content && activeMessage.sender?.id === user?.id
-                              ? (
-                                <MenuItem
-                                  key="edit"
-                                  onClick={() => {
-                                    setEditingMessageId(activeMessage.id);
-                                    setEditedContent(activeMessage.content);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <EditIcon /> Edit
-                                </MenuItem>
-                              )
-                              : null,
-
-                            activeMessage.file_url
-                              ? [
-                                <MenuItem
-                                  key="view-img"
-                                  onClick={() => {
-                                    setSelectedImage(activeMessage.file_url);
-                                    setOpenImage(true);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <RemoveRedEyeIcon /> View Image
-                                </MenuItem>,
-
-                                <MenuItem
-                                  key="save-img"
-                                  onClick={async () => {
-                                    const response = await fetch(activeMessage.file_url);
-                                    const blob = await response.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement("a");
-                                    a.href = url;
-                                    a.download = activeMessage.file_url.split("/").pop();
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <SaveAltIcon /> Save Image
-                                </MenuItem>,
-
-                                activeMessage.sender?.id === user?.id
-                                  ? (
-                                    <MenuItem
-                                      key="replace-img"
-                                      onClick={() => {
-                                        const input = document.createElement("input");
-                                        input.type = "file";
-                                        input.accept = "image/*";
-                                        input.onchange = (e) => {
-                                          if (e.target.files[0])
-                                            updateFileMessage(activeMessage.id, e.target.files[0]);
-                                        };
-                                        input.click();
-                                        closeSecondMenu();
-                                      }}
-                                    >
-                                      <PhotoCameraIcon /> Replace Image
-                                    </MenuItem>
-                                  )
-                                  : null,
-                              ]
-                              : null,
-
-                            (activeMessage.sender?.id === user?.id ||
-                              activeMessage.forwarded_by?.id === user?.id) ? (
-                              <MenuItem
-                                key="delete"
-                                onClick={() => {
-                                  onDelete(activeMessage);
-                                  closeSecondMenu();
-                                }}
-                              >
-                                <DeleteIcon /> Delete
-                              </MenuItem>
-                            ) : null,
-                          ].flat().filter(Boolean)}
-                      </Menu>
                     </Box>
                   );
                 })
             )}
+
+            <Menu
+              anchorEl={secondAnchorEl}
+              open={Boolean(secondAnchorEl)}
+              onClose={closeSecondMenu}
+              PaperProps={{
+                sx: {
+                  borderRadius: '12px',
+                  zIndex: 9999
+                }
+              }}
+              sx={{
+                boxShadow: 0
+              }}
+            >
+              {activeMessage &&
+                [
+                  <MenuItem
+                    key="reply"
+                    onClick={() => {
+                      setReplyTo(activeMessage);
+                      closeSecondMenu();
+                    }}
+                  >
+                    <ReplyIcon /> Reply
+                  </MenuItem>,
+
+                  !activeMessage.call_content
+                    ? (
+                      <MenuItem
+                        key="forward"
+                        onClick={() => {
+                          setSelectedMessage(activeMessage);
+                          toggleDrawer();
+                          closeSecondMenu();
+                        }}
+                      >
+                        <ShortcutIcon /> Forward
+                      </MenuItem>
+                    )
+                    : null,
+
+                  activeMessage.content && activeMessage.sender?.id === user?.id
+                    ? (
+                      <MenuItem
+                        key="edit"
+                        onClick={() => {
+                          setEditingMessageId(activeMessage.id);
+                          setEditedContent(activeMessage.content);
+                          closeSecondMenu();
+                        }}
+                      >
+                        <EditIcon /> Edit
+                      </MenuItem>
+                    )
+                    : null,
+
+                  activeMessage.file_url
+                    ? [
+                      <MenuItem
+                        key="view-img"
+                        onClick={() => {
+                          setSelectedImage(activeMessage.file_url);
+                          setOpenImage(true);
+                          closeSecondMenu();
+                        }}
+                      >
+                        <RemoveRedEyeIcon /> View Image
+                      </MenuItem>,
+
+                      <MenuItem
+                        key="save-img"
+                        onClick={async () => {
+                          const response = await fetch(activeMessage.file_url);
+                          const blob = await response.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = activeMessage.file_url.split("/").pop();
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          closeSecondMenu();
+                        }}
+                      >
+                        <SaveAltIcon /> Save Image
+                      </MenuItem>,
+
+                      activeMessage.sender?.id === user?.id
+                        ? (
+                          <MenuItem
+                            key="replace-img"
+                            onClick={() => {
+                              const input = document.createElement("input");
+                              input.type = "file";
+                              input.accept = "image/*";
+                              input.onchange = (e) => {
+                                if (e.target.files[0])
+                                  updateFileMessage(activeMessage.id, e.target.files[0]);
+                              };
+                              input.click();
+                              closeSecondMenu();
+                            }}
+                          >
+                            <PhotoCameraIcon /> Replace Image
+                          </MenuItem>
+                        )
+                        : null,
+                    ]
+                    : null,
+
+                  (activeMessage.sender?.id === user?.id ||
+                    activeMessage.forwarded_by?.id === user?.id) ? (
+                    <MenuItem
+                      key="delete"
+                      onClick={() => {
+                        onDelete(activeMessage);
+                        closeSecondMenu();
+                      }}
+                    >
+                      <DeleteIcon /> Delete
+                    </MenuItem>
+                  ) : null,
+                ].flat().filter(Boolean)}
+            </Menu>
 
             {showScrollButton && (
               <IconButton
@@ -1980,7 +2006,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                           {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
                         </IconButton>
 
-                        {(showEmojiPicker) &&(
+                        {(showEmojiPicker) && (
                           <EmojiPicker
                             onSelect={(emoji) => {
                               setNewMessage(prev => prev + emoji);

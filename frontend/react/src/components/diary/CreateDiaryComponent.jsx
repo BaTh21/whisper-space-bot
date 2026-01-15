@@ -190,7 +190,7 @@ const CreateDiaryComposer = ({ user, groups, onSuccess, setError }) => {
         </FormControl>
       )}
 
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
 
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title='Please enter title and content first'>

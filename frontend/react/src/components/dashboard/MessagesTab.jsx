@@ -74,8 +74,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const { t, i18n } = useTranslation();
   const [isOnline, setIsOnline] = useState(false);
   const [showTextbox, setShowTextbox] = useState(false);
+  const messageRefs = useRef({});
 
   const LIMIT = 30;
+  const MAX_MESSAGES = 100;
 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -112,6 +114,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const isConnectedRef = useRef(false);
   const sendWsMessageRef = useRef(null);
   const [loadingInitial, setLoadingInitial] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const initialScrollDone = useRef(false);
 
   const [incomingCall, setIncomingCall] = useState({
     open: false,
@@ -154,6 +158,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setAudioUrl(null);
     setRecordingTime(0);
     setIsRecording(false);
+
+    loadInitialMessages();
 
   }, [selectedFriend]);
 
@@ -585,10 +591,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         }
       });
     }
-
-    if (messages.length === 0 && selectedFriend) {
-      loadInitialMessages();
-    }
   }, [sendSeenMessage, messages.length, selectedFriend]);
 
   const handleWebSocketClose = useCallback((event) => {
@@ -928,13 +930,21 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     if (!selectedFriend) return;
 
     setLoadingInitial(true);
+    setHasMore(true);
+
     try {
       const data = await getPrivateChat(selectedFriend.id, LIMIT, 0);
 
       if (data.length < LIMIT) setHasMore(false);
 
       const enhanced = enhanceMessages(data);
-      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+
+      setMessages(
+        enhanced
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, MAX_MESSAGES)
+      );
+
       setPage(1);
     } catch (err) {
       console.error(err);
@@ -943,13 +953,21 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     }
   };
 
+  const dedupeMessages = (messages) => {
+    const map = new Map();
+    messages.forEach(msg => map.set(msg.id, msg));
+    return Array.from(map.values());
+  };
+
   const loadMoreMessages = async () => {
-    if (!selectedFriend || loadingMore || !hasMore) return;
+    if (!selectedFriend || loadingMoreRef.current || !hasMore) return;
 
     const container = messagesContainerRef.current;
     if (!container) return;
 
+    loadingMoreRef.current = true;
     setLoadingMore(true);
+
     const prevScrollHeight = container.scrollHeight;
 
     try {
@@ -959,28 +977,43 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
       const enhanced = enhanceMessages(data);
 
-      setMessages(prev => [...enhanced, ...prev]);
+      setMessages(prev => {
+        const merged = dedupeMessages([...enhanced, ...prev])
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        return merged.slice(-MAX_MESSAGES); // limit memory
+      });
+
       setPage(prev => prev + 1);
 
       requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight - prevScrollHeight;
+        const newScrollHeight = container.scrollHeight;
+        container.scrollTop += newScrollHeight - prevScrollHeight;
       });
+
     } catch (err) {
       console.error(err);
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   };
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
-    if (!container) return;
+    if (!container || loadingMoreRef.current || !hasMore) return;
 
     if (container.scrollTop < 50) {
       loadMoreMessages();
     }
-
   };
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || messages.length === 0 || initialScrollDone.current) return;
+
+    container.scrollTop = container.scrollHeight;
+    initialScrollDone.current = true;
+  }, [messages, selectedFriend]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -988,7 +1021,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [page, hasMore, loadingMore]);
+  }, [hasMore, loadingMoreRef.current, page]);
+
+  // useEffect(() => {
+  //   const container = messagesContainerRef.current;
+  //   if (!container) return;
+
+  //   container.scrollTop = container.scrollHeight;
+  // }, [messages.length]);
 
   const enhanceMessages = (chatMessages) => {
     return chatMessages
@@ -1584,8 +1624,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     flexDirection: 'column',
                     gap: 1,
                     minHeight: { xs: '200px', sm: 'auto' },
-                    '&::-webkit-scrollbar': { display: 'none' },
-                    scrollbarWidth: 'none',
+                    // '&::-webkit-scrollbar': { display: 'none' },
+                    // scrollbarWidth: 'none',
                   }}
                 >
                   {loadingMore && (
@@ -1601,24 +1641,32 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     </Box>
                   ) : (
                     messages.map((message) => (
-                      <ChatMessage
+                      <Box
                         key={message.id}
-                        message={message}
-                        isMine={message.sender_id === profile?.id}
-                        onUpdate={handleEditMessage}
-                        onDelete={handleDeleteMessage}
-                        onForward={handleForward}
-                        onAddReaction={handleAddReaction}
-                        onRemoveReaction={handleRemoveReaction}
-                        onLoadReactions={loadMessageReactions}
-                        profile={profile}
-                        currentFriend={selectedFriend}
-                        getAvatarUrl={getAvatarUrl}
-                        getUserInitials={getUserInitials}
-                        onCallBack={handleStartCall}
-                        onReply={() => { handleReply(message) }}
-                        userId={user.id}
-                      />
+                        data-message-id={message.id}
+                        ref={(el) => {
+                          if (el) messageRefs.current[message.id] = el;
+                        }}
+                        sx={{ flexShrink: 0 }}
+                      >
+                        <ChatMessage
+                          message={message}
+                          isMine={message.sender_id === profile?.id}
+                          onUpdate={handleEditMessage}
+                          onDelete={handleDeleteMessage}
+                          onForward={handleForward}
+                          onAddReaction={handleAddReaction}
+                          onRemoveReaction={handleRemoveReaction}
+                          onLoadReactions={loadMessageReactions}
+                          profile={profile}
+                          currentFriend={selectedFriend}
+                          getAvatarUrl={getAvatarUrl}
+                          getUserInitials={getUserInitials}
+                          onCallBack={handleStartCall}
+                          onReply={() => handleReply(message)}
+                          userId={user.id}
+                        />
+                      </Box>
                     ))
                   )}
                 </Box>

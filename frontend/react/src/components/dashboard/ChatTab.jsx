@@ -11,6 +11,7 @@ import CreateGroupDialog from "../CreateGroupDialog";
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import { useTranslation } from 'react-i18next';
 import Logo from '/pengu-pudgy.webp';
+import GroupsIcon from '@mui/icons-material/Groups';
 
 function ChatTab({ friends, profile, setError, setSuccess }) {
     const [chats, setChats] = useState([]);
@@ -19,6 +20,12 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
     const [showGroupList, setShowGroupList] = useState(true);
     const [selectedGroupId, setSelectedGroupId] = useState(null);
     const [openCreateGroup, setOpenCreateGroup] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+
+    const filteredChats = chats.filter(chat =>
+        chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     const { t } = useTranslation();
 
     const theme = useTheme();
@@ -113,6 +120,8 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                             size="small"
                             label="Search chat"
                             variant="outlined"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                             InputProps={{
                                 endAdornment: (
                                     <InputAdornment position="end">
@@ -134,7 +143,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         }}
                     >
                         <List>
-                            {chats.map((chat) => (
+                            {filteredChats.map((chat) => (
                                 <ListItem
                                     key={`${chat.type}-${chat.id}`}
                                     onClick={() => {
@@ -180,7 +189,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                             position: 'absolute',
                                             top: 0,
                                             right: 0,
-                                            fontSize: 12,
+                                            fontSize: 10,
                                             backgroundColor:
                                                 (chat.type === 'private' && selectedFriend?.id === chat.id) ||
                                                     (chat.type === 'group' && selectedGroupId === chat.id)
@@ -200,18 +209,24 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                         {(chat.type === 'group' ? ('Group') : ('Friend'))}
                                     </ListItemText>
                                     <ListItemAvatar>
-                                        <Avatar src={chat.avatar}>{chat.name.charAt(0).toUpperCase()}</Avatar>
+                                        <Avatar 
+                                        src={chat.avatar}
+                                        sx={{
+                                            borderRadius: chat.type === 'private'? 12 : 2
+                                        }}
+                                        >
+                                            {chat.name.charAt(0).toUpperCase()}</Avatar>
                                     </ListItemAvatar>
                                     <ListItemText
                                         primary={
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                {chat.name}
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 14 }}>
+                                               {chat.type === 'group' && <GroupsIcon sx={{fontSize: 18, mb: 0.5}}/> } {chat.name}
                                             </Box>
                                         }
                                         secondary={chat.last_message ? chat.last_message : 'Tap to start new message'}
                                         secondaryTypographyProps={{
                                             sx: {
-                                                fontSize: '0.75rem',
+                                                fontSize: 10,
                                                 maxWidth: 150,
                                                 whiteSpace: 'nowrap',
                                                 overflow: 'hidden',
@@ -261,7 +276,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         toggleGroupList={toggleGroupList}
                     />
                 )}
-                {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} />}
+                {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} chats={chats}/>}
                 {!showFriend && !selectedGroupId && !isMobile && (
                     <Box
                         sx={{
