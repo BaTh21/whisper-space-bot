@@ -14,14 +14,10 @@ import {
   Toolbar,
   Typography,
   Drawer,
-  useMediaQuery,
-  useTheme,
   Tooltip
 } from '@mui/material';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
-import GroupSideComponent from '../components/group/GroupSideComponent';
-import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getGroupMembers, getGroupMessage, getGroupById, uploadFileMessage, editGroupFileMessage, uploadVoiceMessage } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
@@ -42,7 +38,6 @@ import GroupListComponent from '../components/chat/GroupListComponent';
 import CallIcon from '@mui/icons-material/Call';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import { VoiceMessagePlayer } from '../components/group/VoiceMessagePlayer';
-import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
@@ -81,13 +76,16 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const messagesRef = useRef([]);
   const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
   const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [showDiaries, setShowDiaries] = useState(false);
   const [totalAccepted, setTotalAccepted] = useState(null);
   const [voiceCall, setVoiceCall] = useState(false);
   const [activeCallMessageId, setActiveCallMessageId] = useState(null);
   const [recording, setRecording] = useState(false);
+
+  const LIMIT = 30;
+
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
@@ -102,9 +100,44 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const usernamesRef = useRef({});
   const avatarRef = useRef({});
 
-  const toggleDiary = () => {
-    setShowDiaries(prev => !prev);
-  }
+  const fetchInitialMessages = async () => {
+    setLoading(true);
+    const data = await getGroupMessage(groupId, LIMIT, 0);
+
+    if (data.length < LIMIT) setHasMore(false);
+
+    data.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    setMessages(data);
+    setPage(1);
+    setLoading(false);
+  };
+
+  const loadMoreMessages = async () => {
+    if (loadingMore || !hasMore) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    setLoadingMore(true);
+
+    const prevScrollHeight = container.scrollHeight;
+
+    const data = await getGroupMessage(groupId, LIMIT, page * LIMIT);
+
+    if (data.length < LIMIT) setHasMore(false);
+
+    data.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    setMessages(prev => [...data, ...prev]);
+    setPage(prev => prev + 1);
+
+    requestAnimationFrame(() => {
+      container.scrollTop =
+        container.scrollHeight - prevScrollHeight;
+    });
+
+    setLoadingMore(false);
+  };
 
   const toggleDrawer = () => {
     setOpenDrawer(prev => !prev);
@@ -143,16 +176,30 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     if (!wsRef.current || !targetGroupIds?.length) return;
 
     wsRef.current.send(JSON.stringify({
-      action: 'forward_to_groups',
+      action: 'forward',
       message_id: message.id,
       group_ids: targetGroupIds
     }));
   };
 
-  const handleScroll = (e) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.target;
-    setShowScrollButton(scrollTop + clientHeight < scrollHeight - 100);
+  const handleScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (container.scrollTop < 50) {
+      loadMoreMessages();
+    }
+
+    markVisibleMessagesAsSeen();
   };
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [page, hasMore, loadingMore]);
 
   const scrollToBottom = () => {
     const container = messagesEndRef.current;
@@ -1130,11 +1177,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
   if (loading) {
     return (
-      <Layout>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-          <CircularProgress />
-        </Box>
-      </Layout>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress />
+      </Box>
     );
   }
 
@@ -1176,12 +1221,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
             <Avatar
               sx={{
-                bgcolor: 'primary.main',
                 width: { xs: 38, md: 44 },
                 height: { xs: 38, md: 44 },
                 border: 1,
                 borderColor: 'divider',
-                p: 0.25
+                fontSize: 28
               }}
               src={
                 group?.images?.length
@@ -1266,11 +1310,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
 
       <Box sx={{ display: 'flex', height: '80vh' }}>
-        {/* {(isMobile || !showDiaries && (
-          <GroupSideComponent
-            groupId={groupId}
-          />
-        ))} */}
 
         <Drawer
           anchor='right'
@@ -1284,7 +1323,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            borderLeft: '1px solid #dcdcdcff',
           }}
         >
           <Box
@@ -1301,6 +1339,13 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
             ref={messagesContainerRef}
             onScroll={handleScroll}
           >
+            
+            {loadingMore && (
+              <Typography variant="caption" align="center">
+                Loading more messages...
+              </Typography>
+            )}
+
             {messages.length === 0 ? (
               <Box
                 sx={{

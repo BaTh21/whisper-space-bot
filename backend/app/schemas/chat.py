@@ -126,7 +126,7 @@ class MarkMessagesAsReadResponse(BaseModel):
     
 class GroupMessageSeen(BaseModel):
     id: int
-    user: AuthorResponse    
+    user: Optional[AuthorResponse] = None    
     seen_at: datetime
 
 class GroupMessageOut(BaseModel):

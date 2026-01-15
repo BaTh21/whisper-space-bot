@@ -175,13 +175,54 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                         },
                                     }}
                                 >
+                                    <ListItemText
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            right: 0,
+                                            fontSize: 12,
+                                            backgroundColor:
+                                                (chat.type === 'private' && selectedFriend?.id === chat.id) ||
+                                                    (chat.type === 'group' && selectedGroupId === chat.id)
+                                                    ? 'white'
+                                                    : 'primary.main',
+                                            color:
+                                                (chat.type === 'private' && selectedFriend?.id === chat.id) ||
+                                                    (chat.type === 'group' && selectedGroupId === chat.id)
+                                                    ? 'black'
+                                                    : 'white',
+                                            borderRadius: '2px 9px 2px 2px',
+                                            width: 50,
+                                            textAlign: 'center',
+                                            transform: 'translateY(-2px)'
+                                        }}
+                                    >
+                                        {(chat.type === 'group' ? ('Group') : ('Friend'))}
+                                    </ListItemText>
                                     <ListItemAvatar>
-                                        <Avatar src={chat.avatar}>{chat.name.charAt(0)}</Avatar>
+                                        <Avatar src={chat.avatar}>{chat.name.charAt(0).toUpperCase()}</Avatar>
                                     </ListItemAvatar>
                                     <ListItemText
-                                        primary={chat.name}
-                                        secondary={chat.last_message || 'Tap to start new message'}
-                                        secondaryTypographyProps={{ sx: { fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}
+                                        primary={
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                {chat.name}
+                                            </Box>
+                                        }
+                                        secondary={chat.last_message ? chat.last_message : 'Tap to start new message'}
+                                        secondaryTypographyProps={{
+                                            sx: {
+                                                fontSize: '0.75rem',
+                                                maxWidth: 150,
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                color:
+                                                    (chat.type === 'private' && selectedFriend?.id === chat.id) ||
+                                                        (chat.type === 'group' && selectedGroupId === chat.id)
+                                                        ? 'primary.contrastText'
+                                                        : 'inherit',
+                                            }
+                                        }}
                                     />
                                 </ListItem>
                             ))}

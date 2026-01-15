@@ -1262,21 +1262,21 @@ export const forwardMessage = async (friendId, messageData) => {
   }
 };
 
-export const getPrivateChat = async (friendId) => {
-  const response = await api.get(`/api/v1/chats/private/${friendId}`);
+export const getPrivateChat = async (friendId, limit = 30, offset = 0) => {
+  const response = await api.get(`/api/v1/chats/private/${friendId}`, { params: { limit, offset } });
   return response.data;
 };
 
-export const getGroupMessage = async (groupId) => {
+export const getGroupMessage = async (groupId, limit = 30, offset = 0) => {
   try {
-    const res = await api.get(`/api/v1/groups/${groupId}/message`);
+    const res = await api.get(
+      `/api/v1/groups/${groupId}/message`,
+      { params: { limit, offset } }
+    );
     return res.data;
   } catch (error) {
-    if (error.response?.status === 500) {
-      console.warn("Group messages endpoint returned 500 - backend issue");
-      return []; // return empty array so UI doesn't crash
-    }
-    throw error;
+    console.warn("Failed to load group messages");
+    return [];
   }
 };
 

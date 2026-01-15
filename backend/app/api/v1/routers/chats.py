@@ -195,6 +195,8 @@ async def mark_messages_as_read_batch(
 @router.get("/private/{friend_id}", response_model=List[MessageOut])
 async def get_private_chat(
     friend_id: int,
+    limit: int = 30,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -217,6 +219,8 @@ async def get_private_chat(
             ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
         )
         .order_by(PrivateMessage.created_at.asc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 

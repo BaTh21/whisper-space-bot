@@ -22,7 +22,7 @@ from app.crud.message import handle_forward_message, update_message, delete_mess
 from app.helpers.to_utc_iso import to_local_iso
 from app.crud.reaction import create_reaction, delete_reaction
 from app.schemas.reaction import ReactionCreate
-
+from app.crud.chat_gateway import create_forwarded_private_message
 
 router = APIRouter()
 
@@ -855,9 +855,6 @@ async def handle_websocket_private(
             
 @router.websocket("/notifications")
 async def websocket_notifications(websocket: WebSocket, db: Session = Depends(get_db)):
-    """
-    Unified WebSocket endpoint for all notifications
-    """
     from app.services.websocket_manager import manager
     
     current_user: User | None = None
@@ -866,21 +863,17 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
         # Accept connection first
         await websocket.accept()
         
-        print("🔌 Notifications WebSocket connection accepted")
-        
         # 1. First try to get token from query params
         token = None
         query_params = dict(websocket.query_params)
         if "token" in query_params:
             token = query_params["token"]
-            print(f"🔑 Token from query params: {token[:20]}...")
         
         # 2. If no token in query params, check headers
         if not token:
             token_header = websocket.headers.get("Authorization")
             if token_header and token_header.startswith("Bearer "):
                 token = token_header.split(" ")[1]
-                print(f"🔑 Token from headers: {token[:20]}...")
         
         # 3. If still no token, wait for auth message
         if not token:
@@ -897,11 +890,8 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
                 await websocket.close(code=4001, reason="Authentication timeout")
                 return
         
-        # Verify token
-        print("🔍 Verifying token...")
         payload = verify_token(token)
         if not payload:
-            print("❌ Token verification failed")
             await websocket.send_json({
                 "type": "auth_error",
                 "error": "Invalid or expired token"
@@ -912,7 +902,6 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
         # Get user ID from token
         raw_user_id = payload.get("sub")
         if not raw_user_id:
-            print("❌ Token missing sub claim")
             await websocket.send_json({
                 "type": "auth_error",
                 "error": "Token missing user ID"
@@ -923,7 +912,6 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
         try:
             user_id = int(raw_user_id)
         except (ValueError, TypeError):
-            print(f"❌ Invalid user ID in token: {raw_user_id}")
             await websocket.send_json({
                 "type": "auth_error",
                 "error": "Invalid user ID in token"
@@ -931,8 +919,6 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
             await websocket.close(code=4001, reason="Invalid user ID in token")
             return
         
-        # Load user from DB
-        print(f"👤 Loading user with ID: {user_id}")
         current_user = db.query(User).filter(User.id == user_id).first()
         if not current_user:
             print(f"❌ User not found with ID: {user_id}")
@@ -942,8 +928,6 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
             })
             await websocket.close(code=4001, reason="User not found")
             return
-        
-        print(f"✅ User authenticated: {current_user.username} (ID: {current_user.id})")
 
         # 4. Success – send auth_success
         await websocket.send_json({
@@ -956,8 +940,6 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
         # 5. Join user's notification room
         user_room = f"user_{current_user.id}"
         await manager.connect(user_room, websocket, user_id=current_user.id)
-
-        print(f"📢 User {current_user.id} ({current_user.username}) connected to notifications")
 
         # 6. Keep-alive loop
         while True:
@@ -988,7 +970,6 @@ async def websocket_notifications(websocket: WebSocket, db: Session = Depends(ge
     finally:
         if current_user:
             await manager.disconnect(f"user_{current_user.id}", websocket)
-            print(f"📢 User {current_user.id} disconnected from notifications")
             
 @router.websocket("/group/{group_id}")
 async def websocket_group_chat(
@@ -997,6 +978,7 @@ async def websocket_group_chat(
 ):
     
     from app.services.ws_manager_group import manager
+    from app.services.websocket_manager import manager as private_manager
     
     db = next(get_db())
     try:
@@ -1074,7 +1056,7 @@ async def websocket_group_chat(
                     })
                     continue
 
-                if action == "forward_to_groups": 
+                if action == "forward": 
                     message_id = data.get("message_id")
                     target_group_ids = [int(g) for g in data.get("group_ids", [])]
                     target_group_ids = [gid for gid in target_group_ids if gid != group_id]

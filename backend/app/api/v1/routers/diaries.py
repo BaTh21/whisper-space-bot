@@ -386,21 +386,30 @@ def update_diary_by_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update diary endpoint with debugging"""
     try:
-        # Check what fields are actually being updated
         update_dict = diary_data.dict(exclude_unset=True)
+        
+        diary = db.query(Diary).filter(Diary.id == diary_id).first()
+        if not diary:
+            raise HTTPException(status_code=404, detail="Diary not found")
+        if diary.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this diary")
+        
+        if diary.parent_id:
+            if "images" in update_dict or "videos" in update_dict:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot update images or videos of a shared or child diary"
+                )
         
         diary = update_diary(db, diary_id, diary_data, current_user.id)
 
-        # Refresh with relationships
         diary = db.query(Diary).options(
             joinedload(Diary.author),
             joinedload(Diary.groups),
             joinedload(Diary.likes).joinedload(DiaryLike.user)
         ).filter(Diary.id == diary.id).first()
         
-        # Filter out None values from video_thumbnails
         filtered_thumbnails = []
         if diary.video_thumbnails:
             filtered_thumbnails = [thumb for thumb in diary.video_thumbnails if thumb is not None]

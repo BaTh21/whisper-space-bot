@@ -7,23 +7,17 @@ import {
 } from '@mui/icons-material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CallIcon from '@mui/icons-material/Call';
-import SearchIcon from '@mui/icons-material/Search';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import {
   Avatar,
   Box,
   Button,
-  Chip,
   IconButton,
-  InputAdornment,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   TextField,
   Typography,
   useMediaQuery,
-  useTheme
+  useTheme,
+  CircularProgress
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -32,7 +26,6 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import {
   addReactionToMessage,
   sendVoiceMessage as apiSendVoiceMessage,
-  checkBlockedStatus,
   deleteImageMessage,
   deleteMessage,
   editMessage,
@@ -81,6 +74,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const { t, i18n } = useTranslation();
   const [isOnline, setIsOnline] = useState(false);
 
+  console.log("selectedFriend", selectedFriend)
+
+  const LIMIT = 30;
+
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState(null);
@@ -111,6 +112,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const sentReadReceipts = useRef(new Set());
   const isConnectedRef = useRef(false);
   const sendWsMessageRef = useRef(null);
+  const [loadingInitial, setLoadingInitial] = useState(false);
 
   const [incomingCall, setIncomingCall] = useState({
     open: false,
@@ -154,11 +156,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setRecordingTime(0);
     setIsRecording(false);
 
-    // open socket / fetch messages here
   }, [selectedFriend]);
-  // const toggleShowFriend = () => {
-  //   setShowFriend(prev => !prev);
-  // }
 
   const getWsUrl = useCallback(() => {
     if (!selectedFriend) return null;
@@ -661,19 +659,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     fetchBlockedUsers();
   }, []);
 
-  const checkIfUserIsBlocked = async (userId) => {
-    try {
-      const status = await checkBlockedStatus(userId);
-      setBlockStatus(prev => ({
-        ...prev,
-        [userId]: status.is_blocked
-      }));
-      return status.is_blocked;
-    } catch (error) {
-      return blockedUsers.some(user => user.id === userId);
-    }
-  };
-
   const handleVoiceConfirm = (blob) => {
     if (!blob || !selectedFriend) return;
 
@@ -896,118 +881,129 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     }, 3000);
   }, [selectedFriend, isConnected, sendWsMessage]);
 
+  const buildSeenBy = (msg) => {
+    if (msg.seen_by && Array.isArray(msg.seen_by)) {
+      return msg.seen_by.map(s => ({
+        user_id: s.user_id || s.userId,
+        username: s.username,
+        avatar_url: s.avatar_url || s.avatarUrl,
+        seen_at: s.seen_at || s.seenAt,
+      }));
+    }
+
+    if (msg.is_read) {
+      const otherUserId = msg.receiver_id === profile?.id ? selectedFriend.id : profile.id;
+      return [{
+        user_id: otherUserId,
+        username: msg.receiver_id === profile?.id ? selectedFriend.username : profile.username,
+        avatar_url: msg.receiver_id === profile?.id ? getUserAvatar(selectedFriend) : getUserAvatar(profile),
+        seen_at: msg.read_at || new Date().toISOString(),
+      }];
+    }
+
+    return [];
+  };
+
+  const detectMessageType = (msgData) => {
+    if (msgData.message_type === "system") return "system";
+    if (msgData.message_type === "image") return "image";
+    if (msgData.message_type === "voice") return "voice";
+    if (msgData.message_type === "file") return "file";
+    if (msgData.message_type === "text") return "text";
+
+    const content = msgData.content || "";
+
+    const isVoiceUrl =
+      content.includes("/voice_messages/") ||
+      content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
+      (content.includes("cloudinary.com") && content.includes("/video/upload/"));
+    if (isVoiceUrl) return "voice";
+
+    const isImageUrl =
+      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+      (content.includes("cloudinary.com") && content.includes("/image/upload/"));
+    return isImageUrl ? "image" : "text";
+  };
+
   const loadInitialMessages = async () => {
-    if (!selectedFriend || messages.length > 0) return;
+    if (!selectedFriend) return;
+
+    setLoadingInitial(true);
+    try {
+      const data = await getPrivateChat(selectedFriend.id, LIMIT, 0);
+
+      if (data.length < LIMIT) setHasMore(false);
+
+      const enhanced = enhanceMessages(data);
+      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+      setPage(1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingInitial(false);
+    }
+  };
+
+  const loadMoreMessages = async () => {
+    if (!selectedFriend || loadingMore || !hasMore) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    setLoadingMore(true);
+    const prevScrollHeight = container.scrollHeight;
 
     try {
-      const isBlocked = blockStatus[selectedFriend.id] ||
-        await checkIfUserIsBlocked(selectedFriend.id);
+      const data = await getPrivateChat(selectedFriend.id, LIMIT, page * LIMIT);
 
-      if (isBlocked) {
-        setMessages([]);
-        setError(`Cannot load messages. ${selectedFriend.username} is blocked.`);
-        return;
-      }
+      if (data.length < LIMIT) setHasMore(false);
 
-      const chatMessages = await getPrivateChat(selectedFriend.id);
+      const enhanced = enhanceMessages(data);
 
-      if (Array.isArray(chatMessages) && chatMessages.length === 0) {
-        const recheckBlocked = await checkIfUserIsBlocked(selectedFriend.id);
-        if (recheckBlocked) {
-          setMessages([]);
-          setError(`Cannot load messages. ${selectedFriend.username} is blocked.`);
-          return;
-        }
-      }
+      setMessages(prev => [...enhanced, ...prev]);
+      setPage(prev => prev + 1);
 
-      const filteredMessages = chatMessages.filter(msg => {
-        const messageSenderId = msg.sender_id;
-        return !blockedUsers.some(blockedUser => blockedUser.id === messageSenderId);
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight - prevScrollHeight;
       });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
-      const enhanced = filteredMessages.map((msg) => {
-        const detectMessageType = (message) => {
-          if (message.message_type === 'image') return 'image';
-          if (message.message_type === 'voice') return 'voice';
-          if (message.message_type === 'file') return 'file';
-          if (message.message_type === 'text') return 'text';
-          if (message.message_type === 'system') return 'system';
+  const handleScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
-          const content = message.content || '';
+    if (container.scrollTop < 50) {
+      loadMoreMessages();
+    }
 
-          const isVoiceUrl =
-            content.includes('/voice_messages/') ||
-            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
+  };
 
-          if (isVoiceUrl) return "voice";
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [page, hasMore, loadingMore]);
 
-          return isImageUrl ? "image" : "text";
-        };
-
+  const enhanceMessages = (chatMessages) => {
+    return chatMessages
+      .filter(msg => !blockedUsers.some(u => u.id === msg.sender_id))
+      .map(msg => {
         const messageType = detectMessageType(msg);
-
-        const content = msg.content;
-
         const sender = {
           id: msg.sender_id,
-          username: msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
-          avatar_url: getUserAvatar(msg.sender_id === profile?.id ? profile : selectedFriend),
+          username: msg.sender_id === profile.id ? profile.username : selectedFriend.username,
+          avatar_url: getUserAvatar(msg.sender_id === profile.id ? profile : selectedFriend),
         };
-
-        const seen_by = msg.seen_by && Array.isArray(msg.seen_by)
-          ? msg.seen_by.map(s => ({
-            user_id: s.user_id || s.userId,
-            username: s.username,
-            avatar_url: s.avatar_url || s.avatarUrl,
-            seen_at: s.seen_at || s.seenAt,
-          }))
-          : msg.is_read
-            ? [{
-              user_id: msg.receiver_id === profile?.id ? selectedFriend.id : profile.id,
-              username: msg.receiver_id === profile?.id ? selectedFriend.username : profile.username,
-              avatar_url: msg.receiver_id === profile?.id ? getUserAvatar(selectedFriend) : getUserAvatar(profile),
-              seen_at: msg.read_at || new Date().toISOString(),
-            }]
-            : [];
-
-        return {
-          ...msg,
-          content,
-          is_temp: false,
-          message_type: messageType,
-          sender,
-          is_read: msg.is_read || false,
-          read_at: msg.read_at || null,
-          seen_by,
-          voice_duration: msg.voice_duration || 0,
-          file_size: msg.file_size || 0,
-        };
+        const seen_by = buildSeenBy(msg);
+        return { ...msg, sender, seen_by, message_type: messageType, is_temp: false };
       });
-
-      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
-      setError(null);
-    } catch (err) {
-      if (err.message?.includes('blocked') || err.response?.data?.detail?.includes('blocked')) {
-        setError(`Cannot load messages. ${selectedFriend?.username || 'User'} is blocked.`);
-
-        if (selectedFriend) {
-          setBlockStatus(prev => ({
-            ...prev,
-            [selectedFriend.id]: true
-          }));
-        }
-      } else if (err.response?.status === 403 && err.response?.data?.detail?.includes('Not friends')) {
-        setError(`You are not friends with ${selectedFriend?.username || 'this user'}.`);
-      } else {
-        setError(t('failed_load_messages'));
-      }
-      console.error(err);
-    }
   };
 
   <EmojiButton
@@ -1149,21 +1145,31 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setForwardDialogOpen(true);
   };
 
-  const scrollToBottom = useCallback(() => {
-    if (!messagesContainerRef.current) return;
-    messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+  const scrollToBottom = useCallback((smooth = false) => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+      if (smooth) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth',
+        });
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
   }, []);
 
   useEffect(() => {
-    if (messages.length !== lastMessageCount.current) {
-      lastMessageCount.current = messages.length;
-      scrollToBottom();
-    }
-  }, [messages, scrollToBottom]);
+    if (!selectedFriend) return;
 
-  useEffect(() => {
-    if (selectedFriend) scrollToBottom();
-  }, [selectedFriend, scrollToBottom]);
+    const timeout = setTimeout(() => {
+      scrollToBottom(true);
+    }, 50);
+
+    return () => clearTimeout(timeout);
+  }, [selectedFriend, messages, scrollToBottom]);
 
   const handleEditMessage = async (messageId, newContent) => {
     if (!newContent.trim()) return;
@@ -1372,6 +1378,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setIsAudioOnlyCall(false);
   }
 
+  if (loadingInitial) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -1468,8 +1482,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     display: 'flex',
                     justifyContent: 'space-between',
                     px: { xs: 2, md: 3 },
-                    py: { xs: 1, md: 2 },
-                    boxShadow: 1,
+                    py: { xs: 1.25 },
+                    boxShadow: '0px 2px 4px rgba(0,0,0,0.12)',
                     '&:hover': { bgcolor: 'grey.200' },
                   }}>
                   <Box
@@ -1489,7 +1503,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                       <ArrowBackIcon />
                     </IconButton>
                     <Avatar
-                      src={getUserAvatar(selectedFriend)}
+                      src={getUserAvatar(selectedFriend.avatar)}
                       sx={{
                         width: { xs: 38, md: 44 },
                         height: { xs: 38, md: 44 },
@@ -1498,10 +1512,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                         p: 0.25
                       }}
                     >
-                      {getUserInitials(selectedFriend.username)}
+                      {selectedFriend.name.charAt(0).toUpperCase()}
                     </Avatar>
                     <Box sx={{ ml: 1 }}>
-                      <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
+                      <Typography variant="h6" fontWeight="600">{selectedFriend.name}</Typography>
                       <Typography sx={{ display: { xs: 'block', md: 'none' } }} variant="caption" color="text.secondary">{status.text}</Typography>
                     </Box>
                   </Box>
@@ -1575,6 +1589,11 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     scrollbarWidth: 'none',
                   }}
                 >
+                  {loadingMore && (
+                    <Typography textAlign="center">
+                      Loading more...
+                    </Typography>
+                  )}
                   {messages.length === 0 ? (
                     <Box sx={{ textAlign: 'center', mt: 16 }}>
                       <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />

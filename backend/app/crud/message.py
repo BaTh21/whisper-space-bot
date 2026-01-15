@@ -229,7 +229,7 @@ async def handle_forward_message(
         db.refresh(new_msg)
 
         msg_out = {
-            "action": "forward_to_groups",
+            "action": "forward",
             "id": new_msg.id,
             "group_id": group_id,
             "content": new_msg.content,
