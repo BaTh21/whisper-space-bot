@@ -940,12 +940,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       const enhanced = enhanceMessages(data);
 
       setMessages(
-        enhanced
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .slice(0, MAX_MESSAGES)
+        enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
       );
 
       setPage(1);
+
+      requestAnimationFrame(() => {
+        const container = messagesContainerRef.current;
+        if (container) container.scrollTop = container.scrollHeight;
+      });
     } catch (err) {
       console.error(err);
     } finally {
@@ -955,7 +958,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
   const dedupeMessages = (messages) => {
     const map = new Map();
-    messages.forEach(msg => map.set(msg.id, msg));
+    messages.forEach(msg => {
+      map.set(msg.id, msg);
+    });
     return Array.from(map.values());
   };
 
@@ -965,10 +970,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    loadingMoreRef.current = true;
-    setLoadingMore(true);
-
     const prevScrollHeight = container.scrollHeight;
+
+    setLoadingMore(true);
+    loadingMoreRef.current = true;
 
     try {
       const data = await getPrivateChat(selectedFriend.id, LIMIT, page * LIMIT);
@@ -978,25 +983,28 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       const enhanced = enhanceMessages(data);
 
       setMessages(prev => {
+        // Prepend older messages and dedupe
         const merged = dedupeMessages([...enhanced, ...prev])
-          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        return merged.slice(-MAX_MESSAGES); // limit memory
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); // old → new
+        return merged;
       });
 
       setPage(prev => prev + 1);
 
+      // Preserve scroll position
       requestAnimationFrame(() => {
         const newScrollHeight = container.scrollHeight;
-        container.scrollTop += newScrollHeight - prevScrollHeight;
+        container.scrollTop = newScrollHeight - prevScrollHeight;
       });
 
     } catch (err) {
       console.error(err);
     } finally {
-      loadingMoreRef.current = false;
       setLoadingMore(false);
+      loadingMoreRef.current = false;
     }
   };
+
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
@@ -1022,13 +1030,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
   }, [hasMore, loadingMoreRef.current, page]);
-
-  // useEffect(() => {
-  //   const container = messagesContainerRef.current;
-  //   if (!container) return;
-
-  //   container.scrollTop = container.scrollHeight;
-  // }, [messages.length]);
 
   const enhanceMessages = (chatMessages) => {
     return chatMessages
