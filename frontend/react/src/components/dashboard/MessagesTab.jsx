@@ -73,8 +73,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   // const [showFriend, setShowFriend] = useState(false);
   const { t, i18n } = useTranslation();
   const [isOnline, setIsOnline] = useState(false);
-
-  console.log("selectedFriend", selectedFriend)
+  const [showTextbox, setShowTextbox] = useState(false);
 
   const LIMIT = 30;
 
@@ -1673,48 +1672,52 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     </Box>
                   )}
 
-                  <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
-                  <label htmlFor="image-upload">
-                    <Button
-                      variant='contained'
-                      sx={{ minWidth: 30, borderRadius: 2, py: 1.2, px: 1 }}
-                      component="span"
-                      disabled={!selectedFriend || uploadingImage}>
-                      {uploadingImage ? <AttachFileIcon /> : <AttachFileIcon />}
-                    </Button>
-                  </label>
+                  {!showTextbox && (
+                    <>
+                      <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
+                      <label htmlFor="image-upload">
+                        <Button
+                          variant='contained'
+                          sx={{ minWidth: 30, borderRadius: 2, py: 1.2, px: 1 }}
+                          component="span"
+                          disabled={!selectedFriend || uploadingImage}>
+                          {uploadingImage ? <AttachFileIcon /> : <AttachFileIcon />}
+                        </Button>
+                      </label>
 
-                  <VoiceRecorder
-                    onConfirm={handleVoiceConfirm}
-                    onRecordingChange={setIsRecording}
-                  />
+                      <VoiceRecorder
+                        onConfirm={handleVoiceConfirm}
+                        onRecordingChange={setIsRecording}
+                      />
 
-                  {!isRecording && (
-                    <Box sx={{ position: 'relative' }}>
-                      <IconButton
-                        ref={emojiButtonRef}
-                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        disabled={!selectedFriend || uploadingImage || isRecording}
-                        sx={{
-                          fontSize: 50,
-                          color: 'orange'
-                        }}
-                      >
-                        {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
-                      </IconButton>
+                      {!isRecording && (
+                        <Box sx={{ position: 'relative' }}>
+                          <IconButton
+                            ref={emojiButtonRef}
+                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                            disabled={!selectedFriend || uploadingImage || isRecording}
+                            sx={{
+                              fontSize: 50,
+                              color: 'orange'
+                            }}
+                          >
+                            {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                          </IconButton>
 
-                      {showEmojiPicker && (
-                        <EmojiPicker
-                          onSelect={(emoji) => {
-                            setNewMessage(prev => prev + emoji);
-                            setShowEmojiPicker(false);
-                          }}
-                          onClose={() => setShowEmojiPicker(false)}
-                          anchorEl={emojiButtonRef.current}
-                          placement="top-start"
-                        />
+                          {showEmojiPicker && (
+                            <EmojiPicker
+                              onSelect={(emoji) => {
+                                setNewMessage(prev => prev + emoji);
+                                setShowEmojiPicker(false);
+                              }}
+                              onClose={() => setShowEmojiPicker(false)}
+                              anchorEl={emojiButtonRef.current}
+                              placement="top-start"
+                            />
+                          )}
+                        </Box>
                       )}
-                    </Box>
+                    </>
                   )}
 
                   {!isRecording && (
@@ -1730,6 +1733,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                           handleSendMessage();
                         }
                       }}
+                      onFocus={() => setShowTextbox(true)}
+                      onBlur={() => setShowTextbox(false)}
                       multiline
                       maxRows={3}
                       disabled={!selectedFriend || uploadingImage || isRecording}

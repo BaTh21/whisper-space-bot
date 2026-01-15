@@ -1644,6 +1644,8 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                         cursor: 'pointer',
                                         overflow: 'hidden',
                                         bgcolor: '#000',
+                                        transition: 'transform 0.3s',
+                                        '&:hover': { transform: 'scale(1.03)' },
                                         aspectRatio:
                                           visibleMedia.length === 1
                                             ? '16 / 9'

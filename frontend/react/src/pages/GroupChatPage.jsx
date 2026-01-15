@@ -16,6 +16,10 @@ import {
   Drawer,
   Tooltip
 } from '@mui/material';
+import {
+  EmojiEmotions as EmojiEmotionsIcon,
+  InsertEmoticon as InsertEmoticonIcon,
+} from '@mui/icons-material';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
 import { useAuth } from '../context/AuthContext';
@@ -42,6 +46,7 @@ import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
 import VoiceRecorder from '../components/group/VoiceRecorder';
+import EmojiPicker from '../components/EmojiPicker';
 
 const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
@@ -80,6 +85,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const [voiceCall, setVoiceCall] = useState(false);
   const [activeCallMessageId, setActiveCallMessageId] = useState(null);
   const [recording, setRecording] = useState(false);
+  const [showTextbox, setShowTextbox] = useState(false);
+  const emojiButtonRef = useRef(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const LIMIT = 30;
 
@@ -100,17 +108,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const usernamesRef = useRef({});
   const avatarRef = useRef({});
 
-  const fetchInitialMessages = async () => {
-    setLoading(true);
-    const data = await getGroupMessage(groupId, LIMIT, 0);
-
-    if (data.length < LIMIT) setHasMore(false);
-
-    data.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    setMessages(data);
-    setPage(1);
-    setLoading(false);
-  };
+  const toggleShowTextbox = () => {
+    setShowTextbox(prev => !prev);
+  }
 
   const loadMoreMessages = async () => {
     if (loadingMore || !hasMore) return;
@@ -1339,7 +1339,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
             ref={messagesContainerRef}
             onScroll={handleScroll}
           >
-            
+
             {loadingMore && (
               <Typography variant="caption" align="center">
                 Loading more messages...
@@ -1931,45 +1931,83 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                     gap: 1
                   }}
                 >
-                  <input
-                    type="file"
-                    accept="image/*"
-                    id="file-upload"
-                    style={{ display: 'none' }}
-                    onChange={handleFileChange}
-                  />
-                  <label htmlFor="file-upload" >
-                    <IconButton
+                  {!showTextbox && (
+                    <Box
                       sx={{
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        borderRadius: 2,
-                        '&:hover': {
-                          bgcolor: '#213e57ff'
-                        }
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        width: recording ? '100%' : 150
                       }}
-                      component="span">
-                      <AttachFileIcon />
-                    </IconButton>
-                  </label>
-                  <VoiceRecorder
-                    onConfirm={(blob) => {
-                      handleUploadVoiceMessage(blob);
-                    }}
-                    onRecordingChange={setRecording}
-                  />
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="file-upload"
+                        style={{ display: 'none' }}
+                        onChange={handleFileChange}
+                      />
+                      <label htmlFor="file-upload" >
+                        <IconButton
+                          sx={{
+                            bgcolor: 'primary.main',
+                            color: 'white',
+                            borderRadius: 2,
+                            '&:hover': {
+                              bgcolor: '#213e57ff'
+                            }
+                          }}
+                          component="span">
+                          <AttachFileIcon />
+                        </IconButton>
+                      </label>
+                      <VoiceRecorder
+                        onConfirm={(blob) => {
+                          handleUploadVoiceMessage(blob);
+                        }}
+                        onRecordingChange={setRecording}
+                      />
+                      <Box sx={{ position: 'relative' }}>
+                        <IconButton
+                          ref={emojiButtonRef}
+                          onClick={() => setShowEmojiPicker(true)}
+                          disabled={recording}
+                          sx={{
+                            fontSize: 50,
+                            color: 'orange'
+                          }}
+                        >
+                          {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                        </IconButton>
 
-                  {!recording && (
+                        {(showEmojiPicker) &&(
+                          <EmojiPicker
+                            onSelect={(emoji) => {
+                              setNewMessage(prev => prev + emoji);
+                              setShowEmojiPicker(false);
+                            }}
+                            onClose={() => setShowEmojiPicker(false)}
+                            anchorEl={emojiButtonRef.current}
+                            placement="top-start"
+                          />
+                        )}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {(!recording || showTextbox) && (
                     <>
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="Type a message..."
+                        placeholder="Aa..."
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyPress={handleKeyPress}
                         multiline
                         maxRows={4}
+                        onFocus={() => setShowTextbox(true)}
+                        onBlur={() => setShowTextbox(false)}
                         sx={{
                           bgcolor: 'grey.100',
                           borderRadius: 2,
