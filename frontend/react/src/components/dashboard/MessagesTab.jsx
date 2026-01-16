@@ -164,6 +164,21 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
   }, [selectedFriend]);
 
+  const scrollToBottomIfNeeded = useCallback((behavior = 'smooth') => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+
+    if (isNearBottom || initialScrollDone.current) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior,
+      });
+    }
+  }, []);
+
   const getWsUrl = useCallback(() => {
     if (!selectedFriend) return null;
     const rawToken = localStorage.getItem('accessToken') || '';
@@ -325,6 +340,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         if (data.sender_id !== user.id) {
           sendReadReceipt(data.id);
         }
+
+        requestAnimationFrame(() => {
+          scrollToBottomIfNeeded('smooth');
+        });
       }
 
       else if (type === "new_call_message") {
@@ -361,6 +380,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         if (data.sender_id !== user.id) {
           sendReadReceipt(data.id);
         }
+
+        requestAnimationFrame(() => {
+          scrollToBottomIfNeeded('smooth');
+        });
       }
 
       else if (type === "message_read") {
@@ -451,6 +474,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
           avatarRef.current[data.from_user] = data.avatar;
         }
         setIsAudioOnlyCall(data.call_type === "voice");
+
+        requestAnimationFrame(() => {
+          scrollToBottomIfNeeded('smooth');
+        });
       }
 
       else if (type === "call_accepted") {
@@ -688,6 +715,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       console.error(err.response?.data || err);
       setError(err.response?.data?.message || 'Failed to send voice');
     }
+
+    requestAnimationFrame(() => {
+      scrollToBottomIfNeeded('smooth');
+    });
   };
 
   const handleAddReaction = async (messageId, emoji) => {
@@ -981,7 +1012,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       const enhanced = enhanceMessages(data);
 
       setMessages(prev => {
-        // Prepend older messages and dedupe
         const merged = dedupeMessages([...enhanced, ...prev])
           .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); // old → new
         return merged;
@@ -989,7 +1019,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
       setPage(prev => prev + 1);
 
-      // Preserve scroll position
       requestAnimationFrame(() => {
         const newScrollHeight = container.scrollHeight;
         container.scrollTop = newScrollHeight - prevScrollHeight;
@@ -1002,7 +1031,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       loadingMoreRef.current = false;
     }
   };
-
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
@@ -1137,6 +1165,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     };
 
     sendWsMessage(payload);
+
+    requestAnimationFrame(() => {
+      scrollToBottomIfNeeded('smooth');
+    });
   };
 
   const handleSendMessage = async () => {
@@ -1618,9 +1650,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                   }}
                 >
                   {loadingMore && (
-                    <Typography textAlign="center">
-                      Loading more...
-                    </Typography>
+                    <Box display="flex" justifyContent="center" alignItems="center" mt={2}>
+                      <CircularProgress />
+                    </Box>
                   )}
                   {messages.length === 0 ? (
                     <Box sx={{ textAlign: 'center', mt: 16 }}>

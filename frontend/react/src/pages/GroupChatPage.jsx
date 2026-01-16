@@ -88,11 +88,14 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
   const [showTextbox, setShowTextbox] = useState(false);
   const emojiButtonRef = useRef(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const isPrependingRef = useRef(false);
+  const firstLoadRef = useRef(true);
+  const canLoadMoreRef = useRef(false);
+  const userHasScrolledRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
 
   const LIMIT = 30;
+  const pageRef = useRef(0);
 
-  const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -130,26 +133,44 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     if (!container) return;
 
     setLoadingMore(true);
+
     const prevScrollHeight = container.scrollHeight;
 
     try {
-      const offset = page * LIMIT;
+      const offset = pageRef.current * LIMIT;
       const data = await getGroupMessage(groupId, LIMIT, offset);
 
       if (data.length < LIMIT) setHasMore(false);
 
-      setMessages(prev => mergeMessages(data, prev));
-      setPage(prev => prev + 1);
+      setMessages(prev => {
+        const merged = mergeMessages(data, prev);
 
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight - prevScrollHeight;
+        requestAnimationFrame(() => {
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = newScrollHeight - prevScrollHeight;
+        });
+
+        return merged;
       });
+
+      pageRef.current += 1;
+
     } catch (err) {
       console.error("Failed to load more messages:", err);
     } finally {
       setLoadingMore(false);
     }
   };
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (firstLoadRef.current) {
+      container.scrollTop = container.scrollHeight;
+      firstLoadRef.current = false;
+    }
+  }, [messages]);
 
   const toggleDrawer = () => {
     setOpenDrawer(prev => !prev);
@@ -223,9 +244,31 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
-    if (isAtBottom) autoScrollToBottom();
+    if (firstLoadRef.current) {
+      autoScrollToBottom();
+
+      requestAnimationFrame(() => {
+        canLoadMoreRef.current = true;
+      });
+
+      firstLoadRef.current = false;
+      return;
+    }
+
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+    if (isNearBottom) {
+      autoScrollToBottom();
+    }
   }, [messages]);
+
+  useEffect(() => {
+    firstLoadRef.current = true;
+    canLoadMoreRef.current = false;
+    userHasScrolledRef.current = false;
+    lastScrollTopRef.current = 0;
+  }, [groupId]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -311,6 +354,9 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
         members: membersData
       });
 
+      pageRef.current = Math.ceil(messagesData.length / LIMIT);
+      setHasMore(messagesData.length >= LIMIT);
+
     } catch (error) {
       console.error('Failed to fetch group data:', error);
     } finally {
@@ -340,29 +386,14 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
 
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
-    if (!container || loadingMore || !hasMore) return;
-
-    if (container.scrollTop <= 0) {
-      loadMoreMessages();
-    }
-    markVisibleMessagesAsSeen();
-  }, [loadingMore, hasMore, loadMoreMessages, markVisibleMessagesAsSeen]);
-
-
-  useEffect(() => {
-    const container = messagesContainerRef.current;
     if (!container) return;
 
-    const onScroll = () => {
-      if (container.scrollTop < 50) {
-        loadMoreMessages();
-      }
-      markVisibleMessagesAsSeen();
-    };
+    markVisibleMessagesAsSeen();
 
-    container.addEventListener("scroll", onScroll);
-    return () => container.removeEventListener("scroll", onScroll);
-  }, []);
+    if (!loadingMore && hasMore && container.scrollTop <= 50) {
+      loadMoreMessages();
+    }
+  }, [loadingMore, hasMore, loadMoreMessages, markVisibleMessagesAsSeen]);
 
   const handleWSMessage = async (event) => {
     const data = JSON.parse(event.data);
@@ -462,6 +493,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
 
           return updated;
         });
+        autoScrollToBottom();
         break;
 
       case "file_update":
@@ -476,11 +508,13 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
 
       case "new_message":
         setMessages(prev => [...prev, data]);
+        autoScrollToBottom();
         break;
 
       case "call_request":
         setActiveCallMessageId(data.call_message_id);
         handleIncomingCall(data);
+        autoScrollToBottom();
         break;
 
       case "call_accepted":
@@ -552,11 +586,10 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
           updated.push(data);
           return updated;
         });
-
+        autoScrollToBottom();
         break;
     }
 
-    autoScrollToBottom();
     markVisibleMessagesAsSeen();
   };
 
@@ -1349,17 +1382,15 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
               display: 'flex',
               flexDirection: 'column',
               gap: 1.5,
-              // '&::-webkit-scrollbar': { display: 'none' },
-              // scrollbarWidth: 'none',
             }}
             ref={messagesContainerRef}
             onScroll={handleScroll}
           >
 
             {loadingMore && (
-              <Typography variant="caption" align="center">
-                Loading more messages...
-              </Typography>
+              <Box display="flex" justifyContent="center" alignItems="center" mt={2}>
+                <CircularProgress />
+              </Box>
             )}
 
             {messages.length === 0 ? (
