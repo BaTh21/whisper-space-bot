@@ -1010,12 +1010,11 @@ async def websocket_group_chat(
 
                     # 🔹 Send to private users
                     for uid, payload in result["users"]:
-                        for chat_id in private_manager.get_user_chats(uid):
-                            await private_manager.send_to_user(chat_id, uid, payload)
+                        await private_manager.send_to_user(user_id=uid, message=payload)
 
                     # 🔹 Send to groups
                     for gid, payload in result["groups"]:
-                        await manager.broadcast(f"group_{gid}", payload)
+                        await manager.broadcast(f"group_{gid}", payload, exclude={websocket})
 
                     await websocket.send_json({
                         "action": "forward_success"

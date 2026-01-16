@@ -63,6 +63,8 @@ const ChatMessage = ({
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t, i18n } = useTranslation();
 
+  console.log("message", message)
+
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
     if (msg.message_type === 'voice') return 'voice';
@@ -308,42 +310,6 @@ const ChatMessage = ({
       </Box>
     );
   };
-
-  useEffect(() => {
-    if (!isMine && currentFriend) {
-      const fetchFriendStatus = async () => {
-        try {
-          const { getUserOnlineStatus } = await import('../../services/api');
-          const status = await getUserOnlineStatus(currentFriend.id);
-          setFriendOnlineStatus(status);
-
-          if (status.last_seen) {
-            const lastSeen = new Date(status.last_seen);
-            const now = new Date();
-            const diffMinutes = Math.floor((now - lastSeen) / (1000 * 60));
-
-            if (diffMinutes < 1) {
-              setLastSeenTime('just now');
-            } else if (diffMinutes < 60) {
-              setLastSeenTime(`${diffMinutes}m ago`);
-            } else if (diffMinutes < 1440) {
-              const hours = Math.floor(diffMinutes / 60);
-              setLastSeenTime(`${hours}h ago`);
-            } else {
-              const days = Math.floor(diffMinutes / 1440);
-              setLastSeenTime(`${days}d ago`);
-            }
-          }
-        } catch (err) {
-          console.error('Failed to fetch friend status:', err);
-        }
-      };
-
-      fetchFriendStatus();
-      const interval = setInterval(fetchFriendStatus, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [isMine, currentFriend]);
 
   useEffect(() => {
     const styleElement = document.createElement('style');
@@ -615,14 +581,14 @@ const ChatMessage = ({
     );
   };
 
-  useEffect(() => {
-    const isTempMessage = message.is_temp ||
-      (typeof message.id === 'string' && message.id.startsWith('temp-'));
+  // useEffect(() => {
+  //   const isTempMessage = message.is_temp ||
+  //     (typeof message.id === 'string' && message.id.startsWith('temp-'));
 
-    if (onLoadReactions && message.id && !isTempMessage && !message.reactions) {
-      onLoadReactions(message.id);
-    }
-  }, [message.id, onLoadReactions, message.reactions, message.is_temp]);
+  //   if (onLoadReactions && message.id && !isTempMessage && !message.reactions) {
+  //     onLoadReactions(message.id);
+  //   }
+  // }, [message.id, onLoadReactions, message.reactions, message.is_temp]);
 
   useEffect(() => {
     if (showReactionAnimation) {
@@ -800,7 +766,7 @@ const ChatMessage = ({
 
       {!isMine && (
         <Avatar
-          src={avatarError ? undefined : senderInfo.avatar_url}
+          src={message?.sender_avatar_url}
           sx={{
             width: 32,
             height: 32,
@@ -811,7 +777,7 @@ const ChatMessage = ({
           }}
           imgProps={{ onError: () => setAvatarError(true) }}
         >
-          {senderInfo.initial}
+          {message.sender_username.charAt(0).toUpperCase() ?? 'P'}
         </Avatar>
       )}
 
@@ -820,11 +786,10 @@ const ChatMessage = ({
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5, ml: 1 }}>
             <Typography
               variant="caption"
-              sx={{ color: 'text.secondary', fontWeight: 500, mr: 1 }}
+              sx={{ color: 'text.secondary', fontWeight: 'bold', mr: 1 }}
             >
-              {senderInfo.username}
+              {message.sender_username}
             </Typography>
-            {renderOnlineStatus()}
           </Box>
         )}
 
@@ -901,9 +866,10 @@ const ChatMessage = ({
                           sx={{
                             width: 14,
                             height: 14,
-                            mt: 0.3
+                            mt: 0.3,
+                            fontSize: 8
                           }}
-                        >{message.original_sender.charAt(0) || "U"}</Avatar>
+                        >{message.original_sender.charAt(0).toUpperCase() || "P"}</Avatar>
                         {message.original_sender}
                       </Box>
                       :
@@ -1019,23 +985,24 @@ const ChatMessage = ({
                   {formatCambodiaTime(message.created_at)}
                   {message.edited_at && message.edited_at !== message.created_at && ' (edited)'}
                 </Typography>
-                {message?.seen_by?.length > 0 ?
-                  (
-                    <Tooltip title={message.seen_by[0]?.username || 'Seen'}>
-                      <DoneAllIcon
-                        sx={{
-                          fontSize: 12,
-                          color: 'green',
-                          transition: 'transform 0.2s',
-                          '&:hover': { transform: 'scale(1.3)', cursor: 'pointer' },
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </Tooltip>
-                  ) : (
-                    <DoneIcon fontSize="12" />
-                  )
-                }
+                {isMine && (
+                  message?.seen_by?.length > 0 ?
+                    (
+                      <Tooltip title={message.seen_by[0]?.username || 'Seen'}>
+                        <DoneAllIcon
+                          sx={{
+                            fontSize: 12,
+                            color: 'green',
+                            transition: 'transform 0.2s',
+                            '&:hover': { transform: 'scale(1.3)', cursor: 'pointer' },
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Tooltip>
+                    ) : (
+                      <DoneIcon fontSize="12" />
+                    )
+                )}
               </Box>
 
             </Box>

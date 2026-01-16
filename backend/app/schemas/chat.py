@@ -80,6 +80,7 @@ class MessageOut(TimestampMixin):
     original_sender: Optional[str] = None
     original_sender_avatar: Optional[str] = None
     sender_username: Optional[str] = None
+    sender_avatar_url: Optional[str] = None
     receiver_username: Optional[str] = None
     voice_duration: Optional[float] = None  # ADDED
     file_size: Optional[int] = None  # ADDED

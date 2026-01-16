@@ -507,7 +507,10 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
         break;
 
       case "new_message":
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => {
+          if (prev.some(msg => msg.id === data.id)) return prev;
+          return [...prev, data];
+        });
         autoScrollToBottom();
         break;
 
@@ -1439,7 +1442,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
                           alt={message.sender.username || 'User'}
                           sx={{ width: 32, height: 32, mr: 1 }}
                         >
-                          {message.sender.username?.charAt(0) || 'U'}
+                          {message.sender.username?.charAt(0).toUpperCase() || 'P'}
                         </Avatar>
                       )}
 
@@ -1521,9 +1524,10 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
                                           sx={{
                                             width: 14,
                                             height: 14,
-                                            mt: 0.3
+                                            mt: 0.3,
+                                            fontSize: 8
                                           }}
-                                        >{message.forwarded_by.avatar_url.charAt(0) || "U"}</Avatar>
+                                        >{message.forwarded_by.username.charAt(0).toUpperCase() || "P"}</Avatar>
                                         {message.forwarded_by.username}
                                       </Box>
                                       :

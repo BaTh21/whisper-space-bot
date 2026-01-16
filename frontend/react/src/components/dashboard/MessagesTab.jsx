@@ -15,8 +15,6 @@ import {
   IconButton,
   TextField,
   Typography,
-  useMediaQuery,
-  useTheme,
   CircularProgress
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from 'react';
@@ -58,7 +56,6 @@ const getWebSocketBaseUrl = () => {
 const BASE_URI = getWebSocketBaseUrl();
 
 const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList }) => {
-  // const [selectedFriend, setSelectedFriend] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [forwardingMessage, setForwardingMessage] = useState(null);
@@ -70,7 +67,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef(null);
-  // const [showFriend, setShowFriend] = useState(false);
   const { t, i18n } = useTranslation();
   const [isOnline, setIsOnline] = useState(false);
   const [showTextbox, setShowTextbox] = useState(false);
@@ -127,9 +123,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const audioBlobRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const lastMessageCount = useRef(0);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const tempToRealIdMap = useRef({});
   const cancelReply = () => setReplyTo(null);
 
@@ -301,6 +294,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
             username: data.sender_username,
             avatar_url: getAvatarUrl(data.avatar_url),
           },
+          sender_username: data.sender_username,
+          sender_avatar_url: getAvatarUrl(data.avatar_url),
           is_read: data.is_read || false,
           read_at: data.read_at || null,
           seen_by: data.seen_by || [],
