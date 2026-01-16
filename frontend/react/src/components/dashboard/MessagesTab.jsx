@@ -19,7 +19,7 @@ import {
   useTheme,
   CircularProgress
 } from '@mui/material';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAvatar } from '../../hooks/useAvatar';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -77,7 +77,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const messageRefs = useRef({});
 
   const LIMIT = 30;
-  const MAX_MESSAGES = 100;
 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -151,6 +150,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     if (!selectedFriend) return;
 
     sentReadReceipts.current = new Set();
+    initialScrollDone.current = false;
+
     setMessages([]);
     setNewMessage('');
     setFriendTyping(false);
@@ -945,10 +946,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
       setPage(1);
 
-      requestAnimationFrame(() => {
-        const container = messagesContainerRef.current;
-        if (container) container.scrollTop = container.scrollHeight;
-      });
+      requestAnimationFrame(() => scrollToBottom(true));
     } catch (err) {
       console.error(err);
     } finally {
@@ -1015,13 +1013,19 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     }
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = messagesContainerRef.current;
-    if (!container || messages.length === 0 || initialScrollDone.current) return;
+    if (!container) return;
+    if (!messages.length) return;
+    if (initialScrollDone.current) return;
 
-    container.scrollTop = container.scrollHeight;
-    initialScrollDone.current = true;
-  }, [messages, selectedFriend]);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+        initialScrollDone.current = true;
+      });
+    });
+  }, [messages]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -1185,31 +1189,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setForwardDialogOpen(true);
   };
 
-  const scrollToBottom = useCallback((smooth = false) => {
+  const scrollToBottom = (smooth = true) => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    requestAnimationFrame(() => {
-      if (smooth) {
-        container.scrollTo({
-          top: container.scrollHeight,
-          behavior: 'smooth',
-        });
-      } else {
-        container.scrollTop = container.scrollHeight;
-      }
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
     });
-  }, []);
-
-  useEffect(() => {
-    if (!selectedFriend) return;
-
-    const timeout = setTimeout(() => {
-      scrollToBottom(true);
-    }, 50);
-
-    return () => clearTimeout(timeout);
-  }, [selectedFriend, messages, scrollToBottom]);
+  };
 
   const handleEditMessage = async (messageId, newContent) => {
     if (!newContent.trim()) return;
