@@ -63,7 +63,7 @@ const ChatMessage = ({
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t, i18n } = useTranslation();
 
-  console.log("message", message)
+  // console.log("message", message)
 
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
@@ -132,11 +132,6 @@ const ChatMessage = ({
         console.error('Delete error:', err);
       }
     }
-    handleClose();
-  };
-
-  const handleForwardClick = () => {
-    onForward?.(message);
     handleClose();
   };
 
@@ -1075,7 +1070,7 @@ const ChatMessage = ({
 
                 if (actualMessageType !== 'system') {
                   menuItems.push(
-                    <MenuItem key="forward" onClick={handleForwardClick}>
+                    <MenuItem key="forward" onClick={onForward}>
                       <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                       {t('forward')}
                     </MenuItem>,
@@ -1104,7 +1099,7 @@ const ChatMessage = ({
                     <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
                     Reply
                   </MenuItem>,
-                  <MenuItem key="forward" onClick={handleForwardClick}>
+                  <MenuItem key="forward" onClick={onForward}>
                     <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}
                   </MenuItem>

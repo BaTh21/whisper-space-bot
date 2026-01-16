@@ -15,7 +15,8 @@ import {
   IconButton,
   TextField,
   Typography,
-  CircularProgress
+  CircularProgress,
+  Drawer
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +37,6 @@ import {
   uploadImage
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
-import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 import EmojiButton from '../EmojiButton';
 import EmojiPicker from '../EmojiPicker';
 import { IncomingCallDialog } from '../group/InCommingCallDialog';
@@ -44,6 +44,7 @@ import CallDialog from '../group/CallDialog';
 import { useAuth } from '../../context/AuthContext';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import VoiceRecorder from '../group/VoiceRecorder';
+import GroupListComponent from '../chat/GroupListComponent';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -55,11 +56,9 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList }) => {
+const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList, chats }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [forwardingMessage, setForwardingMessage] = useState(null);
-  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [friendTyping, setFriendTyping] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
@@ -125,6 +124,32 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const typingTimeoutRef = useRef(null);
   const tempToRealIdMap = useRef({});
   const cancelReply = () => setReplyTo(null);
+
+  const [openDrawer, setOpenDrawer] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState("");
+
+  const toggleDrawer = () => {
+    setOpenDrawer(prev => !prev);
+  };
+
+  const DrawerBox = (
+    <Box
+      sx={{
+        width: 350
+      }}
+      role="presentation"
+    >
+      <GroupListComponent
+        onClose={() => setOpenDrawer(false)}
+        message={selectedMessage}
+        onForward={(msg, targets) => {
+          handleForwardMessage(msg, targets);
+          setOpenDrawer(false);
+        }}
+        chats={chats}
+      />
+    </Box>
+  )
 
   const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
 
@@ -1201,19 +1226,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     }
   };
 
-  const handleForwardMessage = async (message, selectedFriends) => {
+  const handleForwardMessage = (message, targets) => {
 
     sendWsMessage({
       type: "forward",
       message_id: message.id,
-      target_user_ids: selectedFriends.map(f => f.id),
-    });
-
-  };
-
-  const handleForward = (msg) => {
-    setForwardingMessage(msg);
-    setForwardDialogOpen(true);
+      targets: {
+        users: targets.users || [],
+        groups: targets.groups || []
+      }
+    })
   };
 
   const scrollToBottom = (smooth = true) => {
@@ -1518,6 +1540,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
       <Box sx={{ display: 'flex', gap: 3, width: '100%', height: '88vh' }}>
 
+        <Drawer
+          anchor='right'
+          open={openDrawer}
+          onClose={toggleDrawer}>
+          {DrawerBox}
+        </Drawer>
+
         {showFriend && (
           <Box
             sx={{
@@ -1670,7 +1699,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                           isMine={message.sender_id === profile?.id}
                           onUpdate={handleEditMessage}
                           onDelete={handleDeleteMessage}
-                          onForward={handleForward}
+                          onForward={() => {
+                            setSelectedMessage(message);
+                            toggleDrawer();
+                          }}
                           onAddReaction={handleAddReaction}
                           onRemoveReaction={handleRemoveReaction}
                           onLoadReactions={loadMessageReactions}
@@ -1861,7 +1893,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         )}
       </Box>
 
-      <ForwardMessageDialog
+      {/* <ForwardMessageDialog
         open={forwardDialogOpen}
         onClose={() => setForwardDialogOpen(false)}
         message={forwardingMessage}
@@ -1869,7 +1901,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         onForward={handleForwardMessage}
         getAvatarUrl={getAvatarUrl}
         getUserInitials={getUserInitials}
-      />
+      /> */}
 
       <IncomingCallDialog
         open={incomingCall.open}

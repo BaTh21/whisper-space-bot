@@ -590,6 +590,8 @@ async def handle_websocket_private(
                     pass
 
                 elif msg_type == "forward":
+                    print("Active connections:", manager.active_connections.keys())
+
                     result = await forward_message(
                         db=db,
                         current_user=current_user,
@@ -599,10 +601,9 @@ async def handle_websocket_private(
                         target_group_ids=data.get("targets", {}).get("groups", []),
                     )
 
-                    # 🔹 Send to users
+                    # 🔹 Send to private users
                     for uid, payload in result["users"]:
-                        for chat_id in manager.get_user_chats(uid):
-                            await manager.send_to_user(chat_id, uid, payload)
+                        await manager.send_to_user_direct(uid, payload)
 
                     # 🔹 Send to groups
                     for gid, payload in result["groups"]:

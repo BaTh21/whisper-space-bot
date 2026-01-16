@@ -111,7 +111,7 @@ async def forward_message(
             forwarded_by_id=original_sender.id,
             forwarded_at=datetime.utcnow(),
             content=original.content,
-            message_type=original.message_type,
+            message_type=original.message_type.value,
         )
 
         db.add(new_msg)

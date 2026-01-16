@@ -274,6 +274,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         showFriend={showFriend}
                         selectedFriend={selectedFriend}
                         toggleGroupList={toggleGroupList}
+                        chats={chats}
                     />
                 )}
                 {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} chats={chats}/>}

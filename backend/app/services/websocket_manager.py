@@ -132,6 +132,20 @@ class WebSocketManager:
                 self.disconnect(chat_id, ws, user_id)
 
         return sent
+    
+    async def send_to_user_direct(self, user_id: int, message: dict) -> bool:
+        if user_id not in self.user_connections:
+            return False
+
+        sent = False
+        for ws in list(self.user_connections[user_id]):
+            try:
+                await ws.send_json(message)
+                sent = True
+            except:
+                self.disconnect(None, ws, user_id)
+
+        return sent
 
     def get_online_users(self, chat_id: str) -> Set[int]:
         return self.online_users.get(chat_id, set())
