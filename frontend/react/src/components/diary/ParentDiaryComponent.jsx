@@ -1,12 +1,13 @@
-import { Box, Typography, Avatar, Chip, Modal, IconButton } from '@mui/material';
+import { Box, Typography, Avatar, Chip, Modal, IconButton,Tooltip, Button, CircularProgress  } from '@mui/material';
 import { DiaryCard } from './DairyCard';
 import { formatCambodiaDate } from '../../utils/dateUtils';
 import { useTranslation } from 'react-i18next';
 import { getVideoThumbnail } from './getVideoThumbnail';
 import { Close as CloseIcon, ArrowBack as ArrowBackIcon, ArrowForward as ArrowForwardIcon, PlayArrow as PlayArrowIcon, } from '@mui/icons-material';
 import { useState } from 'react';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
-function ParentDiaryComponent({ parent, friends, profile }) {
+function ParentDiaryComponent({ parent, friends, profile, sendingRequests }) {
     if (!parent) return null;
 
     const [mediaViewerOpen, setMediaViewerOpen] = useState(false);

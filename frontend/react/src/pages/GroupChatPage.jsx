@@ -1425,6 +1425,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
 
                   const isOwn = message.sender?.id === user?.id;
 
+                  console.log("groups message", message)
+
                   return (
                     <Box
                       key={messageKey}

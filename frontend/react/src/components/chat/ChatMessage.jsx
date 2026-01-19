@@ -63,7 +63,7 @@ const ChatMessage = ({
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t, i18n } = useTranslation();
 
-  // console.log("message", message)
+  console.log("message", message)
 
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';

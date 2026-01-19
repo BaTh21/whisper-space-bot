@@ -1735,7 +1735,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                           )}
 
                           <DiaryCard content={diary.content} />
-                          <ParentDiaryComponent parent={diary.parent} friends={friends} profile={profile} />
+                          <ParentDiaryComponent parent={diary.parent} friends={friends} profile={profile} sendingRequests={sendingRequests}/>
 
                           {!diary.parent && (
                             <Divider />
