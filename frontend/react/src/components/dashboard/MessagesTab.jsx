@@ -7,32 +7,24 @@ import {
 } from '@mui/icons-material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CallIcon from '@mui/icons-material/Call';
-import SearchIcon from '@mui/icons-material/Search';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import {
   Avatar,
   Box,
   Button,
-  Chip,
   IconButton,
-  InputAdornment,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
   TextField,
   Typography,
-  useMediaQuery,
-  useTheme
+  CircularProgress,
+  Drawer
 } from '@mui/material';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAvatar } from '../../hooks/useAvatar';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import {
   addReactionToMessage,
   sendVoiceMessage as apiSendVoiceMessage,
-  checkBlockedStatus,
   deleteImageMessage,
   deleteMessage,
   editMessage,
@@ -45,7 +37,6 @@ import {
   uploadImage
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
-import ForwardMessageDialog from '../chat/ForwardMessageDialog';
 import EmojiButton from '../EmojiButton';
 import EmojiPicker from '../EmojiPicker';
 import { IncomingCallDialog } from '../group/InCommingCallDialog';
@@ -53,6 +44,7 @@ import CallDialog from '../group/CallDialog';
 import { useAuth } from '../../context/AuthContext';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import VoiceRecorder from '../group/VoiceRecorder';
+import GroupListComponent from '../chat/GroupListComponent';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -64,12 +56,9 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList }) => {
-  // const [selectedFriend, setSelectedFriend] = useState(null);
+const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList, chats }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [forwardingMessage, setForwardingMessage] = useState(null);
-  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [friendTyping, setFriendTyping] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
@@ -77,9 +66,16 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef(null);
-  // const [showFriend, setShowFriend] = useState(false);
   const { t, i18n } = useTranslation();
   const [isOnline, setIsOnline] = useState(false);
+  const [showTextbox, setShowTextbox] = useState(false);
+  const messageRefs = useRef({});
+
+  const LIMIT = 30;
+
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -111,6 +107,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const sentReadReceipts = useRef(new Set());
   const isConnectedRef = useRef(false);
   const sendWsMessageRef = useRef(null);
+  const [loadingInitial, setLoadingInitial] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const initialScrollDone = useRef(false);
 
   const [incomingCall, setIncomingCall] = useState({
     open: false,
@@ -123,11 +122,34 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const audioBlobRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const lastMessageCount = useRef(0);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const tempToRealIdMap = useRef({});
   const cancelReply = () => setReplyTo(null);
+
+  const [openDrawer, setOpenDrawer] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState("");
+
+  const toggleDrawer = () => {
+    setOpenDrawer(prev => !prev);
+  };
+
+  const DrawerBox = (
+    <Box
+      sx={{
+        width: 350
+      }}
+      role="presentation"
+    >
+      <GroupListComponent
+        onClose={() => setOpenDrawer(false)}
+        message={selectedMessage}
+        onForward={(msg, targets) => {
+          handleForwardMessage(msg, targets);
+          setOpenDrawer(false);
+        }}
+        chats={chats}
+      />
+    </Box>
+  )
 
   const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
 
@@ -146,6 +168,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     if (!selectedFriend) return;
 
     sentReadReceipts.current = new Set();
+    initialScrollDone.current = false;
+
     setMessages([]);
     setNewMessage('');
     setFriendTyping(false);
@@ -154,11 +178,24 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setRecordingTime(0);
     setIsRecording(false);
 
-    // open socket / fetch messages here
+    loadInitialMessages();
+
   }, [selectedFriend]);
-  // const toggleShowFriend = () => {
-  //   setShowFriend(prev => !prev);
-  // }
+
+  const scrollToBottomIfNeeded = useCallback((behavior = 'smooth') => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+
+    if (isNearBottom || initialScrollDone.current) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior,
+      });
+    }
+  }, []);
 
   const getWsUrl = useCallback(() => {
     if (!selectedFriend) return null;
@@ -282,6 +319,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
             username: data.sender_username,
             avatar_url: getAvatarUrl(data.avatar_url),
           },
+          sender_username: data.sender_username,
+          sender_avatar_url: getAvatarUrl(data.avatar_url),
           is_read: data.is_read || false,
           read_at: data.read_at || null,
           seen_by: data.seen_by || [],
@@ -321,6 +360,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         if (data.sender_id !== user.id) {
           sendReadReceipt(data.id);
         }
+
+        requestAnimationFrame(() => {
+          scrollToBottomIfNeeded('smooth');
+        });
       }
 
       else if (type === "new_call_message") {
@@ -357,6 +400,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         if (data.sender_id !== user.id) {
           sendReadReceipt(data.id);
         }
+
+        requestAnimationFrame(() => {
+          scrollToBottomIfNeeded('smooth');
+        });
       }
 
       else if (type === "message_read") {
@@ -447,6 +494,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
           avatarRef.current[data.from_user] = data.avatar;
         }
         setIsAudioOnlyCall(data.call_type === "voice");
+
+        requestAnimationFrame(() => {
+          scrollToBottomIfNeeded('smooth');
+        });
       }
 
       else if (type === "call_accepted") {
@@ -588,10 +639,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         }
       });
     }
-
-    if (messages.length === 0 && selectedFriend) {
-      loadInitialMessages();
-    }
   }, [sendSeenMessage, messages.length, selectedFriend]);
 
   const handleWebSocketClose = useCallback((event) => {
@@ -661,19 +708,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     fetchBlockedUsers();
   }, []);
 
-  const checkIfUserIsBlocked = async (userId) => {
-    try {
-      const status = await checkBlockedStatus(userId);
-      setBlockStatus(prev => ({
-        ...prev,
-        [userId]: status.is_blocked
-      }));
-      return status.is_blocked;
-    } catch (error) {
-      return blockedUsers.some(user => user.id === userId);
-    }
-  };
-
   const handleVoiceConfirm = (blob) => {
     if (!blob || !selectedFriend) return;
 
@@ -701,6 +735,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       console.error(err.response?.data || err);
       setError(err.response?.data?.message || 'Failed to send voice');
     }
+
+    requestAnimationFrame(() => {
+      scrollToBottomIfNeeded('smooth');
+    });
   };
 
   const handleAddReaction = async (messageId, emoji) => {
@@ -896,118 +934,168 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     }, 3000);
   }, [selectedFriend, isConnected, sendWsMessage]);
 
+  const buildSeenBy = (msg) => {
+    if (msg.seen_by && Array.isArray(msg.seen_by)) {
+      return msg.seen_by.map(s => ({
+        user_id: s.user_id || s.userId,
+        username: s.username,
+        avatar_url: s.avatar_url || s.avatarUrl,
+        seen_at: s.seen_at || s.seenAt,
+      }));
+    }
+
+    if (msg.is_read) {
+      const otherUserId = msg.receiver_id === profile?.id ? selectedFriend.id : profile.id;
+      return [{
+        user_id: otherUserId,
+        username: msg.receiver_id === profile?.id ? selectedFriend.username : profile.username,
+        avatar_url: msg.receiver_id === profile?.id ? getUserAvatar(selectedFriend) : getUserAvatar(profile),
+        seen_at: msg.read_at || new Date().toISOString(),
+      }];
+    }
+
+    return [];
+  };
+
+  const detectMessageType = (msgData) => {
+    if (msgData.message_type === "system") return "system";
+    if (msgData.message_type === "image") return "image";
+    if (msgData.message_type === "voice") return "voice";
+    if (msgData.message_type === "file") return "file";
+    if (msgData.message_type === "text") return "text";
+
+    const content = msgData.content || "";
+
+    const isVoiceUrl =
+      content.includes("/voice_messages/") ||
+      content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
+      (content.includes("cloudinary.com") && content.includes("/video/upload/"));
+    if (isVoiceUrl) return "voice";
+
+    const isImageUrl =
+      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
+      (content.includes("cloudinary.com") && content.includes("/image/upload/"));
+    return isImageUrl ? "image" : "text";
+  };
+
   const loadInitialMessages = async () => {
-    if (!selectedFriend || messages.length > 0) return;
+    if (!selectedFriend) return;
+
+    setLoadingInitial(true);
+    setHasMore(true);
 
     try {
-      const isBlocked = blockStatus[selectedFriend.id] ||
-        await checkIfUserIsBlocked(selectedFriend.id);
+      const data = await getPrivateChat(selectedFriend.id, LIMIT, 0);
 
-      if (isBlocked) {
-        setMessages([]);
-        setError(`Cannot load messages. ${selectedFriend.username} is blocked.`);
-        return;
-      }
+      if (data.length < LIMIT) setHasMore(false);
 
-      const chatMessages = await getPrivateChat(selectedFriend.id);
+      const enhanced = enhanceMessages(data);
 
-      if (Array.isArray(chatMessages) && chatMessages.length === 0) {
-        const recheckBlocked = await checkIfUserIsBlocked(selectedFriend.id);
-        if (recheckBlocked) {
-          setMessages([]);
-          setError(`Cannot load messages. ${selectedFriend.username} is blocked.`);
-          return;
-        }
-      }
+      setMessages(
+        enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      );
 
-      const filteredMessages = chatMessages.filter(msg => {
-        const messageSenderId = msg.sender_id;
-        return !blockedUsers.some(blockedUser => blockedUser.id === messageSenderId);
+      setPage(1);
+
+      requestAnimationFrame(() => scrollToBottom(true));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingInitial(false);
+    }
+  };
+
+  const dedupeMessages = (messages) => {
+    const map = new Map();
+    messages.forEach(msg => {
+      map.set(msg.id, msg);
+    });
+    return Array.from(map.values());
+  };
+
+  const loadMoreMessages = async () => {
+    if (!selectedFriend || loadingMoreRef.current || !hasMore) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const prevScrollHeight = container.scrollHeight;
+
+    setLoadingMore(true);
+    loadingMoreRef.current = true;
+
+    try {
+      const data = await getPrivateChat(selectedFriend.id, LIMIT, page * LIMIT);
+
+      if (data.length < LIMIT) setHasMore(false);
+
+      const enhanced = enhanceMessages(data);
+
+      setMessages(prev => {
+        const merged = dedupeMessages([...enhanced, ...prev])
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); // old → new
+        return merged;
       });
 
-      const enhanced = filteredMessages.map((msg) => {
-        const detectMessageType = (message) => {
-          if (message.message_type === 'image') return 'image';
-          if (message.message_type === 'voice') return 'voice';
-          if (message.message_type === 'file') return 'file';
-          if (message.message_type === 'text') return 'text';
-          if (message.message_type === 'system') return 'system';
+      setPage(prev => prev + 1);
 
-          const content = message.content || '';
+      requestAnimationFrame(() => {
+        const newScrollHeight = container.scrollHeight;
+        container.scrollTop = newScrollHeight - prevScrollHeight;
+      });
 
-          const isVoiceUrl =
-            content.includes('/voice_messages/') ||
-            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/video/upload/'));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  };
 
-          if (isVoiceUrl) return "voice";
+  const handleScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container || loadingMoreRef.current || !hasMore) return;
 
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes('cloudinary.com') && content.includes('/image/upload/'));
+    if (container.scrollTop < 50) {
+      loadMoreMessages();
+    }
+  };
 
-          return isImageUrl ? "image" : "text";
-        };
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (!messages.length) return;
+    if (initialScrollDone.current) return;
 
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+        initialScrollDone.current = true;
+      });
+    });
+  }, [messages]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [hasMore, loadingMoreRef.current, page]);
+
+  const enhanceMessages = (chatMessages) => {
+    return chatMessages
+      .filter(msg => !blockedUsers.some(u => u.id === msg.sender_id))
+      .map(msg => {
         const messageType = detectMessageType(msg);
-
-        const content = msg.content;
-
         const sender = {
           id: msg.sender_id,
-          username: msg.sender_id === profile?.id ? profile.username : selectedFriend.username,
-          avatar_url: getUserAvatar(msg.sender_id === profile?.id ? profile : selectedFriend),
+          username: msg.sender_id === profile.id ? profile.username : selectedFriend.username,
+          avatar_url: getUserAvatar(msg.sender_id === profile.id ? profile : selectedFriend),
         };
-
-        const seen_by = msg.seen_by && Array.isArray(msg.seen_by)
-          ? msg.seen_by.map(s => ({
-            user_id: s.user_id || s.userId,
-            username: s.username,
-            avatar_url: s.avatar_url || s.avatarUrl,
-            seen_at: s.seen_at || s.seenAt,
-          }))
-          : msg.is_read
-            ? [{
-              user_id: msg.receiver_id === profile?.id ? selectedFriend.id : profile.id,
-              username: msg.receiver_id === profile?.id ? selectedFriend.username : profile.username,
-              avatar_url: msg.receiver_id === profile?.id ? getUserAvatar(selectedFriend) : getUserAvatar(profile),
-              seen_at: msg.read_at || new Date().toISOString(),
-            }]
-            : [];
-
-        return {
-          ...msg,
-          content,
-          is_temp: false,
-          message_type: messageType,
-          sender,
-          is_read: msg.is_read || false,
-          read_at: msg.read_at || null,
-          seen_by,
-          voice_duration: msg.voice_duration || 0,
-          file_size: msg.file_size || 0,
-        };
+        const seen_by = buildSeenBy(msg);
+        return { ...msg, sender, seen_by, message_type: messageType, is_temp: false };
       });
-
-      setMessages(enhanced.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
-      setError(null);
-    } catch (err) {
-      if (err.message?.includes('blocked') || err.response?.data?.detail?.includes('blocked')) {
-        setError(`Cannot load messages. ${selectedFriend?.username || 'User'} is blocked.`);
-
-        if (selectedFriend) {
-          setBlockStatus(prev => ({
-            ...prev,
-            [selectedFriend.id]: true
-          }));
-        }
-      } else if (err.response?.status === 403 && err.response?.data?.detail?.includes('Not friends')) {
-        setError(`You are not friends with ${selectedFriend?.username || 'this user'}.`);
-      } else {
-        setError(t('failed_load_messages'));
-      }
-      console.error(err);
-    }
   };
 
   <EmojiButton
@@ -1097,6 +1185,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     };
 
     sendWsMessage(payload);
+
+    requestAnimationFrame(() => {
+      scrollToBottomIfNeeded('smooth');
+    });
   };
 
   const handleSendMessage = async () => {
@@ -1134,36 +1226,27 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     }
   };
 
-  const handleForwardMessage = async (message, selectedFriends) => {
+  const handleForwardMessage = (message, targets) => {
 
     sendWsMessage({
       type: "forward",
       message_id: message.id,
-      target_user_ids: selectedFriends.map(f => f.id),
+      targets: {
+        users: targets.users || [],
+        groups: targets.groups || []
+      }
+    })
+  };
+
+  const scrollToBottom = (smooth = true) => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
     });
-
   };
-
-  const handleForward = (msg) => {
-    setForwardingMessage(msg);
-    setForwardDialogOpen(true);
-  };
-
-  const scrollToBottom = useCallback(() => {
-    if (!messagesContainerRef.current) return;
-    messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-  }, []);
-
-  useEffect(() => {
-    if (messages.length !== lastMessageCount.current) {
-      lastMessageCount.current = messages.length;
-      scrollToBottom();
-    }
-  }, [messages, scrollToBottom]);
-
-  useEffect(() => {
-    if (selectedFriend) scrollToBottom();
-  }, [selectedFriend, scrollToBottom]);
 
   const handleEditMessage = async (messageId, newContent) => {
     if (!newContent.trim()) return;
@@ -1372,6 +1455,14 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setIsAudioOnlyCall(false);
   }
 
+  if (loadingInitial) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -1449,6 +1540,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
       <Box sx={{ display: 'flex', gap: 3, width: '100%', height: '88vh' }}>
 
+        <Drawer
+          anchor='right'
+          open={openDrawer}
+          onClose={toggleDrawer}>
+          {DrawerBox}
+        </Drawer>
+
         {showFriend && (
           <Box
             sx={{
@@ -1468,8 +1566,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     display: 'flex',
                     justifyContent: 'space-between',
                     px: { xs: 2, md: 3 },
-                    py: { xs: 1, md: 2 },
-                    boxShadow: 1,
+                    py: { xs: 1.25 },
+                    boxShadow: '0px 2px 4px rgba(0,0,0,0.12)',
                     '&:hover': { bgcolor: 'grey.200' },
                   }}>
                   <Box
@@ -1489,7 +1587,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                       <ArrowBackIcon />
                     </IconButton>
                     <Avatar
-                      src={getUserAvatar(selectedFriend)}
+                      src={getUserAvatar(selectedFriend.avatar)}
                       sx={{
                         width: { xs: 38, md: 44 },
                         height: { xs: 38, md: 44 },
@@ -1498,10 +1596,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                         p: 0.25
                       }}
                     >
-                      {getUserInitials(selectedFriend.username)}
+                      {selectedFriend.name.charAt(0).toUpperCase()}
                     </Avatar>
                     <Box sx={{ ml: 1 }}>
-                      <Typography variant="h6" fontWeight="600">{selectedFriend.username}</Typography>
+                      <Typography variant="h6" fontWeight="600">{selectedFriend.name}</Typography>
                       <Typography sx={{ display: { xs: 'block', md: 'none' } }} variant="caption" color="text.secondary">{status.text}</Typography>
                     </Box>
                   </Box>
@@ -1571,10 +1669,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     flexDirection: 'column',
                     gap: 1,
                     minHeight: { xs: '200px', sm: 'auto' },
-                    '&::-webkit-scrollbar': { display: 'none' },
-                    scrollbarWidth: 'none',
+                    // '&::-webkit-scrollbar': { display: 'none' },
+                    // scrollbarWidth: 'none',
                   }}
                 >
+                  {loadingMore && (
+                    <Box display="flex" justifyContent="center" alignItems="center" mt={2}>
+                      <CircularProgress />
+                    </Box>
+                  )}
                   {messages.length === 0 ? (
                     <Box sx={{ textAlign: 'center', mt: 16 }}>
                       <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
@@ -1583,24 +1686,35 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     </Box>
                   ) : (
                     messages.map((message) => (
-                      <ChatMessage
+                      <Box
                         key={message.id}
-                        message={message}
-                        isMine={message.sender_id === profile?.id}
-                        onUpdate={handleEditMessage}
-                        onDelete={handleDeleteMessage}
-                        onForward={handleForward}
-                        onAddReaction={handleAddReaction}
-                        onRemoveReaction={handleRemoveReaction}
-                        onLoadReactions={loadMessageReactions}
-                        profile={profile}
-                        currentFriend={selectedFriend}
-                        getAvatarUrl={getAvatarUrl}
-                        getUserInitials={getUserInitials}
-                        onCallBack={handleStartCall}
-                        onReply={() => { handleReply(message) }}
-                        userId={user.id}
-                      />
+                        data-message-id={message.id}
+                        ref={(el) => {
+                          if (el) messageRefs.current[message.id] = el;
+                        }}
+                        sx={{ flexShrink: 0 }}
+                      >
+                        <ChatMessage
+                          message={message}
+                          isMine={message.sender_id === profile?.id}
+                          onUpdate={handleEditMessage}
+                          onDelete={handleDeleteMessage}
+                          onForward={() => {
+                            setSelectedMessage(message);
+                            toggleDrawer();
+                          }}
+                          onAddReaction={handleAddReaction}
+                          onRemoveReaction={handleRemoveReaction}
+                          onLoadReactions={loadMessageReactions}
+                          profile={profile}
+                          currentFriend={selectedFriend}
+                          getAvatarUrl={getAvatarUrl}
+                          getUserInitials={getUserInitials}
+                          onCallBack={handleStartCall}
+                          onReply={() => handleReply(message)}
+                          userId={user.id}
+                        />
+                      </Box>
                     ))
                   )}
                 </Box>
@@ -1654,48 +1768,52 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     </Box>
                   )}
 
-                  <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
-                  <label htmlFor="image-upload">
-                    <Button
-                      variant='contained'
-                      sx={{ minWidth: 30, borderRadius: 2, py: 1.2, px: 1 }}
-                      component="span"
-                      disabled={!selectedFriend || uploadingImage}>
-                      {uploadingImage ? <AttachFileIcon /> : <AttachFileIcon />}
-                    </Button>
-                  </label>
+                  {!showTextbox && (
+                    <>
+                      <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
+                      <label htmlFor="image-upload">
+                        <Button
+                          variant='contained'
+                          sx={{ minWidth: 30, borderRadius: 2, py: 1.2, px: 1 }}
+                          component="span"
+                          disabled={!selectedFriend || uploadingImage}>
+                          {uploadingImage ? <AttachFileIcon /> : <AttachFileIcon />}
+                        </Button>
+                      </label>
 
-                  <VoiceRecorder
-                    onConfirm={handleVoiceConfirm}
-                    onRecordingChange={setIsRecording}
-                  />
+                      <VoiceRecorder
+                        onConfirm={handleVoiceConfirm}
+                        onRecordingChange={setIsRecording}
+                      />
 
-                  {!isRecording && (
-                    <Box sx={{ position: 'relative' }}>
-                      <IconButton
-                        ref={emojiButtonRef}
-                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        disabled={!selectedFriend || uploadingImage || isRecording}
-                        sx={{
-                          fontSize: 50,
-                          color: 'orange'
-                        }}
-                      >
-                        {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
-                      </IconButton>
+                      {!isRecording && (
+                        <Box sx={{ position: 'relative' }}>
+                          <IconButton
+                            ref={emojiButtonRef}
+                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                            disabled={!selectedFriend || uploadingImage || isRecording}
+                            sx={{
+                              fontSize: 50,
+                              color: 'orange'
+                            }}
+                          >
+                            {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                          </IconButton>
 
-                      {showEmojiPicker && (
-                        <EmojiPicker
-                          onSelect={(emoji) => {
-                            setNewMessage(prev => prev + emoji);
-                            setShowEmojiPicker(false);
-                          }}
-                          onClose={() => setShowEmojiPicker(false)}
-                          anchorEl={emojiButtonRef.current}
-                          placement="top-start"
-                        />
+                          {showEmojiPicker && (
+                            <EmojiPicker
+                              onSelect={(emoji) => {
+                                setNewMessage(prev => prev + emoji);
+                                setShowEmojiPicker(false);
+                              }}
+                              onClose={() => setShowEmojiPicker(false)}
+                              anchorEl={emojiButtonRef.current}
+                              placement="top-start"
+                            />
+                          )}
+                        </Box>
                       )}
-                    </Box>
+                    </>
                   )}
 
                   {!isRecording && (
@@ -1711,6 +1829,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                           handleSendMessage();
                         }
                       }}
+                      onFocus={() => setShowTextbox(true)}
+                      onBlur={() => setShowTextbox(false)}
                       multiline
                       maxRows={3}
                       disabled={!selectedFriend || uploadingImage || isRecording}
@@ -1773,7 +1893,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         )}
       </Box>
 
-      <ForwardMessageDialog
+      {/* <ForwardMessageDialog
         open={forwardDialogOpen}
         onClose={() => setForwardDialogOpen(false)}
         message={forwardingMessage}
@@ -1781,7 +1901,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         onForward={handleForwardMessage}
         getAvatarUrl={getAvatarUrl}
         getUserInitials={getUserInitials}
-      />
+      /> */}
 
       <IncomingCallDialog
         open={incomingCall.open}

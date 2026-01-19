@@ -195,6 +195,8 @@ async def mark_messages_as_read_batch(
 @router.get("/private/{friend_id}", response_model=List[MessageOut])
 async def get_private_chat(
     friend_id: int,
+    limit: int = 30,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -216,7 +218,9 @@ async def get_private_chat(
             ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
             ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
         )
-        .order_by(PrivateMessage.created_at.asc())
+        .order_by(PrivateMessage.created_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
@@ -244,7 +248,7 @@ async def get_private_chat(
                 sender_id=reply.sender_id,
                 receiver_id=reply.receiver_id,
                 content=reply.content,
-                message_type=serialize_message_type(reply.message_type),  # ✅ FIXED
+                message_type=serialize_message_type(reply.message_type),
                 is_read=reply.is_read,
                 read_at=reply.read_at.isoformat() if reply.read_at else None,
                 delivered_at=reply.delivered_at.isoformat() if reply.delivered_at else None,
@@ -256,6 +260,7 @@ async def get_private_chat(
                 original_sender_avatar=reply.original_sender_avatar,
                 created_at=reply.created_at.isoformat(),
                 sender_username=getattr(reply.sender, "username", None),
+                sender_avatar_url=getattr(reply.sender, "avatar_url", None),
                 receiver_username=getattr(reply.receiver, "username", None),
                 voice_duration=reply.voice_duration,
                 file_size=reply.file_size,
@@ -358,6 +363,7 @@ async def send_private_message(
             "original_sender": full_msg.original_sender,
             "created_at": full_msg.created_at.isoformat(),
             "sender_username": full_msg.sender.username,
+            "sender_avatar_url": full_msg.sender.avatar_url,
             "receiver_username": full_msg.receiver.username,
             "voice_duration": full_msg.voice_duration,
             "file_size": full_msg.file_size,

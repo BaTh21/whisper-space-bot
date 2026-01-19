@@ -14,14 +14,14 @@ import {
   Toolbar,
   Typography,
   Drawer,
-  useMediaQuery,
-  useTheme,
   Tooltip
 } from '@mui/material';
+import {
+  EmojiEmotions as EmojiEmotionsIcon,
+  InsertEmoticon as InsertEmoticonIcon,
+} from '@mui/icons-material';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import GroupMenuDialog from '../components/dialogs/GroupMenuDialog';
-import GroupSideComponent from '../components/group/GroupSideComponent';
-import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getGroupMembers, getGroupMessage, getGroupById, uploadFileMessage, editGroupFileMessage, uploadVoiceMessage } from '../services/api';
 import { formatCambodiaTime } from '../utils/dateUtils';
@@ -42,13 +42,13 @@ import GroupListComponent from '../components/chat/GroupListComponent';
 import CallIcon from '@mui/icons-material/Call';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import { VoiceMessagePlayer } from '../components/group/VoiceMessagePlayer';
-import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import CallModal from '../components/group/CallModal';
 import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
 import VoiceRecorder from '../components/group/VoiceRecorder';
+import EmojiPicker from '../components/EmojiPicker';
 
-const GroupChatPage = ({ groupId, toggleGroupList }) => {
+const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
 
   const { auth } = useAuth();
   const user = auth?.user;
@@ -81,13 +81,23 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const messagesRef = useRef([]);
   const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
   const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [showDiaries, setShowDiaries] = useState(false);
   const [totalAccepted, setTotalAccepted] = useState(null);
   const [voiceCall, setVoiceCall] = useState(false);
   const [activeCallMessageId, setActiveCallMessageId] = useState(null);
   const [recording, setRecording] = useState(false);
+  const [showTextbox, setShowTextbox] = useState(false);
+  const emojiButtonRef = useRef(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const firstLoadRef = useRef(true);
+  const canLoadMoreRef = useRef(false);
+  const userHasScrolledRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+
+  const LIMIT = 30;
+  const pageRef = useRef(0);
+
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const peersRef = useRef({});
   const localStreamRef = useRef(null);
@@ -102,9 +112,65 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   const usernamesRef = useRef({});
   const avatarRef = useRef({});
 
-  const toggleDiary = () => {
-    setShowDiaries(prev => !prev);
-  }
+  const mergeMessages = (newMessages, existingMessages) => {
+    const allMessages = [...existingMessages, ...newMessages];
+    const map = new Map();
+
+    allMessages.forEach(msg => {
+      const id = msg.id ?? msg.temp_id;
+      if (!map.has(id)) map.set(id, msg);
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(a.created_at || a.temp_created_at) - new Date(b.created_at || b.temp_created_at)
+    );
+  };
+
+  const loadMoreMessages = async () => {
+    if (loadingMore || !hasMore) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    setLoadingMore(true);
+
+    const prevScrollHeight = container.scrollHeight;
+
+    try {
+      const offset = pageRef.current * LIMIT;
+      const data = await getGroupMessage(groupId, LIMIT, offset);
+
+      if (data.length < LIMIT) setHasMore(false);
+
+      setMessages(prev => {
+        const merged = mergeMessages(data, prev);
+
+        requestAnimationFrame(() => {
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = newScrollHeight - prevScrollHeight;
+        });
+
+        return merged;
+      });
+
+      pageRef.current += 1;
+
+    } catch (err) {
+      console.error("Failed to load more messages:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (firstLoadRef.current) {
+      container.scrollTop = container.scrollHeight;
+      firstLoadRef.current = false;
+    }
+  }, [messages]);
 
   const toggleDrawer = () => {
     setOpenDrawer(prev => !prev);
@@ -120,10 +186,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       <GroupListComponent
         onClose={() => setOpenDrawer(false)}
         message={selectedMessage}
-        onForward={(msg, groupIds) => {
-          handleForwardMessage(msg, groupIds);
+        onForward={(msg, targets) => {
+          handleForwardMessage(msg, targets);
           setOpenDrawer(false);
         }}
+        chats={chats}
       />
     </Box>
   )
@@ -139,19 +206,20 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
     }
   };
 
-  const handleForwardMessage = (message, targetGroupIds) => {
-    if (!wsRef.current || !targetGroupIds?.length) return;
+  const handleForwardMessage = (message, targets) => {
+    if (
+      !wsRef.current ||
+      (!targets?.users?.length && !targets?.groups?.length)
+    ) return;
 
     wsRef.current.send(JSON.stringify({
-      action: 'forward_to_groups',
+      action: "forward",
       message_id: message.id,
-      group_ids: targetGroupIds
+      targets: {
+        users: targets.users || [],
+        groups: targets.groups || []
+      }
     }));
-  };
-
-  const handleScroll = (e) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.target;
-    setShowScrollButton(scrollTop + clientHeight < scrollHeight - 100);
   };
 
   const scrollToBottom = () => {
@@ -173,10 +241,34 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   };
 
   useEffect(() => {
-    const handle = requestAnimationFrame(() => autoScrollToBottom());
-    return () => cancelAnimationFrame(handle);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (firstLoadRef.current) {
+      autoScrollToBottom();
+
+      requestAnimationFrame(() => {
+        canLoadMoreRef.current = true;
+      });
+
+      firstLoadRef.current = false;
+      return;
+    }
+
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+    if (isNearBottom) {
+      autoScrollToBottom();
+    }
   }, [messages]);
 
+  useEffect(() => {
+    firstLoadRef.current = true;
+    canLoadMoreRef.current = false;
+    userHasScrolledRef.current = false;
+    lastScrollTopRef.current = 0;
+  }, [groupId]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -232,18 +324,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
   };
 
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const onScroll = () => markVisibleMessagesAsSeen();
-    container.addEventListener("scroll", onScroll);
-
-    markVisibleMessagesAsSeen();
-
-    return () => container.removeEventListener("scroll", onScroll);
-  }, [messages, seenMessages]);
-
-  useEffect(() => {
     fetchGroupData();
     setupWebSocket();
 
@@ -274,6 +354,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         members: membersData
       });
 
+      pageRef.current = Math.ceil(messagesData.length / LIMIT);
+      setHasMore(messagesData.length >= LIMIT);
+
     } catch (error) {
       console.error('Failed to fetch group data:', error);
     } finally {
@@ -300,6 +383,17 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
       }
     });
   }, [seenMessages, user]);
+
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    markVisibleMessagesAsSeen();
+
+    if (!loadingMore && hasMore && container.scrollTop <= 50) {
+      loadMoreMessages();
+    }
+  }, [loadingMore, hasMore, loadMoreMessages, markVisibleMessagesAsSeen]);
 
   const handleWSMessage = async (event) => {
     const data = JSON.parse(event.data);
@@ -399,6 +493,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
           return updated;
         });
+        autoScrollToBottom();
         break;
 
       case "file_update":
@@ -412,12 +507,17 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
         break;
 
       case "new_message":
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => {
+          if (prev.some(msg => msg.id === data.id)) return prev;
+          return [...prev, data];
+        });
+        autoScrollToBottom();
         break;
 
       case "call_request":
         setActiveCallMessageId(data.call_message_id);
         handleIncomingCall(data);
+        autoScrollToBottom();
         break;
 
       case "call_accepted":
@@ -489,11 +589,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
           updated.push(data);
           return updated;
         });
-
+        autoScrollToBottom();
         break;
     }
 
-    autoScrollToBottom();
     markVisibleMessagesAsSeen();
   };
 
@@ -1130,11 +1229,9 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
   if (loading) {
     return (
-      <Layout>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-          <CircularProgress />
-        </Box>
-      </Layout>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress />
+      </Box>
     );
   }
 
@@ -1176,12 +1273,11 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
             <Avatar
               sx={{
-                bgcolor: 'primary.main',
                 width: { xs: 38, md: 44 },
                 height: { xs: 38, md: 44 },
                 border: 1,
                 borderColor: 'divider',
-                p: 0.25
+                fontSize: 28
               }}
               src={
                 group?.images?.length
@@ -1266,11 +1362,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
 
       <Box sx={{ display: 'flex', height: '80vh' }}>
-        {/* {(isMobile || !showDiaries && (
-          <GroupSideComponent
-            groupId={groupId}
-          />
-        ))} */}
 
         <Drawer
           anchor='right'
@@ -1284,7 +1375,6 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            borderLeft: '1px solid #dcdcdcff',
           }}
         >
           <Box
@@ -1295,12 +1385,17 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
               display: 'flex',
               flexDirection: 'column',
               gap: 1.5,
-              '&::-webkit-scrollbar': { display: 'none' },
-              scrollbarWidth: 'none',
             }}
             ref={messagesContainerRef}
             onScroll={handleScroll}
           >
+
+            {loadingMore && (
+              <Box display="flex" justifyContent="center" alignItems="center" mt={2}>
+                <CircularProgress />
+              </Box>
+            )}
+
             {messages.length === 0 ? (
               <Box
                 sx={{
@@ -1330,6 +1425,8 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
                   const isOwn = message.sender?.id === user?.id;
 
+                  console.log("groups message", message)
+
                   return (
                     <Box
                       key={messageKey}
@@ -1347,7 +1444,7 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                           alt={message.sender.username || 'User'}
                           sx={{ width: 32, height: 32, mr: 1 }}
                         >
-                          {message.sender.username?.charAt(0) || 'U'}
+                          {message.sender.username?.charAt(0).toUpperCase() || 'P'}
                         </Avatar>
                       )}
 
@@ -1429,9 +1526,10 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                                           sx={{
                                             width: 14,
                                             height: 14,
-                                            mt: 0.3
+                                            mt: 0.3,
+                                            fontSize: 8
                                           }}
-                                        >{message.forwarded_by.avatar_url.charAt(0) || "U"}</Avatar>
+                                        >{message.forwarded_by.username.charAt(0).toUpperCase() || "P"}</Avatar>
                                         {message.forwarded_by.username}
                                       </Box>
                                       :
@@ -1694,124 +1792,134 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
 
                       </Box>
 
-                      <Menu
-                        anchorEl={secondAnchorEl}
-                        open={Boolean(secondAnchorEl)}
-                        onClose={closeSecondMenu}
-                      >
-                        {activeMessage &&
-                          [
-                            <MenuItem
-                              key="reply"
-                              onClick={() => {
-                                setReplyTo(activeMessage);
-                                closeSecondMenu();
-                              }}
-                            >
-                              <ReplyIcon /> Reply
-                            </MenuItem>,
-
-                            !activeMessage.call_content
-                              ? (
-                                <MenuItem
-                                  key="forward"
-                                  onClick={() => {
-                                    setSelectedMessage(activeMessage);
-                                    toggleDrawer();
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <ShortcutIcon /> Forward
-                                </MenuItem>
-                              )
-                              : null,
-
-                            activeMessage.content && activeMessage.sender?.id === user?.id
-                              ? (
-                                <MenuItem
-                                  key="edit"
-                                  onClick={() => {
-                                    setEditingMessageId(activeMessage.id);
-                                    setEditedContent(activeMessage.content);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <EditIcon /> Edit
-                                </MenuItem>
-                              )
-                              : null,
-
-                            activeMessage.file_url
-                              ? [
-                                <MenuItem
-                                  key="view-img"
-                                  onClick={() => {
-                                    setSelectedImage(activeMessage.file_url);
-                                    setOpenImage(true);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <RemoveRedEyeIcon /> View Image
-                                </MenuItem>,
-
-                                <MenuItem
-                                  key="save-img"
-                                  onClick={async () => {
-                                    const response = await fetch(activeMessage.file_url);
-                                    const blob = await response.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement("a");
-                                    a.href = url;
-                                    a.download = activeMessage.file_url.split("/").pop();
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                    closeSecondMenu();
-                                  }}
-                                >
-                                  <SaveAltIcon /> Save Image
-                                </MenuItem>,
-
-                                activeMessage.sender?.id === user?.id
-                                  ? (
-                                    <MenuItem
-                                      key="replace-img"
-                                      onClick={() => {
-                                        const input = document.createElement("input");
-                                        input.type = "file";
-                                        input.accept = "image/*";
-                                        input.onchange = (e) => {
-                                          if (e.target.files[0])
-                                            updateFileMessage(activeMessage.id, e.target.files[0]);
-                                        };
-                                        input.click();
-                                        closeSecondMenu();
-                                      }}
-                                    >
-                                      <PhotoCameraIcon /> Replace Image
-                                    </MenuItem>
-                                  )
-                                  : null,
-                              ]
-                              : null,
-
-                            (activeMessage.sender?.id === user?.id ||
-                              activeMessage.forwarded_by?.id === user?.id) ? (
-                              <MenuItem
-                                key="delete"
-                                onClick={() => {
-                                  onDelete(activeMessage);
-                                  closeSecondMenu();
-                                }}
-                              >
-                                <DeleteIcon /> Delete
-                              </MenuItem>
-                            ) : null,
-                          ].flat().filter(Boolean)}
-                      </Menu>
                     </Box>
                   );
                 })
             )}
+
+            <Menu
+              anchorEl={secondAnchorEl}
+              open={Boolean(secondAnchorEl)}
+              onClose={closeSecondMenu}
+              PaperProps={{
+                sx: {
+                  borderRadius: '12px',
+                  zIndex: 9999
+                }
+              }}
+              sx={{
+                boxShadow: 0
+              }}
+            >
+              {activeMessage &&
+                [
+                  <MenuItem
+                    key="reply"
+                    onClick={() => {
+                      setReplyTo(activeMessage);
+                      closeSecondMenu();
+                    }}
+                  >
+                    <ReplyIcon /> Reply
+                  </MenuItem>,
+
+                  !activeMessage.call_content
+                    ? (
+                      <MenuItem
+                        key="forward"
+                        onClick={() => {
+                          setSelectedMessage(activeMessage);
+                          toggleDrawer();
+                          closeSecondMenu();
+                        }}
+                      >
+                        <ShortcutIcon /> Forward
+                      </MenuItem>
+                    )
+                    : null,
+
+                  activeMessage.content && activeMessage.sender?.id === user?.id
+                    ? (
+                      <MenuItem
+                        key="edit"
+                        onClick={() => {
+                          setEditingMessageId(activeMessage.id);
+                          setEditedContent(activeMessage.content);
+                          closeSecondMenu();
+                        }}
+                      >
+                        <EditIcon /> Edit
+                      </MenuItem>
+                    )
+                    : null,
+
+                  activeMessage.file_url
+                    ? [
+                      <MenuItem
+                        key="view-img"
+                        onClick={() => {
+                          setSelectedImage(activeMessage.file_url);
+                          setOpenImage(true);
+                          closeSecondMenu();
+                        }}
+                      >
+                        <RemoveRedEyeIcon /> View Image
+                      </MenuItem>,
+
+                      <MenuItem
+                        key="save-img"
+                        onClick={async () => {
+                          const response = await fetch(activeMessage.file_url);
+                          const blob = await response.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = activeMessage.file_url.split("/").pop();
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          closeSecondMenu();
+                        }}
+                      >
+                        <SaveAltIcon /> Save Image
+                      </MenuItem>,
+
+                      activeMessage.sender?.id === user?.id
+                        ? (
+                          <MenuItem
+                            key="replace-img"
+                            onClick={() => {
+                              const input = document.createElement("input");
+                              input.type = "file";
+                              input.accept = "image/*";
+                              input.onchange = (e) => {
+                                if (e.target.files[0])
+                                  updateFileMessage(activeMessage.id, e.target.files[0]);
+                              };
+                              input.click();
+                              closeSecondMenu();
+                            }}
+                          >
+                            <PhotoCameraIcon /> Replace Image
+                          </MenuItem>
+                        )
+                        : null,
+                    ]
+                    : null,
+
+                  (activeMessage.sender?.id === user?.id ||
+                    activeMessage.forwarded_by?.id === user?.id) ? (
+                    <MenuItem
+                      key="delete"
+                      onClick={() => {
+                        onDelete(activeMessage);
+                        closeSecondMenu();
+                      }}
+                    >
+                      <DeleteIcon /> Delete
+                    </MenuItem>
+                  ) : null,
+                ].flat().filter(Boolean)}
+            </Menu>
 
             {showScrollButton && (
               <IconButton
@@ -1886,45 +1994,83 @@ const GroupChatPage = ({ groupId, toggleGroupList }) => {
                     gap: 1
                   }}
                 >
-                  <input
-                    type="file"
-                    accept="image/*"
-                    id="file-upload"
-                    style={{ display: 'none' }}
-                    onChange={handleFileChange}
-                  />
-                  <label htmlFor="file-upload" >
-                    <IconButton
+                  {!showTextbox && (
+                    <Box
                       sx={{
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        borderRadius: 2,
-                        '&:hover': {
-                          bgcolor: '#213e57ff'
-                        }
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        width: recording ? '100%' : 150
                       }}
-                      component="span">
-                      <AttachFileIcon />
-                    </IconButton>
-                  </label>
-                  <VoiceRecorder
-                    onConfirm={(blob) => {
-                      handleUploadVoiceMessage(blob);
-                    }}
-                    onRecordingChange={setRecording}
-                  />
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="file-upload"
+                        style={{ display: 'none' }}
+                        onChange={handleFileChange}
+                      />
+                      <label htmlFor="file-upload" >
+                        <IconButton
+                          sx={{
+                            bgcolor: 'primary.main',
+                            color: 'white',
+                            borderRadius: 2,
+                            '&:hover': {
+                              bgcolor: '#213e57ff'
+                            }
+                          }}
+                          component="span">
+                          <AttachFileIcon />
+                        </IconButton>
+                      </label>
+                      <VoiceRecorder
+                        onConfirm={(blob) => {
+                          handleUploadVoiceMessage(blob);
+                        }}
+                        onRecordingChange={setRecording}
+                      />
+                      <Box sx={{ position: 'relative' }}>
+                        <IconButton
+                          ref={emojiButtonRef}
+                          onClick={() => setShowEmojiPicker(true)}
+                          disabled={recording}
+                          sx={{
+                            fontSize: 50,
+                            color: 'orange'
+                          }}
+                        >
+                          {showEmojiPicker ? <EmojiEmotionsIcon /> : <InsertEmoticonIcon />}
+                        </IconButton>
 
-                  {!recording && (
+                        {(showEmojiPicker) && (
+                          <EmojiPicker
+                            onSelect={(emoji) => {
+                              setNewMessage(prev => prev + emoji);
+                              setShowEmojiPicker(false);
+                            }}
+                            onClose={() => setShowEmojiPicker(false)}
+                            anchorEl={emojiButtonRef.current}
+                            placement="top-start"
+                          />
+                        )}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {(!recording || showTextbox) && (
                     <>
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="Type a message..."
+                        placeholder="Aa..."
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyPress={handleKeyPress}
                         multiline
                         maxRows={4}
+                        onFocus={() => setShowTextbox(true)}
+                        onBlur={() => setShowTextbox(false)}
                         sx={{
                           bgcolor: 'grey.100',
                           borderRadius: 2,

@@ -16,6 +16,7 @@ class WebSocketManager:
         self.user_chats: Dict[int, Set[str]] = {}
         self.last_activity: Dict[int, datetime] = {}
         self.active_calls: Dict[str, dict] = {}
+        self.user_connections: Dict[int, Set[WebSocket]] = {}
 
     async def _update_user_online_status_db(self, user_id: int, is_online: bool):
         try:
@@ -44,6 +45,9 @@ class WebSocketManager:
         self.online_users[chat_id].add(user_id)
         if user_id not in self.user_chats:
             self.user_chats[user_id] = set()
+        if user_id not in self.user_connections:
+            self.user_connections[user_id] = set()
+        self.user_connections[user_id].add(websocket)
         self.user_chats[user_id].add(chat_id)
         self.last_activity[user_id] = datetime.now(timezone.utc)
         await self._update_user_online_status_db(user_id, True)
@@ -114,20 +118,32 @@ class WebSocketManager:
         for websocket in dead_connections:
             self.disconnect(chat_id, websocket)
 
-    async def send_to_user(self, chat_id: str, user_id: int, message: dict) -> bool:
-        if chat_id not in self.active_connections:
-            print(f"[WS] chat_id {chat_id} not found")
+    async def send_to_user(self, user_id: int, message: dict, chat_id: Optional[str] = None) -> bool:
+        if user_id not in self.user_connections or not self.user_connections[user_id]:
+            print(f"[WS] user {user_id} not connected")
             return False
 
         sent = False
-        for websocket, info in self.active_connections[chat_id].items():
-            print(f"[WS] checking user {info['user_id']}")
-            if info["user_id"] == user_id:
-                await websocket.send_json(message)
+        for ws in list(self.user_connections[user_id]):
+            try:
+                await ws.send_json(message)
                 sent = True
+            except:
+                self.disconnect(chat_id, ws, user_id)
 
-        if not sent:
-            print(f"[WS] user {user_id} not connected to chat {chat_id}")
+        return sent
+    
+    async def send_to_user_direct(self, user_id: int, message: dict) -> bool:
+        if user_id not in self.user_connections:
+            return False
+
+        sent = False
+        for ws in list(self.user_connections[user_id]):
+            try:
+                await ws.send_json(message)
+                sent = True
+            except:
+                self.disconnect(None, ws, user_id)
 
         return sent
 

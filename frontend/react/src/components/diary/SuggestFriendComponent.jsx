@@ -3,13 +3,13 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { getSuggestFriends, sendFriendRequest } from '../../services/api';
 import { useEffect, useState } from "react";
 import { useTranslation } from 'react-i18next'; 
-import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 
 function SuggestFriendComponent() {
   const { t } = useTranslation(); 
   const [friends, setFriends] = useState([]);
   const router = useNavigate();
+  const [error, setError] = useState("");
 
   const fetchData = async () => {
     try {
@@ -29,13 +29,13 @@ function SuggestFriendComponent() {
       const result = await sendFriendRequest(userId);
 
       if (result.success) {
-        toast.success(t('friend_request_sent'));
+        setError(t('friend_request_sent'));
         fetchData(); // Refresh list
       } else {
-        toast.error(result.message || t('friend_request_failed'));
+        setError(result.message || t('friend_request_failed'));
       }
     } catch (err) {
-      toast.error(t('friend_request_failed'));
+      setError(t('friend_request_failed'));
     }
   };
 
@@ -51,6 +51,9 @@ function SuggestFriendComponent() {
         <Typography variant='h4'>{t('suggested_for_you')}</Typography>
         <Button onClick={() => router("/friends")}>{t('see_more')}</Button>
       </Box>
+      {error && (
+        <Typography variant="body2" color="error">{error}</Typography>
+      )}
 
       <List
         sx={{

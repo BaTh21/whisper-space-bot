@@ -390,7 +390,7 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
         <Box ref={scrollRef} sx={{ maxHeight: '90vh', overflowY: 'auto', width: { xs: '92vw', md: '63vw' }, mx: 'auto' }}>
           <CreateDiaryComponent groups={groups} user={user} onSuccess={handleNewDiary} setError={setError} />
 
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2, pb: { xs: 3, md: 2 }, width: '100%' }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: 2, pb: { xs: 3, md: 2 }, width: '100%' }}>
             <TextField
               sx={{ width: { xs: '100%', sm: "50%" } }}
               label={t('search_diary')}
@@ -434,7 +434,7 @@ const FeedTab = ({ diaries: initialDiaries, onDataUpdate, profile, groups, frien
                   sx={{
                     border: "none",
                     borderRadius: 0,
-                    px: { xs: 0, md: 2 },
+                    px: { xs: 3, sm: 0, md: 2 },
                     color: "text.secondary",
                     "&.Mui-selected": { color: "primary.main", backgroundColor: "transparent", borderBottom: 3 },
                     "&.Mui-selected:hover": { backgroundColor: "transparent" },

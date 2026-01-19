@@ -2,19 +2,24 @@ from __future__ import annotations
 from typing import Dict, Set
 from fastapi import WebSocket
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.group_message import GroupMessage
 from app.helpers.to_utc_iso import to_local_iso
 
 class WebSocketManager:
     def __init__(self) -> None:
         self.active_connections: Dict[str, Dict[WebSocket, dict]] = {}
-        self.online_users: Dict[str, Set[int]] = {}
+        self.online_users: dict[str, set[int]] = {}
         self.group_call_accepts: Dict[str, Set[int]] = {}
         self.group_call_sessions: Dict[str, dict] = {}
         self.call_timers: Dict[str, asyncio.Task] = {}
 
     async def connect(self, chat_id: str, websocket: WebSocket, user_id: int) -> None:
+        if chat_id not in self.active_connections:
+            self.active_connections[chat_id] = {}
+        if chat_id not in self.online_users:
+            self.online_users[chat_id] = set()
+        
         self.active_connections.setdefault(chat_id, {})[websocket] = {"user_id": user_id}
         self.online_users.setdefault(chat_id, set()).add(user_id)
         
@@ -24,11 +29,12 @@ class WebSocketManager:
         }, exclude={websocket})
         
         await websocket.send_json({
-            "action": "online_users",
-            "user_ids": list(self.online_users[chat_id])
+            "type": "online_users",
+            "user_ids": list(self.online_users.get(chat_id, set())),
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
 
-    def disconnect(self, chat_id: str, websocket: WebSocket, user_id: int) -> None:
+    def disconnect(self, chat_id: str, websocket: WebSocket, user_id: Optional[int] = None) -> None:
         if chat_id in self.active_connections and websocket in self.active_connections[chat_id]:
             info = self.active_connections[chat_id].pop(websocket)
             user_id = user_id or info["user_id"]
@@ -36,7 +42,7 @@ class WebSocketManager:
             if not self.active_connections[chat_id]:
                 del self.active_connections[chat_id]
                 
-        if chat_id in self.online_users:
+        if user_id is not None and chat_id in self.online_users:
                 self.online_users[chat_id].discard(user_id)
                 if not self.online_users[chat_id]:
                     del self.online_users[chat_id]

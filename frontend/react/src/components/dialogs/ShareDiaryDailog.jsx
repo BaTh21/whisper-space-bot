@@ -6,6 +6,8 @@ import { toast } from 'react-toastify';
 function ShareDiaryDialog({ open, onClose, onSuccess, diary }) {
     const [groups, setGroups] = useState([]);
     const [selectedGroups, setSelectedGroups] = useState([]);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
 
     const fetchGroup = async () => {
         try {
@@ -31,18 +33,18 @@ function ShareDiaryDialog({ open, onClose, onSuccess, diary }) {
 
     const handleShareDiary = async () => {
         if (selectedGroups.length === 0) {
-            toast.warning("Please select at least one group");
+            setError("Please select at least one group");
             return;
         }
 
         try {
             await shareDiaryById(diary.id, { group_ids: selectedGroups });
-            toast.success("Diary has been shared");
+            setSuccess("Diary has been shared");
             onSuccess?.();
             onClose();
         } catch (error) {
             const msg = error.response?.data?.detail || error.message || "Unknown error";
-            toast.error(`Error: ${msg}`);
+            setError(`Error: ${msg}`);
         }
     }
 
@@ -62,6 +64,16 @@ function ShareDiaryDialog({ open, onClose, onSuccess, diary }) {
                 }}
             >
                 <Typography variant="h6" mb={2}>Share Diary with Groups</Typography>
+                {error && (
+                    <Typography variant="body2" color="error.main">
+                        {error}
+                    </Typography>
+                )}
+                {success && (
+                    <Typography variant="body2" color="success">
+                        {success}
+                    </Typography>
+                )}
                 <Box
                     sx={{
                         maxHeight: 200,

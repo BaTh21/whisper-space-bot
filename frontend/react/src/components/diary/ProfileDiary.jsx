@@ -6,7 +6,6 @@ import {
   Image as ImageIcon,
   MoreVert as MoreVertIcon,
   PlayArrow as PlayArrowIcon,
-  Save as SaveIcon,
   Videocam as VideocamIcon,
   ZoomIn as ZoomInIcon,
 } from '@mui/icons-material';
@@ -55,7 +54,6 @@ import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import TurnedInNotOutlinedIcon from '@mui/icons-material/TurnedInNotOutlined';
 import TurnedInIcon from "@mui/icons-material/TurnedIn";
 import AlternateEmailIcon from '@mui/icons-material/AlternateEmail';
-import { MediaPlayer } from './MediaPlayer';
 import { convertFilesToBase64 } from './convertFilesToBase64';
 import { getVideoThumbnail } from './getVideoThumbnail';
 import ShareComponent from './ShareComponent';
@@ -821,10 +819,10 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
           open={mediaViewerOpen}
           onClose={handleMediaViewerClose}
           sx={{
-            bgcolor: 'black/1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            bgcolor: 'rgba(0,0,0,0.95)',
             outline: 'none',
           }}
         >
@@ -834,24 +832,28 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
               width: '100vw',
               height: '100vh',
               overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             {/* Media */}
-            <Box
-              sx={{
-                width: '100%',
-                height: '100vh',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <MediaPlayer
-                url={selectedMedia}
-                type={selectedMediaType}
-                thumbnail={selectedThumbnail}
+            {selectedMediaType === 'image' ? (
+              <Box
+                component="img"
+                src={selectedMedia}
+                alt="preview"
+                sx={{ width: '100%', height: '100%', objectFit: 'contain' }}
               />
-            </Box>
+            ) : (
+              <video
+                src={selectedMedia}
+                poster={selectedThumbnail}
+                controls
+                autoPlay
+                style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }}
+              />
+            )}
 
             {/* Prev */}
             {currentMediaList.length > 1 && (
@@ -862,13 +864,12 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                   left: 16,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  bgcolor: 'rgba(189, 189, 189, 0.5)',
                   color: 'white',
-                  zIndex: 10,
-                  '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
+                  bgcolor: 'rgba(0,0,0,0.4)',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.6)' },
                 }}
               >
-                <ArrowBackIcon sx={{ fontSize: { xs: 16, md: 22 } }} />
+                <ArrowBackIcon fontSize="large" />
               </IconButton>
             )}
 
@@ -881,13 +882,12 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                   right: 16,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  bgcolor: 'rgba(189, 189, 189, 0.5)',
                   color: 'white',
-                  zIndex: 10,
-                  '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
+                  bgcolor: 'rgba(0,0,0,0.4)',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.6)' },
                 }}
               >
-                <ArrowForwardIcon sx={{ fontSize: { xs: 16, md: 22 } }} />
+                <ArrowForwardIcon fontSize="large" />
               </IconButton>
             )}
 
@@ -896,16 +896,14 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
               <Typography
                 sx={{
                   position: 'absolute',
-                  bottom: 24,
+                  bottom: 32,
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  bgcolor: 'rgba(0,0,0,0.5)',
                   color: 'white',
+                  bgcolor: 'rgba(0,0,0,0.5)',
                   px: 2,
                   py: 0.5,
                   borderRadius: 2,
-                  fontSize: '0.875rem',
-                  zIndex: 10,
                 }}
               >
                 {selectedMediaIndex + 1} / {currentMediaList.length}
@@ -919,10 +917,9 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                 position: 'absolute',
                 top: 16,
                 right: 16,
-                bgcolor: 'rgba(189, 189, 189, 0.5)',
                 color: 'white',
-                zIndex: 10,
-                '&:hover': { bgcolor: 'rgba(174, 174, 174, 0.5)' },
+                bgcolor: 'rgba(0,0,0,0.4)',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.6)' },
               }}
             >
               <CloseIcon />
@@ -1075,7 +1072,10 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                     <Card
                       sx={{
                         p: { xs: 1, sm: 2 },
-                        mb: 2, width: '100%',
+                        width: '100%',
+                        borderRadius: 3,
+                        boxShadow: 0,
+                        mb: 1,
                         border: isLinkedDiary(diary) ? '2px solid #faab00ff' : '1px solid #ddd',
                         backgroundColor: isLinkedDiary(diary) ? '#faab001b' : '#fff',
                         transition: 'background-color 0.3s, border 0.3s'
@@ -1135,59 +1135,61 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                               )}
 
                               {/* Media Upload Section for Edit */}
-                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                {/* Image Upload */}
-                                <Box>
-                                  <Button
-                                    variant="outlined"
-                                    component="label"
-                                    startIcon={<ImageIcon />}
-                                    size="medium"
-                                    disabled={editLoading || editImages.length >= 10}
-                                    sx={{ mr: 2 }}
-                                  >
-                                    {t('add_images_max', { max: 10 })}
-                                    <input
-                                      type="file"
-                                      hidden
-                                      multiple
-                                      accept="image/*"
-                                      onChange={(e) => handleMediaUpload(e, diary.id, null, 'image')}
-                                    />
-                                  </Button>
-                                  {editImages.length > 0 && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                      {editImages.length} selected
-                                    </Typography>
-                                  )}
-                                </Box>
+                              {!diary.parent && (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                  {/* Image Upload */}
+                                  <Box>
+                                    <Button
+                                      variant="outlined"
+                                      component="label"
+                                      startIcon={<ImageIcon />}
+                                      size="medium"
+                                      disabled={editLoading || editImages.length >= 10}
+                                      sx={{ mr: 2 }}
+                                    >
+                                      {t('add_images_max', { max: 10 })}
+                                      <input
+                                        type="file"
+                                        hidden
+                                        multiple
+                                        accept="image/*"
+                                        onChange={(e) => handleMediaUpload(e, diary.id, null, 'image')}
+                                      />
+                                    </Button>
+                                    {editImages.length > 0 && (
+                                      <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                        {editImages.length} selected
+                                      </Typography>
+                                    )}
+                                  </Box>
 
-                                {/* Video Upload */}
-                                <Box>
-                                  <Button
-                                    variant="outlined"
-                                    component="label"
-                                    startIcon={<VideocamIcon />}
-                                    size="medium"
-                                    disabled={editLoading || editVideos.length >= 3}
-                                    sx={{ mr: 2 }}
-                                  >
-                                    {t('add_videos_max', { max: 3 })}
-                                    <input
-                                      type="file"
-                                      hidden
-                                      multiple
-                                      accept="video/*"
-                                      onChange={(e) => handleMediaUpload(e, diary.id, null, 'video')}
-                                    />
-                                  </Button>
-                                  {editVideos.length > 0 && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                      {editVideos.length} selected
-                                    </Typography>
-                                  )}
+                                  {/* Video Upload */}
+                                  <Box>
+                                    <Button
+                                      variant="outlined"
+                                      component="label"
+                                      startIcon={<VideocamIcon />}
+                                      size="medium"
+                                      disabled={editLoading || editVideos.length >= 3}
+                                      sx={{ mr: 2 }}
+                                    >
+                                      {t('add_videos_max', { max: 3 })}
+                                      <input
+                                        type="file"
+                                        hidden
+                                        multiple
+                                        accept="video/*"
+                                        onChange={(e) => handleMediaUpload(e, diary.id, null, 'video')}
+                                      />
+                                    </Button>
+                                    {editVideos.length > 0 && (
+                                      <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                        {editVideos.length} selected
+                                      </Typography>
+                                    )}
+                                  </Box>
                                 </Box>
-                              </Box>
+                              )}
 
                               {/* Image Preview for Edit */}
                               {editImages.length > 0 && (
@@ -1210,7 +1212,6 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                         sx={{
                                           position: 'relative',
                                           borderRadius: '6px',
-                                          overflow: 'hidden',
                                           aspectRatio: '1',
                                           '&:hover .media-overlay': {
                                             opacity: 1
@@ -1224,62 +1225,53 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                             width: '100%',
                                             height: '100%',
                                             objectFit: 'cover',
-                                            cursor: 'pointer'
+                                            cursor: 'pointer',
+                                            borderRadius: 8
                                           }}
                                           onClick={() => handleMediaClick(img, 'image')}
                                         />
 
-                                        {/* Media Overlay */}
-                                        <Box className="media-overlay" sx={{
-                                          position: 'absolute',
-                                          top: 0,
-                                          left: 0,
-                                          right: 0,
-                                          bottom: 0,
-                                          bgcolor: 'rgba(0,0,0,0.5)',
-                                          opacity: 0,
-                                          transition: 'opacity 0.2s',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          gap: 0.5
-                                        }}>
-                                          <IconButton
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              removeMedia(index, diary.id, null, 'image');
-                                            }}
-                                            sx={{
-                                              bgcolor: 'error.main',
-                                              color: 'white',
-                                              width: 28,
-                                              height: 28,
-                                              '&:hover': {
-                                                bgcolor: 'error.dark'
-                                              }
-                                            }}
-                                            size="small"
-                                          >
-                                            <CloseIcon sx={{ fontSize: 16 }} />
-                                          </IconButton>
-                                          <IconButton
-                                            onClick={() => handleMediaClick(img, 'image')}
-                                            sx={{
-                                              bgcolor: 'primary.main',
-                                              color: 'white',
-                                              width: 28,
-                                              height: 28,
-                                              '&:hover': {
-                                                bgcolor: 'primary.dark'
-                                              }
-                                            }}
-                                            size="small"
-                                          >
-                                            <ZoomInIcon sx={{ fontSize: 16 }} />
-                                          </IconButton>
-                                        </Box>
+                                        <IconButton
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeMedia(index, diary.id, null, 'image');
+                                          }}
+                                          sx={{
+                                            position: 'absolute',
+                                            top: -5,
+                                            right: -5,
+                                            bgcolor: 'error.main',
+                                            color: 'white',
+                                            width: 24,
+                                            height: 24,
+                                            '&:hover': {
+                                              bgcolor: 'error.dark'
+                                            }
+                                          }}
+                                          size="small"
+                                        >
+                                          <CloseIcon sx={{ fontSize: 16 }} />
+                                        </IconButton>
+                                        <IconButton
+                                          onClick={() => handleMediaClick(img, 'image')}
+                                          sx={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            left: '50%',
+                                            transform: 'translate(-50%, -50%)',
+                                            bgcolor: 'primary.main',
+                                            color: 'white',
+                                            width: 24,
+                                            height: 24,
+                                            '&:hover': {
+                                              bgcolor: 'primary.dark'
+                                            }
+                                          }}
+                                          size="small"
+                                        >
+                                          <ZoomInIcon sx={{ fontSize: 16 }} />
+                                        </IconButton>
 
-                                        {/* Media Number Badge */}
                                         <Box
                                           sx={{
                                             position: 'absolute',
@@ -1299,31 +1291,12 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                         >
                                           {index + 1}
                                         </Box>
-
-                                        {/* URL/New Badge */}
-                                        <Box
-                                          sx={{
-                                            position: 'absolute',
-                                            top: 4,
-                                            right: 4,
-                                            bgcolor: img.startsWith('http') ? 'rgba(0, 100, 0, 0.7)' : 'rgba(0, 0, 150, 0.7)',
-                                            color: 'white',
-                                            px: 0.5,
-                                            py: 0.1,
-                                            borderRadius: 1,
-                                            fontSize: '0.55rem',
-                                            fontWeight: 500
-                                          }}
-                                        >
-                                          {img.startsWith('http') ? t('existing') : t('new')}
-                                        </Box>
                                       </Box>
                                     ))}
                                   </Box>
                                 </Box>
                               )}
 
-                              {/* Video Preview for Edit */}
                               {editVideos.length > 0 && (
                                 <Box
                                   key={`video-preview-${editVideos.length}-${mediaUpdateTrigger}`}
@@ -1348,7 +1321,6 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                           sx={{
                                             position: 'relative',
                                             borderRadius: '8px',
-                                            overflow: 'hidden',
                                             aspectRatio: '16/9',
                                             bgcolor: '#000',
                                             cursor: 'pointer',
@@ -1357,7 +1329,6 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                             },
                                           }}
                                         >
-                                          {/* Video Thumbnail or Placeholder */}
                                           {thumbnail ? (
                                             <Box
                                               sx={{
@@ -1433,21 +1404,14 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                             </Box>
                                           )}
 
-                                          {/* Media Overlay with Remove Button */}
-                                          <Box className="media-overlay" sx={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            right: 0,
-                                            bottom: 0,
-                                            bgcolor: 'rgba(0,0,0,0.5)',
-                                            opacity: 0,
-                                            transition: 'opacity 0.2s',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: 0.5
-                                          }}>
+                                          <Box className="media-overlay"
+                                            sx={{
+                                              position: 'absolute',
+                                              top: -5,
+                                              right: -5,
+                                              transition: 'opacity 0.2s',
+                                              zIndex: 1300
+                                            }}>
                                             <IconButton
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -1456,8 +1420,8 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                               sx={{
                                                 bgcolor: 'error.main',
                                                 color: 'white',
-                                                width: 32,
-                                                height: 32,
+                                                width: 24,
+                                                height: 24,
                                                 '&:hover': {
                                                   bgcolor: 'error.dark'
                                                 }
@@ -1468,7 +1432,6 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                             </IconButton>
                                           </Box>
 
-                                          {/* Video Type Badge */}
                                           <Box
                                             sx={{
                                               position: 'absolute',
@@ -1486,8 +1449,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                           >
                                             {isExistingVideo ? t('uploaded') : t('new')}
                                           </Box>
-
-                                          {/* Video Number Badge */}
+                                          
                                           <Box
                                             sx={{
                                               position: 'absolute',
@@ -1528,7 +1490,6 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                   variant="contained"
                                   onClick={() => handleEditSave(diary.id)}
                                   disabled={isSaveDisabled}
-                                  startIcon={editLoading ? <CircularProgress size={24} /> : <SaveIcon />}
                                   size="medium"
                                 >
                                   {editLoading ? t('saving...') : t('save')}
@@ -1546,7 +1507,6 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                     sx={{
                                       width: 40,
                                       height: 40,
-                                      bgcolor: 'primary.light',
                                       fontSize: '1.1rem',
                                     }}
                                   >
@@ -1684,6 +1644,8 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                         cursor: 'pointer',
                                         overflow: 'hidden',
                                         bgcolor: '#000',
+                                        transition: 'transform 0.3s',
+                                        '&:hover': { transform: 'scale(1.03)' },
                                         aspectRatio:
                                           visibleMedia.length === 1
                                             ? '16 / 9'
@@ -1773,10 +1735,12 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                           )}
 
                           <DiaryCard content={diary.content} />
-                          <ParentDiaryComponent parent={diary.parent} friends={friends} profile={profile} />
+                          <ParentDiaryComponent parent={diary.parent} friends={friends} profile={profile} sendingRequests={sendingRequests}/>
 
-                          <Divider />
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { md: 2 }, mb: expandedDiary === diary.id ? 0 : 2 }}>
+                          {!diary.parent && (
+                            <Divider />
+                          )}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { md: 2 } }}>
                             <Tooltip title='Like this post'>
                               <Button
                                 onClick={() => handleLikeDiary(diary.id)}
@@ -1817,7 +1781,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                               <Button
                                 onClick={() => handleExpandDiary(diary.id)}
                                 size="medium"
-                                sx={{ minWidth: 40, justifyContent: 'center', '&:hover': {backgroundColor: 'transparent'} }}
+                                sx={{ minWidth: 40, justifyContent: 'center', '&:hover': { backgroundColor: 'transparent' } }}
                               >
                                 {isMobile ? (
                                   <ChatBubbleOutlineOutlinedIcon />
@@ -1838,7 +1802,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                             <Tooltip title={`Share this post`}>
                               <Button
                                 size="medium"
-                                sx={{ minWidth: 40, justifyContent: 'center', '&:hover': {backgroundColor: 'transparent'} }}
+                                sx={{ minWidth: 40, justifyContent: 'center', '&:hover': { backgroundColor: 'transparent' } }}
                                 onClick={() => {
                                   handleCopyLink(diary.id);
                                   setSelectedDiaryId(diary.id);
@@ -1859,7 +1823,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                   color="success"
                                   disabled={loading}
                                   onClick={() => handleRemove(diary.id)}
-                                  sx={{ minWidth: 40, '&:hover': {backgroundColor: 'transparent'} }}
+                                  sx={{ minWidth: 40, '&:hover': { backgroundColor: 'transparent' } }}
                                 >
                                   <TurnedInIcon />
                                   {!isMobile && <Typography ml={1}>{t('saved')}</Typography>}
@@ -1872,7 +1836,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                   size="medium"
                                   disabled={loading}
                                   onClick={() => handleSave(diary.id)}
-                                  sx={{ minWidth: 40, '&:hover': {backgroundColor: 'transparent'} }}
+                                  sx={{ minWidth: 40, '&:hover': { backgroundColor: 'transparent' } }}
                                 >
                                   <TurnedInNotOutlinedIcon />
                                   {!isMobile && <Typography ml={1}>{t('save')}</Typography>}
@@ -2068,7 +2032,7 @@ const ProfileDiary = ({ groups, diaries, onDataUpdate, profile, friends, fetchSt
                                       />
                                     ))}
 
-                                  {rootCommentsCount  > comments.visibleCount && (
+                                  {rootCommentsCount > comments.visibleCount && (
                                     <Box>
                                       <Button
                                         size="small"
