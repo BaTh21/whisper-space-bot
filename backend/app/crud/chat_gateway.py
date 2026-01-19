@@ -16,7 +16,7 @@ def is_group_member(db: Session, group_id: int, user_id: int) -> bool:
     ).first() is not None
     
 def normalize_private_payload(original, source: str) -> dict:
-    msg_type = original.message_type.value  # 🔑 normalize enum
+    msg_type = original.message_type.value
 
     # ---------- TEXT ----------
     if msg_type == MessageType.text.value:
@@ -130,16 +130,32 @@ async def forward_message(
             forwarded_at=datetime.utcnow(),
             message_type=GroupMessageType(original.message_type.value),
         )
+        
+        print(f"message type {new_msg.message_type}")
 
-        # Assign content / media
+        # Assign content / media for group messages
         if original.message_type == GroupMessageType.text:
-            new_msg.content = original.content
+            new_msg.content = original.content  # works for any source
+
         elif original.message_type in (GroupMessageType.image, GroupMessageType.file):
-            new_msg.file_url = original.content if source == "private" else original.file_url
+            if source == "private":
+                # Forwarding from private: media URL is in content
+                new_msg.file_url = original.content
+            else:
+                # Forwarding from group: media URL is in file_url
+                new_msg.file_url = original.file_url
+
             new_msg.public_id = extract_public_id_from_url(new_msg.file_url) if new_msg.file_url else None
             new_msg.file_size = getattr(original, "file_size", None)
+
         elif original.message_type == GroupMessageType.voice:
-            new_msg.voice_url = original.content if source == "private" else original.voice_url
+            if source == "private":
+                # Forwarding from private: voice URL is in content
+                new_msg.voice_url = original.content
+            else:
+                # Forwarding from group: voice URL is in voice_url
+                new_msg.voice_url = original.voice_url
+
             new_msg.voice_public_id = extract_public_id_from_url(new_msg.voice_url) if new_msg.voice_url else None
             new_msg.voice_duration = getattr(original, "voice_duration", None)
 
