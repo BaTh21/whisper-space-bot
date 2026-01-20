@@ -18,7 +18,6 @@ const EmojiButton = ({
 
   const handleEmojiSelect = (emoji) => {
     onSelect(emoji);
-    setShowPicker(false);
   };
 
   return (

@@ -3,12 +3,10 @@ import {
   Delete as DeleteIcon,
   DoneAll as DoneAllIcon,
   Done as DoneIcon,
-  Download as DownloadIcon,
   Edit as EditIcon,
   Image as ImageIcon,
   Schedule as LastSeenIcon,
   FiberManualRecord as OnlineIcon,
-  ZoomIn as ZoomInIcon
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -19,7 +17,7 @@ import {
   MenuItem,
   TextField,
   Typography,
-  Tooltip
+  Tooltip,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -31,6 +29,8 @@ import ReplyIcon from '@mui/icons-material/Reply';
 import EmojiButton from '../EmojiButton';
 import MessageReactions from '../MessageReactions';
 import { VoiceMessagePlayer } from '../group/VoiceMessagePlayer';
+import SaveAltIcon from '@mui/icons-material/SaveAlt';
+import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
 
 const ChatMessage = ({
   message,
@@ -435,7 +435,7 @@ const ChatMessage = ({
                 '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' },
               }}
             >
-              <ZoomInIcon fontSize="small" />
+              <RemoveRedEyeIcon fontSize="small" />
             </IconButton>
             <IconButton
               size="small"
@@ -446,7 +446,7 @@ const ChatMessage = ({
                 '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' },
               }}
             >
-              <DownloadIcon fontSize="small" />
+              <SaveAltIcon fontSize="small" />
             </IconButton>
           </Box>
         </>
@@ -738,7 +738,7 @@ const ChatMessage = ({
                   '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
                 }}
               >
-                <DownloadIcon />
+                <SaveAltIcon />
               </IconButton>
               {isMine && (
                 <IconButton
@@ -787,7 +787,18 @@ const ChatMessage = ({
         )}
 
         {editing ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1.5,
+              p: 1.5,
+              borderRadius: 3,
+              bgcolor: 'background.paper',
+              boxShadow: 1,
+            }}
+          >
+            {/* Text input */}
             <TextField
               size="small"
               value={editText}
@@ -795,6 +806,7 @@ const ChatMessage = ({
               multiline
               maxRows={4}
               autoFocus
+              placeholder={t('edit_message')}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && e.ctrlKey) {
                   handleEdit();
@@ -802,27 +814,65 @@ const ChatMessage = ({
                   handleCancelEdit();
                 }
               }}
-              sx={{ borderRadius: '12px' }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontSize: '0.95rem',
+                  borderRadius: 2,
+                  bgcolor: 'grey.50',
+                  '& fieldset': {
+                    borderColor: 'divider',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'text.secondary',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'primary.main',
+                    borderWidth: 1,
+                  },
+                },
+              }}
             />
-            <EmojiButton
-              onSelect={(emoji) => setEditText(prev => prev + emoji)}
-              placement="bottom-start"
-              size="small"
-              width={300}
-              height={350}
-            />
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-              <Button size="small" onClick={handleCancelEdit}>{t('cancel')}</Button>
-              <Button
+
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+              }}
+            >
+              <EmojiButton
+                onSelect={(emoji) => setEditText((prev) => prev + emoji)}
+                placement="bottom-start"
                 size="small"
-                variant="contained"
-                onClick={handleEdit}
-                disabled={isEditing}
+                width={300}
+                height={350}
+              />
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 1,
+                }}
               >
-                {isEditing ? "Saving..." : t('save')}
-              </Button>
+                <Button
+                  size="small"
+                  onClick={handleCancelEdit}
+                  color="inherit"
+                >
+                  {t('cancel')}
+                </Button>
+
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={handleEdit}
+                  disabled={isEditing}
+                >
+                  {isEditing ? t('saving') : t('save')}
+                </Button>
+              </Box>
             </Box>
           </Box>
+
         ) : (
           <Box sx={{ position: 'relative', width: '100%' }}>
             <Box
@@ -975,8 +1025,8 @@ const ChatMessage = ({
                     mt: 0.25
                   }}
                 >
+                  {message.edited_at && message.edited_at !== message.created_at && 'edited at '}
                   {formatCambodiaTime(message.created_at)}
-                  {message.edited_at && message.edited_at !== message.created_at && ' (edited)'}
                 </Typography>
                 {isMine && (
                   message?.seen_by?.length > 0 ?
@@ -1073,11 +1123,11 @@ const ChatMessage = ({
                 if (actualMessageType === 'image') {
                   menuItems.push(
                     <MenuItem key="view-full" onClick={handleViewFullImage}>
-                      <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
+                      <RemoveRedEyeIcon fontSize="small" sx={{ mr: 1.5 }} />
                       {t('view_full_image')}
                     </MenuItem>,
                     <MenuItem key="download" onClick={handleDownloadImage}>
-                      <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
+                      <SaveAltIcon fontSize="small" sx={{ mr: 1.5 }} />
                       {t('download_image')}
                     </MenuItem>
                   );

@@ -50,6 +50,7 @@ import EmojiPicker from '../components/EmojiPicker';
 import ModeCommentRoundedIcon from '@mui/icons-material/ModeCommentRounded';
 import useTypewriter from '../hooks/useTypewriter';
 import DeleteDialog from '../components/dialogs/DeleteDialog';
+import EmojiButton from '../components/EmojiButton';
 
 const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
 
@@ -1548,42 +1549,93 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
 
                         <Box>
                           {isEditing ? (
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', backgroundColor: 'primary.main', p: 1, borderRadius: 3 }}>
+                            <Box
+                              sx={{
+                                alignItems: 'center',
+                                gap: 1,
+                                p: 1,
+                                borderRadius: 3,
+                                // bgcolor: 'primary.main',
+                                boxShadow: 2,
+                              }}
+                            >
                               <TextField
                                 fullWidth
                                 size="small"
                                 value={editedContent}
                                 onChange={(e) => setEditedContent(e.target.value)}
+                                placeholder="Edit message…"
                                 variant="outlined"
-                                placeholder="Edit message..."
-                                InputProps={{
-                                  sx: {
-                                    color: 'white',
-                                    '& .MuiOutlinedInput-notchedOutline': {
-                                      borderColor: 'rgba(255,255,255,0.6)',
+                                multiline
+                                maxRows={4}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    fontSize: '0.95rem',
+                                    borderRadius: 2,
+                                    bgcolor: 'grey.50',
+                                    '& fieldset': {
+                                      borderColor: 'divider',
                                     },
-                                    '&:hover .MuiOutlinedInput-notchedOutline': {
-                                      borderColor: 'white',
+                                    '&:hover fieldset': {
+                                      borderColor: 'text.secondary',
                                     },
-                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                                      borderColor: 'white',
+                                    '&.Mui-focused fieldset': {
+                                      borderColor: 'primary.main',
+                                      borderWidth: 1,
                                     },
                                   },
                                 }}
-                                InputLabelProps={{ sx: { color: 'white' } }}
                               />
-                              <Button size="small" variant="contained" color="secondary" onClick={handleSave}>
-                                Save
-                              </Button>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                color="inherit"
-                                onClick={handleCancelEdit}
-                                sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.6)', '&:hover': { borderColor: 'white' } }}
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  mt: 1
+                                }}
                               >
-                                Cancel
-                              </Button>
+
+                                <EmojiButton
+                                  onSelect={(emoji) => setEditedContent((prev) => prev + emoji)}
+                                  placement="bottom-start"
+                                  size="small"
+                                  width={300}
+                                  height={350}
+                                />
+
+                                <Box sx={{ display: 'flex', gap: 0.5 }}>
+
+                                  <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={handleCancelEdit}
+                                    sx={{
+                                      color: 'black',
+                                      opacity: 0.85,
+                                      '&:hover': {
+                                        opacity: 1,
+                                        bgcolor: 'rgba(255,255,255,0.12)',
+                                      },
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    onClick={handleSave}
+                                    sx={{
+                                      bgcolor: 'primary.main',
+                                      color: 'primary.contrastText',
+                                      '&:hover': {
+                                        bgcolor: 'primary.dark',
+                                      },
+                                    }}
+                                  >
+                                    Save
+                                  </Button>
+                                </Box>
+                              </Box>
                             </Box>
                           ) : (
                             <Box
@@ -1911,7 +1963,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                       closeSecondMenu();
                     }}
                   >
-                    <ReplyIcon /> Reply
+                    <ReplyIcon sx={{ mr: 1.5 }}/> Reply
                   </MenuItem>,
 
                   !activeMessage.call_content
@@ -1924,7 +1976,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <ShortcutIcon /> Forward
+                        <ShortcutIcon sx={{ mr: 1.5 }}/> Forward
                       </MenuItem>
                     )
                     : null,
@@ -1939,7 +1991,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <EditIcon /> Edit
+                        <EditIcon sx={{ mr: 1.5 }}/> Edit
                       </MenuItem>
                     )
                     : null,
@@ -1954,7 +2006,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <RemoveRedEyeIcon /> View Image
+                        <RemoveRedEyeIcon sx={{ mr: 1.5 }}/> View Image
                       </MenuItem>,
 
                       <MenuItem
@@ -1971,7 +2023,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <SaveAltIcon /> Save Image
+                        <SaveAltIcon sx={{ mr: 1.5 }}/> Save Image
                       </MenuItem>,
 
                       activeMessage.sender?.id === user?.id
@@ -1990,7 +2042,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                               closeSecondMenu();
                             }}
                           >
-                            <PhotoCameraIcon /> Replace Image
+                            <PhotoCameraIcon sx={{ mr: 1.5 }}/> Replace Image
                           </MenuItem>
                         )
                         : null,
@@ -2007,7 +2059,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                       }}
                       sx={{ color: 'error.main' }}
                     >
-                      <DeleteIcon /> Delete
+                      <DeleteIcon sx={{ mr: 1.5 }}/> Delete
                     </MenuItem>
                   ) : null,
                 ].flat().filter(Boolean)}
@@ -2170,7 +2222,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           <EmojiPicker
                             onSelect={(emoji) => {
                               setNewMessage(prev => prev + emoji);
-                              setShowEmojiPicker(false);
                             }}
                             onClose={() => setShowEmojiPicker(false)}
                             anchorEl={emojiButtonRef.current}

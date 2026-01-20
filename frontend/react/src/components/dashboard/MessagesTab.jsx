@@ -1906,7 +1906,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                             <EmojiPicker
                               onSelect={(emoji) => {
                                 setNewMessage(prev => prev + emoji);
-                                setShowEmojiPicker(false);
                               }}
                               onClose={() => setShowEmojiPicker(false)}
                               anchorEl={emojiButtonRef.current}
