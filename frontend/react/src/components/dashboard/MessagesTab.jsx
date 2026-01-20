@@ -45,6 +45,8 @@ import { useAuth } from '../../context/AuthContext';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import VoiceRecorder from '../group/VoiceRecorder';
 import GroupListComponent from '../chat/GroupListComponent';
+import ModeCommentRoundedIcon from '@mui/icons-material/ModeCommentRounded';
+import useTypewriter from '../../hooks/useTypewriter';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -70,6 +72,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const [isOnline, setIsOnline] = useState(false);
   const [showTextbox, setShowTextbox] = useState(false);
   const messageRefs = useRef({});
+  const [isError, setIsError] = useState(setError);
 
   const LIMIT = 30;
 
@@ -877,10 +880,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setError(t('select_image_file'));
+      setIsError(true);
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
       setError(t('image_too_large_5mb'));
+      setIsError(true);
       return;
     }
     const reader = new FileReader();
@@ -1212,6 +1217,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       setAudioUrl(null);
       setImagePreview(null);
       setReplyTo(null);
+      setIsError(false);
 
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -1455,10 +1461,24 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setIsAudioOnlyCall(false);
   }
 
+  const animatedText = useTypewriter('Connecting...', 120, 1000);
+
   if (loadingInitial) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '80%',
+          flexDirection: 'column',
+          color: 'text.secondary',
+        }}
+      >
         <CircularProgress />
+        <Typography mt={1}>
+          {animatedText}
+        </Typography>
       </Box>
     );
   }
@@ -1554,10 +1574,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
-              bgcolor: '#f8f9fa',
+              bgcolor: isError? '#ff8b8911':'#f8f9fa',
               overflow: 'hidden',
               border: 1,
-              borderColor: 'grey.300'
+              borderColor: isError ? 'error.main' : 'divider',
             }}>
             {selectedFriend && (
               <>
@@ -1679,10 +1699,17 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     </Box>
                   )}
                   {messages.length === 0 ? (
-                    <Box sx={{ textAlign: 'center', mt: 16 }}>
-                      <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                    <Box sx={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      height: '100%',
+                      flexDirection: 'column',
+                      color: 'text.secondary',
+                    }}>
+                      <ModeCommentRoundedIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
                       <Typography variant="h6" color="text.secondary">{t('no_message_yet')}</Typography>
-                      <Typography color="text.secondary">{t('say_hello')} {selectedFriend.username}!</Typography>
+                      <Typography color="text.secondary">{t('say_hello')} {selectedFriend.name}!</Typography>
                     </Box>
                   ) : (
                     messages.map((message) => (
@@ -1723,7 +1750,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                 <Box className="input-area" sx={{
                   p: { xs: 1, sm: 2 },
                   borderTop: 1,
-                  borderColor: 'divider',
+                  borderColor: isError ? 'error.main' : 'divider',
                   bgcolor: 'white',
                   display: 'flex',
                   alightItems: 'center',

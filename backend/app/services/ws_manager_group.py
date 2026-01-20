@@ -29,7 +29,7 @@ class WebSocketManager:
         }, exclude={websocket})
         
         await websocket.send_json({
-            "type": "online_users",
+            "action": "online_users",
             "user_ids": list(self.online_users.get(chat_id, set())),
             "timestamp": datetime.now(timezone.utc).isoformat()
         })

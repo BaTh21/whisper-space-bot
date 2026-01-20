@@ -18,10 +18,10 @@ import PeopleIcon from '@mui/icons-material/People';
 import PersonIcon from '@mui/icons-material/Person';
 import StickyNote2Icon from '@mui/icons-material/StickyNote2';
 import InboxComponent from './dialogs/InboxComponent';
-import AssistantIcon from '@mui/icons-material/Assistant';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CambodiaImg from '../assets/cambodia.png';
 import EnglishImg from '../assets/english.png';
+import ModeCommentRoundedIcon from '@mui/icons-material/ModeCommentRounded';
 
 const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
   const { t, i18n } = useTranslation();
@@ -215,7 +215,7 @@ const Layout = ({ children, onProfileClick, setNewActiveTab }) => {
         }}
       >
         <Tab icon={<HomeIcon />} label={showLabel ? t("feed") : null} />
-        <Tab icon={<AssistantIcon />} label={showLabel ? t("messages") : null} />
+        <Tab icon={<ModeCommentRoundedIcon />} label={showLabel ? t("messages") : null} />
         <Tab icon={<PeopleIcon />} label={showLabel ? t("friends") : null} />
         <Tab icon={<StickyNote2Icon />} label={showLabel ? t("notes") : null} />
         <Tab icon={<PersonIcon />} label={showLabel ? t("profile") : null} sx={{ mt: 35 }} />

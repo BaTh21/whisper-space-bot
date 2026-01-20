@@ -157,4 +157,5 @@ class ChatListItem(BaseModel):
     avatar: Optional[str]
     last_message: Optional[str]
     updated_at: datetime
+    creator: Optional[AuthorResponse] = None
 

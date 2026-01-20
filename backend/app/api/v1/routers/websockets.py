@@ -1043,9 +1043,24 @@ async def websocket_group_chat(
                     continue
                 
                 if action == "delete":
-                    message_id = int(data.get("message_id"))
+                    message_id = data.get("message_id")
+
+                    if message_id is None:
+                        await websocket.send_json({
+                            "error": "message_id is required for delete"
+                        })
+                        continue
+
+                    try:
+                        message_id = int(message_id)
+                    except ValueError:
+                        await websocket.send_json({
+                            "error": "invalid message_id"
+                        })
+                        continue
+
                     await delete_message(db, message_id, current_user.id)
-                    
+
                     await manager.broadcast(chat_id, {
                         "action": "delete",
                         "message_id": message_id

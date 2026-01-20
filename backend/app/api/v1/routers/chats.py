@@ -91,6 +91,12 @@ def list_chats(
         updated_at = to_utc(
             last_msg.created_at if last_msg else group.created_at
         )
+        
+        creator_info = {
+            "id": group.creator.id,
+            "username": group.creator.username,
+            "avatar_url": group.creator.avatar_url
+        } if group.creator else None
 
         chats.append({
             "id": group.id,
@@ -98,7 +104,8 @@ def list_chats(
             "name": group.name,
             "avatar": group.images[0].url if group.images else None,
             "last_message": last_msg.content if last_msg else None,
-            "updated_at": updated_at
+            "updated_at": updated_at,
+            "creator": creator_info
         })
 
     chats.sort(

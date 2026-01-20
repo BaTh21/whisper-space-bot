@@ -47,8 +47,11 @@ import CallDialog from '../components/group/CallDialog';
 import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
 import VoiceRecorder from '../components/group/VoiceRecorder';
 import EmojiPicker from '../components/EmojiPicker';
+import ModeCommentRoundedIcon from '@mui/icons-material/ModeCommentRounded';
+import useTypewriter from '../hooks/useTypewriter';
+import DeleteDialog from '../components/dialogs/DeleteDialog';
 
-const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
+const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
 
   const { auth } = useAuth();
   const user = auth?.user;
@@ -92,6 +95,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
   const canLoadMoreRef = useRef(false);
   const userHasScrolledRef = useRef(false);
   const lastScrollTopRef = useRef(0);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [isError, setIsError] = useState(false);
 
   const LIMIT = 30;
   const pageRef = useRef(0);
@@ -111,6 +116,19 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
   const pendingAnswers = useRef({});          // userId -> SDP
   const usernamesRef = useRef({});
   const avatarRef = useRef({});
+  const fileInputRef = useRef(null);
+
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const ALLOWED_EXTENSIONS = [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    // ".pdf",
+    ".gif"
+  ];
 
   const mergeMessages = (newMessages, existingMessages) => {
     const allMessages = [...existingMessages, ...newMessages];
@@ -223,13 +241,12 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
   };
 
   const scrollToBottom = () => {
-    const container = messagesEndRef.current;
-    if (container) {
-      const scrollContainer = container.parentElement;
+    const container = messagesContainerRef.current;
+    const end = messagesEndRef.current;
 
-      scrollContainer.scrollTo({
-        top: scrollContainer.scrollHeight,
-        behavior: 'smooth'
+    if (container && end) {
+      requestAnimationFrame(() => {
+        end.scrollIntoView({ behavior: "smooth", block: "end" });
       });
     }
   };
@@ -240,28 +257,40 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     }
   };
 
+  const scrollIfNearBottom = (container, threshold = 150) => {
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    if (distanceFromBottom < threshold) {
+      container.scrollTop = container.scrollHeight;
+    }
+  };
+
+  const handleMessageAdded = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+      scrollIfNearBottom(container, 100);
+    });
+  };
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    if (firstLoadRef.current) {
-      autoScrollToBottom();
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
 
-      requestAnimationFrame(() => {
-        canLoadMoreRef.current = true;
-      });
+    const isNearBottom = distanceFromBottom < 150; // threshold
 
-      firstLoadRef.current = false;
-      return;
-    }
-
-    const isNearBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-
-    if (isNearBottom) {
-      autoScrollToBottom();
+    if (isNearBottom || firstLoadRef.current) {
+      scrollToBottom();
     }
   }, [messages]);
+
 
   useEffect(() => {
     firstLoadRef.current = true;
@@ -306,20 +335,24 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     setEditingMessageId(null);
   };
 
-  const onDelete = async (message) => {
+  const onDelete = async (activeMessageId) => {
+    if (!activeMessageId) return;
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
     const payload = {
       action: "delete",
-      message_id: message.id
+      message_id: activeMessageId,
     };
 
     try {
+      setDeleting(true);
+      closeSecondMenu();
       wsRef.current.send(JSON.stringify(payload));
-
-      setMessages(prev => prev.filter(msg => msg.id !== message.id));
+      setMessages(prev => prev.filter(msg => msg.id !== activeMessageId));
     } catch (err) {
       console.error("Failed to send delete via WS:", err);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -398,6 +431,11 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
   const handleWSMessage = async (event) => {
     const data = JSON.parse(event.data);
     console.log('WS received:', data);
+
+    // if (!data.action) {
+    //   console.warn("Ignored WS system event:", data);
+    //   return;
+    // }
 
     switch (data.action) {
       case "online_users":
@@ -491,9 +529,9 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
             progress: 100
           });
 
+          requestAnimationFrame(scrollToBottom);
           return updated;
         });
-        autoScrollToBottom();
         break;
 
       case "file_update":
@@ -509,15 +547,15 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
       case "new_message":
         setMessages(prev => {
           if (prev.some(msg => msg.id === data.id)) return prev;
+          requestAnimationFrame(scrollToBottom);
           return [...prev, data];
         });
-        autoScrollToBottom();
         break;
 
       case "call_request":
         setActiveCallMessageId(data.call_message_id);
         handleIncomingCall(data);
-        autoScrollToBottom();
+        requestAnimationFrame(scrollToBottom);
         break;
 
       case "call_accepted":
@@ -587,9 +625,9 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
           }
 
           updated.push(data);
+          requestAnimationFrame(scrollToBottom);
           return updated;
         });
-        autoScrollToBottom();
         break;
     }
 
@@ -597,12 +635,14 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
   };
 
   const setupWebSocket = () => {
+    setWsConnected(false);
     const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('Connected to group chat');
+      setWsConnected(true);
       markVisibleMessagesAsSeen();
     }
 
@@ -628,6 +668,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
       setCallStatus(null);
       setCallingOpen(false);
       setVoiceCall(false);
+      setWsConnected(false);
 
       setTimeout(setupWebSocket, 3000);
     };
@@ -657,6 +698,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     };
 
     setMessages((prev) => [...prev, tempMessage]);
+
+    requestAnimationFrame(scrollToBottom);
 
     const payload = {
       action: "message",
@@ -696,18 +739,36 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
   }
 
   const handleFileChange = (e) => {
-    if (e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    const fileExt = "." + selectedFile.name.split(".").pop().toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
+      setIsError(true);
+      setError("Invalid file type");
+      e.target.value = "";
+      return;
     }
+
+    setFile({
+      raw: selectedFile,
+      preview: URL.createObjectURL(selectedFile),
+    });
   };
 
-  const handleUploadFileMessage = async (groupId, file) => {
-    if (!file) return;
+  const handleRemoveFile = () => {
+    if (file?.preview) URL.revokeObjectURL(file.preview);
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleUploadFileMessage = async (groupId) => {
+    if (!file?.raw) return;
 
     const tempId = generateTempId();
     const tempMessage = {
       id: tempId,
-      file_url: URL.createObjectURL(file),
+      file_url: file.preview,
       sender: user,
       created_at: new Date().toISOString(),
       is_temp: true,
@@ -715,17 +776,18 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
       progress: 0,
     };
 
-    setMessages((prev) => [...prev, tempMessage]);
+    setMessages(prev => [...prev, tempMessage]);
+    requestAnimationFrame(scrollToBottom);
 
     try {
-      const data = await uploadFileMessage(groupId, file);
+      const data = await uploadFileMessage(groupId, file.raw);
 
       const uploadFilePayload = {
         action: "file_upload",
         file_url: data.file_url,
         temp_id: tempId,
         message_id: data.id
-      }
+      };
 
       wsRef.current.send(JSON.stringify(uploadFilePayload));
     } catch (err) {
@@ -736,7 +798,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
         )
       );
     } finally {
-      setFile(null);
+      handleRemoveFile();
     }
   };
 
@@ -798,6 +860,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     };
 
     setMessages((prev) => [...prev, tempMessage]);
+    requestAnimationFrame(scrollToBottom);
 
     try {
       const data = await uploadVoiceMessage(groupId, voiceFile);
@@ -901,6 +964,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
       }
     });
 
+    requestAnimationFrame(scrollToBottom);
+
     setCallStatus("Calling...");
     setCallingOpen(true);
   };
@@ -911,6 +976,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     wsRef.current.send(JSON.stringify({
       action: "call_start_voice"
     }));
+
+    requestAnimationFrame(scrollToBottom);
 
     setCallStatus("Calling…");
     setVoiceCall(true);
@@ -1227,10 +1294,25 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     setIncomingCall(null);
   };
 
+  const animatedText = useTypewriter('Connecting...', 120, 1000);
+
+  // if (loading || !wsConnected) {
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '80%',
+          flexDirection: 'column',
+          color: 'text.secondary',
+        }}
+      >
         <CircularProgress />
+        <Typography mt={1}>
+          {animatedText}
+        </Typography>
       </Box>
     );
   }
@@ -1239,7 +1321,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
     <Box
       sx={{
         width: '100%',
-        border: '1px solid #dcdcdcff',
+        border: 1,
+        borderColor: isError ? 'error.main' : 'divider'
       }}
     >
       <AppBar
@@ -1247,6 +1330,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
         color="default"
         elevation={2}
         sx={{
+          bgcolor: isError ? '#ff8b8911' : 'inherit',
           '&:hover': { bgcolor: 'grey.200' },
         }}
       >
@@ -1361,7 +1445,12 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
       </AppBar>
 
 
-      <Box sx={{ display: 'flex', height: '80vh' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          height: '80vh',
+          bgcolor: isError ? '#ff8b8911' : 'inherit',
+        }}>
 
         <Drawer
           anchor='right'
@@ -1407,6 +1496,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
                   color: 'text.secondary',
                 }}
               >
+                <ModeCommentRoundedIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
                 <Typography variant="h6" gutterBottom>
                   No messages yet
                 </Typography>
@@ -1419,13 +1509,11 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
                 .sort((a, b) => new Date(a.created_at || a.temp_created_at) - new Date(b.created_at || b.temp_created_at))
                 .map((message) => {
                   const isEditing = editingMessageId === message.id;
-                  const messageKey = message.id ?? message.temp_id;
+                  const messageKey = message.id ?? message.temp_id ?? `temp-${Math.random()}`;
 
                   const isForwarded = !!message.forwarded_by;
 
                   const isOwn = message.sender?.id === user?.id;
-
-                  console.log("groups message", message)
 
                   return (
                     <Box
@@ -1911,9 +1999,10 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
                     <MenuItem
                       key="delete"
                       onClick={() => {
-                        onDelete(activeMessage);
-                        closeSecondMenu();
+                        setActiveMessageId(activeMessage.id);
+                        setDeleteOpen(true);
                       }}
+                      sx={{ color: 'error.main' }}
                     >
                       <DeleteIcon /> Delete
                     </MenuItem>
@@ -1942,12 +2031,42 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
 
           <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white' }}>
             {file && (
-              <Typography variant="caption" sx={{ mt: 1 }}>
-                Selected file: {file.name}
-              </Typography>
-            )}
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  border: "1px solid #ddd",
+                  borderRadius: 2,
+                  p: 1,
+                  mb: 1
+                }}
+              >
+                {file.raw.type.startsWith("image/") ? (
+                  <img
+                    src={file.preview}
+                    alt="preview"
+                    style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6 }}
+                  />
+                ) : (
+                  <AttachFileIcon />
+                )}
 
+                <Typography variant="caption" sx={{ flexGrow: 1 }}>
+                  {file.raw.name}
+                </Typography>
+
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={handleRemoveFile}
+                >
+                  ✕
+                </IconButton>
+              </Box>
+            )}
+
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
 
               <Box
                 sx={{
@@ -2005,9 +2124,10 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
                     >
                       <input
                         type="file"
-                        accept="image/*"
+                        accept=".png,.jpg,.jpeg,.webp,.gif"
                         id="file-upload"
                         style={{ display: 'none' }}
+                        ref={fileInputRef}
                         onChange={handleFileChange}
                       />
                       <label htmlFor="file-upload" >
@@ -2081,12 +2201,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
                       <Button
                         variant="contained"
                         onClick={() => {
-                          if (file) {
-                            handleUploadFileMessage(groupId, file);
-                          }
-                          if (newMessage.trim()) {
-                            handleSendMessage();
-                          }
+                          if (file) handleUploadFileMessage(groupId);
+                          if (newMessage.trim()) handleSendMessage();
                         }}
                         disabled={!newMessage.trim() && !file}
                         sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
@@ -2151,6 +2267,19 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats }) => {
         avatar={incomingCall?.avatar_url}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
+      />
+
+      <DeleteDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete a message"
+        description="Are you sure want to delete this message?"
+        onConfirm={
+          activeMessageId
+            ? () => onDelete(activeMessageId)
+            : undefined
+        }
+        tag={`${deleting ? ('Deleting') : ('Delete')}`}
       />
 
     </Box >

@@ -1,6 +1,7 @@
 import {
     Box, List, IconButton, Button, ListItem, ListItemAvatar, Avatar, ListItemText, Typography, TextField, InputAdornment, useMediaQuery,
     useTheme,
+    Tooltip,
 } from "@mui/material";
 import { getChatList } from "../../services/api"
 import { useState, useEffect, useRef } from "react"
@@ -209,18 +210,38 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                                         {(chat.type === 'group' ? ('Group') : ('Friend'))}
                                     </ListItemText>
                                     <ListItemAvatar>
-                                        <Avatar 
-                                        src={chat.avatar}
-                                        sx={{
-                                            borderRadius: chat.type === 'private'? 12 : 2
-                                        }}
+                                        <Avatar
+                                            src={chat.avatar}
+                                            sx={{
+                                                borderRadius: chat.type === 'private' ? 12 : 2
+                                            }}
                                         >
                                             {chat.name.charAt(0).toUpperCase()}</Avatar>
                                     </ListItemAvatar>
+                                    {chat.type === 'group' && (
+                                        <Tooltip title={`Created by ${chat.creator.username}`}>
+                                            <Avatar
+                                                src={chat.creator.avatar_url}
+                                                sx={{
+                                                    position: 'absolute',
+                                                    width: 15,
+                                                    height: 15,
+                                                    fontSize: 10,
+                                                    left: 4,
+                                                    bottom: 10,
+                                                    zIndex: 1300,
+                                                    border: 1,
+                                                    borderColor: 'divider'
+                                                }}
+                                            >
+                                                {chat.creator.username.charAt(0).toUpperCase()}
+                                            </Avatar>
+                                        </Tooltip>
+                                    )}
                                     <ListItemText
                                         primary={
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 14 }}>
-                                               {chat.type === 'group' && <GroupsIcon sx={{fontSize: 18, mb: 0.5}}/> } {chat.name}
+                                                {chat.type === 'group' && <GroupsIcon sx={{ fontSize: 18, mb: 0.5 }} />} {chat.name}
                                             </Box>
                                         }
                                         secondary={chat.last_message ? chat.last_message : 'Tap to start new message'}
@@ -277,7 +298,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         chats={chats}
                     />
                 )}
-                {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} chats={chats}/>}
+                {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} chats={chats} setError={setError}/>}
                 {!showFriend && !selectedGroupId && !isMobile && (
                     <Box
                         sx={{
