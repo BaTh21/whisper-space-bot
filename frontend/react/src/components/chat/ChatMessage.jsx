@@ -1019,33 +1019,37 @@ const ChatMessage = ({
             {(() => {
               const menuItems = [];
 
+              // menuItems.push(
+              //   <MenuItem
+              //     key="react"
+              //   >
+              //     <MessageReactions
+              //       messageId={message.id}
+              //       reactions={reactions}
+              //       currentUserId={profile?.id}
+              //       onAddReaction={handleAddReaction}
+              //       onRemoveReaction={handleRemoveReaction}
+              //       showAddButton={true}
+              //       size="small"
+              //       isMine={isMine}
+              //     />
+              //   </MenuItem>
+              // );
+
               menuItems.push(
-                <MenuItem
-                  key="react"
-                >
-                  <MessageReactions
-                    messageId={message.id}
-                    reactions={reactions}
-                    currentUserId={profile?.id}
-                    onAddReaction={handleAddReaction}
-                    onRemoveReaction={handleRemoveReaction}
-                    showAddButton={true}
-                    size="small"
-                    isMine={isMine}
-                  />
+                <MenuItem key="reply" onClick={onReply}>
+                  <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
+                  Reply
                 </MenuItem>
               );
 
-              if (actualMessageType === 'image') {
+              if (actualMessageType !== 'system') {
                 menuItems.push(
-                  <MenuItem key="view-full" onClick={handleViewFullImage}>
-                    <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
-                    {t('view_full_image')}
+                  <MenuItem key="forward" onClick={onForward}>
+                    <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
+                    {t('forward')}
                   </MenuItem>,
-                  <MenuItem key="download" onClick={handleDownloadImage}>
-                    <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
-                    {t('download_image')}
-                  </MenuItem>
+
                 );
               }
 
@@ -1066,21 +1070,20 @@ const ChatMessage = ({
                   );
                 }
 
-                if (actualMessageType !== 'system') {
+                if (actualMessageType === 'image') {
                   menuItems.push(
-                    <MenuItem key="forward" onClick={onForward}>
-                      <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
-                      {t('forward')}
+                    <MenuItem key="view-full" onClick={handleViewFullImage}>
+                      <ZoomInIcon fontSize="small" sx={{ mr: 1.5 }} />
+                      {t('view_full_image')}
                     </MenuItem>,
-
+                    <MenuItem key="download" onClick={handleDownloadImage}>
+                      <DownloadIcon fontSize="small" sx={{ mr: 1.5 }} />
+                      {t('download_image')}
+                    </MenuItem>
                   );
                 }
 
                 menuItems.push(
-                  <MenuItem key="reply" onClick={onReply}>
-                    <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
-                    Reply
-                  </MenuItem>,
                   <MenuItem
                     key="delete"
                     onClick={handleDelete}
@@ -1091,19 +1094,6 @@ const ChatMessage = ({
                   </MenuItem>
                 );
               }
-              else {
-                menuItems.push(
-                  <MenuItem key="reply" onClick={onReply}>
-                    <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
-                    Reply
-                  </MenuItem>,
-                  <MenuItem key="forward" onClick={onForward}>
-                    <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
-                    {t('forward')}
-                  </MenuItem>
-                );
-              }
-
               return menuItems;
             })()}
           </Menu>

@@ -130,8 +130,9 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     ".gif"
   ];
 
-  const mergeMessages = (newMessages, existingMessages) => {
-    const allMessages = [...existingMessages, ...newMessages];
+  const mergeMessages = (existingMessages, newMessages) => {
+    // Prepend new messages before existing ones
+    const allMessages = [...newMessages, ...existingMessages];
     const map = new Map();
 
     allMessages.forEach(msg => {
@@ -144,7 +145,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     );
   };
 
-  const loadMoreMessages = async () => {
+  const loadMoreMessages = useCallback(async () => {
     if (loadingMore || !hasMore) return;
 
     const container = messagesContainerRef.current;
@@ -161,9 +162,11 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
       if (data.length < LIMIT) setHasMore(false);
 
       setMessages(prev => {
-        const merged = mergeMessages(data, prev);
+        // Merge old messages at the beginning
+        const merged = mergeMessages(prev, data);
 
         requestAnimationFrame(() => {
+          // Adjust scroll to keep viewport at same message
           const newScrollHeight = container.scrollHeight;
           container.scrollTop = newScrollHeight - prevScrollHeight;
         });
@@ -178,7 +181,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [loadingMore, hasMore, groupId]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;

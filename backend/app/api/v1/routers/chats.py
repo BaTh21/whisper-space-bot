@@ -586,17 +586,11 @@ async def send_voice_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    FIXED VERSION: Better error handling and validation
-    """
     try:
-        print(f"🎤 Starting voice message from user {current_user.id} → friend {friend_id}")
 
-        # Check friendship
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
 
-        # Read and validate file
         contents = await voice_file.read()
         file_size = len(contents)
 
@@ -609,9 +603,6 @@ async def send_voice_message(
         if duration <= 0 or duration > 600:  # max 10 minutes
             raise HTTPException(status_code=400, detail="Invalid voice duration")
 
-        print(f"📁 File received: {file_size} bytes, {duration:.1f}s")
-
-        # FIX: Better error handling for upload
         try:
             upload_result = upload_voice_message(
                 file_content=contents,
@@ -621,14 +612,11 @@ async def send_voice_message(
             voice_url = upload_result["secure_url"]
             
         except Exception as upload_error:
-            print(f"❌ Cloudinary upload failed: {upload_error}")
-            # FIX: More specific error message
             raise HTTPException(
                 status_code=500, 
                 detail=f"Failed to upload voice message: {str(upload_error)}"
             )
 
-        # FIX: Wrap database operations in try-catch
         try:
             msg = create_private_message(
                 db=db,
@@ -641,7 +629,6 @@ async def send_voice_message(
                 file_size=file_size
             )
         except Exception as db_error:
-            print(f"❌ Database error: {db_error}")
             raise HTTPException(status_code=500, detail="Failed to save message to database")
 
         # Load full message with all relations
@@ -708,7 +695,7 @@ async def send_voice_message(
             }
 
         # Send via WebSocket
-        await manager.broadcast(chat_id, broadcast_data)
+        await manager.send_to_user(friend_id, broadcast_data, chat_id=_chat_id(current_user.id, friend_id))
 
         # Build HTTP response
         response = MessageOut(
@@ -747,7 +734,6 @@ async def send_voice_message(
                 file_size=reply.file_size
             )
 
-        print(f"VOICE MESSAGE SENT #{full_msg.id} | {duration}s | {file_size/1024:.1f}KB")
         return response
 
     except HTTPException:
