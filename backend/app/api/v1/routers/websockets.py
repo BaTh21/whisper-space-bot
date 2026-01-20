@@ -950,13 +950,18 @@ async def websocket_group_chat(
                 to_user = data.get("to_user")
                 sdp = data.get("sdp")
                 
+                if action == "ping":
+                    await websocket.send_json({"action": "pong"})
+                    continue
+
                 if action == "online_users":
                     online_user_ids = list(manager.get_online_users(chat_id))
                     await websocket.send_json({
                         "action": "online_users",
                         "user_ids": online_user_ids
                     })
-
+                    continue
+                
                 if action == "seen":
                     message_id = int(data.get("message_id"))
 

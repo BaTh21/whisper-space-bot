@@ -118,9 +118,18 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
   const usernamesRef = useRef({});
   const avatarRef = useRef({});
   const fileInputRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const isUnmountedRef = useRef(false);
 
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const getReconnectDelay = () => {
+    const base = 1000;       // 1s
+    const max = 15000;       // 15s
+    return Math.min(base * 2 ** reconnectAttemptsRef.current, max);
+  };
 
   const ALLOWED_EXTENSIONS = [
     ".png",
@@ -255,12 +264,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     }
   };
 
-  const autoScrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-  };
-
   const scrollIfNearBottom = (container, threshold = 150) => {
     if (!container) return;
 
@@ -270,15 +273,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     if (distanceFromBottom < threshold) {
       container.scrollTop = container.scrollHeight;
     }
-  };
-
-  const handleMessageAdded = () => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    requestAnimationFrame(() => {
-      scrollIfNearBottom(container, 100);
-    });
   };
 
   useEffect(() => {
@@ -361,12 +355,26 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
   };
 
   useEffect(() => {
+    isUnmountedRef.current = false;
     fetchGroupData();
     setupWebSocket();
 
     return () => {
-      wsRef.current?.close();
+      isUnmountedRef.current = true;
+
+      clearTimeout(reconnectTimeoutRef.current);
+
+      if (wsRef.current) {
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.close();
+        }
+        wsRef.current = null;
+      }
     };
+
+    // return () => {
+    //   wsRef.current?.close();
+    // };
   }, [groupId]);
 
   const fetchGroupData = async () => {
@@ -436,10 +444,12 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     const data = JSON.parse(event.data);
     console.log('WS received:', data);
 
-    // if (!data.action) {
-    //   console.warn("Ignored WS system event:", data);
-    //   return;
-    // }
+    if (data.action === "ping") {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "pong" }));
+      }
+      return;
+    }
 
     switch (data.action) {
       case "online_users":
@@ -639,6 +649,15 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
   };
 
   const setupWebSocket = () => {
+    // Prevent duplicate sockets
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
     setWsConnected(false);
     const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
     const ws = new WebSocket(wsUrl);
@@ -653,6 +672,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     ws.onmessage = handleWSMessage;
 
     ws.onclose = (event) => {
+      if (isUnmountedRef.current) return;
       console.log('Disconnected from group chat:', event.reason);
 
       setOnlineUsers(prev => {
@@ -674,7 +694,15 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
       setVoiceCall(false);
       setWsConnected(false);
 
-      setTimeout(setupWebSocket, 3000);
+      if (!isUnmountedRef.current) {
+        const delay = getReconnectDelay();
+        console.log(`Reconnecting in ${delay}ms...`);
+
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectAttemptsRef.current += 1;
+          setupWebSocket();
+        }, delay);
+      }
     };
 
     ws.onerror = (error) => {
@@ -992,9 +1020,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
     usernamesRef.current[from_user] = username;
     avatarRef.current[from_user] = avatar_url;
 
-    let isAudioOnly;
-
-    if (isAudioOnly = call_type === "voice") {
+    const isAudioOnly = call_type === "voice";
+    if (isAudioOnly) {
       setVoiceCall(true);
     }
 
@@ -1963,7 +1990,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                       closeSecondMenu();
                     }}
                   >
-                    <ReplyIcon sx={{ mr: 1.5 }}/> Reply
+                    <ReplyIcon sx={{ mr: 1.5 }} /> Reply
                   </MenuItem>,
 
                   !activeMessage.call_content
@@ -1976,7 +2003,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <ShortcutIcon sx={{ mr: 1.5 }}/> Forward
+                        <ShortcutIcon sx={{ mr: 1.5 }} /> Forward
                       </MenuItem>
                     )
                     : null,
@@ -1991,7 +2018,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <EditIcon sx={{ mr: 1.5 }}/> Edit
+                        <EditIcon sx={{ mr: 1.5 }} /> Edit
                       </MenuItem>
                     )
                     : null,
@@ -2006,7 +2033,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <RemoveRedEyeIcon sx={{ mr: 1.5 }}/> View Image
+                        <RemoveRedEyeIcon sx={{ mr: 1.5 }} /> View Image
                       </MenuItem>,
 
                       <MenuItem
@@ -2023,7 +2050,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                           closeSecondMenu();
                         }}
                       >
-                        <SaveAltIcon sx={{ mr: 1.5 }}/> Save Image
+                        <SaveAltIcon sx={{ mr: 1.5 }} /> Save Image
                       </MenuItem>,
 
                       activeMessage.sender?.id === user?.id
@@ -2042,7 +2069,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                               closeSecondMenu();
                             }}
                           >
-                            <PhotoCameraIcon sx={{ mr: 1.5 }}/> Replace Image
+                            <PhotoCameraIcon sx={{ mr: 1.5 }} /> Replace Image
                           </MenuItem>
                         )
                         : null,
@@ -2059,7 +2086,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
                       }}
                       sx={{ color: 'error.main' }}
                     >
-                      <DeleteIcon sx={{ mr: 1.5 }}/> Delete
+                      <DeleteIcon sx={{ mr: 1.5 }} /> Delete
                     </MenuItem>
                   ) : null,
                 ].flat().filter(Boolean)}
