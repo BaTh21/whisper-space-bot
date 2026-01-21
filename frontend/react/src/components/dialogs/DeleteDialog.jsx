@@ -2,9 +2,11 @@ import Box from '@mui/material/Box';
 import Modal from '@mui/material/Modal';
 import Button from '@mui/material/Button';
 
-export default function DeleteDialog({ open, onClose, onSuccess, title, tag="Delete", description, onConfirm }) {
+export default function DeleteDialog({ open, onClose, onSuccess, title, tag = "Delete", description, onConfirm }) {
 
     const handleConfirm = async () => {
+        if (!onConfirm) return;
+
         try {
             await onConfirm();
             onSuccess?.();
@@ -41,7 +43,7 @@ export default function DeleteDialog({ open, onClose, onSuccess, title, tag="Del
                     </p>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
                         <Button variant="outlined" onClick={onClose}>Cancel</Button>
-                        <Button variant="contained" color="error" onClick={handleConfirm}>{tag}</Button>
+                        <Button variant="contained" color="error" onClick={handleConfirm} disabled={!onConfirm}>{tag}</Button>
                     </Box>
                 </Box>
             </Modal>

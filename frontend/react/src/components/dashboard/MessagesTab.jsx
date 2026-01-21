@@ -45,6 +45,8 @@ import { useAuth } from '../../context/AuthContext';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import VoiceRecorder from '../group/VoiceRecorder';
 import GroupListComponent from '../chat/GroupListComponent';
+import ModeCommentRoundedIcon from '@mui/icons-material/ModeCommentRounded';
+import useTypewriter from '../../hooks/useTypewriter';
 
 const getWebSocketBaseUrl = () => {
   const wsUrl = import.meta.env.VITE_WS_URL;
@@ -70,6 +72,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const [isOnline, setIsOnline] = useState(false);
   const [showTextbox, setShowTextbox] = useState(false);
   const messageRefs = useRef({});
+  const [isError, setIsError] = useState(setError);
 
   const LIMIT = 30;
 
@@ -110,6 +113,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const [loadingInitial, setLoadingInitial] = useState(false);
   const loadingMoreRef = useRef(false);
   const initialScrollDone = useRef(false);
+  const selectedFileRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const [incomingCall, setIncomingCall] = useState({
     open: false,
@@ -725,20 +730,59 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     const blobToSend = audioBlobRef.current;
     audioBlobRef.current = null;
 
-    const formData = new FormData();
-    formData.append('voice_file', blobToSend, 'voice.webm');
-    formData.append('duration', Math.max(recordingTime, 1).toString());
+    const tempId = `temp-voice-${Date.now()}`;
+    const tempMsg = {
+      id: tempId,
+      temp_id: tempId,
+      sender_id: profile.id,
+      receiver_id: selectedFriend.id,
+      content: URL.createObjectURL(blobToSend),
+      message_type: 'voice',
+      is_read: false,
+      is_temp: true,
+      voice_duration: Math.max(recordingTime, 1),
+      sender: {
+        id: profile.id,
+        username: profile.username,
+        avatar_url: getUserAvatar(profile),
+      },
+      created_at: new Date().toISOString(),
+    };
 
-    try {
-      await apiSendVoiceMessage(selectedFriend.id, formData);
-    } catch (err) {
-      console.error(err.response?.data || err);
-      setError(err.response?.data?.message || 'Failed to send voice');
-    }
-
+    setMessages((prev) => [...prev, tempMsg]);
     requestAnimationFrame(() => {
       scrollToBottomIfNeeded('smooth');
     });
+
+    const formData = new FormData();
+    formData.append('voice_file', blobToSend, 'voice.webm');
+    formData.append('duration', tempMsg.voice_duration.toString());
+    formData.append('temp_id', tempId); // send temp_id to server
+
+    try {
+      const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.temp_id === tempId
+            ? {
+              ...sentMessage,
+              is_temp: false,
+              sender: {
+                id: profile.id,
+                username: profile.username,
+                avatar_url: getUserAvatar(profile),
+              },
+            }
+            : m
+        )
+      );
+    } catch (err) {
+      console.error(err.response?.data || err);
+      setError(err.response?.data?.message || 'Failed to send voice');
+
+      setMessages((prev) => prev.filter((m) => m.temp_id !== tempId));
+    }
   };
 
   const handleAddReaction = async (messageId, emoji) => {
@@ -821,23 +865,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       const result = await uploadImage(selectedFriend.id, file);
       const { url } = result;
 
-      const tempMsg = {
-        id: tempId,
-        sender_id: profile.id,
-        receiver_id: selectedFriend.id,
-        content: url,
-        message_type: 'image',
-        is_read: false,
-        created_at: new Date().toISOString(),
-        is_temp: true,
-        sender: {
-          username: profile.username,
-          avatar_url: getUserAvatar(profile),
-          id: profile.id,
-        },
-      };
-
-      setMessages((prev) => [...prev, tempMsg]);
       setImagePreview(null);
 
       const payload = {
@@ -877,19 +904,30 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setError(t('select_image_file'));
+      setIsError(true);
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
       setError(t('image_too_large_5mb'));
+      setIsError(true);
       return;
     }
+
+    selectedFileRef.current = file;
+
     const reader = new FileReader();
     reader.onload = (e) => setImagePreview(e.target.result);
     reader.readAsDataURL(file);
-    handleImageUpload(file);
   };
 
-  const handleRemoveImagePreview = () => setImagePreview(null);
+  const handleRemoveImagePreview = () => {
+    setImagePreview(null);
+    selectedFileRef.current = null;
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = null;
+    }
+  };
 
   const handleDeleteMessage = (messageId, isTemp = false) => {
     const message = messages.find(m => m.id === messageId);
@@ -904,8 +942,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     const { id, isTemp, message } = messageToDelete;
     const isImage = message.message_type === 'image';
 
-    setMessages(prev => prev.filter(m => m.id !== id));
-
     if (!isTemp) {
       try {
         if (isImage) {
@@ -913,6 +949,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         } else {
           await deleteMessage(id);
         }
+        setMessages(prev => prev.filter(m => m.id !== id));
         setSuccess(isImage ? t('image_deleted') : t('message_deleted'));
         setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
@@ -1203,15 +1240,18 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         await sendVoiceMessage();
       }
 
-      if (imagePreview && selectedFriend) {
-        const file = imagePreviewFileRef.current;
-        if (file) await handleImageUpload(file);
+      if (selectedFileRef.current) {
+        await handleImageUpload(selectedFileRef.current);
+
+        selectedFileRef.current = null;
+        return;
       }
 
       setNewMessage('');
       setAudioUrl(null);
       setImagePreview(null);
       setReplyTo(null);
+      setIsError(false);
 
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -1455,10 +1495,24 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     setIsAudioOnlyCall(false);
   }
 
+  const animatedText = useTypewriter('Connecting...', 120, 1000);
+
   if (loadingInitial) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '80%',
+          flexDirection: 'column',
+          color: 'text.secondary',
+        }}
+      >
         <CircularProgress />
+        <Typography mt={1}>
+          {animatedText}
+        </Typography>
       </Box>
     );
   }
@@ -1554,10 +1608,10 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
-              bgcolor: '#f8f9fa',
+              bgcolor: isError ? '#ff8b8911' : '#f8f9fa',
               overflow: 'hidden',
               border: 1,
-              borderColor: 'grey.300'
+              borderColor: isError ? 'error.main' : 'divider',
             }}>
             {selectedFriend && (
               <>
@@ -1679,10 +1733,17 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                     </Box>
                   )}
                   {messages.length === 0 ? (
-                    <Box sx={{ textAlign: 'center', mt: 16 }}>
-                      <ChatIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                    <Box sx={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      height: '100%',
+                      flexDirection: 'column',
+                      color: 'text.secondary',
+                    }}>
+                      <ModeCommentRoundedIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
                       <Typography variant="h6" color="text.secondary">{t('no_message_yet')}</Typography>
-                      <Typography color="text.secondary">{t('say_hello')} {selectedFriend.username}!</Typography>
+                      <Typography color="text.secondary">{t('say_hello')} {selectedFriend.name}!</Typography>
                     </Box>
                   ) : (
                     messages.map((message) => (
@@ -1719,18 +1780,59 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                   )}
                 </Box>
 
-                {/* Input Area */}
-                <Box className="input-area" sx={{
-                  p: { xs: 1, sm: 2 },
-                  borderTop: 1,
-                  borderColor: 'divider',
-                  bgcolor: 'white',
-                  display: 'flex',
-                  alightItems: 'center',
-                  gap: { xs: 0.5, sm: 1.5 },
-                  flexShrink: 0,
-                  minHeight: { xs: '60px', sm: 'auto' }
-                }}>
+                {imagePreview && (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      border: "1px solid #ddd",
+                      borderRadius: 2,
+                      p: 1,
+                      mb: 1,
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        gap: 1,
+                        alignItems: "center",
+                      }}
+                    >
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        style={{
+                          width: 60, height: 60, objectFit: "cover", borderRadius: 6
+                        }}
+                      />
+                      <Typography fontWeight={600}>
+                        {selectedFileRef.current ? selectedFileRef.current.name : ""}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <IconButton onClick={handleRemoveImagePreview}>
+                        <CloseIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                )}
+
+                <Box
+                  className="input-area"
+                  sx={{
+                    p: { xs: 1, sm: 2 },
+                    borderTop: 1,
+                    borderColor: isError ? 'error.main' : 'divider',
+                    bgcolor: 'white',
+                    display: 'flex',
+                    alightItems: 'center',
+                    gap: { xs: 0.5, sm: 1.5 },
+                    flexShrink: 0,
+                    minHeight: { xs: '60px', sm: 'auto' }
+                  }}>
 
                   {replyTo && (
                     <Box
@@ -1746,7 +1848,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                         display: 'flex',
                         justifyContent: 'space-between',
                         alightItems: 'center',
-                        width: { xs: '100%', md: 400, lg: '75%' }
+                        width: { xs: '100%', md: 400, lg: '75%', xl: '100%' }
                       }}
                     >
                       <Box>
@@ -1755,22 +1857,22 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                         </Typography>
                         <Typography variant="body2" noWrap>
                           {replyTo.message_type === 'voice'
-                            ? '🎤 Voice message'
+                            ? 'Voice message'
                             : replyTo.message_type === 'image'
-                              ? '🖼️ Photo'
+                              ? 'Photo'
                               : replyTo.content}
                         </Typography>
                       </Box>
 
-                      <IconButton size="small" onClick={cancelReply}>
-                        <CloseIcon />
-                      </IconButton>
+                      <Button size="small" onClick={cancelReply}>
+                        Cancel
+                      </Button>
                     </Box>
                   )}
 
                   {!showTextbox && (
                     <>
-                      <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" onChange={handleFileSelect} />
+                      <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" ref={fileInputRef} onChange={handleFileSelect} />
                       <label htmlFor="image-upload">
                         <Button
                           variant='contained'
@@ -1804,7 +1906,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                             <EmojiPicker
                               onSelect={(emoji) => {
                                 setNewMessage(prev => prev + emoji);
-                                setShowEmojiPicker(false);
                               }}
                               onClose={() => setShowEmojiPicker(false)}
                               anchorEl={emojiButtonRef.current}
@@ -1843,47 +1944,15 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                   )}
 
                   {!isRecording && (
-                    <Button variant="contained" color="primary" onClick={handleSendMessage} disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleSendMessage}
+                      disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
                       sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
                     >
                       <SendIcon />
                     </Button>
-                  )}
-
-                  {imagePreview && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        bottom: 72,
-                        left: 0,
-                        right: 0,
-                        bgcolor: 'white',
-                        p: 2,
-                        borderTopLeftRadius: 16,
-                        borderTopRightRadius: 16,
-                        boxShadow: 6,
-                        zIndex: 10
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography fontWeight={600}>Image Preview</Typography>
-                        <IconButton onClick={handleRemoveImagePreview}>
-                          <CloseIcon />
-                        </IconButton>
-                      </Box>
-
-                      <Box sx={{ mt: 2, textAlign: 'center' }}>
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          style={{
-                            maxWidth: { xs: 100, md: '80%' },
-                            maxHeight: 200,
-                            borderRadius: 12
-                          }}
-                        />
-                      </Box>
-                    </Box>
                   )}
 
                 </Box>
@@ -1892,16 +1961,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
           </Box>
         )}
       </Box>
-
-      {/* <ForwardMessageDialog
-        open={forwardDialogOpen}
-        onClose={() => setForwardDialogOpen(false)}
-        message={forwardingMessage}
-        friends={friends}
-        onForward={handleForwardMessage}
-        getAvatarUrl={getAvatarUrl}
-        getUserInitials={getUserInitials}
-      /> */}
 
       <IncomingCallDialog
         open={incomingCall.open}

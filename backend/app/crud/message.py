@@ -17,7 +17,7 @@ import cloudinary.uploader
 
 configure_cloudinary()
 
-ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".jpeg"}
 MAX_FILE_SIZE = 3 * 1024 * 1024  # 3MB
 
 def update_message(db: Session, message_id: int, content: str, current_user_id: int):

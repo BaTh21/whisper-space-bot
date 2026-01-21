@@ -1,7 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Box, IconButton, Popper, ClickAwayListener } from '@mui/material';
-import InsertEmoticonIcon from '@mui/icons-material/InsertEmoticon';
-import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
+import { useState,useEffect } from 'react';
+import { Box,Popper, ClickAwayListener } from '@mui/material';
 import EmojiPickerReact from 'emoji-picker-react';
 
 const EmojiPicker = ({ 
@@ -16,18 +14,12 @@ const EmojiPicker = ({
 
   const handleEmojiClick = (emojiData) => {
     onSelect(emojiData.emoji);
-    setOpen(false);
-    onClose?.();
   };
 
   const handleClickAway = () => {
     setOpen(false);
     onClose?.();
   };
-
-  useEffect(() => {
-    setOpen(true);
-  }, []);
 
   return (
     <Popper
