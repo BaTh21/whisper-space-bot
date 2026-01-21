@@ -1460,6 +1460,124 @@ async def websocket_group_chat(
     finally:
         db.close()
         
+@router.websocket("/global/{chat_id}")
+async def websocket_global(websocket: WebSocket, chat_id: str):
+    from app.services.ws_manager_group import manager as group_manager
+    from app.services.websocket_manager import manager as private_manager
+    from app.services.websocket_manager_gateway import manager_gateway
+    db = next(get_db())
+
+    current_user = await get_current_user_ws(websocket, db)
+    if not current_user:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
+    await websocket.accept()
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action") or data.get("type")
+            
+            if action in ("call_start", "call_start_voice"):
+                call_type = "video" if action == "call_start" else "voice"
+                await manager_gateway.start_call(
+                    chat_id=chat_id,
+                    caller_id=current_user.id,
+                    call_type=call_type,
+                    db=db
+                )
+
+            elif action == "call_accept":
+                manager_gateway.join_call(chat_id, current_user.id)
+                await manager_gateway.broadcast_to_chat(chat_id, {
+                    "type": "call_accepted",
+                    "from_user": current_user.id,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+
+            elif action == "call_reject":
+                await manager_gateway.end_call(chat_id, reason="rejected", ended_by=current_user.id)
+
+            elif action == "call_leave":
+                manager_gateway.leave_call(chat_id, current_user.id)
+                await manager_gateway.broadcast_to_chat(chat_id, {
+                    "type": "call_leave",
+                    "user_id": current_user.id
+                })
+
+            elif action == "call_end":
+                await manager_gateway.end_call(chat_id, reason="ended", ended_by=current_user.id)
+
+            elif action == "call_offer":
+                await manager_gateway.send_offer(chat_id, current_user.id, data.get("to_user"), data.get("offer"))
+
+            elif action == "call_answer":
+                await manager_gateway.send_answer(chat_id, current_user.id, data.get("to_user"), data.get("answer"))
+
+            elif action == "call_ice":
+                await manager_gateway.send_ice(chat_id, current_user.id, data.get("to_user"), data.get("candidate"))
+
+            elif action == "message":
+                content = data.get("content", "")
+                message_type = data.get("message_type", "text")
+                parent_id = data.get("parent_message_id")
+                
+                if manager_gateway.is_group_chat(chat_id):
+                    msg = GroupMessage(
+                        group_id=int(chat_id.split("_")[1]),
+                        sender_id=current_user.id,
+                        content=content,
+                        message_type=message_type,
+                        parent_message_id=parent_id
+                    )
+                    db.add(msg)
+                    db.commit()
+                    db.refresh(msg)
+                    await group_manager.broadcast(chat_id, {
+                        "id": msg.id,
+                        "group_id": msg.group_id,
+                        "sender_id": current_user.id,
+                        "content": msg.content,
+                        "message_type": msg.message_type,
+                        "created_at": msg.created_at.isoformat()
+                    })
+                else:
+                    u1, u2 = map(int, chat_id.split("_")[1:])
+                    receiver_id = u2 if current_user.id == u1 else u1
+                    msg = PrivateMessage(
+                        sender_id=current_user.id,
+                        receiver_id=receiver_id,
+                        content=content,
+                        message_type=message_type
+                    )
+                    db.add(msg)
+                    db.commit()
+                    db.refresh(msg)
+                    await private_manager.send_to_user(receiver_id, {
+                        "id": msg.id,
+                        "sender_id": current_user.id,
+                        "content": msg.content,
+                        "message_type": msg.message_type,
+                        "created_at": msg.created_at.isoformat()
+                    })
+
+            else:
+                await websocket.send_json({
+                    "type": "error",
+                    "error": f"Unknown action: {action}"
+                })
+
+    except Exception as e:
+        print(f"[WebSocket Error] User {current_user.id}: {e}")
+        await websocket.close(code=1011, reason="Internal error")
+
+    finally:
+        # Optional: clean up user from active calls if disconnected
+        for chat in list(manager_gateway.active_calls.keys()):
+            manager_gateway.leave_call(chat, current_user.id)
+
+        
 async def auto_end_call(chat_id: str, db):
     from app.services.ws_manager_group import manager
     

@@ -13,96 +13,99 @@ import VerifyCodePage from './pages/VerifyCodePage';
 import theme from './theme';
 import AuthRedirect from './guards/AuthRedirect';
 import { TwoFactorAuthPage } from './pages/TwoFactorAuthPage';
+import { CallProvider } from './context/CallContext';
 
 const App = () => (
   <ThemeProvider theme={theme}>
     <AuthProvider>
       <DebugAuth>
-        <Router>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login"
-              element={
-                <AuthRedirect>
-                  <LoginPage />
-                </AuthRedirect>
-              } />
-            <Route path="/register"
-              element={
-                <AuthRedirect>
-                  <RegisterPage />
-                </AuthRedirect>
-              } />
-            <Route path="/2fa"
-              element={
-                <AuthRedirect>
-                  <TwoFactorAuthPage />
-                </AuthRedirect>
-              } />
-            <Route path="/verify-code/:email"
-              element={
-                <AuthRedirect>
-                  <VerifyCodePage />
-                </AuthRedirect>
-              } />
+        <CallProvider>
+          <Router>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login"
+                element={
+                  <AuthRedirect>
+                    <LoginPage />
+                  </AuthRedirect>
+                } />
+              <Route path="/register"
+                element={
+                  <AuthRedirect>
+                    <RegisterPage />
+                  </AuthRedirect>
+                } />
+              <Route path="/2fa"
+                element={
+                  <AuthRedirect>
+                    <TwoFactorAuthPage />
+                  </AuthRedirect>
+                } />
+              <Route path="/verify-code/:email"
+                element={
+                  <AuthRedirect>
+                    <VerifyCodePage />
+                  </AuthRedirect>
+                } />
 
-            {/* Protected Routes - Separate routes for each tab */}
-            <Route
-              path="/feed"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={0} />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/messages"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={1} />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/friends"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={2} />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/notes"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={3} />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={4} />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/setting"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage defaultTab={5} />
-                </ProtectedRoute>
-              }
-            />
+              {/* Protected Routes - Separate routes for each tab */}
+              <Route
+                path="/feed"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage defaultTab={0} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/messages"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage defaultTab={1} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/friends"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage defaultTab={2} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/notes"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage defaultTab={3} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage defaultTab={4} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/setting"
+                element={
+                  <ProtectedRoute>
+                    <DashboardPage defaultTab={5} />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Redirect root to feed */}
-            <Route path="/" element={<Navigate to="/feed" replace />} />
+              {/* Redirect root to feed */}
+              <Route path="/" element={<Navigate to="/feed" replace />} />
 
-            {/* Catch all route - redirect to feed */}
-            <Route path="*" element={<Navigate to="/feed" replace />} />
-          </Routes>
-        </Router>
+              {/* Catch all route - redirect to feed */}
+              <Route path="*" element={<Navigate to="/feed" replace />} />
+            </Routes>
+          </Router>
+        </CallProvider>
         <ToastContainer
           position="top-right"
           autoClose={3000}
