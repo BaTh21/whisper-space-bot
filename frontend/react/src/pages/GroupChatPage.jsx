@@ -52,7 +52,7 @@ import useTypewriter from '../hooks/useTypewriter';
 import DeleteDialog from '../components/dialogs/DeleteDialog';
 import EmojiButton from '../components/EmojiButton';
 
-const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
+const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatId, currentChatType }) => {
 
   const { auth } = useAuth();
   const user = auth?.user;
@@ -222,6 +222,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError }) => {
           setOpenDrawer(false);
         }}
         chats={chats}
+        currentChatId={currentChatId}
+        currentChatType={currentChatType}
       />
     </Box>
   )

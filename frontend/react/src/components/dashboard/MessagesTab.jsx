@@ -1,5 +1,4 @@
 import {
-  Chat as ChatIcon,
   Close as CloseIcon,
   EmojiEmotions as EmojiEmotionsIcon,
   InsertEmoticon as InsertEmoticonIcon,
@@ -29,7 +28,6 @@ import {
   deleteMessage,
   editMessage,
   getBlockedUsers,
-  getFriendsOnlineStatus,
   getMessageReactions,
   getPrivateChat,
   removeReactionFromMessage,
@@ -58,18 +56,16 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList, chats }) => {
+const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList, chats, currentChatId, currentChatType }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [friendTyping, setFriendTyping] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiButtonRef = useRef(null);
-  const { t, i18n } = useTranslation();
-  const [isOnline, setIsOnline] = useState(false);
+  const { t } = useTranslation();
   const [showTextbox, setShowTextbox] = useState(false);
   const messageRefs = useRef({});
   const [isError, setIsError] = useState(setError);
@@ -86,11 +82,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const [isDeleting, setIsDeleting] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
 
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const [lastSeenMap, setLastSeenMap] = useState({});
-
   const [blockedUsers, setBlockedUsers] = useState([]);
-  const [blockStatus, setBlockStatus] = useState({});
 
   const [callStatus, setCallStatus] = useState("");
   const [callOpen, setCallOpen] = useState(false);
@@ -152,11 +144,13 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
           setOpenDrawer(false);
         }}
         chats={chats}
+        currentChatId={currentChatId}
+        currentChatType={currentChatType}
       />
     </Box>
   )
 
-  const { getAvatarUrl, getUserInitials, getUserAvatar } = useAvatar();
+  const { getAvatarUrl, getUserAvatar } = useAvatar();
 
   const handleReply = (message) => {
     setReplyTo({
@@ -177,7 +171,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
     setMessages([]);
     setNewMessage('');
-    setFriendTyping(false);
     setImagePreview(null);
     setAudioUrl(null);
     setRecordingTime(0);
@@ -212,47 +205,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const handleWebSocketMessage = useCallback(
     async (data) => {
       const { type } = data;
-
-      if (type === "user_online") {
-        setOnlineUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.add(data.user_id);
-          return newSet;
-        });
-
-        if (selectedFriend?.id === data.user_id) {
-          setIsOnline(true);
-        }
-
-        setLastSeenMap(prev => ({
-          ...prev,
-          [data.user_id]: data.timestamp || new Date().toISOString()
-        }));
-        return;
-
-      } else if (type === "user_offline") {
-        setOnlineUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(data.user_id);
-          return newSet;
-        });
-
-        if (selectedFriend.id === data.user_id) {
-          setIsOnline(false);
-        }
-
-        const offlineTime = data.last_seen || data.timestamp || new Date().toISOString();
-        setLastSeenMap(prev => ({
-          ...prev,
-          [data.user_id]: offlineTime
-        }));
-
-        return;
-
-      } else if (type === "online_users") {
-        setOnlineUsers(new Set(data.user_ids || []));
-        return;
-      }
 
       if (type === "reaction_added") {
         setMessages(prev => prev.map(msg => {
@@ -478,10 +430,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
           })
         );
 
-      } else if (type === "typing") {
-        // toast.success("Your friend is typing");
-        setFriendTyping(!!data.is_typing);
-
       } else if (type === "message_deleted") {
         setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
       }
@@ -598,8 +546,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       friends,
       selectedFriend,
       getUserAvatar,
-      setOnlineUsers,
-      setLastSeenMap,
       setSuccess
     ]
   );
@@ -648,7 +594,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
   const handleWebSocketClose = useCallback((event) => {
     console.log('[WS] Closed', event.code, event.reason);
-    setFriendTyping(false);
   }, []);
 
   const handleWebSocketError = useCallback((error) => {
@@ -704,7 +649,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         blockedUsersList.forEach(user => {
           statusMap[user.id] = true;
         });
-        setBlockStatus(statusMap);
       } catch (error) {
         console.error('Error fetching blocked users:', error);
       }
@@ -1145,35 +1089,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       sx: { color: 'primary.main' }
     }}
   />
-
-  const updateFriendsOnlineStatus = useCallback(async () => {
-    try {
-      const response = await getFriendsOnlineStatus();
-      const friendsList = response.friends || [];
-
-      const onlineIds = new Set();
-      const lastSeenData = {};
-
-      friendsList.forEach(friend => {
-        if (friend.is_online) {
-          onlineIds.add(friend.user_id);
-        }
-        if (friend.last_seen) {
-          lastSeenData[friend.user_id] = friend.last_seen;
-        }
-      });
-
-      setOnlineUsers(onlineIds);
-      setLastSeenMap(lastSeenData);
-
-    } catch (err) {
-      console.error('Failed to fetch online status:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    updateFriendsOnlineStatus();
-  }, [updateFriendsOnlineStatus]);
 
   const sendTextMessage = async () => {
     if (!newMessage.trim() || !selectedFriend) return;
@@ -1664,28 +1579,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                       gap: 1
                     }}
                   >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        backgroundColor: 'green',
-                        borderRadius: 1,
-                        px: { xs: 0.75, md: 1.5 },
-                        py: { xs: 0, md: 0.5 },
-                        mr: { xs: 0, md: 1 },
-                        gap: { xs: 0, sm: 1 }
-                      }}
-                    >
-                      <Typography
-                        sx={{
-                          color: 'white',
-                          fontSize: { xs: 12, md: 14 },
-                          display: { xs: 'block', sm: 'block' }
-                        }}
-                      >
-                        {isOnline ? 'Active' : 'Offline'}
-                      </Typography>
-                    </Box>
                     <CallIcon
                       sx={{
                         fontSize: { xs: 22, md: 26 },
@@ -1766,11 +1659,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                           }}
                           onAddReaction={handleAddReaction}
                           onRemoveReaction={handleRemoveReaction}
-                          onLoadReactions={loadMessageReactions}
                           profile={profile}
-                          currentFriend={selectedFriend}
-                          getAvatarUrl={getAvatarUrl}
-                          getUserInitials={getUserInitials}
                           onCallBack={handleStartCall}
                           onReply={() => handleReply(message)}
                           userId={user.id}
@@ -1848,7 +1737,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                         display: 'flex',
                         justifyContent: 'space-between',
                         alightItems: 'center',
-                        width: { xs: '100%', md: 400, lg: '75%', xl: '100%' }
+                        width: '100%'
                       }}
                     >
                       <Box>
@@ -1864,9 +1753,9 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                         </Typography>
                       </Box>
 
-                      <Button size="small" onClick={cancelReply}>
-                        Cancel
-                      </Button>
+                      <IconButton size="small" onClick={cancelReply}>
+                        <CloseIcon />
+                      </IconButton>
                     </Box>
                   )}
 

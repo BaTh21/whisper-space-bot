@@ -39,12 +39,8 @@ const ChatMessage = ({
   onDelete,
   onForward,
   profile,
-  currentFriend,
-  getAvatarUrl,
-  getUserInitials,
   onAddReaction,
   onRemoveReaction,
-  onLoadReactions,
   onCallBack,
   onReply,
   userId
@@ -52,16 +48,12 @@ const ChatMessage = ({
   const [anchorEl, setAnchorEl] = useState(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
-  const [avatarError, setAvatarError] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [friendOnlineStatus, setFriendOnlineStatus] = useState(null);
-  const [lastSeenTime, setLastSeenTime] = useState(null);
-  const [showOnlineStatusTooltip, setShowOnlineStatusTooltip] = useState(false);
   const [reactions, setReactions] = useState(message.reactions || []);
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   const detectMessageType = (msg) => {
     if (msg.message_type === 'image') return 'image';
@@ -166,142 +158,6 @@ const ChatMessage = ({
 
   const retryImageLoad = () => {
     setImageError(false);
-  };
-
-  const getSenderInfo = () => {
-    if (message.sender?.username) {
-      const url = message.sender.avatar_url || message.sender.avatar;
-      return {
-        username: message.sender.username,
-        avatar_url: getAvatarUrl ? getAvatarUrl(url) : url,
-        initial: getUserInitials?.(message.sender.username) ?? (message.sender.username?.[0] ?? 'U').toUpperCase(),
-      };
-    }
-    if (isMine) {
-      const url = profile?.avatar_url || profile?.avatar;
-      return {
-        username: profile?.username ?? 'Me',
-        avatar_url: getAvatarUrl ? getAvatarUrl(url) : url,
-        initial: getUserInitials?.(profile?.username) ?? (profile?.username?.[0] ?? 'M').toUpperCase(),
-      };
-    }
-    if (currentFriend) {
-      const url = currentFriend.avatar_url || currentFriend.avatar;
-      return {
-        username: currentFriend.username ?? 'Friend',
-        avatar_url: getAvatarUrl ? getAvatarUrl(url) : url,
-        initial: getUserInitials?.(currentFriend.username) ?? (currentFriend.username?.[0] ?? 'F').toUpperCase(),
-      };
-    }
-    return { username: 'Unknown', avatar_url: null, initial: 'U' };
-  };
-
-  const senderInfo = getSenderInfo();
-
-  const renderOnlineStatus = () => {
-    if (isMine || !friendOnlineStatus || !currentFriend) return null;
-
-    const isOnline = friendOnlineStatus.is_online;
-
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-          ml: 1,
-          position: 'relative',
-          cursor: 'help'
-        }}
-        onMouseEnter={() => setShowOnlineStatusTooltip(true)}
-        onMouseLeave={() => setShowOnlineStatusTooltip(false)}
-      >
-        {isOnline ? (
-          <>
-            <OnlineIcon
-              sx={{
-                fontSize: '0.6rem',
-                color: '#4CAF50',
-                filter: 'drop-shadow(0 0 2px rgba(76, 175, 80, 0.5))',
-                animation: 'pulse 2s infinite'
-              }}
-            />
-            <Typography
-              variant="caption"
-              sx={{
-                color: '#4CAF50',
-                fontWeight: 500,
-                fontSize: '0.65rem',
-                letterSpacing: '0.3px'
-              }}
-            >
-              Online
-            </Typography>
-          </>
-        ) : (
-          <>
-            <Typography
-              variant="caption"
-              sx={{
-                color: 'text.secondary',
-                fontSize: '0.65rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.3
-              }}
-            >
-              <LastSeenIcon fontSize="inherit" />
-              {lastSeenTime || ''}
-            </Typography>
-          </>
-        )}
-
-        {showOnlineStatusTooltip && (
-          <Box
-            sx={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              bgcolor: 'background.paper',
-              boxShadow: 3,
-              borderRadius: '8px',
-              p: 1.5,
-              minWidth: 180,
-              zIndex: 9999,
-              border: '1px solid',
-              borderColor: 'divider'
-            }}
-          >
-            <Typography variant="caption" fontWeight="bold">
-              {currentFriend.username}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-              <Box
-                sx={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  bgcolor: isOnline ? '#4CAF50' : '#9E9E9E',
-                  animation: isOnline ? 'pulse 2s infinite' : 'none'
-                }}
-              />
-            </Box>
-
-            {!isOnline && friendOnlineStatus.last_seen && (
-              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
-                Last seen: {new Date(friendOnlineStatus.last_seen).toLocaleString()}
-              </Typography>
-            )}
-
-            {friendOnlineStatus.last_activity && (
-              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
-                Last activity: {new Date(friendOnlineStatus.last_activity).toLocaleTimeString()}
-              </Typography>
-            )}
-          </Box>
-        )}
-      </Box>
-    );
   };
 
   useEffect(() => {
@@ -768,7 +624,6 @@ const ChatMessage = ({
             fontSize: '0.8rem',
             fontWeight: 'bold',
           }}
-          imgProps={{ onError: () => setAvatarError(true) }}
         >
           {message.sender_username.charAt(0).toUpperCase() ?? 'P'}
         </Avatar>
@@ -1087,7 +942,7 @@ const ChatMessage = ({
               // );
 
               menuItems.push(
-                <MenuItem key="reply" onClick={onReply}>
+                <MenuItem key="reply" onClick={() => { onReply(); handleClose(); }}>
                   <ReplyIcon fontSize="small" sx={{ mr: 1.5 }} />
                   Reply
                 </MenuItem>
@@ -1095,7 +950,7 @@ const ChatMessage = ({
 
               if (actualMessageType !== 'system') {
                 menuItems.push(
-                  <MenuItem key="forward" onClick={onForward}>
+                  <MenuItem key="forward" onClick={() => { onForward(); handleClose(); }}>
                     <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
                     {t('forward')}
                   </MenuItem>,

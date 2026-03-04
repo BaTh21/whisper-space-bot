@@ -23,18 +23,82 @@ from app.helpers.to_utc_iso import to_local_iso
 from app.crud.reaction import create_reaction, delete_reaction
 from app.schemas.reaction import ReactionCreate
 from app.crud.chat_gateway import forward_message
+from app.services.websocket_manager import manager
 
 router = APIRouter()
 
+@router.websocket("/")
+async def global_websocket(websocket: WebSocket):
+    db = next(get_db())
+    current_user = None
+    global_room = "global"
+
+    try:
+        current_user = await get_current_user_ws(websocket, db)
+        if not current_user:
+            await websocket.close(code=4001, reason="Please login")
+            return
+
+        await websocket.accept()
+
+        await manager.connect(global_room, websocket, current_user.id)
+
+        chats = get_user_chat_list(db, current_user.id)
+
+        await websocket.send_json({
+            "type": "chat_list",
+            "chats": chats
+        })
+
+        while True:
+            try:
+                data = await websocket.receive_json()
+                event_type = data.get("type")
+
+                if event_type == "ping":
+                    await websocket.send_json({"type": "pong"})
+                    await manager.update_user_activity(current_user.id)
+                    continue
+
+                if event_type == "refresh_chats":
+                    chats = get_user_chat_list(db, current_user.id)
+
+                    await websocket.send_json({
+                        "type": "chat_list",
+                        "chats": chats
+                    })
+                    continue
+
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Invalid event type"
+                })
+
+            except WebSocketDisconnect:
+                break
+
+            except Exception as e:
+                traceback.print_exc()
+                print(f"[Global WS Error] {e}")
+                await websocket.close(code=1011, reason="Server error")
+                break
+
+    except Exception as e:
+        traceback.print_exc()
+        print(f"[Global WS Fatal Error] {e}")
+        await websocket.close(code=1011, reason="Server error")
+
+    finally:
+        if current_user:
+            manager.disconnect(global_room, websocket, current_user.id)
+        db.close()
+    
 @router.websocket("/private/{friend_id}")
 async def handle_websocket_private(
     websocket: WebSocket,
     friend_id: int,
     db: Session = Depends(get_db)
 ):
-    
-    from app.services.websocket_manager import manager
-    from app.services.ws_manager_group import manager as group_manager
 
     current_user = None
     heartbeat_task = None
@@ -590,7 +654,6 @@ async def handle_websocket_private(
                     pass
 
                 elif msg_type == "forward":
-                    print("Active connections:", manager.active_connections.keys())
 
                     result = await forward_message(
                         db=db,
@@ -603,11 +666,11 @@ async def handle_websocket_private(
 
                     # 🔹 Send to private users
                     for uid, payload in result["users"]:
-                        await manager.send_to_user_direct(uid, payload)
+                        await manager.send_to_user(uid, payload)
 
                     # 🔹 Send to groups
                     for gid, payload in result["groups"]:
-                        await group_manager.broadcast(f"group_{gid}", payload)
+                        await manager.broadcast(f"group_{gid}", payload)
 
                     await websocket.send_json({
                         "type": "forward_success"
@@ -796,132 +859,11 @@ async def handle_websocket_private(
             manager.disconnect(chat_id, websocket, user_id=current_user.id)
             print(f"User {current_user.id} fully disconnected from chat {chat_id}")        
             
-@router.websocket("/notifications")
-async def websocket_notifications(websocket: WebSocket, db: Session = Depends(get_db)):
-    from app.services.websocket_manager import manager
-    
-    current_user: User | None = None
-
-    try:
-        # Accept connection first
-        await websocket.accept()
-        
-        # 1. First try to get token from query params
-        token = None
-        query_params = dict(websocket.query_params)
-        if "token" in query_params:
-            token = query_params["token"]
-        
-        # 2. If no token in query params, check headers
-        if not token:
-            token_header = websocket.headers.get("Authorization")
-            if token_header and token_header.startswith("Bearer "):
-                token = token_header.split(" ")[1]
-        
-        # 3. If still no token, wait for auth message
-        if not token:
-            try:
-                print("⏳ Waiting for auth message...")
-                data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
-                if data.get("type") == "auth" and data.get("token"):
-                    token = data["token"]
-                    print(f"🔑 Token from auth message: {token[:20]}...")
-                else:
-                    await websocket.close(code=4001, reason="Authentication required")
-                    return
-            except (asyncio.TimeoutError, json.JSONDecodeError):
-                await websocket.close(code=4001, reason="Authentication timeout")
-                return
-        
-        payload = verify_token(token)
-        if not payload:
-            await websocket.send_json({
-                "type": "auth_error",
-                "error": "Invalid or expired token"
-            })
-            await websocket.close(code=4001, reason="Invalid or expired token")
-            return
-        
-        # Get user ID from token
-        raw_user_id = payload.get("sub")
-        if not raw_user_id:
-            await websocket.send_json({
-                "type": "auth_error",
-                "error": "Token missing user ID"
-            })
-            await websocket.close(code=4001, reason="Token missing sub")
-            return
-        
-        try:
-            user_id = int(raw_user_id)
-        except (ValueError, TypeError):
-            await websocket.send_json({
-                "type": "auth_error",
-                "error": "Invalid user ID in token"
-            })
-            await websocket.close(code=4001, reason="Invalid user ID in token")
-            return
-        
-        current_user = db.query(User).filter(User.id == user_id).first()
-        if not current_user:
-            print(f"❌ User not found with ID: {user_id}")
-            await websocket.send_json({
-                "type": "auth_error",
-                "error": "User not found"
-            })
-            await websocket.close(code=4001, reason="User not found")
-            return
-
-        # 4. Success – send auth_success
-        await websocket.send_json({
-            "type": "auth_success",
-            "message": "Authenticated successfully",
-            "user_id": current_user.id,
-            "username": current_user.username,
-        })
-
-        # 5. Join user's notification room
-        user_room = f"user_{current_user.id}"
-        await manager.connect(user_room, websocket, user_id=current_user.id)
-
-        # 6. Keep-alive loop
-        while True:
-            try:
-                msg = await websocket.receive_json()
-                if msg.get("type") == "ping":
-                    await websocket.send_json({"type": "pong"})
-                elif msg.get("type") == "heartbeat":
-                    # Update user activity
-                    await manager.update_user_activity(current_user.id)
-                    await websocket.send_json({"type": "pong"})
-            except WebSocketDisconnect:
-                print(f"📢 User {current_user.id} disconnected from notifications")
-                break
-            except Exception as e:
-                print(f"📢 Message handling error: {e}")
-                continue
-
-    except WebSocketDisconnect:
-        print(f"📢 Notifications WebSocket disconnected normally")
-    except Exception as e:
-        print(f"❌ Notification WS authentication error: {e}")
-        traceback.print_exc()
-        try:
-            await websocket.close(code=1011, reason=f"Authentication failed: {str(e)}")
-        except:
-            pass
-    finally:
-        if current_user:
-            await manager.disconnect(f"user_{current_user.id}", websocket)
-            
 @router.websocket("/group/{group_id}")
 async def websocket_group_chat(
     websocket: WebSocket,
     group_id: int,
 ):
-    
-    from app.services.ws_manager_group import manager
-    from app.services.websocket_manager import manager as private_manager
     
     db = next(get_db())
     try:
@@ -1014,11 +956,11 @@ async def websocket_group_chat(
                         target_group_ids=data.get("targets", {}).get("groups", []),
                     )
 
-                    # 🔹 Send to private users
+                    # Forward to users
                     for uid, payload in result["users"]:
-                        await private_manager.send_to_user(user_id=uid, message=payload)
+                        await manager.send_to_user(uid, payload)
 
-                    # 🔹 Send to groups
+                    # Forward to groups
                     for gid, payload in result["groups"]:
                         await manager.broadcast(f"group_{gid}", payload, exclude={websocket})
 
@@ -1460,126 +1402,7 @@ async def websocket_group_chat(
     finally:
         db.close()
         
-@router.websocket("/global/{chat_id}")
-async def websocket_global(websocket: WebSocket, chat_id: str):
-    from app.services.ws_manager_group import manager as group_manager
-    from app.services.websocket_manager import manager as private_manager
-    from app.services.websocket_manager_gateway import manager_gateway
-    db = next(get_db())
-
-    current_user = await get_current_user_ws(websocket, db)
-    if not current_user:
-        await websocket.close(code=4001, reason="Unauthorized")
-        return
-
-    await websocket.accept()
-
-    try:
-        while True:
-            data = await websocket.receive_json()
-            action = data.get("action") or data.get("type")
-            
-            if action in ("call_start", "call_start_voice"):
-                call_type = "video" if action == "call_start" else "voice"
-                await manager_gateway.start_call(
-                    chat_id=chat_id,
-                    caller_id=current_user.id,
-                    call_type=call_type,
-                    db=db
-                )
-
-            elif action == "call_accept":
-                manager_gateway.join_call(chat_id, current_user.id)
-                await manager_gateway.broadcast_to_chat(chat_id, {
-                    "type": "call_accepted",
-                    "from_user": current_user.id,
-                    "timestamp": datetime.utcnow().isoformat()
-                })
-
-            elif action == "call_reject":
-                await manager_gateway.end_call(chat_id, reason="rejected", ended_by=current_user.id)
-
-            elif action == "call_leave":
-                manager_gateway.leave_call(chat_id, current_user.id)
-                await manager_gateway.broadcast_to_chat(chat_id, {
-                    "type": "call_leave",
-                    "user_id": current_user.id
-                })
-
-            elif action == "call_end":
-                await manager_gateway.end_call(chat_id, reason="ended", ended_by=current_user.id)
-
-            elif action == "call_offer":
-                await manager_gateway.send_offer(chat_id, current_user.id, data.get("to_user"), data.get("offer"))
-
-            elif action == "call_answer":
-                await manager_gateway.send_answer(chat_id, current_user.id, data.get("to_user"), data.get("answer"))
-
-            elif action == "call_ice":
-                await manager_gateway.send_ice(chat_id, current_user.id, data.get("to_user"), data.get("candidate"))
-
-            elif action == "message":
-                content = data.get("content", "")
-                message_type = data.get("message_type", "text")
-                parent_id = data.get("parent_message_id")
-                
-                if manager_gateway.is_group_chat(chat_id):
-                    msg = GroupMessage(
-                        group_id=int(chat_id.split("_")[1]),
-                        sender_id=current_user.id,
-                        content=content,
-                        message_type=message_type,
-                        parent_message_id=parent_id
-                    )
-                    db.add(msg)
-                    db.commit()
-                    db.refresh(msg)
-                    await group_manager.broadcast(chat_id, {
-                        "id": msg.id,
-                        "group_id": msg.group_id,
-                        "sender_id": current_user.id,
-                        "content": msg.content,
-                        "message_type": msg.message_type,
-                        "created_at": msg.created_at.isoformat()
-                    })
-                else:
-                    u1, u2 = map(int, chat_id.split("_")[1:])
-                    receiver_id = u2 if current_user.id == u1 else u1
-                    msg = PrivateMessage(
-                        sender_id=current_user.id,
-                        receiver_id=receiver_id,
-                        content=content,
-                        message_type=message_type
-                    )
-                    db.add(msg)
-                    db.commit()
-                    db.refresh(msg)
-                    await private_manager.send_to_user(receiver_id, {
-                        "id": msg.id,
-                        "sender_id": current_user.id,
-                        "content": msg.content,
-                        "message_type": msg.message_type,
-                        "created_at": msg.created_at.isoformat()
-                    })
-
-            else:
-                await websocket.send_json({
-                    "type": "error",
-                    "error": f"Unknown action: {action}"
-                })
-
-    except Exception as e:
-        print(f"[WebSocket Error] User {current_user.id}: {e}")
-        await websocket.close(code=1011, reason="Internal error")
-
-    finally:
-        # Optional: clean up user from active calls if disconnected
-        for chat in list(manager_gateway.active_calls.keys()):
-            manager_gateway.leave_call(chat, current_user.id)
-
-        
 async def auto_end_call(chat_id: str, db):
-    from app.services.ws_manager_group import manager
     
     await asyncio.sleep(30)
 

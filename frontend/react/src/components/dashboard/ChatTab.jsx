@@ -35,6 +35,8 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
     const [chatWidth, setChatWidth] = useState(300);
     const [isResizing, setIsResizing] = useState(false);
     const sidebarRef = useRef(null);
+    const currentChatId = selectedFriend?.id || selectedGroupId;
+    const currentChatType = selectedFriend ? "private" : selectedGroupId ? "group" : null;
 
     const handleMouseDown = (e) => {
         setIsResizing(true);
@@ -296,9 +298,19 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                         selectedFriend={selectedFriend}
                         toggleGroupList={toggleGroupList}
                         chats={chats}
+                        currentChatId={selectedFriend?.id}
+                        currentChatType="private"
                     />
                 )}
-                {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} chats={chats} setError={setError}/>}
+                {selectedGroupId &&
+                    <GroupChatPage
+                        groupId={selectedGroupId}
+                        toggleGroupList={toggleGroupList}
+                        chats={chats}
+                        setError={setError}
+                        currentChatId={selectedGroupId}
+                        currentChatType="group"
+                    />}
                 {!showFriend && !selectedGroupId && !isMobile && (
                     <Box
                         sx={{
