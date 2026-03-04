@@ -41,7 +41,6 @@ const ChatMessage = ({
   profile,
   onAddReaction,
   onRemoveReaction,
-  onCallBack,
   onReply,
   userId
 }) => {
@@ -392,7 +391,6 @@ const ChatMessage = ({
           }}
           onClick={(e) => {
             e.stopPropagation();
-            onCallBack()
           }}
         >
           <CallIcon

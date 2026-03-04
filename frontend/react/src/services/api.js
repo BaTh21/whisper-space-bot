@@ -1302,9 +1302,10 @@ export const deleteMessageById = async (messageId) => {
   }
 };
 
-export const uploadFileMessage = async (groupId, file) => {
+export const uploadFileMessage = async (groupId, file, tempId) => {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("temp_id", tempId);
 
   const response = await api.post(
     `/api/v1/messages/groups/${groupId}`,
@@ -1318,9 +1319,10 @@ export const uploadFileMessage = async (groupId, file) => {
   return response.data;
 };
 
-export const uploadVoiceMessage = async (groupId, file) => {
+export const uploadVoiceMessage = async (groupId, file, tempId) => {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("temp_id", tempId);
 
   const response = await api.post(
     `/api/v1/messages/groups/${groupId}/voice`,
@@ -1416,9 +1418,11 @@ export const editGroupMessage = async (messageId, content) => {
   }
 };
 
-export const editGroupFileMessage = async (messageId, file) => {
+export const editGroupFileMessage = async (messageId, file, tempId) => {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("temp_id", tempId);
+
   const res = await api.put(`/api/v1/messages/${messageId}/file`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });

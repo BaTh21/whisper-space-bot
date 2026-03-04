@@ -34,7 +34,6 @@ import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import ReplyIcon from '@mui/icons-material/Reply';
 import ShortcutIcon from '@mui/icons-material/Shortcut';
 import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import CheckIcon from '@mui/icons-material/Check';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import SeenMessageListDialog from '../components/dialogs/SeenMessageListDialog';
@@ -42,15 +41,13 @@ import GroupListComponent from '../components/chat/GroupListComponent';
 import CallIcon from '@mui/icons-material/Call';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import { VoiceMessagePlayer } from '../components/group/VoiceMessagePlayer';
-import CallModal from '../components/group/CallModal';
-import CallDialog from '../components/group/CallDialog';
-import { IncomingCallDialog } from '../components/group/InCommingCallDialog';
 import VoiceRecorder from '../components/group/VoiceRecorder';
 import EmojiPicker from '../components/EmojiPicker';
 import ModeCommentRoundedIcon from '@mui/icons-material/ModeCommentRounded';
 import useTypewriter from '../hooks/useTypewriter';
 import DeleteDialog from '../components/dialogs/DeleteDialog';
 import EmojiButton from '../components/EmojiButton';
+import { useGroupWebsocket } from '../hooks/useGroupWebsocket';
 
 const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatId, currentChatType }) => {
 
@@ -62,7 +59,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
-  const wsRef = useRef(null);
   const WS_BASE_URI = import.meta.env.VITE_WS_URL;
   const token = localStorage.getItem('accessToken');
   const [open, setOpen] = useState(false);
@@ -75,8 +71,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
   const [selectedImage, setSelectedImage] = useState(null);
   const activeMessage = messages.find((m) => m.id === activeMessageId);
   const [replyTo, setReplyTo] = useState(null);
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const [seenMessages, setSeenMessages] = useState(new Set());
   const messagesContainerRef = useRef(null);
   const [openSeenMessage, setOpenSeenMessage] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState(null);
@@ -84,10 +78,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
   const [selectedMessage, setSelectedMessage] = useState(null);
   const messagesRef = useRef([]);
   const generateTempId = () => `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const [totalAccepted, setTotalAccepted] = useState(null);
-  const [voiceCall, setVoiceCall] = useState(false);
-  const [activeCallMessageId, setActiveCallMessageId] = useState(null);
   const [recording, setRecording] = useState(false);
   const [showTextbox, setShowTextbox] = useState(false);
   const emojiButtonRef = useRef(null);
@@ -96,7 +86,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
   const canLoadMoreRef = useRef(false);
   const userHasScrolledRef = useRef(false);
   const lastScrollTopRef = useRef(0);
-  const [wsConnected, setWsConnected] = useState(false);
   const [isError, setIsError] = useState(false);
 
   const LIMIT = 30;
@@ -106,17 +95,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
   const [loadingMore, setLoadingMore] = useState(false);
 
   const peersRef = useRef({});
-  const localStreamRef = useRef(null);
-  const [callPopupOpen, setCallPopupOpen] = useState(false);
-  const [callingOpen, setCallingOpen] = useState(false);
   const remoteStreamsRef = useRef({});
-  const [remoteStreams, setRemoteStreams] = useState({});
-  const [incomingCall, setIncomingCall] = useState(null);
-  const [callStatus, setCallStatus] = useState(null);
-  const pendingOffers = useRef({});           // userId -> SDP
-  const pendingAnswers = useRef({});          // userId -> SDP
-  const usernamesRef = useRef({});
-  const avatarRef = useRef({});
   const fileInputRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -136,12 +115,10 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     ".jpg",
     ".jpeg",
     ".webp",
-    // ".pdf",
     ".gif"
   ];
 
   const mergeMessages = (existingMessages, newMessages) => {
-    // Prepend new messages before existing ones
     const allMessages = [...newMessages, ...existingMessages];
     const map = new Map();
 
@@ -172,11 +149,9 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
       if (data.length < LIMIT) setHasMore(false);
 
       setMessages(prev => {
-        // Merge old messages at the beginning
         const merged = mergeMessages(prev, data);
 
         requestAnimationFrame(() => {
-          // Adjust scroll to keep viewport at same message
           const newScrollHeight = container.scrollHeight;
           container.scrollTop = newScrollHeight - prevScrollHeight;
         });
@@ -228,24 +203,13 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     </Box>
   )
 
-  const sendSeenEvent = (messageId) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          action: "seen",
-          message_id: messageId,
-        })
-      );
-    }
-  };
-
   const handleForwardMessage = (message, targets) => {
     if (
       !wsRef.current ||
       (!targets?.users?.length && !targets?.groups?.length)
     ) return;
 
-    wsRef.current.send(JSON.stringify({
+    sendWs(({
       action: "forward",
       message_id: message.id,
       targets: {
@@ -266,17 +230,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     }
   };
 
-  const scrollIfNearBottom = (container, threshold = 150) => {
-    if (!container) return;
-
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-
-    if (distanceFromBottom < threshold) {
-      container.scrollTop = container.scrollHeight;
-    }
-  };
-
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -284,7 +237,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
 
-    const isNearBottom = distanceFromBottom < 150; // threshold
+    const isNearBottom = distanceFromBottom < 150;
 
     if (isNearBottom || firstLoadRef.current) {
       scrollToBottom();
@@ -331,7 +284,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
       new_content: content,
     };
 
-    wsRef.current.send(JSON.stringify(editPayload));
+    sendWs(editPayload);
     setEditingMessageId(null);
   };
 
@@ -347,7 +300,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     try {
       setDeleting(true);
       closeSecondMenu();
-      wsRef.current.send(JSON.stringify(payload));
+      sendWs(payload);
       setMessages(prev => prev.filter(msg => msg.id !== activeMessageId));
     } catch (err) {
       console.error("Failed to send delete via WS:", err);
@@ -357,26 +310,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
   };
 
   useEffect(() => {
-    isUnmountedRef.current = false;
     fetchGroupData();
-    setupWebSocket();
-
-    return () => {
-      isUnmountedRef.current = true;
-
-      clearTimeout(reconnectTimeoutRef.current);
-
-      if (wsRef.current) {
-        if (wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.close();
-        }
-        wsRef.current = null;
-      }
-    };
-
-    // return () => {
-    //   wsRef.current?.close();
-    // };
   }, [groupId]);
 
   const fetchGroupData = async () => {
@@ -411,94 +345,20 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     }
   };
 
-  const markVisibleMessagesAsSeen = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    container.querySelectorAll("[data-message-id]").forEach((el) => {
-      const rect = el.getBoundingClientRect();
-      if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-        const id = Number(el.dataset.messageId);
-        setMessages(prev => {
-          const msg = prev.find(m => m.id === id);
-          if (msg && msg.sender?.id !== user?.id && !seenMessages.has(id)) {
-            setSeenMessages(prevSet => new Set(prevSet).add(id));
-            sendSeenEvent(id);
-          }
-          return prev;
-        });
-      }
-    });
-  }, [seenMessages, user]);
-
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    markVisibleMessagesAsSeen();
-
     if (!loadingMore && hasMore && container.scrollTop <= 50) {
       loadMoreMessages();
     }
-  }, [loadingMore, hasMore, loadMoreMessages, markVisibleMessagesAsSeen]);
+  }, [loadingMore, hasMore, loadMoreMessages]);
 
   const handleWSMessage = async (event) => {
     const data = JSON.parse(event.data);
     console.log('WS received:', data);
 
-    if (data.action === "ping") {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: "pong" }));
-      }
-      return;
-    }
-
     switch (data.action) {
-      case "online_users":
-        setOnlineUsers(new Set(data.user_ids));
-        break;
-
-      case "user_online":
-        setOnlineUsers(prev => {
-          const updated = new Set(prev);
-          updated.add(data.user_id);
-          return updated;
-        });
-        break;
-
-      case "user_offline":
-        setOnlineUsers(prev => {
-          const updated = new Set(prev);
-          updated.delete(data.user_id);
-          return updated;
-        });
-
-        if (remoteStreamsRef.current[data.user_id]) {
-          remoteStreamsRef.current[data.user_id].getTracks().forEach(track => track.stop());
-          delete remoteStreamsRef.current[data.user_id];
-          setRemoteStreams({ ...remoteStreamsRef.current });
-        }
-
-        if (callStatus === "In Call" && peersRef.current[data.user_id]) {
-          const pc = peersRef.current[data.user_id];
-          pc.getSenders().forEach(s => s.track?.stop());
-          pc.close();
-          delete peersRef.current[data.user_id];
-        }
-        break;
-
-      case "seen":
-        setMessages(prev =>
-          prev.map(msg => {
-            if (msg.id !== data.message_id) return msg;
-
-            const seenBy = new Set(msg.seen_by || []);
-            seenBy.add(data.user_id);
-
-            return { ...msg, seen_by: Array.from(seenBy) };
-          })
-        );
-        break;
 
       case "edit":
         setMessages(prev =>
@@ -568,62 +428,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
         });
         break;
 
-      case "call_request":
-        setActiveCallMessageId(data.call_message_id);
-        handleIncomingCall(data);
-        requestAnimationFrame(scrollToBottom);
-        break;
-
-      case "call_accepted":
-        handleCallAcceptedByUser(data);
-        break;
-
-      case "call_join":
-        console.log("CALL JOIN DATA:", data);
-        handleNewUserJoined(data.user_id, data.username, data.avatar_url);
-        if (data.call_message_id) {
-          setActiveCallMessageId(data.call_message_id);
-        }
-        break;
-
-      case "call_new_peer":
-        setCallStatus("In Call");
-        handleSendOfferToNewPeer(data.new_user_id);
-        break;
-
-      case "call_offer":
-        handleReceiveOffer(data)
-        break;
-
-      case "call_answer":
-        handleReceiveAnswer(data);
-        break;
-
-      case "call_ice":
-        handleNewIceCandidate(data);
-        break;
-
-      case "call_leave":
-        handleUserLeave(data.user_id);
-
-        if (Object.keys(peersRef.current).length < 1) {
-          setCallingOpen(false);
-        }
-        break;
-
-      case "total_accepted":
-        setTotalAccepted(data.total);
-        break;
-
-      case "call_end":
-        handleCallEnded(data);
-        break;
-
-      case "call_info":
-        setVoiceCall(data.is_audio_only);
-        setCallType(data.call_type);
-        break;
-
       default:
         setMessages((prev) => {
           const updated = [...prev];
@@ -647,69 +451,31 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
         break;
     }
 
-    markVisibleMessagesAsSeen();
   };
 
-  const setupWebSocket = () => {
-    // Prevent duplicate sockets
-    if (
-      wsRef.current &&
-      (wsRef.current.readyState === WebSocket.OPEN ||
-        wsRef.current.readyState === WebSocket.CONNECTING)
-    ) {
-      return;
-    }
+  const wsRef = useGroupWebsocket({ groupId, token, WS_BASE_URI });
 
-    setWsConnected(false);
-    const wsUrl = `${WS_BASE_URI}/api/v1/ws/group/${groupId}?token=${token}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+  useEffect(() => {
+    if (!wsRef.current) return;
 
-    ws.onopen = () => {
-      console.log('Connected to group chat');
-      setWsConnected(true);
-      markVisibleMessagesAsSeen();
-    }
-
-    ws.onmessage = handleWSMessage;
-
-    ws.onclose = (event) => {
-      if (isUnmountedRef.current) return;
-      console.log('Disconnected from group chat:', event.reason);
-
-      setOnlineUsers(prev => {
-        const updated = new Set(prev);
-        updated.delete(user.id);
-        return updated;
-      });
-
-      Object.values(peersRef.current).forEach(pc => {
-        pc.getSenders().forEach(s => s.track?.stop());
-        pc.close();
-      });
-      peersRef.current = {};
-      remoteStreamsRef.current = {};
-      setRemoteStreams({});
-
-      setCallStatus(null);
-      setCallingOpen(false);
-      setVoiceCall(false);
-      setWsConnected(false);
-
-      if (!isUnmountedRef.current) {
-        const delay = getReconnectDelay();
-        console.log(`Reconnecting in ${delay}ms...`);
-
-        reconnectTimeoutRef.current = setTimeout(() => {
-          reconnectAttemptsRef.current += 1;
-          setupWebSocket();
-        }, delay);
-      }
+    const handleMessage = (event) => {
+      JSON.parse(event.data);
+      handleWSMessage(event);
     };
 
-    ws.onerror = (error) => {
-      console.log('WebSocket error', error);
+    wsRef.current.addEventListener("message", handleMessage);
+
+    return () => {
+      wsRef.current?.removeEventListener("message", handleMessage);
     };
+  }, [wsRef, handleWSMessage]);
+
+  const sendWs = (payload) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(payload));
+    } else {
+      console.warn("WebSocket not connected yet!");
+    }
   };
 
   const handleSendMessage = () => {
@@ -743,7 +509,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     };
 
     try {
-      wsRef.current.send(JSON.stringify(payload));
+      sendWs(payload);
     } catch (err) {
       console.error("Failed to send message via WS:", err);
       setMessages((prev) =>
@@ -814,16 +580,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     requestAnimationFrame(scrollToBottom);
 
     try {
-      const data = await uploadFileMessage(groupId, file.raw);
+      await uploadFileMessage(groupId, file.raw, tempId);
 
-      const uploadFilePayload = {
-        action: "file_upload",
-        file_url: data.file_url,
-        temp_id: tempId,
-        message_id: data.id
-      };
-
-      wsRef.current.send(JSON.stringify(uploadFilePayload));
     } catch (err) {
       console.error("Failed to send file_upload via WS:", err);
       setMessages(prev =>
@@ -858,14 +616,8 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     );
 
     try {
-      const data = await editGroupFileMessage(messageId, newFile);
+      await editGroupFileMessage(messageId, newFile, tempId);
 
-      wsRef.current.send(JSON.stringify({
-        action: "file_update",
-        message_id: messageId,
-        file_url: data.file_url,
-        temp_id: tempId
-      }));
     } catch (err) {
       console.error("Failed to send file_update via WS:", err);
       setMessages(prev =>
@@ -897,15 +649,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
     requestAnimationFrame(scrollToBottom);
 
     try {
-      const data = await uploadVoiceMessage(groupId, voiceFile);
-
-      wsRef.current.send(JSON.stringify({
-        action: "voice_upload",
-        message_type: "voice",
-        voice_url: data.voice_url,
-        temp_id: tempId,
-        message_id: data.id
-      }))
+      await uploadVoiceMessage(groupId, voiceFile, tempId);
     } catch (err) {
       console.error("Failed to upload voice message:", err);
       setMessages(prev =>
@@ -914,417 +658,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
         )
       )
     }
-  };
-
-  const getLocalStream = async (isAudioOnly = false) => {
-    if (!localStreamRef.current) {
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia(
-        isAudioOnly ? {
-          video: false,
-          audio: true
-        } : {
-          video: true,
-          audio: true
-        }
-      );
-    }
-
-    if (isAudioOnly) {
-      localStreamRef.current.getVideoTracks().forEach(t => (t.enabled = false));
-    }
-
-    return localStreamRef.current;
-  };
-
-  const getOrCreatePeer = async (userId) => {
-    let pc = peersRef.current[userId];
-    if (pc && pc.signalingState !== "closed") return pc;
-
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current);
-      });
-    }
-
-    pc.ontrack = (event) => {
-      let stream = remoteStreamsRef.current[userId];
-
-      if (!stream) {
-        stream = new MediaStream();
-        remoteStreamsRef.current[userId] = stream;
-      }
-
-      stream.addTrack(event.track);
-
-      setRemoteStreams({ ...remoteStreamsRef.current });
-    };
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        wsRef.current.send(JSON.stringify({
-          action: "call_ice",
-          to_user: userId,
-          candidate: e.candidate,
-        }));
-      }
-    };
-
-    peersRef.current[userId] = pc;
-    return pc;
-  };
-
-  const handleStartGroupCall = async () => {
-    await getLocalStream();
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_start"
-    }));
-
-    onlineUsers.forEach(async (uid) => {
-      if (uid !== user.id) {
-        const pc = await getOrCreatePeer(uid);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        wsRef.current.send(JSON.stringify({
-          action: "call_offer",
-          to_user: uid,
-          sdp: pc.localDescription
-        }));
-      }
-    });
-
-    requestAnimationFrame(scrollToBottom);
-
-    setCallStatus("Calling...");
-    setCallingOpen(true);
-  };
-
-  const handleStartVoiceCall = async () => {
-    await getLocalStream(true);
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_start_voice"
-    }));
-
-    requestAnimationFrame(scrollToBottom);
-
-    setCallStatus("Calling…");
-    setVoiceCall(true);
-    setCallingOpen(true);
-  };
-
-  const handleIncomingCall = async ({ from_user, username, avatar_url, call_type }) => {
-    usernamesRef.current[from_user] = username;
-    avatarRef.current[from_user] = avatar_url;
-
-    const isAudioOnly = call_type === "voice";
-    if (isAudioOnly) {
-      setVoiceCall(true);
-    }
-
-    await getLocalStream(isAudioOnly);
-    await getOrCreatePeer(from_user);
-
-    if (from_user !== user.id) {
-      setIncomingCall({ userId: from_user, username: username, avatar_url: avatar_url });
-    }
-
-    setCallStatus("Calling");
-  };
-
-  const handleAcceptCall = async () => {
-    const { userId: caller, isAudioOnly } = incomingCall;
-
-    await getLocalStream(isAudioOnly);
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_accept",
-      to_user: caller
-    }));
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_join"
-    }));
-
-    setIncomingCall(null);
-    setCallStatus("In Call");
-    setCallingOpen(true);
-
-    await getOrCreatePeer(caller);
-  };
-
-  const handleJoinCall = async () => {
-    await getLocalStream();
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_join"
-    }));
-
-    setCallStatus("In Call");
-    setCallingOpen(true);
-
-    for (const uid of Array.from(onlineUsers)) {
-      if (uid === user.id) continue;
-
-      const pc = await getOrCreatePeer(uid);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      wsRef.current.send(JSON.stringify({
-        action: "call_offer",
-        to_user: uid,
-        sdp: offer
-      }));
-    }
-  };
-
-  const handleCallAcceptedByUser = async ({ from_user }) => {
-
-    await getLocalStream();
-    const pc = await getOrCreatePeer(from_user);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_offer",
-      to_user: from_user,
-      sdp: offer
-    }));
-
-    setCallStatus("In Call");
-  };
-
-  const handleNewUserJoined = async (newUserId, username, avatar_url) => {
-    if (newUserId === user.id) return;
-
-    usernamesRef.current[newUserId] = username;
-    avatarRef.current[newUserId] = avatar_url;
-
-    await getLocalStream();
-
-    const pc = await getOrCreatePeer(newUserId);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_offer",
-      to_user: newUserId,
-      sdp: pc.localDescription
-    }));
-  };
-
-  const handleReceiveOffer = async ({ from_user, username, avatar_url, sdp }) => {
-    usernamesRef.current[from_user] = username;
-    avatarRef.current[from_user] = avatar_url;
-
-    await getLocalStream();
-
-    const pc = await getOrCreatePeer(from_user);
-
-    if (pc.signalingState !== "stable") {
-      pendingOffers.current[from_user] = sdp;
-      return;
-    }
-
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    if (pendingCandidates.current[from_user]) {
-      for (const c of pendingCandidates.current[from_user]) {
-        await pc.addIceCandidate(new RTCIceCandidate(c));
-      }
-      delete pendingCandidates.current[from_user];
-    }
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_answer",
-      to_user: from_user,
-      sdp: answer
-    }));
-
-    if (pendingOffers.current[from_user]) {
-      const pending = pendingOffers.current[from_user];
-      delete pendingOffers.current[from_user];
-
-      await handleReceiveOffer({
-        from_user,
-        username,
-        avatar_url,
-        sdp: pending
-      });
-    }
-  };
-
-  const handleSendOfferToNewPeer = async (userId) => {
-    if (userId === user.id) return;
-
-    await getLocalStream();
-    const pc = await getOrCreatePeer(userId);
-
-    if (pc.signalingState !== "stable") return;
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    wsRef.current.send(JSON.stringify({
-      action: "call_offer",
-      to_user: userId,
-      sdp: offer
-    }));
-  };
-
-  const handleReceiveAnswer = async ({ from_user, sdp }) => {
-    const pc = peersRef.current[from_user];
-    if (!pc) return;
-
-    if (pc.signalingState !== "have-local-offer") {
-      pendingAnswers.current[from_user] = sdp;
-      return;
-    }
-
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-
-    if (pendingCandidates.current[from_user]) {
-      for (const c of pendingCandidates.current[from_user]) {
-        await pc.addIceCandidate(new RTCIceCandidate(c));
-      }
-      delete pendingCandidates.current[from_user];
-    }
-  };
-
-  const pendingCandidates = useRef({});
-
-  const handleNewIceCandidate = async ({ from_user, candidate }) => {
-    const pc = peersRef.current[from_user];
-
-    if (!pc) return;
-
-    if (!pc.remoteDescription) {
-      if (!pendingCandidates.current[from_user]) {
-        pendingCandidates.current[from_user] = [];
-      }
-      pendingCandidates.current[from_user].push(candidate);
-      return;
-    }
-
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-      console.warn("ICE add failed", e);
-    }
-  };
-
-  const handleUserLeave = (userId) => {
-    const pc = peersRef.current[userId];
-    if (pc) {
-      pc.getReceivers().forEach(receiver => receiver.track?.stop());
-      pc.close();
-      delete peersRef.current[userId];
-    }
-
-    const remoteStream = remoteStreamsRef.current[userId];
-    if (remoteStream) {
-      remoteStream.getTracks().forEach(track => track.stop());
-      delete remoteStreamsRef.current[userId];
-      setRemoteStreams({ ...remoteStreamsRef.current });
-    }
-
-    console.log(`User ${userId} left the call, cleaned up remote stream.`);
-  };
-
-  const handleCancelCall = () => {
-    wsRef.current.send(JSON.stringify({ action: "call_leave" }));
-
-    if (activeCallMessageId) {
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === activeCallMessageId
-            ? {
-              ...m,
-              call_content: "Call ended",
-              can_join: false,
-              updated_at: new Date().toISOString()
-            }
-            : m
-        )
-      );
-    }
-
-    setCallStatus("Ending call...");
-
-    Object.values(peersRef.current).forEach(pc => {
-      pc.getSenders().forEach(s => s.track?.stop());
-      pc.close();
-    });
-
-    peersRef.current = {};
-    pendingOffers.current = {};
-    pendingAnswers.current = {};
-    pendingCandidates.current = {};
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-
-    remoteStreamsRef.current = {};
-    setRemoteStreams({});
-    setCallStatus(null);
-    setVoiceCall(false);
-    setCallingOpen(false);
-
-    setActiveCallMessageId(null);
-  };
-
-  const handleRejectCall = () => {
-    wsRef.current.send(JSON.stringify({
-      action: "call_reject",
-      to_user: incomingCall.userId
-    }));
-    setIncomingCall(null);
-  };
-
-  const handleCallEnded = (data) => {
-
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === data.call_message_id
-          ? {
-            ...m,
-            call_content: data.call_content,
-            can_join: false,
-            updated_at: new Date().toISOString()
-          }
-          : m
-      )
-    );
-
-    Object.values(peersRef.current).forEach(pc => {
-      pc.getSenders().forEach(s => s.track?.stop());
-      pc.close();
-    });
-    peersRef.current = {};
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(t => t.stop());
-      localStreamRef.current = null;
-    }
-
-    remoteStreamsRef.current = {};
-    setRemoteStreams({});
-
-    setCallStatus(null);
-    setVoiceCall(false);
-    setCallingOpen(false);
-    setIncomingCall(null);
   };
 
   const animatedText = useTypewriter('Connecting...', 120, 1000);
@@ -1426,31 +759,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
               alignItems: 'center',
             }}
           >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                backgroundColor: 'green',
-                borderRadius: 1,
-                px: { xs: 0.75, md: 1.5 },
-                py: { xs: 0, md: 0.5 },
-                mr: { xs: 0, md: 1 },
-                gap: { xs: 0, sm: 1 }
-              }}
-            >
-              <Typography sx={{ color: 'white', fontSize: { xs: 12, md: 14 } }}>
-                {Array.from(onlineUsers).length}
-              </Typography>
-              <Typography
-                sx={{
-                  color: 'white',
-                  fontSize: { xs: 12, md: 14 },
-                  display: { xs: 'none', sm: 'block' }
-                }}
-              >
-                Online
-              </Typography>
-            </Box>
             <CallIcon
               sx={{
                 fontSize: { xs: 22, md: 26 },
@@ -1460,7 +768,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
                   scale: 1.1
                 }
               }}
-              onClick={handleStartVoiceCall}
+            // onClick={handleStartVoiceCall}
             />
             <VideocamIcon
               sx={{
@@ -1471,7 +779,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
                   scale: 1.1
                 }
               }}
-              onClick={handleStartGroupCall}
+            // onClick={handleStartGroupCall}
             />
           </Box>
         </Toolbar>
@@ -1563,7 +871,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
                         <Avatar
                           src={message.sender.avatar_url}
                           alt={message.sender.username || 'User'}
-                          sx={{ width: 32, height: 32, mr: 1 }}
+                          sx={{ width: 25, height: 25, mr: 1, fontSize: 14 }}
                         >
                           {message.sender.username?.charAt(0).toUpperCase() || 'P'}
                         </Avatar>
@@ -2094,22 +1402,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
                 ].flat().filter(Boolean)}
             </Menu>
 
-            {showScrollButton && (
-              <IconButton
-                onClick={scrollToBottom}
-                variant="contained"
-                sx={{
-                  position: 'fixed',
-                  bottom: 80,
-                  right: 16,
-                  backgroundColor: 'primary.main'
-                }}
-              >
-                <ArrowDownwardIcon sx={{ color: 'white' }} />
-              </IconButton>
-
-            )}
-
             <div ref={messagesEndRef} />
           </Box>
 
@@ -2319,37 +1611,6 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
         open={openSeenMessage}
         onClose={() => setOpenSeenMessage(false)}
         messageId={selectedMessageId}
-      />
-
-      <CallModal
-        open={callPopupOpen}
-        onClose={() => setCallPopupOpen(false)}
-        onlineUsers={onlineUsers}
-      />
-
-      <CallDialog
-        open={callingOpen}
-        onCancel={handleCancelCall}
-        isAudioOnly={voiceCall}
-        remoteStreams={Object.fromEntries(
-          Object.entries(remoteStreams).filter(([uid, stream]) => (
-            stream && stream.getTracks().length > 0
-          ))
-        )}
-        usernames={usernamesRef.current}
-        avatars={avatarRef.current}
-        onLocal={localStreamRef.current}
-        peersRef={peersRef}
-        status={callStatus}
-        totalAccepted={totalAccepted}
-      />
-
-      <IncomingCallDialog
-        open={!!incomingCall}
-        username={incomingCall?.username}
-        avatar={incomingCall?.avatar_url}
-        onAccept={handleAcceptCall}
-        onReject={handleRejectCall}
       />
 
       <DeleteDialog

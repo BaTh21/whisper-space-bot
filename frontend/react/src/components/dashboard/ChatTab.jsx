@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import Logo from '/pengu-pudgy.webp';
 import GroupsIcon from '@mui/icons-material/Groups';
 
-function ChatTab({ friends, profile, setError, setSuccess }) {
+function ChatTab({ friends, profile, error, setError, setSuccess }) {
     const [chats, setChats] = useState([]);
     const [showFriend, setShowFriend] = useState(false);
     const [selectedFriend, setSelectedFriend] = useState(null);
@@ -292,6 +292,7 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                     <MessagesTab
                         friends={friends}
                         profile={profile}
+                        isError={error}
                         setError={setError}
                         setSuccess={setSuccess}
                         showFriend={showFriend}

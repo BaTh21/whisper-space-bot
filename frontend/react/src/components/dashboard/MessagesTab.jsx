@@ -28,7 +28,6 @@ import {
   deleteMessage,
   editMessage,
   getBlockedUsers,
-  getMessageReactions,
   getPrivateChat,
   removeReactionFromMessage,
   sendImageMessage,
@@ -37,8 +36,6 @@ import {
 import ChatMessage from '../chat/ChatMessage';
 import EmojiButton from '../EmojiButton';
 import EmojiPicker from '../EmojiPicker';
-import { IncomingCallDialog } from '../group/InCommingCallDialog';
-import CallDialog from '../group/CallDialog';
 import { useAuth } from '../../context/AuthContext';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import VoiceRecorder from '../group/VoiceRecorder';
@@ -56,7 +53,7 @@ const getWebSocketBaseUrl = () => {
 };
 const BASE_URI = getWebSocketBaseUrl();
 
-const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selectedFriend, toggleGroupList, chats, currentChatId, currentChatType }) => {
+const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFriend, selectedFriend, toggleGroupList, chats, currentChatId, currentChatType }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -68,7 +65,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const { t } = useTranslation();
   const [showTextbox, setShowTextbox] = useState(false);
   const messageRefs = useRef({});
-  const [isError, setIsError] = useState(setError);
 
   const LIMIT = 30;
 
@@ -84,21 +80,8 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
   const [blockedUsers, setBlockedUsers] = useState([]);
 
-  const [callStatus, setCallStatus] = useState("");
-  const [callOpen, setCallOpen] = useState(false);
-  const [remoteStreams, setRemoteStreams] = useState({});
-  const [totalAccepted, setTotalAccepted] = useState(0);
-  const [isAudioOnlyCall, setIsAudioOnlyCall] = useState(false);
-  const localStreamRef = useRef(null);
-  const peersRef = useRef({});
-  const remoteStreamsRef = useRef({});
   const { auth } = useAuth();
   const user = auth?.user;
-  const usernamesRef = useRef({});
-  const avatarRef = useRef({});
-  const pendingAnswers = useRef({});
-  const pendingCandidates = useRef({})
-  const isCallerRef = useRef(false);
   const sentReadReceipts = useRef(new Set());
   const isConnectedRef = useRef(false);
   const sendWsMessageRef = useRef(null);
@@ -107,14 +90,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
   const initialScrollDone = useRef(false);
   const selectedFileRef = useRef(null);
   const fileInputRef = useRef(null);
-
-  const [incomingCall, setIncomingCall] = useState({
-    open: false,
-    username: "",
-    avatar: "",
-    fromUserId: null,
-    call_type: ""
-  });
 
   const audioBlobRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -361,32 +336,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
         requestAnimationFrame(() => {
           scrollToBottomIfNeeded('smooth');
         });
-      }
-
-      else if (type === "message_read") {
-        setMessages(prev =>
-          prev.map(msg => {
-            if (msg.id === data.message_id) {
-              const alreadySeen = msg.seen_by?.some(s => s.user_id === data.reader_id);
-              if (alreadySeen) return msg;
-              return {
-                ...msg,
-                is_read: true,
-                read_at: data.read_at,
-                seen_by: [
-                  ...(msg.seen_by || []),
-                  {
-                    user_id: data.reader_id,
-                    username: data.reader_username,
-                    avatar_url: data.reader_avatar || '',
-                    seen_at: data.read_at
-                  }
-                ]
-              };
-            }
-            return msg;
-          })
-        );
 
       } else if (type === "message_updated") {
         setMessages((prev) =>
@@ -432,112 +381,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
 
       } else if (type === "message_deleted") {
         setMessages((prev) => prev.filter((m) => m.id !== data.message_id));
-      }
-
-      else if (type === "call_request") {
-        if (data.from_user !== user.id) {
-          setIncomingCall({
-            open: true,
-            fromUserId: data.from_user,
-            username: data.sender_username,
-            avatar: data.avatar_url,
-            call_type: data.call_type
-          });
-          usernamesRef.current[data.from_user] = data.sender_username;
-          avatarRef.current[data.from_user] = data.avatar;
-        }
-        setIsAudioOnlyCall(data.call_type === "voice");
-
-        requestAnimationFrame(() => {
-          scrollToBottomIfNeeded('smooth');
-        });
-      }
-
-      else if (type === "call_accepted") {
-        setCallStatus("In Call");
-
-        if (isCallerRef.current) {
-          startWebRTCForCall(isAudioOnlyCall);
-        }
-      }
-
-      else if (type === "call_ice") {
-        const { from_user, candidate } = data;
-        const pc = peersRef.current[from_user];
-
-        if (!pc) {
-          if (!pendingCandidates.current[from_user]) {
-            pendingCandidates.current[from_user] = [];
-          }
-          pendingCandidates.current[from_user].push(candidate);
-          return;
-        }
-
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error("Error adding ICE candidate", err);
-        }
-      }
-
-      else if (type === "call_offer") {
-        const fromUserId = data.from_user;
-        usernamesRef.current[data.from_user] = data.username;
-        avatarRef.current[data.from_user] = data.avatar;
-
-        const audioOnly = data.call_type === "voice" || isAudioOnlyCall;
-        setIsAudioOnlyCall(audioOnly);
-
-        await getLocalStream(audioOnly);
-        const pc = await getOrCreatePeer(fromUserId);
-
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        sendWsMessage({
-          type: "call_answer",
-          to_user: fromUserId,
-          answer
-        });
-      }
-
-      else if (type === "call_answer") {
-        const fromUserId = data.from_user;
-        const pc = peersRef.current[fromUserId];
-        if (!pc) return;
-
-        if (pc.signalingState === "have-local-offer") {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-
-          if (pendingCandidates.current[fromUserId]) {
-            for (const c of pendingCandidates.current[fromUserId]) {
-              await pc.addIceCandidate(new RTCIceCandidate(c));
-            }
-            delete pendingCandidates.current[fromUserId];
-          }
-        } else {
-          pendingAnswers.current[fromUserId] = data.answer;
-        }
-      }
-
-      else if (type === "call_ended") {
-
-        endWebRTC();
-
-        setCallStatus(
-          data.reason === "timeout"
-            ? "Call not answered"
-            : "Call ended"
-        );
-
-        setCallOpen(false);
-        setIsAudioOnlyCall(false);
-        setIncomingCall({ open: false });
-        setTotalAccepted(0);
-
-        return;
       }
     },
     [
@@ -783,23 +626,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     }
   };
 
-  const loadMessageReactions = async (messageId) => {
-    try {
-      const response = await getMessageReactions(messageId);
-      setMessages(prev => prev.map(msg => {
-        if (msg.id === messageId) {
-          return {
-            ...msg,
-            reactions: response.reactions || []
-          };
-        }
-        return msg;
-      }));
-    } catch (err) {
-      console.error('Failed to load reactions:', err);
-    }
-  };
-
   const handleImageUpload = async (file) => {
     if (!selectedFriend) return;
 
@@ -848,12 +674,12 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setError(t('select_image_file'));
-      setIsError(true);
+      setError(true);
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
       setError(t('image_too_large_5mb'));
-      setIsError(true);
+      setError(true);
       return;
     }
 
@@ -1166,7 +992,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       setAudioUrl(null);
       setImagePreview(null);
       setReplyTo(null);
-      setIsError(false);
+      setError(false);
 
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -1259,156 +1085,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
       setTimeout(() => setError(null), 3000);
     }
   };
-
-  const getLocalStream = async (isAudioOnly = false) => {
-    if (!localStreamRef.current) {
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: isAudioOnly ? false : { facingMode: "user" }
-      });
-    }
-    return localStreamRef.current;
-  };
-
-  const getOrCreatePeer = async (userId) => {
-    if (!localStreamRef.current) {
-      throw new Error("Local stream must exist before creating PeerConnection");
-    }
-
-    let pc = peersRef.current[userId];
-    if (pc && pc.signalingState !== "closed") return pc;
-
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
-
-    localStreamRef.current.getTracks().forEach(track => {
-      pc.addTrack(track, localStreamRef.current);
-    });
-
-    pc.ontrack = (event) => {
-      let stream = remoteStreamsRef.current[userId];
-
-      if (!stream) {
-        stream = new MediaStream();
-        remoteStreamsRef.current[userId] = stream;
-      }
-
-      stream.addTrack(event.track);
-
-      setRemoteStreams({ ...remoteStreamsRef.current });
-
-      setTotalAccepted(Object.keys(remoteStreamsRef.current).length);
-    };
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        sendWsMessage({
-          type: "call_ice",
-          to_user: userId,
-          candidate: e.candidate
-        });
-      }
-    };
-
-    peersRef.current[userId] = pc;
-    return pc;
-  };
-
-  const startWebRTCForCall = async (isAudioOnlyCall) => {
-    await getLocalStream(isAudioOnlyCall);
-
-    const friendId = selectedFriend.id;
-    const pc = await getOrCreatePeer(friendId);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    sendWsMessage({
-      type: "call_offer",
-      to_user: friendId,
-      offer,
-      call_type: isAudioOnlyCall ? "voice" : "video"
-    });
-  };
-
-  const endWebRTC = () => {
-    Object.values(peersRef.current).forEach(pc => pc.close());
-    peersRef.current = {};
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(t => t.stop());
-      localStreamRef.current = null;
-    }
-
-    remoteStreamsRef.current = {};
-    setRemoteStreams({});
-  };
-
-  const handleStartCall = async () => {
-    isCallerRef.current = true;
-    await getLocalStream();
-
-    sendWsMessage({
-      type: "call_start",
-      call_type: "video",
-      to_user: selectedFriend.id
-    });
-
-    setIsAudioOnlyCall(false);
-    setCallStatus("Calling...");
-    setCallOpen(true);
-  };
-
-  const handleStartVoiceCall = async () => {
-    isCallerRef.current = true;
-
-    await getLocalStream(true);
-
-    sendWsMessage({ type: "call_start", call_type: "voice", to_user: selectedFriend.id });
-
-    setIsAudioOnlyCall(true);
-    setCallStatus("Calling...");
-    setCallOpen(true);
-  };
-
-  const handleAcceptCall = async () => {
-    isCallerRef.current = false;
-    setIncomingCall(prev => ({ ...prev, open: false }));
-
-    await getLocalStream(isAudioOnlyCall);
-    await getOrCreatePeer(incomingCall.fromUserId);
-
-    sendWsMessage({
-      type: "call_accept",
-      to_user: incomingCall.fromUserId
-    });
-
-    setCallOpen(true);
-    setCallStatus("In Call");
-  };
-
-  const handleRejectCall = () => {
-    setIncomingCall(prev => ({ ...prev, open: false }));
-
-    sendWsMessage({
-      type: "call_reject",
-      to_user: incomingCall.fromUserId
-    });
-  };
-
-  const handleCallEnd = () => {
-    sendWsMessage(
-      {
-        type: "call_end"
-      });
-    endWebRTC();
-    setCallOpen(false);
-    setCallStatus("Call ended");
-    setRemoteStreams({});
-    setTotalAccepted(0);
-    setIsAudioOnlyCall(false);
-  }
 
   const animatedText = useTypewriter('Connecting...', 120, 1000);
 
@@ -1588,7 +1264,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                           scale: 1.1
                         }
                       }}
-                      onClick={handleStartVoiceCall}
+                    // onClick={handleStartVoiceCall}
                     />
                     <VideocamIcon
                       sx={{
@@ -1599,7 +1275,7 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                           scale: 1.1
                         }
                       }}
-                      onClick={handleStartCall}
+                    // onClick={handleStartCall}
                     />
                   </Box>
                 </Box>
@@ -1660,7 +1336,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
                           onAddReaction={handleAddReaction}
                           onRemoveReaction={handleRemoveReaction}
                           profile={profile}
-                          onCallBack={handleStartCall}
                           onReply={() => handleReply(message)}
                           userId={user.id}
                         />
@@ -1850,27 +1525,6 @@ const MessagesTab = ({ friends, profile, setError, setSuccess, showFriend, selec
           </Box>
         )}
       </Box>
-
-      <IncomingCallDialog
-        open={incomingCall.open}
-        username={incomingCall.username}
-        avatar={incomingCall.avatar}
-        onAccept={handleAcceptCall}
-        onReject={handleRejectCall}
-      />
-
-      <CallDialog
-        open={callOpen}
-        remoteStreams={remoteStreams}
-        usernames={usernamesRef.current}
-        avatars={avatarRef.current}
-        onLocal={localStreamRef.current}
-        onCancel={handleCallEnd}
-        status={callStatus}
-        peersRef={peersRef}
-        totalAccepted={totalAccepted}
-        isAudioOnly={isAudioOnlyCall}
-      />
 
     </Box>
   );

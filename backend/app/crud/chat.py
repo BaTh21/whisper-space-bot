@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException
 from app.schemas.chat import MessageCreate
 from app.crud.friend import get_friends
+import asyncio
 
 from app.models.user_message_status import UserMessageStatus
 from app.models.message_seen_status import MessageSeenStatus
@@ -22,6 +23,7 @@ from sqlalchemy import or_, and_
 from app.crud.group import get_user_groups
 from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadResponse, ChatListItem,
                              MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
+from app.services.websocket_manager import manager
 
 def to_utc(dt):
     if dt is None:
@@ -44,22 +46,16 @@ def create_private_message(
     file_size: Optional[int] = None,
     forwarded_from_id=None
 ) -> PrivateMessage:
-    """
-    Create a private message with proper type handling and reply validation
-    """
     try:
-        # Validate reply message if provided
         replied_message = None
         if reply_to_id:
             replied_message = validate_reply_message(db, reply_to_id, sender_id, receiver_id)
         
-        # Validate message type
         try:
             msg_type_enum = MessageType(message_type)
         except ValueError:
             msg_type_enum = MessageType.text
 
-        # FIXED: Handle voice message specific fields
         msg = PrivateMessage(
             sender_id=sender_id,
             receiver_id=receiver_id,
@@ -80,12 +76,11 @@ def create_private_message(
         db.commit()
         db.refresh(msg)
         
-        # FIXED: Eager load relationships including reply_to sender
         msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)  # Load sender of replied message
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)
         ).filter(PrivateMessage.id == msg.id).first()
         
         return msg
@@ -173,7 +168,6 @@ def build_chat_list(db: Session, current_user: User):
     return chats
 
 def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int = 50, offset: int = 0) -> List[PrivateMessage]:
-    """Get private messages between two users"""
     return db.query(PrivateMessage).options(
         joinedload(PrivateMessage.sender),
         joinedload(PrivateMessage.receiver),
@@ -182,38 +176,6 @@ def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int =
         ((PrivateMessage.sender_id == user_id) & (PrivateMessage.receiver_id == friend_id)) |
         ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == user_id))
     ).order_by(PrivateMessage.created_at.desc()).offset(offset).limit(limit).all()
-
-def mark_message_as_read(db: Session, message_id: int, user_id: int) -> bool:
-    # Check if already exists
-    existing = db.query(MessageSeenStatus).filter_by(message_id=message_id, user_id=user_id).first()
-    if existing:
-        return True  # Already marked as read
-
-    seen_status = MessageSeenStatus(
-        message_id=message_id,
-        user_id=user_id,
-        seen_at=datetime.utcnow()
-    )
-    db.add(seen_status)
-    try:
-        db.commit()
-        return True
-    except Exception as e:
-        db.rollback()
-        return False
-
-
-# ADD NEW FUNCTION to get seen status
-def get_message_seen_status(db: Session, message_id: int):
-    """
-    Get who has seen a message and when
-    """
-    seen_statuses = db.query(MessageSeenStatus).filter(
-        MessageSeenStatus.message_id == message_id
-    ).options(joinedload(MessageSeenStatus.user)).all()
-    
-    return seen_statuses
-
 
 def create_group_message(
     db: Session, 
@@ -256,12 +218,10 @@ def get_group_messages(db: Session, group_id: int, limit=50, offset=0):
     )
         
 def edit_private_message(db: Session, message_id: int, user_id: int, new_content: str) -> PrivateMessage:
-    """Edit a private message"""
     try:
         if not new_content or not new_content.strip():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message content cannot be empty.")
 
-        # Use options to load relationships for WebSocket broadcast
         msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
@@ -276,10 +236,8 @@ def edit_private_message(db: Session, message_id: int, user_id: int, new_content
                 detail="Message not found or you don't have permission to edit it."
             )
 
-        # Store old content for potential rollback
         old_content = msg.content
         
-        # Update message
         msg.content = new_content.strip()
         msg.edited_at = datetime.now(timezone.utc)
         
@@ -312,12 +270,11 @@ def delete_message_for_user(db: Session, message_id: int, user_id: int):
     db.commit()
     
 def delete_message_forever(db: Session, message_id: int, user_id: int) -> dict:
-    """Permanently delete a message (sender only)"""
     msg = db.query(PrivateMessage).options(
         joinedload(PrivateMessage.seen_statuses)
     ).filter(
         PrivateMessage.id == message_id,
-        PrivateMessage.sender_id == user_id,  # Only sender can delete permanently
+        PrivateMessage.sender_id == user_id
     ).first()
 
     if not msg:
@@ -338,118 +295,6 @@ def delete_message_forever(db: Session, message_id: int, user_id: int) -> dict:
     db.commit()
 
     return {"message_id": message_id, "receiver_id": receiver_id}
-
-def mark_message_as_read(db: Session, message_id: int, user_id: int) -> Optional[PrivateMessage]:
-    try:
-        message = db.query(PrivateMessage).filter(
-            PrivateMessage.id == message_id,
-            PrivateMessage.receiver_id == user_id
-        ).first()
-
-        if not message or message.sender_id == user_id:
-            return None
-        
-        current_time = datetime.now(timezone.utc)
-
-        existing_seen = db.query(MessageSeenStatus).filter(
-            MessageSeenStatus.message_id == message_id,
-            MessageSeenStatus.user_id == user_id
-        ).first()
-
-        if not existing_seen:
-            seen_status = MessageSeenStatus(
-                message_id=message_id,
-                user_id=user_id,
-                seen_at=current_time
-            )
-            db.add(seen_status)
-
-        if not message.is_read:
-            message.is_read = True
-            message.read_at = current_time
-
-        db.commit()
-        db.refresh(message)
-        return message
-
-    except Exception as e:
-        db.rollback()
-        print(f"[DB] Error marking message as read: {e}")
-        return None
-
-
-
-def update_user_online_status(db: Session, user_id: int, is_online: bool) -> bool:
-    """Update user's online status"""
-    try:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            return False
-            
-        user.is_online = is_online
-        user.last_activity = datetime.now(timezone.utc)
-        
-        if not is_online:
-            user.last_seen = datetime.now(timezone.utc)
-            
-        db.commit()
-        return True
-        
-    except Exception as e:
-        db.rollback()
-        print(f"Error updating user online status: {e}")
-        return False
-
-def get_user_online_status(db: Session, user_id: int) -> dict:
-    """Get user's online status and last activity"""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        return None
-        
-    return {
-        "user_id": user.id,
-        "username": user.username,
-        "is_online": user.is_online,
-        "last_seen": user.last_seen,
-        "last_activity": user.last_activity,
-        "avatar_url": user.avatar_url
-    }
-
-def get_friends_online_status(db: Session, user_id: int) -> List[dict]:
-    """Get online status of all friends"""
-    from app.crud.friend import get_user_friends
-    
-    friends = get_user_friends(db, user_id)
-    
-    status_list = []
-    for friend in friends:
-        status_list.append({
-            "user_id": friend.id,
-            "username": friend.username,
-            "avatar_url": friend.avatar_url,
-            "is_online": friend.is_online,
-            "last_seen": friend.last_seen.isoformat() if friend.last_seen else None,
-            "last_activity": friend.last_activity.isoformat() if friend.last_activity else None
-        })
-    
-    return status_list
-
-def get_multiple_users_online_status(db: Session, user_ids: List[int]) -> List[dict]:
-    """Get online status for multiple users"""
-    users = db.query(User).filter(User.id.in_(user_ids)).all()
-    
-    status_list = []
-    for user in users:
-        status_list.append({
-            "user_id": user.id,
-            "username": user.username,
-            "avatar_url": user.avatar_url,
-            "is_online": user.is_online,
-            "last_seen": user.last_seen.isoformat() if user.last_seen else None,
-            "last_activity": user.last_activity.isoformat() if user.last_activity else None
-        })
-    
-    return status_list
 
 def serialize_message_type(message_type: MessageType | None) -> str:
     return message_type.value if message_type else MessageType.text.value
@@ -514,3 +359,30 @@ def build_message_out(
         seen_by=seen_by
     )
 
+async def auto_end_call(chat_id: str, db):
+    
+    await asyncio.sleep(30)
+
+    total = manager.get_total_accepted(chat_id)
+
+    if total < 1:
+        await manager.end_group_call(chat_id, db)
+
+    manager.call_timers.pop(chat_id, None)
+    
+async def send_heartbeat():
+            try:
+                while True:
+                    await asyncio.sleep(25)
+                    try:
+                        await websocket.send_json({
+                            "type": "ping",
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+                        await manager.update_user_activity(current_user.id)
+                    except Exception:
+                        break
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"Heartbeat error: {e}")

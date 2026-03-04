@@ -225,6 +225,7 @@ const DashboardPage = ({ defaultTab = 0 }) => {
             <ChatTab
               friends={friends}
               profile={profile}
+              error={error}
               setError={setError}
               setSuccess={setSuccess}
             />

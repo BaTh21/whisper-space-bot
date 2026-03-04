@@ -6,9 +6,7 @@ export const useImage = () => {
 
   const getImageUrl = (url) => {
     if (!url) return null;
-    if (failedImages.has(url)) return null;
-    
-    console.log('🖼️ Processing image URL:', url); // Debug log
+    if (failedImages.has(url)) return null
 
     // If it's already a full URL (including Cloudinary URLs), return as is
     if (url.startsWith('http')) {

@@ -14,6 +14,7 @@ from app.helpers.to_utc_iso import to_local_iso
 from app.models.user import User
 import cloudinary
 import cloudinary.uploader
+from app.services.websocket_manager import manager
 
 configure_cloudinary()
 
@@ -62,14 +63,20 @@ async def delete_message(db: Session, message_id: int, current_user_id: int):
     return {"detail": "Message has been deleted"}
 
 
-async def upload_file_message(db: Session, group_id: int, file: UploadFile, current_user_id: int):
+async def upload_file_message(
+    db: Session,
+    group_id: int,
+    file: UploadFile,
+    current_user_id: int,
+    temp_id: str,
+):
     is_member = db.query(GroupMember).filter(
         GroupMember.group_id == group_id,
         GroupMember.user_id == current_user_id
     ).first()
     if not is_member:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Only member can upload file")
+                            detail="Only members can upload files")
         
     file_extension = Path(file.filename).suffix.lower()
     if file_extension not in ALLOWED_EXTENSIONS:
@@ -82,27 +89,41 @@ async def upload_file_message(db: Session, group_id: int, file: UploadFile, curr
                             detail="File is too large, Max size is 3MB")
         
     unique_filename = f"groups/{group_id}/messages/{uuid.uuid4().hex}{file_extension}"
-    
     upload_result = upload_to_cloudinary(content, public_id=unique_filename)
     if not upload_result or "secure_url" not in upload_result:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail="Failed to upload file")
-        
+    
     save_message = GroupMessage(
         group_id=group_id,  
         sender_id=current_user_id,
-        message_type = MessageType.image,
-        public_id = upload_result["public_id"],
-        file_url = upload_result["secure_url"],    
-        content = None
+        message_type=MessageType.image,
+        public_id=upload_result["public_id"],
+        file_url=upload_result["secure_url"],    
+        content=None
     )
-    
     db.add(save_message)
     db.commit()
     db.refresh(save_message)
+    
+    payload = {
+        "action": "file_upload",
+        "id": save_message.id,
+        "sender": {
+            "id": save_message.sender.id,
+            "username": save_message.sender.username,
+            "avatar_url": save_message.sender.avatar_url,
+        },
+        "file_url": save_message.file_url,
+        "created_at": to_local_iso(save_message.created_at, tz_offset_hours=7),
+        "temp_id": temp_id,
+    }
+    
+    await manager.broadcast(f"group_{group_id}", payload)
+    
     return save_message
 
-async def update_file_message(db: Session, message_id: int, file: UploadFile, current_user_id: int):
+async def update_file_message(db: Session, message_id: int, file: UploadFile, current_user_id: int, temp_id: str):
     
     message = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
     if not message:
@@ -139,6 +160,16 @@ async def update_file_message(db: Session, message_id: int, file: UploadFile, cu
         
     db.commit()
     db.refresh(message)
+    
+    payload = {
+        "action": "file_update",
+        "message_id": message.id,
+        "file_url": message.file_url,
+        "updated_at": to_local_iso(message.updated_at, tz_offset_hours=7),
+        "temp_id": temp_id,
+    }
+
+    await manager.broadcast(f"group_{message.group_id}", payload)
     
     return message
 
@@ -279,7 +310,8 @@ async def upload_voice_message(group_id: int,
                          file: UploadFile,
                         #  duration: float,
                          db: Session,
-                         current_user_id: int
+                         current_user_id: int,
+                         temp_id: str
                          ):
     
     allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4']
@@ -315,6 +347,21 @@ async def upload_voice_message(group_id: int,
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
+    
+    payload = {
+        "action": "file_upload",
+        "id": new_message.id,
+        "sender": {
+            "id": new_message.sender.id,
+            "username": new_message.sender.username,
+            "avatar_url": new_message.sender.avatar_url,
+        },
+        "voice_url": new_message.file_url,
+        "created_at": to_local_iso(new_message.created_at, tz_offset_hours=7),
+        "temp_id": temp_id,
+    }
+    
+    await manager.broadcast(f"group_{group_id}", payload)
     
     return new_message
 

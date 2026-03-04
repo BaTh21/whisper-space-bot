@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.chat import create_private_message, delete_message_forever, edit_private_message, get_multiple_users_online_status, mark_message_as_read, build_chat_list, serialize_message_type, build_reply_preview, build_message_out
+from app.crud.chat import create_private_message, edit_private_message, serialize_message_type, build_reply_preview, build_message_out
 from app.crud.friend import is_blocked, is_blocked_by, is_friend
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import MessageType, PrivateMessage
