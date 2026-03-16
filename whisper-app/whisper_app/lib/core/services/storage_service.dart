@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
@@ -11,16 +12,28 @@ class StorageService {
   late SharedPreferences _prefs;
   
   Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      
+      // ignore: unused_local_variable
+      final allKeys = _prefs.getKeys();
+      if (getToken() != null) {
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  String? getToken() {
+    if (_prefs == null) throw Exception('StorageService not initialized');
+    final token = _prefs.getString(_tokenKey);
+    return token;
   }
   
   // Token management
   Future<void> saveToken(String token) async {
+    if (_prefs == null) throw Exception('StorageService not initialized');
     await _prefs.setString(_tokenKey, token);
-  }
-  
-  String? getToken() {
-    return _prefs.getString(_tokenKey);
   }
   
   Future<void> saveRefreshToken(String refreshToken) async {
@@ -63,7 +76,9 @@ class StorageService {
   }
   
   bool isLoggedIn() {
-    return _prefs.getBool(_isLoggedInKey) ?? false;
+    if (_prefs == null) throw Exception('StorageService not initialized');
+    final loggedIn = _prefs.getBool(_isLoggedInKey) ?? false;
+    return loggedIn;
   }
   
   // Clear all data (logout)
@@ -75,4 +90,6 @@ class StorageService {
   bool isFirstLaunch() {
     return !_prefs.containsKey(_isLoggedInKey);
   }
+  
+  int min(int a, int b) => a < b ? a : b;
 }

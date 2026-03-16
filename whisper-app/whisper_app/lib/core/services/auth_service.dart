@@ -17,18 +17,13 @@ class AuthService {
   // Login with email and password
 Future<LoginResponse> login(String email, String password) async {
   try {
-    print('🌐 Login URL: $baseUrl${ApiConstants.login}');
-    print('🌐 Email: $email');
-    
-    // ✅ CORRECT: OAuth2 expects form-urlencoded, NOT json
+
     final response = await http.post(
       Uri.parse('$baseUrl${ApiConstants.login}'),
       headers: ApiConstants.formLoginHeaders,  // Use form headers, not defaultHeaders
       body: 'username=${Uri.encodeComponent(email)}&password=${Uri.encodeComponent(password)}',
     );
     
-    print('📡 Response Status: ${response.statusCode}');
-    print('📡 Response Body: ${response.body}');
     
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -50,7 +45,6 @@ Future<LoginResponse> login(String email, String password) async {
       return _handleLoginError(response);
     }
   } catch (e) {
-    print('🔥 Login Error: $e');
     return LoginResponse.error(
       message: 'Connection error: ${e.toString()}',
     );
@@ -101,8 +95,6 @@ LoginResponse _handleLoginError(http.Response response) {
         }),
       );
       
-      print('Register Response Status: ${response.statusCode}');
-      print('Register Response Body: ${response.body}');
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -122,7 +114,6 @@ LoginResponse _handleLoginError(http.Response response) {
         );
       }
     } catch (e) {
-      print('Register Error: $e');
       return RegisterResponse.error(
         message: 'Network error. Please check your internet connection.',
       );
@@ -141,8 +132,6 @@ LoginResponse _handleLoginError(http.Response response) {
         }),
       );
       
-      print('Verify Email Response Status: ${response.statusCode}');
-      print('Verify Email Response Body: ${response.body}');
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -161,7 +150,6 @@ LoginResponse _handleLoginError(http.Response response) {
         );
       }
     } catch (e) {
-      print('Verify Email Error: $e');
       return VerifyResponse.error(
         message: 'Network error. Please check your internet connection.',
       );
@@ -179,8 +167,6 @@ LoginResponse _handleLoginError(http.Response response) {
         }),
       );
       
-      print('Forgot Password Response Status: ${response.statusCode}');
-      print('Forgot Password Response Body: ${response.body}');
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -193,7 +179,6 @@ LoginResponse _handleLoginError(http.Response response) {
         );
       }
     } catch (e) {
-      print('Forgot Password Error: $e');
       return ForgotPasswordResponse.error(
         message: 'Network error. Please check your internet connection.',
       );
@@ -218,7 +203,6 @@ LoginResponse _handleLoginError(http.Response response) {
         throw Exception('Failed to load user profile');
       }
     } catch (e) {
-      print('Get User Error: $e');
       throw Exception('Failed to load user: $e');
     }
   }
@@ -234,7 +218,6 @@ LoginResponse _handleLoginError(http.Response response) {
           body: jsonEncode({'refresh_token': refreshToken}),
         );
       } catch (e) {
-        print('Logout API Error: $e');
         // Continue with local logout even if API fails
       }
     }
