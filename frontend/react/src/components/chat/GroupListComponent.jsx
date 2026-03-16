@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { Box, Avatar, Typography, Card, Button } from "@mui/material";
 
-function GroupListComponent({ message, onForward, onClose, chats }) {
+function GroupListComponent({ message, onForward, onClose, chats, currentChatId, currentChatType }) {
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
 
-  const groupChats = chats.filter(c => c.type === "group");
-  const privateChats = chats.filter(c => c.type === "private");
+  const filteredChats = chats.filter(chat =>
+    !(chat.id === currentChatId && chat.type === currentChatType)
+  );
+
+  const groupChats = filteredChats.filter(c => c.type === "group");
+  const privateChats = filteredChats.filter(c => c.type === "private");
 
   const handleToggleGroup = (chatId) => {
     setSelectedGroups(prev =>
@@ -71,7 +75,7 @@ function GroupListComponent({ message, onForward, onClose, chats }) {
 
   return (
     <Box sx={{ p: 2 }}>
-      {chats.length === 0 ? (
+      {filteredChats.length === 0 ? (
         <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
           No chats yet. Create one to get started!
         </Typography>

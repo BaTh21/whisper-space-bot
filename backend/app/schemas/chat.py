@@ -8,7 +8,7 @@ from pydantic import Field
 
 from app.models.private_message import MessageType
 
-MessageTypeInput = Literal["text", "image", "file", "voice", "system"]
+MessageTypeInput = Literal["text", "image", "file", "voice", "system", "video"]
 
 class MessageCreate(BaseModel):
     content: str

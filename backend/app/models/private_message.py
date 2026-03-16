@@ -9,6 +9,7 @@ class MessageType(enum.Enum):
     image = "image"
     file = "file"
     voice = "voice"
+    video = "video"
     system = "system"
 
 class PrivateMessage(Base):

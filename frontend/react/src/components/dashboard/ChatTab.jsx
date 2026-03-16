@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import Logo from '/pengu-pudgy.webp';
 import GroupsIcon from '@mui/icons-material/Groups';
 
-function ChatTab({ friends, profile, setError, setSuccess }) {
+function ChatTab({ friends, profile, error, setError, setSuccess }) {
     const [chats, setChats] = useState([]);
     const [showFriend, setShowFriend] = useState(false);
     const [selectedFriend, setSelectedFriend] = useState(null);
@@ -35,6 +35,8 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
     const [chatWidth, setChatWidth] = useState(300);
     const [isResizing, setIsResizing] = useState(false);
     const sidebarRef = useRef(null);
+    const currentChatId = selectedFriend?.id || selectedGroupId;
+    const currentChatType = selectedFriend ? "private" : selectedGroupId ? "group" : null;
 
     const handleMouseDown = (e) => {
         setIsResizing(true);
@@ -290,15 +292,26 @@ function ChatTab({ friends, profile, setError, setSuccess }) {
                     <MessagesTab
                         friends={friends}
                         profile={profile}
+                        isError={error}
                         setError={setError}
                         setSuccess={setSuccess}
                         showFriend={showFriend}
                         selectedFriend={selectedFriend}
                         toggleGroupList={toggleGroupList}
                         chats={chats}
+                        currentChatId={selectedFriend?.id}
+                        currentChatType="private"
                     />
                 )}
-                {selectedGroupId && <GroupChatPage groupId={selectedGroupId} toggleGroupList={toggleGroupList} chats={chats} setError={setError}/>}
+                {selectedGroupId &&
+                    <GroupChatPage
+                        groupId={selectedGroupId}
+                        toggleGroupList={toggleGroupList}
+                        chats={chats}
+                        setError={setError}
+                        currentChatId={selectedGroupId}
+                        currentChatType="group"
+                    />}
                 {!showFriend && !selectedGroupId && !isMobile && (
                     <Box
                         sx={{
