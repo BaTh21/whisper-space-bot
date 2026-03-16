@@ -552,6 +552,8 @@ async def send_voice_message(
             "message_type": "voice",
             "voice_duration": round(duration, 2),
             "file_size": file_size,
+            "reply_to_id": full_msg.reply_to_id,
+            "reply_preview": None,
             "is_read": False,
             "created_at": full_msg.created_at.isoformat(),
             "sender_username": full_msg.sender.username,
@@ -627,130 +629,144 @@ async def send_voice_message(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Voice message failed: {str(e)}")
     
-@router.post("/private/{friend_id}/image")
-async def send_image_message(
+@router.post("/private/{friend_id}/upload")
+async def send_media_message(
     friend_id: int,
-    image_url: str = Form(...),
-    message_type: str = Form(default="image"),
+    file: UploadFile = File(...),
+    message_type: str = Form(default=None),
     reply_to_id: int = Form(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if message_type not in ["image", "video", "file"]:
+        raise HTTPException(status_code=400, detail="Invalid media type")
+    
+    if message_type == "image" and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File is not an image")
+    if message_type == "video" and not file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="File is not a video")
+    
     try:
         if not is_friend(db, current_user.id, friend_id):
             raise HTTPException(status_code=403, detail="Not friends")
+
+        if not file.content_type:
+            raise HTTPException(status_code=400, detail="Invalid file")
+
+        content_type = file.content_type
+
+        if content_type.startswith("image/"):
+            detected_type = MessageType.image
+            folder = "chat_images"
+            resource_type = "image"
+        elif content_type.startswith("video/"):
+            detected_type = MessageType.video
+            folder = "chat_videos"
+            resource_type = "video"
+        else:
+            detected_type = MessageType.file
+            folder = "chat_files"
+            resource_type = "raw"
+
+        if message_type:
+            detected_type = MessageType(message_type)
+            if message_type == "image":
+                resource_type = "image"
+                folder = "chat_images"
+            elif message_type == "video":
+                resource_type = "video"
+                folder = "chat_videos"
+            else:
+                resource_type = "raw"
+                folder = "chat_files"
+
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else "bin"
+        unique_filename = f"chat_{current_user.id}_{friend_id}_{uuid.uuid4().hex}.{file_extension}"
+
+        upload_result = cloudinary.uploader.upload(
+            file.file,
+            folder=folder,
+            public_id=unique_filename,
+            resource_type=resource_type
+        )
+
+        file_url = upload_result["secure_url"]
 
         msg = create_private_message(
             db=db,
             sender_id=current_user.id,
             receiver_id=friend_id,
-            content=image_url,
-            message_type=message_type,
+            content=file_url,
+            message_type=detected_type,
             reply_to_id=reply_to_id,
+            file_size=upload_result.get("bytes", 0),
             is_forwarded=False,
             original_sender=None
         )
-        
+
         full_msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
         ).filter(PrivateMessage.id == msg.id).first()
-        
-        if not full_msg:
-            raise HTTPException(status_code=500, detail="Failed to retrieve created image message")
-        
+
         chat_id = _chat_id(current_user.id, friend_id)
-        
-        seen_by = []
-        for status in full_msg.seen_statuses:
-            seen_by.append({
+
+        seen_by = [
+            {
                 "user_id": status.user.id,
                 "username": status.user.username,
                 "avatar_url": status.user.avatar_url,
                 "seen_at": status.seen_at.isoformat() if status.seen_at else None
-            })
-        
+            }
+            for status in full_msg.seen_statuses
+        ]
+
+        reply_preview = None
+        if full_msg.reply_to_id:
+            reply_msg = db.query(PrivateMessage).filter(
+                PrivateMessage.id == full_msg.reply_to_id
+            ).first()
+
+            if reply_msg:
+                reply_preview = {
+                    "id": reply_msg.id,
+                    "content": reply_msg.content,
+                    "message_type": reply_msg.message_type.value,
+                    "sender_username": reply_msg.sender.username
+                }
+
         broadcast_data = {
             "type": "message",
             "id": full_msg.id,
-            "sender_id": full_msg.sender_id,
-            "receiver_id": full_msg.receiver_id,
             "content": full_msg.content,
             "message_type": full_msg.message_type.value,
+            "sender_id": full_msg.sender_id,
+            "receiver_id": full_msg.receiver_id,
+            "sender_username": full_msg.sender.username,
+            "sender_avatar_url": full_msg.sender.avatar_url,
+            "receiver_username": full_msg.receiver.username,
+            "created_at": full_msg.created_at.isoformat(),
             "is_read": full_msg.is_read,
             "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
             "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
+            "voice_duration": full_msg.voice_duration,
+            "file_size": full_msg.file_size,
             "reply_to_id": full_msg.reply_to_id,
+            "reply_preview": reply_preview,
             "is_forwarded": full_msg.is_forwarded,
             "original_sender": full_msg.original_sender,
-            "created_at": full_msg.created_at.isoformat(),
-            "sender_username": full_msg.sender.username,
-            "receiver_username": full_msg.receiver.username,
             "seen_by": seen_by
         }
-        
+
         await manager.broadcast(chat_id, broadcast_data)
-        
-        return MessageOut(
-            id=full_msg.id,
-            sender_id=full_msg.sender_id,
-            receiver_id=full_msg.receiver_id,
-            content=full_msg.content,
-            message_type=full_msg.message_type.value,
-            is_read=full_msg.is_read,
-            read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
-            delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-            reply_to_id=full_msg.reply_to_id,
-            is_forwarded=full_msg.is_forwarded,
-            original_sender=full_msg.original_sender,
-            sender_username=full_msg.sender.username,
-            receiver_username=full_msg.receiver.username,
-            created_at=full_msg.created_at.isoformat(),
-            seen_by=[MessageSeenByUser(**item) for item in seen_by]
-        )
-        
+
+        return broadcast_data
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send image message: {str(e)}")
-
-@router.post("/private/{friend_id}/upload")
-async def upload_image_to_cloudinary(
-    friend_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        if not is_friend(db, current_user.id, friend_id):
-            raise HTTPException(status_code=403, detail="Not friends")
-
-        if not file.content_type or not file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="Only image files allowed")
-
-        try:
-            file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
-            unique_filename = f"chat_{current_user.id}_{friend_id}_{uuid.uuid4().hex}.{file_extension}"
-            
-            result = cloudinary.uploader.upload(
-                file.file,
-                folder="chat_images",
-                public_id=unique_filename,
-                resource_type="image",
-                transformation=[
-                    {"width": 800, "crop": "limit"},
-                    {"quality": "auto"}
-                ]
-            )
-            return {"url": result["secure_url"], "public_id": result["public_id"]}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.delete("/private/image/{message_id}")
 async def delete_image_message(
@@ -1028,21 +1044,6 @@ async def edit_message(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to edit message: {str(e)}")
-
-@router.post("/delete-image")
-async def delete_cloudinary_image(
-    data: dict,
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        public_id = data.get("public_id")
-        if not public_id:
-            raise HTTPException(status_code=400, detail="public_id required")
-
-        cloudinary.uploader.destroy(public_id)
-        return {"status": "deleted"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Cloudinary delete failed: {str(e)}")
     
 
 

@@ -1715,7 +1715,7 @@ export const uploadImage = async (friendId, file) => {
     formData.append("file", file);
 
     const response = await api.post(
-      `/api/v1/chats/private/${friendId}/upload`,
+      `/api/v1/chats/private/${friendId}/image`,
       formData,
       {
         headers: {
@@ -1734,14 +1734,19 @@ export const uploadImage = async (friendId, file) => {
   }
 };
 
-export const sendImageMessage = async (friendId, imageUrl) => {
+export const sendMediaMessage = async (friendId, file, messageType = "image", replyToId = null) => {
   try {
     const formData = new FormData();
-    formData.append("image_url", imageUrl);
-    formData.append("message_type", "image");
+
+    formData.append("file", file);
+    formData.append("message_type", messageType);
+
+    if (replyToId) {
+      formData.append("reply_to_id", replyToId);
+    }
 
     const response = await api.post(
-      `/api/v1/chats/private/${friendId}/image`,
+      `/api/v1/chats/private/${friendId}/upload`,
       formData,
       {
         headers: {
@@ -1749,13 +1754,15 @@ export const sendImageMessage = async (friendId, imageUrl) => {
         },
       }
     );
+
     return response.data;
   } catch (error) {
-    console.error("Send image message error:", error.response?.data);
+    console.error("Send media message error:", error.response?.data);
+
     throw new Error(
       error.response?.data?.detail ||
-        error.response?.data?.msg ||
-        "Failed to send image message"
+      error.response?.data?.msg ||
+      "Failed to send media message"
     );
   }
 };

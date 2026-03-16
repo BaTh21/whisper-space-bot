@@ -640,6 +640,7 @@ async def websocket_group_chat(
 
                 # Build message output
                 msg_out = {
+                    "action": "message",
                     "id": msg.id,
                     "temp_id": incoming_temp_id,
                     "sender": {

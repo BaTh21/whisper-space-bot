@@ -5,8 +5,6 @@ import {
   Done as DoneIcon,
   Edit as EditIcon,
   Image as ImageIcon,
-  Schedule as LastSeenIcon,
-  FiberManualRecord as OnlineIcon,
 } from '@mui/icons-material';
 import {
   Avatar,
@@ -19,7 +17,7 @@ import {
   Typography,
   Tooltip,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatCambodiaTime } from '../../utils/dateUtils';
 import ShortcutIcon from '@mui/icons-material/Shortcut';
@@ -31,6 +29,8 @@ import MessageReactions from '../MessageReactions';
 import { VoiceMessagePlayer } from '../group/VoiceMessagePlayer';
 import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 const ChatMessage = ({
   message,
@@ -53,33 +53,6 @@ const ChatMessage = ({
   const [reactions, setReactions] = useState(message.reactions || []);
   const [showReactionAnimation, setShowReactionAnimation] = useState(null);
   const { t } = useTranslation();
-
-  const detectMessageType = (msg) => {
-    if (msg.message_type === 'image') return 'image';
-    if (msg.message_type === 'voice') return 'voice';
-    if (msg.message_type === 'file') return 'file';
-    if (msg.message_type === 'text') return 'text';
-    if (msg.message_type === 'system') return 'system';
-
-    const content = (msg.content || '').trim();
-
-    const isVoiceUrl =
-      content.includes('/voice_messages/') ||
-      content.includes('/video/upload/') ||
-      /\.(mp3|m4a|wav|ogg|aac|opus|flac|webm|mp4)$/i.test(content);
-
-    if (isVoiceUrl) return 'voice';
-
-    const isImageUrl =
-      /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(content) ||
-      (content.includes('cloudinary.com') && content.includes('/image/upload/')) ||
-      content.startsWith('data:image/');
-
-    if (isImageUrl) return 'image';
-
-    return 'text';
-  };
-  const actualMessageType = detectMessageType(message);
 
   const handleMenu = (e) => {
     e.stopPropagation();
@@ -130,23 +103,33 @@ const ChatMessage = ({
     setImageError(true);
   };
 
-  const handleDownloadImage = async (e) => {
+  const handleDownloadMedia = async (e) => {
     e.stopPropagation();
+
     try {
       const response = await fetch(message.content);
       const blob = await response.blob();
+
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
+      const a = document.createElement("a");
+      a.style.display = "none";
       a.href = url;
-      const filename = `chat-image-${message.id}-${Date.now()}.jpg`;
-      a.download = filename;
+
+      let fileName = message.content.split("/").pop()?.split("?")[0];
+
+      if (!fileName) {
+        fileName = `chat-file-${message.id}-${Date.now()}`;
+      }
+
+      a.download = fileName;
+
       document.body.appendChild(a);
       a.click();
+
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Download failed:', err);
+      console.error("Download failed:", err);
     }
   };
 
@@ -159,20 +142,6 @@ const ChatMessage = ({
     setImageError(false);
   };
 
-  useEffect(() => {
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.6; }
-      100% { opacity: 1; }
-    }
-    `;
-    document.head.appendChild(styleElement);
-    return () => {
-      document.head.removeChild(styleElement);
-    };
-  }, []);
 
   useEffect(() => {
     setReactions(message.reactions || []);
@@ -261,7 +230,7 @@ const ChatMessage = ({
             onError={handleImageError}
             style={{
               maxWidth: '100%',
-              maxHeight: 300,
+              maxHeight: 200,
               borderRadius: '8px',
               cursor: 'pointer',
               objectFit: 'cover',
@@ -294,7 +263,7 @@ const ChatMessage = ({
             </IconButton>
             <IconButton
               size="small"
-              onClick={handleDownloadImage}
+              onClick={handleDownloadMedia}
               sx={{
                 bgcolor: 'rgba(0,0,0,0.7)',
                 color: 'white',
@@ -428,97 +397,90 @@ const ChatMessage = ({
     );
   };
 
-  // useEffect(() => {
-  //   const isTempMessage = message.is_temp ||
-  //     (typeof message.id === 'string' && message.id.startsWith('temp-'));
+  const renderVideoContent = () => {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const videoRef = useRef(null);
 
-  //   if (onLoadReactions && message.id && !isTempMessage && !message.reactions) {
-  //     onLoadReactions(message.id);
-  //   }
-  // }, [message.id, onLoadReactions, message.reactions, message.is_temp]);
-
-  useEffect(() => {
-    if (showReactionAnimation) {
-      const floatingAnimation = document.createElement('div');
-      floatingAnimation.className = 'floating-emoji';
-      floatingAnimation.innerHTML = showReactionAnimation.emoji;
-
-      const messageBubble = document.querySelector(`[data-message-id="${message.id}"] .message-bubble`);
-      if (messageBubble) {
-        const rect = messageBubble.getBoundingClientRect();
-        floatingAnimation.style.cssText = `
-          position: fixed;
-          font-size: 24px;
-          z-index: 9999;
-          pointer-events: none;
-          animation: floatUp 1s ease-out forwards;
-          left: ${rect.right - 30}px;
-          top: ${rect.top}px;
-        `;
-
-        document.body.appendChild(floatingAnimation);
-
-        setTimeout(() => {
-          if (floatingAnimation.parentNode) {
-            document.body.removeChild(floatingAnimation);
-          }
-        }, 1000);
+    const handlePlay = () => {
+      if (videoRef.current) {
+        videoRef.current.play();
+        setIsPlaying(true);
       }
-    }
-  }, [showReactionAnimation, message.id]);
+    };
 
-  const playReactionSound = (type) => {
-    if (typeof window === 'undefined') return;
+    return (
+      <Box
+        sx={{
+          position: 'relative',
+          borderRadius: 2,
+          overflow: 'hidden',
+          width: '100%',
+          maxWidth: 200,
+          bgcolor: 'black',
+        }}
+      >
+        <video
+          ref={videoRef}
+          controls={isPlaying}
+          style={{ width: '100%', display: 'block' }}
+          onEnded={() => setIsPlaying(false)}
+        >
+          <source src={message.content} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
 
-    try {
-      const audio = new Audio();
-      audio.volume = 0.2;
-
-      if (type === 'add') {
-        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3';
-      } else if (type === 'remove') {
-        audio.src = 'https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3';
-      }
-
-      audio.play().catch(() => { });
-    } catch (error) { }
+        {!isPlaying && (
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePlay();
+            }}
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              bgcolor: 'rgba(0,0,0,0.6)',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' },
+              borderRadius: '50%',
+              width: 60,
+              height: 60,
+              color: 'white',
+            }}
+          >
+            <PlayArrowIcon sx={{ fontSize: 40 }} />
+          </IconButton>
+        )}
+      </Box>
+    );
   };
 
-  useEffect(() => {
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-      @keyframes floatUp {
-        0% {
-          transform: translateY(0) scale(1);
-          opacity: 1;
-        }
-        50% {
-          transform: translateY(-30px) scale(1.2);
-          opacity: 0.8;
-        }
-        100% {
-          transform: translateY(-60px) scale(0.8);
-          opacity: 0;
-        }
-      }
-      
-      @keyframes reactionPop {
-        0% { transform: scale(0.5); opacity: 0; }
-        70% { transform: scale(1.1); }
-        100% { transform: scale(1); opacity: 1; }
-      }
-      
-      .floating-emoji {
-        will-change: transform, opacity;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-      }
-    `;
-    document.head.appendChild(styleElement);
+  const renderFileContent = () => {
+    const fileName = message.content
+      ? message.content.split('/').pop()
+      : 'Download File';
 
-    return () => {
-      document.head.removeChild(styleElement);
-    };
-  }, []);
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          p: 1,
+          bgcolor: isMine ? 'primary.main' : 'grey.100',
+          color: isMine ? 'white' : 'black',
+          borderRadius: 2,
+          cursor: 'pointer',
+          maxWidth: 400,
+        }}
+      >
+
+        <InsertDriveFileIcon sx={{ mr: 1 }} />
+        <Typography variant="body2" noWrap onClick={() => window.open(message.content, '_blank')}>
+          {fileName}
+        </Typography>
+      </Box>
+    );
+  };
 
   return (
     <Box
@@ -585,7 +547,7 @@ const ChatMessage = ({
 
             <Box sx={{ position: 'absolute', bottom: -40, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 1 }}>
               <IconButton
-                onClick={handleDownloadImage}
+                onClick={handleDownloadMedia}
                 sx={{
                   color: 'white',
                   bgcolor: 'rgba(0,0,0,0.5)',
@@ -801,18 +763,33 @@ const ChatMessage = ({
                     </Typography>
 
                     <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                      {message.reply_preview.content}
+                      {message.reply_preview.message_type === "text" && (
+                        message.reply_preview.content
+                      )}
+                      {message.reply_preview.message_type === "image" && (
+                        "Image"
+                      )}
+                      {message.reply_preview.message_type === "voice" && (
+                        "Voice message"
+                      )}
+                      {message.reply_preview.message_type === "file" && (
+                        "File"
+                      )}
                     </Typography>
 
                   </Box>
                 </Box>
               )}
 
-              {actualMessageType === 'image' ? (
+              {message.message_type === 'image' ? (
                 renderImageContent()
-              ) : actualMessageType === 'voice' ? (
+              ) : message.message_type === 'voice' ? (
                 renderVoiceContent()
-              ) : actualMessageType === 'system' ? (
+              ) : message.message_type === 'video' ? (
+                renderVideoContent()
+              ) : message.message_type === 'file' ? (
+                renderFileContent()
+              ) : message.message_type === 'system' ? (
                 renderCallMessage()
               ) : (
                 <Box
@@ -946,7 +923,7 @@ const ChatMessage = ({
                 </MenuItem>
               );
 
-              if (actualMessageType !== 'system') {
+              if (message.message_type !== 'system') {
                 menuItems.push(
                   <MenuItem key="forward" onClick={() => { onForward(); handleClose(); }}>
                     <ShortcutIcon fontSize="small" sx={{ mr: 1.5 }} />
@@ -957,7 +934,7 @@ const ChatMessage = ({
               }
 
               if (isMine) {
-                if (actualMessageType === 'text') {
+                if (message.message_type === 'text') {
                   menuItems.push(
                     <MenuItem
                       key="edit"
@@ -973,13 +950,13 @@ const ChatMessage = ({
                   );
                 }
 
-                if (actualMessageType === 'image') {
+                if (message.message_type === 'image' || message.message_type === 'video' || message.message_type === 'file') {
                   menuItems.push(
                     <MenuItem key="view-full" onClick={handleViewFullImage}>
                       <RemoveRedEyeIcon fontSize="small" sx={{ mr: 1.5 }} />
                       {t('view_full_image')}
                     </MenuItem>,
-                    <MenuItem key="download" onClick={handleDownloadImage}>
+                    <MenuItem key="download" onClick={handleDownloadMedia}>
                       <SaveAltIcon fontSize="small" sx={{ mr: 1.5 }} />
                       {t('download_image')}
                     </MenuItem>

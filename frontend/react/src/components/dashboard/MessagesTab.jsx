@@ -30,8 +30,7 @@ import {
   getBlockedUsers,
   getPrivateChat,
   removeReactionFromMessage,
-  sendImageMessage,
-  uploadImage
+  sendMediaMessage,
 } from '../../services/api';
 import ChatMessage from '../chat/ChatMessage';
 import EmojiButton from '../EmojiButton';
@@ -57,7 +56,6 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [imagePreview, setImagePreview] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -77,6 +75,8 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
   const [audioUrl, setAudioUrl] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [mediaPreviews, setMediaPreviews] = useState([]);
 
   const [blockedUsers, setBlockedUsers] = useState([]);
 
@@ -88,7 +88,6 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
   const [loadingInitial, setLoadingInitial] = useState(false);
   const loadingMoreRef = useRef(false);
   const initialScrollDone = useRef(false);
-  const selectedFileRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const audioBlobRef = useRef(null);
@@ -99,6 +98,7 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
 
   const [openDrawer, setOpenDrawer] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState("");
+  const selectedFilesRef = useRef([]);
 
   const toggleDrawer = () => {
     setOpenDrawer(prev => !prev);
@@ -146,7 +146,6 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
 
     setMessages([]);
     setNewMessage('');
-    setImagePreview(null);
     setAudioUrl(null);
     setRecordingTime(0);
     setIsRecording(false);
@@ -212,39 +211,13 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
       }
 
       else if (type === "message") {
-        const detectMessageType = (msgData) => {
-          if (msgData.message_type === "system") return "system";
-          if (msgData.message_type === "image") return "image";
-          if (msgData.message_type === "voice") return "voice";
-          if (msgData.message_type === "file") return "file";
-          if (msgData.message_type === "text") return "text";
-
-          const content = msgData.content || "";
-
-          const isVoiceUrl =
-            content.includes("/voice_messages/") ||
-            content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-            (content.includes("cloudinary.com") && content.includes("/video/upload/"));
-          if (isVoiceUrl) return "voice";
-
-          const isImageUrl =
-            content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-            (content.includes("cloudinary.com") && content.includes("/image/upload/"));
-          return isImageUrl ? "image" : "text";
-        };
-
-        if (data.temp_id) {
-          console.log("Temp message received from server:", data);
-        }
-
-        const messageType = detectMessageType(data);
 
         const realMessage = {
           id: data.id,
           temp_id: data.temp_id || null,
           content: data.content,
           is_temp: false,
-          message_type: messageType,
+          message_type: data.message_type,
           sender_id: data.sender_id,
           sender: {
             id: data.sender_id,
@@ -449,9 +422,7 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
 
   const {
     sendMessage: sendWsMessage,
-    closeConnection,
     isConnected,
-    reconnectAttempts,
   } = useWebSocket(getWsUrl(), {
     onMessage: handleWebSocketMessage,
     onOpen: handleWebSocketOpen,
@@ -463,24 +434,6 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
   useEffect(() => {
     sendWsMessageRef.current = sendWsMessage;
   }, [sendWsMessage]);
-
-  useEffect(() => {
-    if (!selectedFriend || !isConnected || !sendWsMessageRef.current) return;
-
-    const unreadMessages = messages.filter(
-      msg => msg.sender_id !== user.id && !msg.is_read && msg.id && !msg.is_temp
-    );
-
-    unreadMessages.forEach(msg => {
-      if (!sentReadReceipts.current.has(msg.id)) {
-        sendWsMessageRef.current({
-          type: "read_message",
-          message_id: msg.id
-        });
-        sentReadReceipts.current.add(msg.id);
-      }
-    });
-  }, [messages, selectedFriend, isConnected, user.id]);
 
   useEffect(() => {
     const fetchBlockedUsers = async () => {
@@ -513,6 +466,7 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
       setError('Empty voice recording');
       return;
     }
+    cancelReply();
 
     const blobToSend = audioBlobRef.current;
     audioBlobRef.current = null;
@@ -528,11 +482,28 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
       is_read: false,
       is_temp: true,
       voice_duration: Math.max(recordingTime, 1),
+
+      reply_to_id: replyTo?.id || null,
+      reply_preview: replyTo
+        ? {
+          id: replyTo.id,
+          sender_username: replyTo.sender?.username,
+          content:
+            replyTo.message_type === 'voice'
+              ? '🎤 Voice message'
+              : replyTo.message_type === 'image'
+                ? '🖼️ Photo'
+                : replyTo.content,
+          message_type: replyTo.message_type,
+        }
+        : null,
+
       sender: {
         id: profile.id,
         username: profile.username,
         avatar_url: getUserAvatar(profile),
       },
+
       created_at: new Date().toISOString(),
     };
 
@@ -544,7 +515,11 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
     const formData = new FormData();
     formData.append('voice_file', blobToSend, 'voice.webm');
     formData.append('duration', tempMsg.voice_duration.toString());
-    formData.append('temp_id', tempId); // send temp_id to server
+    formData.append('temp_id', tempId);
+
+    if (replyTo?.id) {
+      formData.append('reply_to_id', replyTo.id);
+    }
 
     try {
       const sentMessage = await apiSendVoiceMessage(selectedFriend.id, formData);
@@ -626,77 +601,90 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
     }
   };
 
-  const handleImageUpload = async (file) => {
+  const handleFileUpload = async (file) => {
     if (!selectedFriend) return;
 
-    const tempId = `temp-img-${Date.now()}`;
+    const tempId = `temp-file-${Date.now()}`;
+    const fileUrl = URL.createObjectURL(file);
+
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+
+    const messageType = isImage
+      ? "image"
+      : isVideo
+        ? "video"
+        : "file";
+
     try {
       setUploadingImage(true);
-      const result = await uploadImage(selectedFriend.id, file);
-      const { url } = result;
+      cancelReply();
 
-      setImagePreview(null);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: tempId,
+          temp_id: tempId,
+          content: fileUrl,
+          message_type: messageType,
+          is_temp: true,
 
-      const payload = {
-        type: 'message',
-        content: url,
-        message_type: 'image',
-      };
+          sender_id: profile.id,
+          sender: {
+            id: profile.id,
+            username: profile.username,
+            avatar_url: getUserAvatar(profile),
+          },
 
-      if (!sendWsMessage(payload)) {
-        const sentMessage = await sendImageMessage(selectedFriend.id, url);
-        setMessages((prev) =>
-          prev
-            .filter((m) => m.id !== tempId)
-            .concat({
-              ...sentMessage,
-              is_temp: false,
-              message_type: 'image',
-              sender: {
-                username: profile.username,
-                avatar_url: getUserAvatar(profile),
-                id: profile.id,
-              },
-            })
-        );
-      }
+          sender_username: profile.username,
+          sender_avatar_url: getUserAvatar(profile),
+
+          created_at: new Date().toISOString(),
+
+          file_size: file.size,
+          file_name: file.name,
+
+          reply_to_id: replyTo?.id || null,
+
+          is_read: false,
+        },
+      ]);
+
+      await sendMediaMessage(
+        selectedFriend.id,
+        file,
+        messageType,
+        replyTo?.id
+      );
+
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+
     } catch (err) {
-      console.error('Upload error:', err);
-      setError(t('failed_upload_image'));
+      console.error("Upload error:", err);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setUploadingImage(false);
     }
   };
 
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError(t('select_image_file'));
-      setError(true);
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setError(t('image_too_large_5mb'));
-      setError(true);
-      return;
-    }
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
 
-    selectedFileRef.current = file;
+    selectedFilesRef.current = files;
 
-    const reader = new FileReader();
-    reader.onload = (e) => setImagePreview(e.target.result);
-    reader.readAsDataURL(file);
-  };
+    const previews = files.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      url: URL.createObjectURL(file),
+      type: file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+          ? "video"
+          : "file",
+      sending: false
+    }));
 
-  const handleRemoveImagePreview = () => {
-    setImagePreview(null);
-    selectedFileRef.current = null;
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = null;
-    }
+    setMediaPreviews(previews);
   };
 
   const handleDeleteMessage = (messageId, isTemp = false) => {
@@ -720,8 +708,6 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
           await deleteMessage(id);
         }
         setMessages(prev => prev.filter(m => m.id !== id));
-        setSuccess(isImage ? t('image_deleted') : t('message_deleted'));
-        setTimeout(() => setSuccess(null), 2000);
       } catch (err) {
         setError(t('failed_delete_message'));
         setMessages(prev => [...prev, message]);
@@ -762,27 +748,6 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
     }
 
     return [];
-  };
-
-  const detectMessageType = (msgData) => {
-    if (msgData.message_type === "system") return "system";
-    if (msgData.message_type === "image") return "image";
-    if (msgData.message_type === "voice") return "voice";
-    if (msgData.message_type === "file") return "file";
-    if (msgData.message_type === "text") return "text";
-
-    const content = msgData.content || "";
-
-    const isVoiceUrl =
-      content.includes("/voice_messages/") ||
-      content.match(/\.(mp3|wav|ogg|webm|m4a|aac|opus|flac|3gp)$/i) ||
-      (content.includes("cloudinary.com") && content.includes("/video/upload/"));
-    if (isVoiceUrl) return "voice";
-
-    const isImageUrl =
-      content.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ||
-      (content.includes("cloudinary.com") && content.includes("/image/upload/"));
-    return isImageUrl ? "image" : "text";
   };
 
   const loadInitialMessages = async () => {
@@ -894,7 +859,7 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
     return chatMessages
       .filter(msg => !blockedUsers.some(u => u.id === msg.sender_id))
       .map(msg => {
-        const messageType = detectMessageType(msg);
+        const messageType = msg.message_type;
         const sender = {
           id: msg.sender_id,
           username: msg.sender_id === profile.id ? profile.username : selectedFriend.username,
@@ -970,7 +935,9 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() && !audioUrl && !imagePreview) return;
+    if (!newMessage.trim() && !audioUrl && selectedFilesRef.current.length === 0) return;
+
+    setSending(true);
 
     try {
       if (newMessage.trim()) {
@@ -981,22 +948,38 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
         await sendVoiceMessage();
       }
 
-      if (selectedFileRef.current) {
-        await handleImageUpload(selectedFileRef.current);
+      if (selectedFilesRef.current.length > 0) {
+        const files = [...selectedFilesRef.current];
 
-        selectedFileRef.current = null;
-        return;
+        setMediaPreviews((prev) =>
+          prev.map((item) => ({
+            ...item,
+            sending: true
+          }))
+        );
+
+        for (const file of files) {
+          await handleFileUpload(file);
+        }
+
+        selectedFilesRef.current = [];
+        setMediaPreviews([]);
       }
 
       setNewMessage('');
       setAudioUrl(null);
-      setImagePreview(null);
       setReplyTo(null);
       setError(false);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = null;
+      }
 
     } catch (err) {
       console.error('Failed to send message:', err);
       setError(err.message || t('failed_send_message'));
+    } finally {
+      setSending(false);
     }
   };
 
@@ -1154,7 +1137,7 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               {t('irreversible_action')}.
             </Typography>
-            {messageToDelete.message.message_type === 'image' && (
+            {/* {messageToDelete.message.message_type === 'image' && (
               <Box sx={{ mb: 2, textAlign: 'center' }}>
                 <img
                   src={messageToDelete.message.content}
@@ -1162,7 +1145,7 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
                   style={{ maxWidth: '100%', maxHeight: 150, borderRadius: '8px' }}
                 />
               </Box>
-            )}
+            )} */}
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
               <Button
                 onClick={() => setDeleteConfirmOpen(false)}
@@ -1344,43 +1327,71 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
                   )}
                 </Box>
 
-                {imagePreview && (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      border: "1px solid #ddd",
-                      borderRadius: 2,
-                      p: 1,
-                      mb: 1,
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        gap: 1,
-                        alignItems: "center",
-                      }}
-                    >
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        style={{
-                          width: 60, height: 60, objectFit: "cover", borderRadius: 6
+                {mediaPreviews.length > 0 && (
+                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1 }}>
+                    {mediaPreviews.map((media) => (
+                      <Box
+                        key={media.id}
+                        sx={{
+                          position: "relative",
+                          width: 70,
+                          height: 70,
+                          borderRadius: 2,
+                          overflow: "hidden",
+                          border: "1px solid #ddd"
                         }}
-                      />
-                      <Typography fontWeight={600}>
-                        {selectedFileRef.current ? selectedFileRef.current.name : ""}
-                      </Typography>
-                    </Box>
+                      >
+                        {media.type === "image" && (
+                          <img
+                            src={media.url}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover"
+                            }}
+                          />
+                        )}
 
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <IconButton onClick={handleRemoveImagePreview}>
-                        <CloseIcon />
-                      </IconButton>
-                    </Box>
+                        {media.type === "video" && (
+                          <video
+                            src={media.url}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover"
+                            }}
+                          />
+                        )}
+
+                        {media.type === "file" && (
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              height: "100%"
+                            }}
+                          >
+                            📎
+                          </Box>
+                        )}
+
+                        {media.sending && (
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background: "rgba(0,0,0,0.4)"
+                            }}
+                          >
+                            <CircularProgress size={28} sx={{ color: "#fff" }} />
+                          </Box>
+                        )}
+                      </Box>
+                    ))}
                   </Box>
                 )}
 
@@ -1436,7 +1447,14 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
 
                   {!showTextbox && (
                     <>
-                      <input accept="image/*" style={{ display: 'none' }} id="image-upload" type="file" ref={fileInputRef} onChange={handleFileSelect} />
+                      <input
+                        accept="image/*,video/*,.pdf,.doc,.docx,.zip,.rar"
+                        multiple
+                        style={{ display: 'none' }}
+                        id="image-upload" type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                      />
                       <label htmlFor="image-upload">
                         <Button
                           variant='contained'
@@ -1508,15 +1526,27 @@ const MessagesTab = ({ friends, profile, isError, setError, setSuccess, showFrie
                   )}
 
                   {!isRecording && (
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={handleSendMessage}
-                      disabled={!selectedFriend || (!newMessage.trim() && !imagePreview)}
-                      sx={{ minWidth: 30, borderRadius: 2, py: 1, px: 1.5 }}
-                    >
-                      <SendIcon />
-                    </Button>
+                    sending ? (
+                      <CircularProgress size={26} />
+                    ) : (
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={handleSendMessage}
+                        disabled={
+                          !selectedFriend ||
+                          (!newMessage.trim() && !audioUrl && mediaPreviews.length === 0)
+                        }
+                        sx={{
+                          minWidth: 30,
+                          borderRadius: 2,
+                          py: 1,
+                          px: 1.5
+                        }}
+                      >
+                        <SendIcon />
+                      </Button>
+                    )
                   )}
 
                 </Box>

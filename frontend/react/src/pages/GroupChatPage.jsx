@@ -48,6 +48,7 @@ import useTypewriter from '../hooks/useTypewriter';
 import DeleteDialog from '../components/dialogs/DeleteDialog';
 import EmojiButton from '../components/EmojiButton';
 import { useGroupWebsocket } from '../hooks/useGroupWebsocket';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 
 const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatId, currentChatType }) => {
 
@@ -94,21 +95,10 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const peersRef = useRef({});
-  const remoteStreamsRef = useRef({});
   const fileInputRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
-  const reconnectAttemptsRef = useRef(0);
-  const isUnmountedRef = useRef(false);
 
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const getReconnectDelay = () => {
-    const base = 1000;       // 1s
-    const max = 15000;       // 15s
-    return Math.min(base * 2 ** reconnectAttemptsRef.current, max);
-  };
 
   const ALLOWED_EXTENSIONS = [
     ".png",
@@ -428,7 +418,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
         });
         break;
 
-      default:
+      case "message":
         setMessages((prev) => {
           const updated = [...prev];
 
@@ -448,6 +438,9 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
           requestAnimationFrame(scrollToBottom);
           return updated;
         });
+        break;
+
+      default:
         break;
     }
 
@@ -1379,7 +1372,7 @@ const GroupChatPage = ({ groupId, toggleGroupList, chats, setError, currentChatI
                               closeSecondMenu();
                             }}
                           >
-                            <PhotoCameraIcon sx={{ mr: 1.5 }} /> Replace Image
+                            <AutorenewIcon sx={{ mr: 1.5 }} /> Replace Image
                           </MenuItem>
                         )
                         : null,
