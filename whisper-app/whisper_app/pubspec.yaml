@@ -36,11 +36,19 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # HTTP & Networking
+  image_picker: ^1.0.4
+  video_player: ^2.8.3
+  file_picker: ^10.3.8
   http: ^1.2.1
   dio: ^5.4.0
+  chewie: ^1.5.0
+  photo_view: ^0.14.0
+  web_socket_channel: ^2.4.0
+  just_audio: ^0.9.41 
 
-  # State Management
+    # State Management
   provider: ^6.1.1
+  equatable: ^2.0.5
   riverpod: ^2.4.9
 
   # Local Storage
