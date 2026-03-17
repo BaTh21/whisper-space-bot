@@ -9,7 +9,8 @@ class CustomButton extends StatelessWidget {
   final IconData? icon;
   final ButtonVariant variant;
   final bool isLoading;
-  
+  final Color? color; // <-- add this
+
   const CustomButton({
     super.key,
     required this.text,
@@ -18,47 +19,48 @@ class CustomButton extends StatelessWidget {
     this.icon,
     this.variant = ButtonVariant.primary,
     this.isLoading = false,
+    this.color, // <-- add this
   });
-  
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     Color backgroundColor;
     Color foregroundColor;
     BorderSide borderSide;
-    
+
     switch (variant) {
       case ButtonVariant.primary:
-        backgroundColor = theme.primaryColor;
+        backgroundColor =
+            color ?? theme.primaryColor; // <-- use custom color if provided
         foregroundColor = theme.colorScheme.onPrimary;
         borderSide = BorderSide.none;
         break;
       case ButtonVariant.secondary:
-        backgroundColor = theme.colorScheme.secondary;
+        backgroundColor = color ?? theme.colorScheme.secondary;
         foregroundColor = theme.colorScheme.onSecondary;
         borderSide = BorderSide.none;
         break;
       case ButtonVariant.outlined:
         backgroundColor = Colors.transparent;
-        foregroundColor = theme.primaryColor;
-        borderSide = BorderSide(color: theme.primaryColor, width: 1);
+        foregroundColor = color ?? theme.primaryColor;
+        borderSide = BorderSide(color: color ?? theme.primaryColor, width: 1);
         break;
       case ButtonVariant.text:
         backgroundColor = Colors.transparent;
-        foregroundColor = theme.primaryColor;
+        foregroundColor = color ?? theme.primaryColor;
         borderSide = BorderSide.none;
         break;
     }
-    
+
     if (isLoading || onPressed == null) {
       foregroundColor = Colors.grey;
-      // Fix: Use Colors.grey.shade300 instead of Colors.grey[300] which returns Color?
-      backgroundColor = variant == ButtonVariant.primary 
-          ? Colors.grey.shade300 
+      backgroundColor = (variant == ButtonVariant.primary)
+          ? Colors.grey.shade300
           : Colors.transparent;
     }
-    
+
     final buttonStyle = ElevatedButton.styleFrom(
       backgroundColor: backgroundColor,
       foregroundColor: foregroundColor,
@@ -69,7 +71,7 @@ class CustomButton extends StatelessWidget {
       ),
       elevation: (variant == ButtonVariant.primary && !isLoading) ? 2 : 0,
     );
-    
+
     Widget child = isLoading
         ? const SizedBox(
             width: 20,
@@ -94,20 +96,20 @@ class CustomButton extends StatelessWidget {
               ),
             ],
           );
-    
+
     final button = ElevatedButton(
       onPressed: isLoading ? null : onPressed,
       style: buttonStyle,
       child: child,
     );
-    
+
     if (fullWidth) {
       return SizedBox(
         width: double.infinity,
         child: button,
       );
     }
-    
+
     return button;
   }
 }

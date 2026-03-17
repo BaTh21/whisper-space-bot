@@ -8,6 +8,7 @@ import '../widgets/password_field.dart';
 import 'login_screen.dart';
 import 'providers/auth_provider.dart';
 import 'verification_screen.dart';
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -22,7 +23,7 @@ class RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
-  
+
   @override
   void dispose() {
     _usernameController.dispose();
@@ -31,31 +32,31 @@ class RegisterScreenState extends State<RegisterScreen> {
     _confirmPasswordController.dispose();
     super.dispose();
   }
-  
+
   Future<void> _register() async {
     // Hide keyboard
     FocusScope.of(context).unfocus();
-    
+
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_passwordController.text != _confirmPasswordController.text) {
       _showErrorDialog('Passwords do not match');
       return;
     }
-    
+
     setState(() => _isLoading = true);
-    
+
     final authProvider = context.read<AuthProvider>();
     final result = await authProvider.register(
       _usernameController.text.trim(),
       _emailController.text.trim(),
       _passwordController.text,
     );
-    
+
     setState(() => _isLoading = false);
-    
+
     if (!mounted) return;
-    
+
     if (result.success) {
       // ✅ Show success message and navigate to verification
       _showSuccessDialogAndNavigate(result.email!);
@@ -63,7 +64,7 @@ class RegisterScreenState extends State<RegisterScreen> {
       _showErrorDialog(result.message ?? 'Registration failed');
     }
   }
-  
+
   void _showSuccessDialogAndNavigate(String email) {
     showDialog(
       context: context,
@@ -126,7 +127,7 @@ class RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
-  
+
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -142,145 +143,181 @@ class RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return LoadingOverlay(
-      isLoading: _isLoading,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Create Account'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                Text(
-                  'Join Whisper Space',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+        isLoading: _isLoading,
+        child: Scaffold(
+          body: Stack(
+            children: [
+              // Full-screen gradient background
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Create your account to get started',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 30),
-                
-                Form(
-                  key: _formKey,
+              ),
+
+              // Main content
+              SafeArea(
+                  child: Center(
+                child: SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      AuthTextField(
-                        controller: _usernameController,
-                        label: 'Username',
-                        hintText: 'Choose a username',
-                        prefixIcon: Icons.person,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Username is required';
-                          }
-                          if (value.length < 3) {
-                            return 'Username must be at least 3 characters';
-                          }
-                          if (value.contains(' ')) {
-                            return 'Username cannot contain spaces';
-                          }
-                          return null;
-                        }, 
+                      Icon(Icons.message, size: 100, color: Colors.white),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Join Whisper Space',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 1.2,
+                            ),
                       ),
-                      const SizedBox(height: 16),
-                      AuthTextField(
-                        controller: _emailController,
-                        label: 'Email',
-                        hintText: 'Enter your email',
-                        keyboardType: TextInputType.emailAddress,
-                        prefixIcon: Icons.email,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Email is required';
-                          }
-                          if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        }, 
-                      ),
-                      const SizedBox(height: 16),
-                      PasswordField(
-                        controller: _passwordController,
-                        label: 'Password',
-                        hintText: 'Create a password',
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Password is required';
-                          }
-                          if (value.length < 6) {
-                            return 'Password must be at least 6 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      PasswordField(
-                        controller: _confirmPasswordController,
-                        label: 'Confirm Password',
-                        hintText: 'Confirm your password',
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please confirm your password';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 32),
-                      CustomButton(
-                        text: 'Create Account',
-                        onPressed: _register,
-                        fullWidth: true,
-                        icon: Icons.person_add,
+                      const SizedBox(height: 8),
+                      Text(
+                        'Create your account to get started',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.white70, fontSize: 16),
                       ),
                       const SizedBox(height: 20),
-                      
-                      // Already have account
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Already have an account? ",
-                            style: Theme.of(context).textTheme.bodyMedium,
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(25),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 30,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            children: [
+                              AuthTextField(
+                                controller: _usernameController,
+                                label: 'Username',
+                                hintText: 'Choose a username',
+                                prefixIcon: Icons.person,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Username is required';
+                                  }
+                                  if (value.length < 3) {
+                                    return 'Username must be at least 3 characters';
+                                  }
+                                  if (value.contains(' ')) {
+                                    return 'Username cannot contain spaces';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              AuthTextField(
+                                controller: _emailController,
+                                label: 'Email',
+                                hintText: 'Enter your email',
+                                keyboardType: TextInputType.emailAddress,
+                                prefixIcon: Icons.email,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Email is required';
+                                  }
+                                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                      .hasMatch(value)) {
+                                    return 'Enter a valid email';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              PasswordField(
+                                controller: _passwordController,
+                                label: 'Password',
+                                hintText: 'Create a password',
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Password is required';
+                                  }
+                                  if (value.length < 6) {
+                                    return 'Password must be at least 6 characters';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              PasswordField(
+                                controller: _confirmPasswordController,
+                                label: 'Confirm Password',
+                                hintText: 'Confirm your password',
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please confirm your password';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 32),
+                              CustomButton(
+                                text: 'Create Account',
+                                onPressed: _register,
+                                fullWidth: true,
+                                icon: Icons.person_add,
+                                color: const Color(0xFF6A11CB),
+                              ),
+
+                              // Already have account
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    "Already have an account? ",
+                                    style:
+                                        Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const LoginScreen(),
+                                        ),
+                                      );
+                                    },
+                                    child: const Text('Sign In'),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const LoginScreen(),
-                                ),
-                              );
-                            },
-                            child: const Text('Sign In'),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              )),
+            ],
           ),
-        ),
-      ),
-    );
+        ));
   }
 }

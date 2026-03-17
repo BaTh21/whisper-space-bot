@@ -9,7 +9,7 @@ import 'providers/auth_provider.dart';
 
 class VerificationScreen extends StatefulWidget {
   final String email;
-  
+
   const VerificationScreen({super.key, required this.email});
 
   @override
@@ -17,18 +17,19 @@ class VerificationScreen extends StatefulWidget {
 }
 
 class VerificationScreenState extends State<VerificationScreen> {
-  final List<TextEditingController> _controllers = List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _controllers =
+      List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   bool _isLoading = false;
   bool _isResending = false;
   int _resendCountdown = 0;
   Timer? _timer;
-  
+
   @override
   void initState() {
     super.initState();
     _startResendTimer();
-    
+
     // Setup focus node listeners
     for (int i = 0; i < _controllers.length; i++) {
       _controllers[i].addListener(() {
@@ -41,7 +42,7 @@ class VerificationScreenState extends State<VerificationScreen> {
       });
     }
   }
-  
+
   @override
   void dispose() {
     for (var controller in _controllers) {
@@ -53,7 +54,7 @@ class VerificationScreenState extends State<VerificationScreen> {
     _timer?.cancel();
     super.dispose();
   }
-  
+
   void _startResendTimer() {
     _resendCountdown = 60;
     _timer?.cancel();
@@ -71,25 +72,25 @@ class VerificationScreenState extends State<VerificationScreen> {
       });
     });
   }
-  
+
   Future<void> _verify() async {
     FocusScope.of(context).unfocus();
-    
+
     final code = _controllers.map((c) => c.text).join();
     if (code.length != 6) {
       _showErrorDialog('Please enter all 6 digits');
       return;
     }
-    
+
     setState(() => _isLoading = true);
-    
+
     final authProvider = context.read<AuthProvider>();
     final result = await authProvider.verifyEmail(widget.email, code);
-    
+
     setState(() => _isLoading = false);
-    
+
     if (!mounted) return;
-    
+
     if (result.success) {
       // Show success dialog
       _showSuccessDialog();
@@ -97,7 +98,7 @@ class VerificationScreenState extends State<VerificationScreen> {
       _showErrorDialog(result.message ?? 'Verification failed');
     }
   }
-  
+
   void _showSuccessDialog() {
     showDialog(
       context: context,
@@ -142,19 +143,19 @@ class VerificationScreenState extends State<VerificationScreen> {
       ),
     );
   }
-  
+
   Future<void> _resendCode() async {
     if (_resendCountdown > 0) return;
-    
+
     setState(() => _isResending = true);
-    
+
     final authProvider = context.read<AuthProvider>();
     final result = await authProvider.resendVerification(widget.email);
-    
+
     setState(() => _isResending = false);
-    
+
     if (!mounted) return;
-    
+
     if (result.success) {
       _startResendTimer();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -168,7 +169,7 @@ class VerificationScreenState extends State<VerificationScreen> {
       _showErrorDialog(result.message ?? 'Failed to resend code');
     }
   }
-  
+
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -184,19 +185,12 @@ class VerificationScreenState extends State<VerificationScreen> {
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return LoadingOverlay(
       isLoading: _isLoading,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Verify Email'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -232,7 +226,7 @@ class VerificationScreenState extends State<VerificationScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-                
+
                 // Instruction
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -254,7 +248,7 @@ class VerificationScreenState extends State<VerificationScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
-                
+
                 // Verification code input
                 const Text(
                   'Enter verification code',
@@ -286,7 +280,8 @@ class VerificationScreenState extends State<VerificationScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Colors.blue, width: 2),
+                            borderSide:
+                                const BorderSide(color: Colors.blue, width: 2),
                           ),
                         ),
                         onChanged: (value) {
@@ -302,7 +297,7 @@ class VerificationScreenState extends State<VerificationScreen> {
                   }),
                 ),
                 const SizedBox(height: 40),
-                
+
                 // Verify Button
                 CustomButton(
                   text: 'Verify Email',
@@ -311,7 +306,7 @@ class VerificationScreenState extends State<VerificationScreen> {
                   icon: Icons.verified,
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Resend Code
                 Center(
                   child: Column(
@@ -333,7 +328,8 @@ class VerificationScreenState extends State<VerificationScreen> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Text(
                                   'Resend Code',
@@ -347,7 +343,7 @@ class VerificationScreenState extends State<VerificationScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Back to register
                 Center(
                   child: TextButton(
