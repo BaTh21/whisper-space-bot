@@ -392,7 +392,7 @@ class FeedApiService {
   }
 
   // ============ COMMENT FUNCTIONALITY ============
-  Future<Comment> createComment({
+Future<Comment> createComment({
   required int diaryId,
   required String content,
   int? parentId,
@@ -407,17 +407,32 @@ class FeedApiService {
       throw Exception('Not authenticated');
     }
 
-    final request = {
+    // Build the request body - match what your backend expects
+    final Map<String, dynamic> request = {
       'content': content,
-      if (parentId != null && parentId > 0) 'parent_id': parentId, // Only send if > 0
-      if (replyToUserId != null && replyToUserId > 0) 'reply_to_user_id': replyToUserId,
-      if (images != null && images.isNotEmpty) 'images': images,
     };
+    
+    // Only add optional fields if they're provided and valid
+    if (parentId != null && parentId > 0) {
+      request['parent_id'] = parentId;
+    }
+    
+    if (replyToUserId != null && replyToUserId > 0) {
+      request['reply_to_user_id'] = replyToUserId;
+    }
+    
+    if (images != null && images.isNotEmpty) {
+      request['images'] = images;
+    }
 
     _log('📤 Creating comment with data: ${jsonEncode(request)}');
     
+    // Use the correct endpoint format: /api/v1/diaries/{diaryId}/comments
+    final url = '$baseUrl/api/v1/diaries/$diaryId/comments';
+    _log('Endpoint: $url');
+    
     final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/diaries/$diaryId/comments'),
+      Uri.parse(url),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -426,13 +441,24 @@ class FeedApiService {
     ).timeout(const Duration(seconds: 30));
 
     _log('📥 Comment response: ${response.statusCode}');
+    _log('Response body: ${response.body}');
     
-    if (response.statusCode == 200) {
+    if (response.statusCode == 200 || response.statusCode == 201) {
       final data = jsonDecode(response.body);
       return Comment.fromJson(data);
     } else {
-      _log('❌ API Error: ${response.body}');
-      throw Exception('Failed to create comment: ${response.statusCode}');
+      _log('❌ API Error: ${response.statusCode} - ${response.body}');
+      
+      // Provide more helpful error messages
+      if (response.statusCode == 404) {
+        throw Exception('Comment endpoint not found. Please check backend routes.');
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication expired. Please login again.');
+      } else if (response.statusCode == 403) {
+        throw Exception('You don\'t have permission to comment on this diary.');
+      } else {
+        throw Exception('Failed to create comment: ${response.statusCode}');
+      }
     }
   } catch (e) {
     _log('❌ Error creating comment: $e');
