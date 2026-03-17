@@ -239,39 +239,40 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
-  void _handleDeleteDiary(
-      BuildContext context, FeedProvider provider, int diaryId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Diary'),
-        content: const Text('Are you sure you want to delete this diary? '
-            'This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
+void _handleDeleteDiary(
+    BuildContext context, FeedProvider feedProvider, int diaryId) async {
+  final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete Diary'),
+          content: const Text('Are you sure you want to delete this diary? '
+              'This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
             ),
-          ),
-        ],
-      ),
-    );
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
-    if (confirmed == true) {
-      try {
-        await provider.deleteDiary(diaryId);
-        _showSuccessSnackBar('Diary deleted successfully');
-      } catch (e) {
-        _showErrorSnackBar('Failed to delete diary: $e');
-      }
+  if (confirmed) {
+    try {
+      await feedProvider.deleteDiary(diaryId);
+      _showSuccessSnackBar('Diary deleted successfully');
+    } catch (e) {
+      _showErrorSnackBar('Failed to delete diary: $e');
     }
   }
+}
 
   void _createNewPost(BuildContext context, FeedProvider provider) {
     final feedApiService = Provider.of<FeedApiService>(context, listen: false);
