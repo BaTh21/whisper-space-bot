@@ -4,7 +4,7 @@ enum ButtonVariant { primary, secondary, outlined, text }
 
 class CustomButton extends StatelessWidget {
   final String text;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool fullWidth;
   final IconData? icon;
   final ButtonVariant variant;
@@ -13,7 +13,7 @@ class CustomButton extends StatelessWidget {
   const CustomButton({
     super.key,
     required this.text,
-    required this.onPressed,
+    this.onPressed,
     this.fullWidth = false,
     this.icon,
     this.variant = ButtonVariant.primary,
@@ -51,6 +51,14 @@ class CustomButton extends StatelessWidget {
         break;
     }
     
+    if (isLoading || onPressed == null) {
+      foregroundColor = Colors.grey;
+      // Fix: Use Colors.grey.shade300 instead of Colors.grey[300] which returns Color?
+      backgroundColor = variant == ButtonVariant.primary 
+          ? Colors.grey.shade300 
+          : Colors.transparent;
+    }
+    
     final buttonStyle = ElevatedButton.styleFrom(
       backgroundColor: backgroundColor,
       foregroundColor: foregroundColor,
@@ -59,15 +67,14 @@ class CustomButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         side: borderSide,
       ),
-      elevation: variant == ButtonVariant.primary ? 2 : 0,
+      elevation: (variant == ButtonVariant.primary && !isLoading) ? 2 : 0,
     );
     
     Widget child = isLoading
-        ? SizedBox(
+        ? const SizedBox(
             width: 20,
             height: 20,
             child: CircularProgressIndicator(
-              color: foregroundColor,
               strokeWidth: 2,
             ),
           )

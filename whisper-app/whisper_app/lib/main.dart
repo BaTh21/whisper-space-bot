@@ -1,32 +1,31 @@
-// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:whisper_space_flutter/core/services/auth_service.dart';
-import 'package:whisper_space_flutter/core/services/storage_service.dart';
-import 'package:whisper_space_flutter/features/auth/presentation/screens/home_screen.dart';
-import 'package:whisper_space_flutter/features/auth/presentation/screens/login_screen.dart';
-import 'package:whisper_space_flutter/features/auth/presentation/screens/providers/auth_provider.dart';
-import 'package:whisper_space_flutter/features/feed/data/datasources/feed_api_service.dart';
-import 'package:whisper_space_flutter/features/feed/presentation/providers/feed_provider.dart';
+
+import 'core/services/auth_service.dart';
+import 'core/services/storage_service.dart';
+import 'features/auth/presentation/screens/home_screen.dart';
+import 'features/auth/presentation/screens/login_screen.dart';
+import 'features/auth/presentation/screens/providers/auth_provider.dart';
+import 'features/feed/data/datasources/feed_api_service.dart';
+import 'features/feed/presentation/providers/feed_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // Initialize storage service
     final storageService = StorageService();
     await storageService.init();
     
-    // Initialize other services
     final authService = AuthService(storageService: storageService);
-    final feedApiService = FeedApiService(storageService: storageService);
+    final feedApiService = FeedApiService(storageService: storageService); 
     
     runApp(
       MultiProvider(
         providers: [
           Provider<StorageService>(create: (_) => storageService),
           Provider<AuthService>(create: (_) => authService),
-          Provider<FeedApiService>(create: (_) => feedApiService),
+          Provider<FeedApiService>(create: (_) => feedApiService), 
           ChangeNotifierProvider(
             create: (context) => AuthProvider(
               authService: authService,
@@ -34,7 +33,9 @@ void main() async {
             ),
           ),
           ChangeNotifierProvider(
-            create: (context) => FeedProvider(feedApiService: feedApiService),
+            create: (context) => FeedProvider(
+              feedApiService: context.read<FeedApiService>(), 
+            ),
           ),
         ],
         child: const MyApp(),
@@ -76,26 +77,10 @@ class MyApp extends StatelessWidget {
       ),
       home: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
-          if (authProvider.isLoading) {
-            return const Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 20),
-                    Text('Loading app...', style: TextStyle(fontSize: 16)),
-                  ],
-                ),
-              ),
-            );
-          }
-          
           if (authProvider.currentUser != null) {
             return const HomeScreen();
-          } else {
-            return const LoginScreen();
           }
+          return const LoginScreen();
         },
       ),
     );
