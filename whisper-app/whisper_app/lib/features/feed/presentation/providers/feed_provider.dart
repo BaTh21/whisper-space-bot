@@ -127,37 +127,26 @@ class FeedProvider with ChangeNotifier {
     }
   }
 
-Future<void> deleteDiary(int diaryId) async {
-  try {
-    print('🗑️ Deleting diary $diaryId');
-    print('📊 Before deletion: ${_diaries.length} diaries');
-    
-    _isLoading = true;
-    notifyListeners();
-    
-    await feedApiService.deleteDiary(diaryId);
-    print('✅ API delete successful');
-    
-    _diaries = _diaries.where((d) => d.id != diaryId).toList();
-    _myDiaries = _myDiaries.where((d) => d.id != diaryId).toList();
-    _favoriteDiaries = _favoriteDiaries.where((d) => d.id != diaryId).toList();
-    
-    print('📊 After deletion: ${_diaries.length} diaries');
-    
-    _isLoading = false;
-    _error = null;
-    notifyListeners();
-    print('🔄 Notified listeners - UI should update');
-    
-  } catch (e) {
-    print('❌ Delete failed: $e');
-    _isLoading = false;
-    _error = 'Failed to delete diary: $e';
-    notifyListeners();
-    rethrow;
+  Future<void> deleteDiary(int diaryId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      
+      await feedApiService.deleteDiary(diaryId);
+      
+      _diaries.removeWhere((d) => d.id == diaryId);
+      _myDiaries.removeWhere((d) => d.id == diaryId);
+      
+      _isLoading = false;
+      notifyListeners();
+      
+    } catch (e) {
+      _isLoading = false;
+      _error = 'Failed to delete diary: $e';
+      notifyListeners();
+      rethrow;
+    }
   }
-}
-
 
   // ============ COMMENT OPERATIONS ============
   Future<Comment> createComment({

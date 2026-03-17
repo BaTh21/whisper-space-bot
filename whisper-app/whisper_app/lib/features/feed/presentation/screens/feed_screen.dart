@@ -266,13 +266,44 @@ void _handleDeleteDiary(
 
   if (confirmed) {
     try {
+      // Show loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Deleting diary...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      // Call the provider's delete method
       await feedProvider.deleteDiary(diaryId);
-      _showSuccessSnackBar('Diary deleted successfully');
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Diary deleted successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
-      _showErrorSnackBar('Failed to delete diary: $e');
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete diary: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 }
+
 
   void _createNewPost(BuildContext context, FeedProvider provider) {
     final feedApiService = Provider.of<FeedApiService>(context, listen: false);
