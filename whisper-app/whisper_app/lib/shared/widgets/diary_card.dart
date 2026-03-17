@@ -857,48 +857,63 @@ class _DiaryCardState extends State<DiaryCard> {
   }
 
   void _handleMenuSelection(String value) {
-    switch (value) {
-      case 'edit':
-        widget.onEdit(widget.diary);
-        break;
-      case 'delete':
-        _showDeleteConfirmation();
-        break;
-      case 'share':
-        _shareDiary();
-        break;
-      case 'report':
-        _reportDiary();
-        break;
-    }
+  switch (value) {
+    case 'edit':
+      widget.onEdit(widget.diary);
+      break;
+    case 'delete':
+      _showDeleteConfirmation();
+      break;
+    case 'share':
+      _shareDiary();
+      break;
+    case 'report':
+      _reportDiary();
+      break;
   }
+}
 
   void _showDeleteConfirmation() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Diary'),
-        content: const Text(
-            'Are you sure you want to delete this diary? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Diary'),
+      content: const Text(
+          'Are you sure you want to delete this diary? This action cannot be undone.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            Navigator.pop(context); // Close dialog first
+            
+            // Show loading indicator
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Deleting diary...'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            }
+            
+            // Call delete function
+            await widget.onDelete(widget.diary.id);
+            
+            // No need to do anything else - the provider will update the list
+            // and the UI will rebuild automatically
+          },
+          child: const Text(
+            'Delete',
+            style: TextStyle(color: Colors.red),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onDelete(widget.diary.id);
-            },
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   void _shareDiary() {
     showDialog(
