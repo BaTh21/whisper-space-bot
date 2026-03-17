@@ -460,7 +460,7 @@ def delete_diary_by_id(diary_id: int,
     delete_diary(db, diary_id, current_user.id)
     return None
 
-@router.post("/{diary_id}/comment", response_model=DiaryCommentOut)
+@router.post("/{diary_id}/comments", response_model=DiaryCommentOut)
 def comment_on_diary(
     diary_id: int,
     comment_in: DiaryCommentCreate,
@@ -477,8 +477,14 @@ def comment_on_diary(
     elif not can_view(db, diary, current_user.id):
         raise HTTPException(status_code=404, detail="Diary not found or not visible")
     
-    comment = create_comment(db, diary_id, current_user, comment_in.content, 
-                           comment_in.parent_id, comment_in.images)
+    comment = create_comment(
+        db, 
+        diary_id, 
+        current_user, 
+        comment_in.content, 
+        comment_in.parent_id, 
+        comment_in.images
+    )
     
     user_response = CreatorResponse(
         id=current_user.id,
