@@ -173,7 +173,8 @@ class RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.message, size: 100, color: Colors.white),
+                      const Icon(Icons.person_add,
+                          size: 100, color: Colors.white),
                       const SizedBox(height: 20),
                       Text(
                         'Join Whisper Space',
@@ -186,7 +187,7 @@ class RegisterScreenState extends State<RegisterScreen> {
                               letterSpacing: 1.2,
                             ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       Text(
                         'Create your account to get started',
                         style: Theme.of(context)
@@ -194,7 +195,7 @@ class RegisterScreenState extends State<RegisterScreen> {
                             .bodyMedium
                             ?.copyWith(color: Colors.white70, fontSize: 16),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 15),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(24),
@@ -231,7 +232,7 @@ class RegisterScreenState extends State<RegisterScreen> {
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 10),
                               AuthTextField(
                                 controller: _emailController,
                                 label: 'Email',
@@ -249,7 +250,7 @@ class RegisterScreenState extends State<RegisterScreen> {
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 10),
                               PasswordField(
                                 controller: _passwordController,
                                 label: 'Password',
@@ -264,7 +265,7 @@ class RegisterScreenState extends State<RegisterScreen> {
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 10),
                               PasswordField(
                                 controller: _confirmPasswordController,
                                 label: 'Confirm Password',
@@ -276,14 +277,33 @@ class RegisterScreenState extends State<RegisterScreen> {
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 32),
+                              const SizedBox(height: 15),
                               CustomButton(
                                 text: 'Create Account',
                                 onPressed: _register,
                                 fullWidth: true,
-                                icon: Icons.person_add,
+                                icon: Icons.account_circle,
                                 color: const Color(0xFF6A11CB),
                               ),
+                              const SizedBox(height: 10),
+
+                              Row(
+                                children: [
+                                  Expanded(
+                                      child: Divider(color: Colors.grey[300])),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16),
+                                    child: Text(
+                                      'OR',
+                                      style: TextStyle(color: Colors.grey[600]),
+                                    ),
+                                  ),
+                                  Expanded(
+                                      child: Divider(color: Colors.grey[300])),
+                                ],
+                              ),
+                              const SizedBox(height: 1),
 
                               // Already have account
                               Row(
@@ -295,16 +315,24 @@ class RegisterScreenState extends State<RegisterScreen> {
                                         Theme.of(context).textTheme.bodyMedium,
                                   ),
                                   TextButton(
-                                    onPressed: () {
-                                      Navigator.pushReplacement(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const LoginScreen(),
-                                        ),
-                                      );
-                                    },
-                                    child: const Text('Sign In'),
+                                    onPressed: _isLoading
+                                        ? null
+                                        : () {
+                                            Navigator.pushReplacement(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    const LoginScreen(),
+                                              ),
+                                            );
+                                          },
+                                    child: const Text(
+                                      'Sign In',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF2575FC),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
