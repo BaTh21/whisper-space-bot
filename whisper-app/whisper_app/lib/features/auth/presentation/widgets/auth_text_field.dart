@@ -12,6 +12,7 @@ class AuthTextField extends StatelessWidget {
   final int? maxLines;
   final bool readOnly;
   final void Function()? onTap;
+  final bool enabled;
   
   const AuthTextField({
     super.key,
@@ -25,7 +26,8 @@ class AuthTextField extends StatelessWidget {
     this.onChanged,
     this.maxLines = 1,
     this.readOnly = false,
-    this.onTap, required,
+    this.onTap,
+    this.enabled = true,// Removed the extra "required" keyword at the end
   });
   
   @override
@@ -36,8 +38,8 @@ class AuthTextField extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[700],
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[800],
           ),
         ),
         const SizedBox(height: 8),
@@ -52,25 +54,35 @@ class AuthTextField extends StatelessWidget {
           onTap: onTap,
           decoration: InputDecoration(
             hintText: hintText,
-            prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+            hintStyle: TextStyle(color: Colors.grey[400]),
+            prefixIcon: prefixIcon != null 
+                ? Icon(prefixIcon, color: Colors.grey[600]) 
+                : null,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Theme.of(context).primaryColor),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: Theme.of(context).primaryColor, 
+                width: 2,
+              ),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Colors.red),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red, width: 1),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
             ),
             filled: true,
-            fillColor: Colors.grey[50],
+            fillColor: readOnly ? Colors.grey[100] : Colors.white,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,

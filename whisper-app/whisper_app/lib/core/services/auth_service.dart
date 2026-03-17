@@ -14,76 +14,80 @@ class AuthService {
     String? baseUrl,
   }) : baseUrl = baseUrl ?? ApiConstants.baseUrl;
   
-  // Login with email and password
-Future<LoginResponse> login(String email, String password) async {
-  try {
+  Future<LoginResponse> login(String email, String password) async {
+    try {
+      final url = Uri.parse('$baseUrl${ApiConstants.login}');
+      
+      final response = await http.post(
+        url,
+        headers: ApiConstants.formLoginHeaders,
+        body: 'username=${Uri.encodeComponent(email)}&password=${Uri.encodeComponent(password)}',
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final token = Token.fromJson(data);
+        
+        await storageService.saveToken(token.accessToken);
+        await storageService.saveRefreshToken(token.refreshToken);
+        await storageService.setLoggedIn(true);
+        
+        final user = await getCurrentUser(token.accessToken);
+        await storageService.saveUserData(user.toJson());
+        await storageService.saveUserEmail(user.email);
+        
+        return LoginResponse.success(user: user, token: token);
+      } else {
+        return _handleLoginError(response);
+      }
+    } catch (e) {
+      return LoginResponse.error(
+        message: 'Network error. Please check your internet connection.',
+      );
+    }
+  }
 
-    final response = await http.post(
-      Uri.parse('$baseUrl${ApiConstants.login}'),
-      headers: ApiConstants.formLoginHeaders,  // Use form headers, not defaultHeaders
-      body: 'username=${Uri.encodeComponent(email)}&password=${Uri.encodeComponent(password)}',
-    );
-    
-    
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final token = Token.fromJson(data);
+  LoginResponse _handleLoginError(http.Response response) {
+    try {
+      final error = jsonDecode(response.body);
+      String errorMessage;
       
-      // Save tokens
-      await storageService.saveToken(token.accessToken);
-      await storageService.saveRefreshToken(token.refreshToken);
-      await storageService.setLoggedIn(true);
+      if (response.statusCode == 401) {
+        return LoginResponse.error(message: 'Invalid email or password. Please try again.');
+      } else if (response.statusCode == 404) {
+        return LoginResponse.error(message: 'User not found. Please check your email.');
+      } else if (response.statusCode == 403) {
+        return LoginResponse.error(message: 'Account not verified. Please verify your email first.');
+      } else if (response.statusCode == 422) {
+        return LoginResponse.error(message: 'Invalid input format. Please check your information.');
+      }
       
-      // Fetch user data
-      final user = await getCurrentUser(token.accessToken);
-      await storageService.saveUserData(user.toJson());
-      await storageService.saveUserEmail(user.email);
-      
-      return LoginResponse.success(user: user, token: token);
-    } else {
-      // Handle error response
-      return _handleLoginError(response);
-    }
-  } catch (e) {
-    return LoginResponse.error(
-      message: 'Connection error: ${e.toString()}',
-    );
-  }
-}
-LoginResponse _handleLoginError(http.Response response) {
-  try {
-    final error = jsonDecode(response.body);
-    String errorMessage;
-    
-    if (error['detail'] is List) {
-      // Handle list of validation errors
-      final errors = error['detail'] as List;
-      errorMessage = errors.map((e) {
-        if (e is Map && e.containsKey('msg')) {
-          return e['msg'];
+      if (error is Map<String, dynamic>) {
+        if (error.containsKey('detail')) {
+          final detail = error['detail'];
+          if (detail is String) {
+            errorMessage = detail;
+          } else if (detail is List && detail.isNotEmpty) {
+            errorMessage = detail.map((e) => e['msg'] ?? '').join(', ');
+          } else {
+            errorMessage = 'Login failed. Please try again.';
+          }
+        } else {
+          errorMessage = 'Login failed. Please try again.';
         }
-        return 'Validation error';
-      }).join(', ');
-    } else if (error['detail'] is String) {
-      errorMessage = error['detail'];
-    } else {
-      errorMessage = 'Login failed (Status: ${response.statusCode})';
+      } else {
+        errorMessage = 'Login failed with status ${response.statusCode}';
+      }
+      
+      return LoginResponse.error(message: errorMessage);
+    } catch (e) {
+      return LoginResponse.error(
+        message: 'Login failed. Please check your credentials and try again.',
+      );
     }
-    
-    return LoginResponse.error(message: errorMessage);
-  } catch (e) {
-    return LoginResponse.error(
-      message: 'Login failed with status ${response.statusCode}',
-    );
   }
-}
   
-  // Register new user
-  Future<RegisterResponse> register(
-    String username, 
-    String email, 
-    String password
-  ) async {
+  Future<RegisterResponse> register(String username, String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl${ApiConstants.register}'),
@@ -95,7 +99,6 @@ LoginResponse _handleLoginError(http.Response response) {
         }),
       );
       
-      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         await storageService.saveUserEmail(email);
@@ -104,9 +107,8 @@ LoginResponse _handleLoginError(http.Response response) {
           email: email,
         );
       } else if (response.statusCode == 409) {
-        final error = jsonDecode(response.body);
         return RegisterResponse.error(
-          message: error['detail'] ?? 'Email or username already exists.',
+          message: 'Email or username already exists.',
         );
       } else {
         return RegisterResponse.error(
@@ -120,7 +122,6 @@ LoginResponse _handleLoginError(http.Response response) {
     }
   }
   
-  // Verify email with code
   Future<VerifyResponse> verifyEmail(String email, String code) async {
     try {
       final response = await http.post(
@@ -132,21 +133,18 @@ LoginResponse _handleLoginError(http.Response response) {
         }),
       );
       
-      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final token = Token.fromJson(data);
         
-        // Save tokens
         await storageService.saveToken(token.accessToken);
         await storageService.saveRefreshToken(token.refreshToken);
         await storageService.setLoggedIn(true);
         
         return VerifyResponse.success(token: token);
       } else {
-        final error = jsonDecode(response.body);
         return VerifyResponse.error(
-          message: error['detail'] ?? 'Invalid or expired verification code.',
+          message: 'Invalid or expired verification code.',
         );
       }
     } catch (e) {
@@ -156,22 +154,17 @@ LoginResponse _handleLoginError(http.Response response) {
     }
   }
   
-  // Forgot password
   Future<ForgotPasswordResponse> forgotPassword(String email) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl${ApiConstants.forgotPassword}'),
         headers: ApiConstants.defaultHeaders,
-        body: jsonEncode({
-          'email': email,
-        }),
+        body: jsonEncode({'email': email}),
       );
       
-      
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
         return ForgotPasswordResponse.success(
-          message: data['msg'] ?? 'If the email is registered, a reset code has been sent.',
+          message: 'If the email is registered, a reset code has been sent.',
         );
       } else {
         return ForgotPasswordResponse.error(
@@ -185,7 +178,6 @@ LoginResponse _handleLoginError(http.Response response) {
     }
   }
   
-  // Get current user
   Future<User> getCurrentUser(String token) async {
     try {
       final response = await http.get(
@@ -207,25 +199,10 @@ LoginResponse _handleLoginError(http.Response response) {
     }
   }
   
-  // Logout
   Future<void> logout() async {
-    final refreshToken = storageService.getRefreshToken();
-    if (refreshToken != null) {
-      try {
-        await http.post(
-          Uri.parse('$baseUrl${ApiConstants.logout}'),
-          headers: ApiConstants.defaultHeaders,
-          body: jsonEncode({'refresh_token': refreshToken}),
-        );
-      } catch (e) {
-        // Continue with local logout even if API fails
-      }
-    }
-    
     await storageService.clearAll();
   }
   
-  // Resend verification code
   Future<ResendVerificationResponse> resendVerification(String email) async {
     try {
       final response = await http.post(
@@ -239,9 +216,8 @@ LoginResponse _handleLoginError(http.Response response) {
           message: 'Verification code sent successfully.',
         );
       } else {
-        final error = jsonDecode(response.body);
         return ResendVerificationResponse.error(
-          message: error['detail'] ?? 'Failed to resend verification code.',
+          message: 'Failed to resend verification code.',
         );
       }
     } catch (e) {

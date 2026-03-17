@@ -3,18 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/auth/data/models/diary_model.dart';
+import 'package:whisper_space_flutter/features/chat/chat_screen.dart';
+import 'package:whisper_space_flutter/features/feed/data/datasources/feed_api_service.dart';
+import 'package:whisper_space_flutter/features/feed/presentation/providers/feed_provider.dart';
 import 'package:whisper_space_flutter/features/feed/presentation/screens/create_diary_screen.dart';
 import 'package:whisper_space_flutter/features/feed/presentation/screens/edit_diary_full_screen.dart';
-import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
 import 'package:whisper_space_flutter/features/friend/presentation/screens/friend_screen.dart';
-import 'package:whisper_space_flutter/features/chat/chat_screen.dart';
+import 'package:whisper_space_flutter/features/inbox/inbox_api_service.dart';
+import 'package:whisper_space_flutter/features/inbox/inbox_screen.dart';
+import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
 
-import '../../../../features/feed/data/datasources/feed_api_service.dart';
-import '../../../../features/feed/presentation/providers/feed_provider.dart';
 import 'login_screen.dart';
 import 'providers/auth_provider.dart';
-import 'package:whisper_space_flutter/features/inbox/inbox_screen.dart';
-import 'package:whisper_space_flutter/features/inbox/inbox_api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,7 +25,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  int? _currentUserId; // Store current user ID
+  int? _currentUserId;
   late final InboxAPISource inboxApi;
 
   bool isLoading = true;
@@ -56,19 +56,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _loadCurrentUser() {
-    // Current user ID will be loaded from AuthProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final user = authProvider.currentUser;
       if (user != null) {
         setState(() {
           _currentUserId = user.id;
         });
+        
+        // Set current user ID in FeedProvider
+        final feedProvider = Provider.of<FeedProvider>(context, listen: false);
+        feedProvider.setCurrentUserId(user.id);
       }
     });
   }
 
-  Future<void> _initServicesAndLoad() async{
+  Future<void> _initServicesAndLoad() async {
     final storageService = StorageService();
     await storageService.init();
 
@@ -77,16 +81,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async{
-    try{
+  Future<void> _loadData() async {
+    try {
       final count = await inboxApi.getUnreadActivityCount();
-      setState(() {
-        _unreadCount = count;
-        isLoading = false;
-      });
-    }catch(e){
-      isLoading = false;
-      error = e.toString();
+      if (mounted) {
+        setState(() {
+          _unreadCount = count;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          error = e.toString();
+        });
+      }
     }
   }
 
@@ -102,7 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: 'Inbox',
             onPressed: () async {
               await showInboxDialog(context);
-
               _loadData();
             },
             icon: Badge(
@@ -127,7 +136,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: _screens[_selectedIndex],
       bottomNavigationBar: _buildBottomNavBar(),
-      // ADDED: FloatingActionButton that's always visible on Feed tab
       floatingActionButton:
           _selectedIndex == 0 ? _buildFloatingActionButton(context) : null,
     );
@@ -137,13 +145,17 @@ class _HomeScreenState extends State<HomeScreen> {
     return FloatingActionButton(
       onPressed: () => _createNewDiaryFromHome(context),
       heroTag: 'home_fab',
-      child: const Icon(Icons.add), // Unique tag for FAB
+      child: const Icon(Icons.add),
     );
   }
 
   Future<void> showInboxDialog(BuildContext context) {
     return Navigator.of(context).push(
-      _RightSlidePageRoute(widget: InboxDialog(unreadCounts: _unreadCount,)),
+      _RightSlidePageRoute(
+        widget: InboxDialog(
+          unreadCounts: _unreadCount,
+        ),
+      ),
     );
   }
 
@@ -225,8 +237,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child:
-                    const Text('Logout', style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  'Logout',
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ],
           ),
@@ -262,33 +276,42 @@ class _FeedTabState extends State<FeedTab> {
   bool _isInitialized = false;
   bool _showCreateButton = true;
   int? _currentUserId;
-  List<Group> _availableGroups = []; // ADDED: Define availableGroups here
+  List<Group> _availableGroups = [];
 
   @override
   void initState() {
     super.initState();
-    _initialize();
     _scrollController.addListener(_onScroll);
-    _loadCurrentUser();
-    _loadUserGroups(); // ADDED: Load groups on init
-  }
-
-  void _loadCurrentUser() {
+    
+    // Use post frame callback to ensure context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final user = authProvider.currentUser;
-      if (user != null) {
-        setState(() {
-          _currentUserId = user.id;
-        });
-      }
+      _loadCurrentUser();
+      _loadUserGroups();
+      _initializeFeed();
     });
   }
 
+  void _loadCurrentUser() {
+    if (!mounted) return;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.currentUser;
+    if (user != null) {
+      setState(() {
+        _currentUserId = user.id;
+      });
+      
+      // Set current user ID in FeedProvider
+      final feedProvider = Provider.of<FeedProvider>(context, listen: false);
+      feedProvider.setCurrentUserId(user.id);
+    }
+  }
+
   Future<void> _loadUserGroups() async {
+    if (!mounted) return;
+    
     try {
-      final feedApiService =
-          Provider.of<FeedApiService>(context, listen: false);
+      // Get FeedApiService from provider
+      final feedApiService = Provider.of<FeedApiService>(context, listen: false);
       final groups = await feedApiService.getUserGroups();
       if (mounted) {
         setState(() {
@@ -297,22 +320,31 @@ class _FeedTabState extends State<FeedTab> {
       }
     } catch (e) {
       print('Failed to load groups: $e');
+      // Don't show error to user, just log it
     }
   }
 
-  Future<void> _initialize() async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    final feedProvider = Provider.of<FeedProvider>(context, listen: false);
-    await feedProvider.loadInitialFeed();
-    if (mounted) {
-      setState(() => _isInitialized = true);
+  Future<void> _initializeFeed() async {
+    if (!mounted) return;
+    
+    try {
+      final feedProvider = Provider.of<FeedProvider>(context, listen: false);
+      await feedProvider.loadInitialFeed();
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
+    } catch (e) {
+      print('Failed to initialize feed: $e');
+      if (mounted) {
+        setState(() => _isInitialized = true); // Still set initialized to show error state
+      }
     }
   }
 
   void _onScroll() {
+    if (!mounted) return;
+    
     final currentScroll = _scrollController.position.pixels;
-
-    // Show/hide create button based on scroll position
     if (currentScroll > 100 && _showCreateButton) {
       setState(() => _showCreateButton = false);
     } else if (currentScroll <= 100 && !_showCreateButton) {
@@ -330,9 +362,17 @@ class _FeedTabState extends State<FeedTab> {
   Widget build(BuildContext context) {
     return Consumer<FeedProvider>(
       builder: (context, feedProvider, child) {
-        if (!_isInitialized ||
-            feedProvider.isLoading && feedProvider.diaries.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+        if (!_isInitialized) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Loading feed...'),
+              ],
+            ),
+          );
         }
 
         if (feedProvider.error != null && feedProvider.diaries.isEmpty) {
@@ -352,7 +392,10 @@ class _FeedTabState extends State<FeedTab> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: () => feedProvider.refreshFeed(),
+                  onPressed: () {
+                    feedProvider.clearError();
+                    feedProvider.refreshFeed();
+                  },
                   child: const Text('Retry'),
                 ),
               ],
@@ -401,11 +444,11 @@ class _FeedTabState extends State<FeedTab> {
                           diary: diary,
                           onLike: () => _handleLike(feedProvider, diary.id),
                           onFavorite: () =>
-                              _handleFavorite(feedProvider, diary.id, isOwner),
+                              _handleFavorite(feedProvider, diary.id),
                           onComment: (diaryId, content, parentId,
-                                  replyToUserId) => 
-                              _handleComment(feedProvider, diaryId, content,
-                                  parentId, replyToUserId),
+                                  replyToUserId) =>
+                              _handleComment(
+                                  feedProvider, diaryId, content, parentId, replyToUserId),
                           onEdit: (diaryToEdit) => _handleEditDiary(
                               context, feedProvider, diaryToEdit),
                           onDelete: (diaryId) => _handleDeleteDiary(
@@ -415,28 +458,9 @@ class _FeedTabState extends State<FeedTab> {
                       },
                     ),
             ),
-
-            // ADDED: Fixed Create Button at bottom (always visible in FeedTab)
-            if (_showCreateButton && feedProvider.diaries.isNotEmpty)
-              Positioned(
-                bottom: 80, // Position above the FAB
-                right: 16,
-                left: 16,
-                child: _buildBottomCreateButton(context, feedProvider),
-              ),
           ],
         );
       },
-    );
-  }
-
-  Widget _buildBottomCreateButton(
-      BuildContext context, FeedProvider feedProvider) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-      ),
     );
   }
 
@@ -450,10 +474,8 @@ class _FeedTabState extends State<FeedTab> {
     }
   }
 
-  void _handleFavorite(
-      FeedProvider feedProvider, int diaryId, bool isOwner) async {
+  void _handleFavorite(FeedProvider feedProvider, int diaryId) async {
     try {
-      // Check if already favorited
       final diary = feedProvider.diaries.firstWhere((d) => d.id == diaryId);
       final isCurrentlyFavorited =
           diary.favoritedUserIds.contains(_currentUserId);
@@ -472,13 +494,12 @@ class _FeedTabState extends State<FeedTab> {
 
   void _handleComment(FeedProvider feedProvider, int diaryId, String content,
       int? parentId, int? replyToUserId) async {
-    // UPDATE SIGNATURE
     try {
       await feedProvider.createComment(
         diaryId: diaryId,
         content: content,
         parentId: parentId,
-        replyToUserId: replyToUserId, // PASS THIS
+        replyToUserId: replyToUserId,
       );
       _showSuccessSnackBar('Comment posted!');
     } catch (e) {
@@ -488,94 +509,67 @@ class _FeedTabState extends State<FeedTab> {
 
   void _handleEditDiary(
       BuildContext context, FeedProvider provider, DiaryModel diary) async {
-    final result = await Navigator.push<DiaryModel?>(
-      context,
-      MaterialPageRoute<DiaryModel?>(
-        builder: (context) => EditDiaryFullScreen(
-          diary: diary,
-          onUpdate: (updatedDiary) async {
-            try {
-              // Update the diary with all fields
-              final result = await provider.updateDiary(
-                diaryId: updatedDiary.id,
-                title: updatedDiary.title,
-                content: updatedDiary.content,
-                shareType: updatedDiary.shareType,
-                groupIds: updatedDiary.groups.map((g) => g.id).toList(),
-                imageUrls: updatedDiary.images,
-                videoUrls: updatedDiary.videos,
-              );
-
-              return result;
-            } catch (e) {
-              rethrow;
-            }
-          },
-          availableGroups: _availableGroups,
+    try {
+      final result = await Navigator.push<DiaryModel?>(
+        context,
+        MaterialPageRoute<DiaryModel?>(
+          builder: (context) => EditDiaryFullScreen(
+            diary: diary,
+            onUpdate: (updatedDiary) async {
+              try {
+                final result = await provider.updateDiary(
+                  diaryId: updatedDiary.id,
+                  title: updatedDiary.title,
+                  content: updatedDiary.content,
+                  shareType: updatedDiary.shareType,
+                  groupIds: updatedDiary.groups.map((g) => g.id).toList(),
+                  imageUrls: updatedDiary.images,
+                  videoUrls: updatedDiary.videos,
+                );
+                return result;
+              } catch (e) {
+                rethrow;
+              }
+            },
+            availableGroups: _availableGroups,
+          ),
         ),
-      ),
-    );
+      );
 
-    if (result != null && mounted) {
-      _showSuccessSnackBar('Diary updated successfully!');
+      if (result != null && mounted) {
+        _showSuccessSnackBar('Diary updated successfully!');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to edit diary: $e');
     }
-  }
-
-  Future<String?> _showEditDialog(
-      BuildContext context, DiaryModel diary) async {
-    final controller = TextEditingController(text: diary.content);
-
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Diary'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            hintText: 'Edit your diary content...',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _handleDeleteDiary(
       BuildContext context, FeedProvider feedProvider, int diaryId) async {
     final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Diary'),
-        content: const Text('Are you sure you want to delete this diary? '
-            'This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete Diary'),
+            content: const Text('Are you sure you want to delete this diary? '
+                'This action cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
+        ) ??
+        false;
 
-    if (confirmed == true) {
+    if (confirmed) {
       try {
         await feedProvider.deleteDiary(diaryId);
         _showSuccessSnackBar('Diary deleted successfully');
@@ -594,13 +588,9 @@ class _FeedTabState extends State<FeedTab> {
         builder: (context) => CreateDiaryScreen(
           feedApiService: feedApiService,
           onDiaryCreated: (DiaryModel diary) {
-            // Add to provider
             feedProvider.diaries.insert(0, diary);
-
-            // Show success message
             _showSuccessSnackBar('Created: "${diary.title}"');
-
-            // Scroll to top to show new diary
+            
             if (_scrollController.hasClients) {
               _scrollController.animateTo(
                 0,
@@ -643,20 +633,22 @@ class _RightSlidePageRoute extends PageRouteBuilder {
   final Widget widget;
   _RightSlidePageRoute({required this.widget})
       : super(
-    pageBuilder: (context, animation, secondaryAnimation) => widget,
-    transitionDuration: const Duration(milliseconds: 300),
-    reverseTransitionDuration: const Duration(milliseconds: 300),
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final begin = const Offset(1.0, 0.0); // start from right
-      final end = Offset.zero;
-      final curve = Curves.easeInOut;
-      final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-      return SlideTransition(
-        position: animation.drive(tween),
-        child: child,
-      );
-    },
-  );
+          pageBuilder: (context, animation, secondaryAnimation) => widget,
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            final begin = const Offset(1.0, 0.0);
+            final end = Offset.zero;
+            final curve = Curves.easeInOut;
+            final tween = Tween(begin: begin, end: end)
+                .chain(CurveTween(curve: curve));
+            return SlideTransition(
+              position: animation.drive(tween),
+              child: child,
+            );
+          },
+        );
 }
 
 class MessagesTab extends StatelessWidget {
@@ -712,21 +704,25 @@ class ProfileTab extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // Profile Header
               Card(
                 elevation: 2,
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      const CircleAvatar(
+                      CircleAvatar(
                         radius: 50,
-                        backgroundColor: Color(0xFF6C63FF),
-                        child: Icon(
-                          Icons.person,
-                          size: 60,
-                          color: Colors.white,
-                        ),
+                        backgroundColor: const Color(0xFF6C63FF),
+                        backgroundImage: user?.avatarUrl != null
+                            ? NetworkImage(user!.avatarUrl!)
+                            : null,
+                        child: user?.avatarUrl == null
+                            ? const Icon(
+                                Icons.person,
+                                size: 60,
+                                color: Colors.white,
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -748,10 +744,7 @@ class ProfileTab extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // Stats
               const Card(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
@@ -766,10 +759,7 @@ class ProfileTab extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // Menu Items
               Card(
                 child: Column(
                   children: [
@@ -799,10 +789,7 @@ class ProfileTab extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // Logout Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
