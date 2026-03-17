@@ -17,6 +17,7 @@ class MessageType(enum.Enum):
     file = "file"
     voice = "voice"
     system = "system"
+    video = "video"
 
 class GroupMessage(Base):
     __tablename__ = "group_messages"
@@ -30,7 +31,10 @@ class GroupMessage(Base):
     can_join = Column(Boolean, nullable=True, default=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=utcnow)
-    message_type = Column(Enum(MessageType), default=MessageType.text)
+    message_type = Column(
+        Enum(MessageType, name="message_type"),
+        default=MessageType.text
+    )
     file_url = Column(String(255), nullable=True)
     voice_url = Column(String(255), nullable=True)
     public_id = Column(String(255), nullable=True)

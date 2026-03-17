@@ -250,4 +250,56 @@ class ChatAPISource {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
+
+  Future<GroupMessageModel> uploadFile(int groupId, File file, String tempId) async {
+    final uri = Uri.parse('$baseUrl/api/v1/messages/groups/$groupId');
+
+    var request = http.MultipartRequest("POST", uri);
+
+    request.headers.addAll(await _authHeaders());
+
+    request.files.add(
+      await http.MultipartFile.fromPath('file', file.path),
+    );
+
+    request.fields['temp_id'] = tempId;
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return GroupMessageModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception("Upload failed: ${response.body}");
+    }
+  }
+
+  Future<GroupMessageModel> uploadVoice(
+      int groupId,
+      File file,
+      String tempId,
+      ) async {
+    final uri = Uri.parse('$baseUrl/api/v1/messages/groups/$groupId/voice');
+
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(await _authHeaders());
+
+    request.files.add(
+      await http.MultipartFile.fromPath('file', file.path, contentType: http.MediaType('audio', 'm4a'),),
+    );
+
+    request.fields['temp_id'] = tempId;
+
+    final response = await request.send();
+
+    final responseBody = await response.stream.bytesToString();
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(responseBody);
+    }
+
+    final jsonData = json.decode(responseBody) as Map<String, dynamic>;
+
+    return GroupMessageModel.fromJson(jsonData);
+  }
 }

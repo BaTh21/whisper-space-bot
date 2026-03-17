@@ -32,40 +32,39 @@ class SeenMessageModel {
   factory SeenMessageModel.fromJson(Map<String, dynamic> json) {
     return SeenMessageModel(
       id: json['id'],
-      user: json['user'] != null
-          ? AuthorModel.fromJson(json['user'])
-          : null,
+      user: json['user'] != null ? AuthorModel.fromJson(json['user']) : null,
       seenAt: DateTime.parse(json['seen_at']),
     );
   }
 }
 
-class ParentMessageModel{
+class ParentMessageModel {
   final int id;
   final AuthorModel sender;
   final String? content;
   final String? callContent;
   final String? fileUrl;
   final String? voiceUrl;
+  final String? type;
 
-  ParentMessageModel({
-      required this.id,
+  ParentMessageModel(
+      {required this.id,
       required this.sender,
       this.content,
       this.callContent,
       this.fileUrl,
-      this.voiceUrl
-  });
+      this.voiceUrl,
+      this.type});
 
-  factory ParentMessageModel.fromJson(Map<String, dynamic> json){
+  factory ParentMessageModel.fromJson(Map<String, dynamic> json) {
     return ParentMessageModel(
         id: json['id'],
         sender: AuthorModel.fromJson(json['sender']),
         content: json['content'],
         callContent: json['call_content'],
         fileUrl: json['file_url'],
-        voiceUrl: json['voice_url']
-    );
+        voiceUrl: json['voice_url'],
+        type: json['message_type']);
   }
 }
 
@@ -84,23 +83,24 @@ class GroupMessageModel {
   final List<SeenMessageModel>? seenBy;
   final String? tempId;
   final ParentMessageModel? parentMessage;
+  final String? type;
 
-  GroupMessageModel({
-    required this.id,
-    this.incomingTempId,
-    required this.sender,
-    this.forwardedBy,
-    required this.groupId,
-    this.content,
-    this.callContent,
-    required this.createdAt,
-    this.updatedAt,
-    this.fileUrl,
-    this.voiceUrl,
-    this.seenBy,
-    this.tempId,
-    this.parentMessage,
-  });
+  GroupMessageModel(
+      {required this.id,
+      this.incomingTempId,
+      required this.sender,
+      this.forwardedBy,
+      required this.groupId,
+      this.content,
+      this.callContent,
+      required this.createdAt,
+      this.updatedAt,
+      this.fileUrl,
+      this.voiceUrl,
+      this.seenBy,
+      this.tempId,
+      this.parentMessage,
+      this.type});
 
   /// Optimistic message (before server response)
   factory GroupMessageModel.temp({
@@ -119,58 +119,68 @@ class GroupMessageModel {
     );
   }
 
+  static final deletedUser = AuthorModel(id: 0, username: 'Deleted user');
+
   factory GroupMessageModel.fromJson(Map<String, dynamic> json) {
     return GroupMessageModel(
-      id: json['id'],
-      incomingTempId: json['incoming_temp_id'],
-      groupId: json['group_id'],
-      sender: json['sender'] != null
-          ? AuthorModel.fromJson(json['sender'])
-          : AuthorModel(id: 0, username: 'Delete user'),
-      forwardedBy: json['forwarded_by'] != null
-          ? AuthorModel.fromJson(json['forwarded_by'])
-          : null,
-      content: json['content'],
-      callContent: json['call_content'],
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'])
-          : null,
-      fileUrl: json['file_url'],
-      voiceUrl: json['voice_url'],
-      seenBy: json['seen_by'] != null
-          ? (json['seen_by'] as List)
-          .map((e) => SeenMessageModel.fromJson(e))
-          .toList()
-          : null,
-      tempId: json['temp_id'],
-      parentMessage: json['parent_message'] != null
-          ? ParentMessageModel.fromJson(json['parent_message'])
-          : null,
-    );
+        id: json['id'],
+        incomingTempId: json['incoming_temp_id'],
+        groupId: json['group_id'],
+        sender: json['sender'] != null
+            ? AuthorModel.fromJson(json['sender'])
+            : deletedUser,
+        forwardedBy: json['forwarded_by'] != null
+            ? AuthorModel.fromJson(json['forwarded_by'])
+            : null,
+        content: json['content'],
+        callContent: json['call_content'],
+        createdAt: DateTime.parse(json['created_at']),
+        updatedAt: json['updated_at'] != null
+            ? DateTime.parse(json['updated_at'])
+            : null,
+        fileUrl: json['file_url'],
+        voiceUrl: json['voice_url'],
+        seenBy: json['seen_by'] != null
+            ? (json['seen_by'] as List)
+                .map((e) => SeenMessageModel.fromJson(e))
+                .toList()
+            : null,
+        tempId: json['temp_id'],
+        parentMessage: json['parent_message'] != null
+            ? ParentMessageModel.fromJson(json['parent_message'])
+            : null,
+        type: json['message_type']);
   }
 
   GroupMessageModel copyWith({
     int? id,
     String? content,
+    String? callContent,
+    String? fileUrl,
+    String? voiceUrl,
+    DateTime? createdAt,
     DateTime? updatedAt,
     List<SeenMessageModel>? seenBy,
+    String? type,
+    AuthorModel? forwardedBy,
+    String? tempId,
+    ParentMessageModel? parentMessage,
   }) {
     return GroupMessageModel(
-      id: id ?? this.id,
-      incomingTempId: incomingTempId,
-      sender: sender,
-      forwardedBy: forwardedBy,
-      groupId: groupId,
-      content: content ?? this.content,
-      callContent: callContent,
-      createdAt: createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      fileUrl: fileUrl,
-      voiceUrl: voiceUrl,
-      seenBy: seenBy,
-      tempId: tempId,
-      parentMessage: parentMessage,
-    );
+        id: id ?? this.id,
+        incomingTempId: incomingTempId,
+        sender: sender,
+        forwardedBy: forwardedBy,
+        groupId: groupId,
+        content: content ?? this.content,
+        callContent: callContent,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        fileUrl: fileUrl ?? this.fileUrl,
+        voiceUrl: voiceUrl ?? this.voiceUrl,
+        seenBy: seenBy ?? this.seenBy,
+        tempId: tempId,
+        parentMessage: parentMessage,
+        type: type);
   }
 }

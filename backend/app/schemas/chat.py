@@ -144,6 +144,7 @@ class GroupMessageOut(BaseModel):
     voice_url: Optional[str] = None
     seen_by: Optional[List[GroupMessageSeen]] = []
     temp_id: Optional[str] = None
+    message_type: str
     
     parent_message: Optional[ParentMessageResponse] = None
 

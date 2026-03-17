@@ -18,8 +18,24 @@ from app.services.websocket_manager import manager
 
 configure_cloudinary()
 
-ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".jpeg"}
-MAX_FILE_SIZE = 3 * 1024 * 1024  # 3MB
+ALLOWED_EXTENSIONS = {
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
+    ".gif": "image",
+
+    ".pdf": "file",
+    ".txt": "file",
+    ".doc": "file",
+    ".docx": "file",
+    ".zip": "file",
+
+    ".mp4": "video",
+    ".mov": "video",
+    ".mkv": "video",
+}
+MAX_FILE_SIZE = 500 * 1024 * 1024  # 3MB
 
 def update_message(db: Session, message_id: int, content: str, current_user_id: int):
     message = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
@@ -79,25 +95,43 @@ async def upload_file_message(
                             detail="Only members can upload files")
         
     file_extension = Path(file.filename).suffix.lower()
+
     if file_extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Only png and JPG are allowed")
-        
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="File is too large, Max size is 3MB")
-        
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type"
+        )
+
+    message_type = ALLOWED_EXTENSIONS[file_extension]
+
+    resource_type = "image"
+    if message_type == "video":
+        resource_type = "video"
+    elif message_type == "file":
+        resource_type = "raw"
+
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File is too large"
+        )
+
     unique_filename = f"groups/{group_id}/messages/{uuid.uuid4().hex}{file_extension}"
-    upload_result = upload_to_cloudinary(content, public_id=unique_filename)
-    if not upload_result or "secure_url" not in upload_result:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Failed to upload file")
+
+    upload_result = upload_to_cloudinary(
+        file.file,
+        public_id=unique_filename,
+        resource_type=resource_type,
+    )
     
     save_message = GroupMessage(
         group_id=group_id,  
         sender_id=current_user_id,
-        message_type=MessageType.image,
+        message_type=message_type,
         public_id=upload_result["public_id"],
         file_url=upload_result["secure_url"],    
         content=None
@@ -114,6 +148,7 @@ async def upload_file_message(
             "username": save_message.sender.username,
             "avatar_url": save_message.sender.avatar_url,
         },
+        "message_type": save_message.message_type,
         "file_url": save_message.file_url,
         "created_at": to_local_iso(save_message.created_at, tz_offset_hours=7),
         "temp_id": temp_id,
@@ -263,6 +298,7 @@ async def handle_forward_message(
             "action": "forward",
             "id": new_msg.id,
             "group_id": group_id,
+            "message_type": new_msg.message_type.value,
             "content": new_msg.content,
             "call_content": new_msg.call_content,
             "sender": {
@@ -314,7 +350,10 @@ async def upload_voice_message(group_id: int,
                          temp_id: str
                          ):
     
-    allowed_types = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/mp4']
+    allowed_types = [
+        'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 
+        'audio/aac', 'audio/mp4', 'audio/m4a', 'audio/x-m4a'
+    ]
     if not file.content_type or file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type. Supported: MP3, WAV, OGG, WEBM, AAC, M4A")
     
@@ -356,7 +395,8 @@ async def upload_voice_message(group_id: int,
             "username": new_message.sender.username,
             "avatar_url": new_message.sender.avatar_url,
         },
-        "voice_url": new_message.file_url,
+        "message_type": new_message.message_type.voice,
+        "voice_url": new_message.voice_url,
         "created_at": to_local_iso(new_message.created_at, tz_offset_hours=7),
         "temp_id": temp_id,
     }
