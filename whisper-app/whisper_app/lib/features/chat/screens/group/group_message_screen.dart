@@ -1,13 +1,22 @@
 import 'dart:async';
+import 'dart:core';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/websocket/group_websocket.dart';
 import 'package:whisper_space_flutter/features/chat/model/group_message_model/group_message_model.dart';
 import '../../chat_api_service.dart';
-import 'package:whisper_space_flutter/features/chat/voice_player.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
+import './message_bubble_screen.dart';
 
 String _formatTime(DateTime dateTime) {
   final diff = DateTime.now().difference(dateTime);
+  if (diff.inMinutes < 1) {
+    return "Just now";
+  }
   if (diff.inMinutes < 60) {
     return "${diff.inMinutes}m";
   } else if (diff.inHours < 24) {
@@ -40,6 +49,11 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   List<GroupMessageModel> _messages = [];
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ImagePicker _picker = ImagePicker();
+
+  final _recorder = AudioRecorder();
+  bool _isRecording = false;
+  String? _recordedFilePath;
 
   late final StreamSubscription _wsSubscription;
 
@@ -47,6 +61,90 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   bool _isLoadingMore = false;
   int _offset = 0;
   final int _limit = 30;
+
+  final allowedExtensions = {
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
+    ".gif": "image",
+    ".pdf": "file",
+    ".txt": "file",
+    ".doc": "file",
+    ".docx": "file",
+    ".zip": "file",
+    ".mp4": "video",
+    ".mov": "video",
+    ".mkv": "video",
+  };
+
+  String _getFileType(File file) {
+    final ext = '.${file.path.split('.').last.toLowerCase()}';
+    return allowedExtensions[ext] ?? 'file';
+  }
+
+  Future<void> _pickImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image == null) return;
+
+    _uploadImage(File(image.path));
+  }
+
+  Future<void> _pickFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: allowedExtensions.keys
+          .map((ext) => ext.replaceFirst('.', ''))
+          .toList(),
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final file = File(result.files.single.path!);
+    final ext = '.${file.path.split('.').last.toLowerCase()}';
+
+    if (!allowedExtensions.containsKey(ext)) return;
+
+    _uploadFile(file, allowedExtensions[ext]!);
+  }
+
+  Future<void> _startRecording() async {
+    if (await _recorder.hasPermission(request: true)) {
+      final dir = await getTemporaryDirectory();
+      final filePath =
+          '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      final config = RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        sampleRate: 44100,
+        bitRate: 128000,
+      );
+
+      await _recorder.start(
+        config,
+        path: filePath,
+      );
+
+      setState(() {
+        _isRecording = true;
+        _recordedFilePath = filePath;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Microphone permission denied')),
+      );
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    final path = await _recorder.stop();
+    setState(() => _isRecording = false);
+
+    if (path != null) {
+      _uploadVoice(File(path));
+    }
+  }
 
   @override
   void initState() {
@@ -72,10 +170,13 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     _wsSubscription.cancel();
     _controller.dispose();
     _scrollController.dispose();
+    _recorder.dispose();
     super.dispose();
   }
 
   void _handleWsEvent(Map<String, dynamic> data) {
+    print('Websocket received data: $data');
+
     final action = data['action'];
 
     switch (action) {
@@ -99,6 +200,22 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                 _messages[index].copyWith(content: data['new_content']);
           }
         });
+        return;
+
+      case 'file_upload':
+        final index = _messages.indexWhere(
+          (m) => m.tempId == data['temp_id'],
+        );
+
+        if (index != -1) {
+          setState(() {
+            _messages[index] = GroupMessageModel.fromJson(data);
+          });
+        } else {
+          setState(() {
+            _messages.insert(0, GroupMessageModel.fromJson(data));
+          });
+        }
         return;
 
       default:
@@ -158,6 +275,191 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     _controller.clear();
   }
 
+  Future<void> _uploadImage(File file) async {
+    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
+    final type = _getFileType(file);
+
+    final tempMessage = GroupMessageModel(
+        id: -1,
+        tempId: tempId,
+        sender: AuthorModel(
+          id: widget.currentUserId,
+          username: "me",
+          avatar: null,
+        ),
+        groupId: widget.groupId,
+        createdAt: DateTime.now(),
+        fileUrl: file.path,
+        type: type);
+
+    setState(() {
+      _messages.insert(0, tempMessage);
+    });
+
+    try {
+      final message = await widget.chatApi.uploadFile(
+        widget.groupId,
+        file,
+        tempId,
+      );
+
+      final index = _messages.indexWhere((m) => m.tempId == tempId);
+
+      if (index != -1) {
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+            id: message.id,
+            fileUrl: message.fileUrl,
+            content: message.content,
+            createdAt: message.createdAt,
+            seenBy: message.seenBy,
+            type: message.type
+          );
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.removeWhere((m) => m.tempId == tempId);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Upload failed")),
+      );
+    }
+  }
+
+  Future<void> _uploadVoice(File file) async {
+    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
+    final type = _getFileType(file);
+
+    final tempMessage = GroupMessageModel(
+      id: -1,
+      tempId: tempId,
+      sender: AuthorModel(
+        id: widget.currentUserId,
+        username: "me",
+        avatar: null,
+      ),
+      groupId: widget.groupId,
+      createdAt: DateTime.now(),
+      voiceUrl: file.path,
+      type: "voice"
+    );
+
+    setState(() {
+      _messages.insert(0, tempMessage);
+    });
+
+    try {
+      final message = await widget.chatApi.uploadVoice(
+        widget.groupId,
+        file,
+        tempId,
+      );
+
+      final index = _messages.indexWhere((m) => m.tempId == tempId);
+
+      if (index != -1) {
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+              id: message.id,
+              voiceUrl: message.voiceUrl,
+              content: message.content,
+              createdAt: message.createdAt,
+              seenBy: message.seenBy,
+              type: message.type
+          );
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.removeWhere((m) => m.tempId == tempId);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Upload failed")),
+      );
+    }
+  }
+
+  Future<void> _uploadFile(File file, String type) async {
+    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
+
+    final tempMessage = GroupMessageModel(
+      id: -1,
+      tempId: tempId,
+      sender: AuthorModel(
+        id: widget.currentUserId,
+        username: "me",
+        avatar: null,
+      ),
+      groupId: widget.groupId,
+      createdAt: DateTime.now(),
+      fileUrl: file.path,
+      type: type,
+    );
+
+    setState(() => _messages.insert(0, tempMessage));
+
+    try {
+      final message = await widget.chatApi.uploadFile(
+        widget.groupId,
+        file,
+        tempId,
+      );
+
+      final index = _messages.indexWhere((m) => m.tempId == tempId);
+      if (index != -1) {
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+            id: message.id,
+            fileUrl: message.fileUrl,
+            content: message.content,
+            createdAt: message.createdAt,
+            seenBy: message.seenBy,
+            type: message.type
+          );
+        });
+      }
+    } catch (e) {
+      setState(() => _messages.removeWhere((m) => m.tempId == tempId));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Upload failed")),
+      );
+    }
+  }
+
+  void _showAttachmentOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.image),
+                title: const Text('Image'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file),
+                title: const Text('File'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFiles();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -186,243 +488,89 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
               final msg = _messages[index];
               final isMe = msg.sender.id == widget.currentUserId;
               final isSeen = msg.seenBy?.isNotEmpty ?? false;
+              bool isUploading = msg.id == -1;
 
               return Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Align(
-                  alignment:
-                      isMe ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: (msg.fileUrl != null) ? 0:8, vertical: (msg.fileUrl != null) ? 0:6),
-                    decoration: BoxDecoration(
-                      color: (msg.fileUrl != null)
-                          ? Colors.transparent
-                          : isMe
-                              ? Theme.of(context).primaryColor
-                              : Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: isMe
-                          ? CrossAxisAlignment.end
-                          : CrossAxisAlignment.start,
-                      children: [
-                        if (msg.fileUrl != null) ...[
-                          Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  msg.fileUrl!,
-                                  width: 200,
-                                  height: 200,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 200,
-                                      height: 200,
-                                      color: Colors.grey.shade300,
-                                      child: const Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.broken_image, size: 40, color: Colors.grey),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              'Failed to load image',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.grey,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-
-                              Positioned(
-                                bottom: 4,
-                                right: 6,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.5),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _formatTime(msg.createdAt),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      if (isMe) ...[
-                                        const SizedBox(width: 4),
-                                        Icon(
-                                          isSeen ? Icons.done_all : Icons.check,
-                                          size: 14,
-                                          color: Colors.white,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                        ],
-
-                        if (msg.callContent != null) ...[
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            margin: const EdgeInsets.only(top: 6),
-                            decoration: BoxDecoration(
-                              // color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment:
-                              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  msg.callContent!,
-                                  style: const TextStyle(fontSize: 16, color: Colors.black87),
-                                ),
-                                const SizedBox(height: 6),
-                                ElevatedButton(
-                                  onPressed: msg.updatedAt == null
-                                      ? () {
-                                    debugPrint('Joining call: ${msg.id}');
-                                  }
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: msg.updatedAt == null
-                                        ? Theme.of(context).primaryColor
-                                        : Colors.grey,
-                                  ),
-                                  child: Text(
-                                    msg.updatedAt == null ? 'Join Now' : 'Call End',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                        ],
-
-                        if (msg.voiceUrl != null) ...[
-                          Stack(
-                            children: [
-                              VoiceMessagePlayer(url: msg.voiceUrl!, isOwn: isMe,),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.5),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _formatTime(msg.createdAt),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      if (isMe) ...[
-                                        const SizedBox(width: 4),
-                                        Icon(
-                                          isSeen ? Icons.done_all : Icons.check,
-                                          size: 14,
-                                          color: Colors.white,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                        ],
-                        if (msg.content != null) ...[
-                          Text(
-                            msg.content ?? msg.callContent ?? '',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: isMe ? Colors.white : Colors.black,
-                            ),
-                          ),
-                        ],
-
-                        if (msg.voiceUrl == null && msg.fileUrl == null) ...[
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _formatTime(msg.createdAt),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isMe ? Colors.white : Colors.black,
-                                ),
-                              ),
-                              if (isMe) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  isSeen ? Icons.done_all : Icons.check,
-                                  size: 14,
-                                  color: isSeen ? Colors.white : Colors.grey,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: MessageBubble(
+                  msg: msg,
+                  isMe: isMe,
+                  isSeen: isSeen,
                 ),
               );
             },
           ),
         ),
         SafeArea(
-            child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: [
-              Expanded(
-                  child: TextField(
-                controller: _controller,
-                decoration: const InputDecoration(
-                    hintText: 'Aa...', border: OutlineInputBorder()),
-              )),
-              const SizedBox(
-                width: 8,
-              ),
-              IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: _sendMessage,
-              )
-            ],
+          child: Container(
+            color: Theme.of(context).primaryColor, // solid background
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                // Image Picker Button
+                IconButton(
+                  icon: const Icon(Icons.attach_file, color: Colors.white),
+                  onPressed: _showAttachmentOptions,
+                ),
+
+                const SizedBox(width: 8),
+
+                // Voice Record Button
+                GestureDetector(
+                  onLongPressStart: (_) => _startRecording(),
+                  onLongPressEnd: (_) => _stopRecording(),
+                  child: Icon(
+                    _isRecording ? Icons.mic : Icons.mic_none,
+                    color: _isRecording ? Colors.red : Colors.white,
+                    size: 28,
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Text Input
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            decoration: const InputDecoration(
+                              hintText: 'Type a message...',
+                              border: InputBorder.none,
+                            ),
+                            minLines: 1,
+                            maxLines: 5,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.emoji_emotions_outlined,
+                              color: Colors.grey),
+                          onPressed: () {},
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                // Send Button
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.white),
+                  onPressed: _sendMessage,
+                ),
+              ],
+            ),
           ),
-        ))
+        )
       ],
     );
   }
