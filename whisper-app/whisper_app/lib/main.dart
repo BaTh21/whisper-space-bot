@@ -1,6 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:whisper_space_flutter/features/notes/data/datasources/notes_api_service.dart';
+import 'package:whisper_space_flutter/features/notes/presentation/providers/friend_provider.dart';
+import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
 
 import 'core/services/auth_service.dart';
 import 'core/services/storage_service.dart';
@@ -12,20 +14,20 @@ import 'features/feed/presentation/providers/feed_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     final storageService = StorageService();
     await storageService.init();
-    
+
     final authService = AuthService(storageService: storageService);
-    final feedApiService = FeedApiService(storageService: storageService); 
-    
+    final feedApiService = FeedApiService(storageService: storageService);
+
     runApp(
       MultiProvider(
         providers: [
           Provider<StorageService>(create: (_) => storageService),
           Provider<AuthService>(create: (_) => authService),
-          Provider<FeedApiService>(create: (_) => feedApiService), 
+          Provider<FeedApiService>(create: (_) => feedApiService),
           ChangeNotifierProvider(
             create: (context) => AuthProvider(
               authService: authService,
@@ -34,7 +36,17 @@ void main() async {
           ),
           ChangeNotifierProvider(
             create: (context) => FeedProvider(
-              feedApiService: context.read<FeedApiService>(), 
+              feedApiService: context.read<FeedApiService>(),
+            ),
+          ),
+          ChangeNotifierProvider(
+            create: (context) => NotesProvider(
+              NotesApiService(storageService: storageService),
+            ),
+          ),
+          ChangeNotifierProvider(
+            create: (context) => FriendProvider(
+              storageService: storageService,
             ),
           ),
         ],
