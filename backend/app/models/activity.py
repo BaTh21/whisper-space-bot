@@ -8,6 +8,7 @@ import enum
 
 class ActivityType(enum.Enum):
     friend_request = "friend_request"
+    friend_request_accepted = "friend_request_accepted"
     post_like = "post_like"
     post_comment = "post_comment"
     group_invite = "group_invite"

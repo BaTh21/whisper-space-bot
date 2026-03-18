@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:whisper_space_flutter/core/constants/api_constants.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
+
 import 'inbox_model/inbox_model.dart';
 
 class InboxAPISource {
@@ -50,13 +51,18 @@ class InboxAPISource {
     }
   }
 
+  // Add this method - alias for readActivity
+  Future<void> markActivityAsRead(int activityId) async {
+    return readActivity(activityId);
+  }
+
   Future<void> deleteActivityById(int activityId) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/api/v1/activities/$activityId'),
       headers: await _authHeader(),
     );
 
-    if (response.statusCode != 204) {
+    if (response.statusCode != 200 && response.statusCode != 204) {
       String errorMessage = 'Cannot delete activity';
       try {
         final data = jsonDecode(response.body);
@@ -105,32 +111,55 @@ class InboxAPISource {
       Uri.parse('$baseUrl/api/v1/activities/read-all'),
       headers: await _authHeader(),
     );
-    final error = jsonDecode(response.body);
-    if(response.statusCode != 200){
-      throw Exception(error['details'] ?? error['message'] ?? error['msg']);
+    
+    if (response.statusCode != 200) {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['details'] ?? error['message'] ?? error['msg'] ?? 'Failed to mark all as read');
+      } catch (_) {
+        throw Exception('Failed to mark all as read');
+      }
     }
   }
 
-  Future<void> acceptFriendRequest(int actorId) async{
+  Future<void> acceptFriendRequest(int actorId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/v1/friends/accept/$actorId'),
       headers: await _authHeader()
     );
-    final error = jsonDecode(response.body);
-    if(response.statusCode != 200){
-      throw Exception(error['details'] ?? error['message'] ?? error['msg']);
+    
+    if (response.statusCode != 200) {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['details'] ?? error['message'] ?? error['msg'] ?? 'Failed to accept friend request');
+      } catch (_) {
+        throw Exception('Failed to accept friend request');
+      }
     }
   }
 
-  Future<void> acceptGroupInvite(int groupId) async{
+  Future<void> acceptGroupInvite(int groupId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/v1/groups/invites/$groupId/accept'),
       headers: await _authHeader()
     );
-    final error = jsonDecode(response.body);
-    if(response.statusCode != 200){
-      throw Exception(error['details'] ?? error['message'] ?? error['msg']);
+    
+    if (response.statusCode != 200) {
+      try {
+        final error = jsonDecode(response.body);
+        throw Exception(error['details'] ?? error['message'] ?? error['msg'] ?? 'Failed to accept group invite');
+      } catch (_) {
+        throw Exception('Failed to accept group invite');
+      }
     }
   }
 
+  // Optional: Add a method to get unread count for badge
+  Future<int> getUnreadCount() async {
+    try {
+      return await getUnreadActivityCount();
+    } catch (e) {
+      return 0;
+    }
+  }
 }
