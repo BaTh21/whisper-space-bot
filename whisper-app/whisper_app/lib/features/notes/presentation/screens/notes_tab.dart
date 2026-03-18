@@ -78,6 +78,9 @@ class _NotesTabState extends State<NotesTab> with SingleTickerProviderStateMixin
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Colors.white, // Set active tab text color to white
+          unselectedLabelColor: Colors.white.withOpacity(0.7), // Set inactive tab text color to white with opacity
+          indicatorColor: Colors.white, // Optional: make indicator white too
           tabs: const [
             Tab(text: 'All Notes'),
             Tab(text: 'Shared'),

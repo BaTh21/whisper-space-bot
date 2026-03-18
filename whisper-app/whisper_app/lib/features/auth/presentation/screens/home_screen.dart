@@ -11,6 +11,7 @@ import 'package:whisper_space_flutter/features/feed/presentation/screens/edit_di
 import 'package:whisper_space_flutter/features/friend/presentation/screens/friend_screen.dart';
 import 'package:whisper_space_flutter/features/inbox/inbox_api_service.dart';
 import 'package:whisper_space_flutter/features/inbox/inbox_screen.dart';
+import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_tab.dart' as notes; // Import with alias
 import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
 
 import 'login_screen.dart';
@@ -36,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const FeedTab(),
     const MessagesTab(),
     const FriendsTab(),
-    const NotesTab(),
+    const NotesTab(), // This now uses the dynamic NotesTab
     const ProfileTab(),
   ];
 
@@ -699,25 +700,15 @@ class FriendsTab extends StatelessWidget {
   }
 }
 
+// ============ DYNAMIC NOTES TAB ============
+// This now uses the actual Notes implementation
 class NotesTab extends StatelessWidget {
   const NotesTab({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.note, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            'Notes',
-            style: TextStyle(fontSize: 24, color: Colors.grey),
-          ),
-          Text('Coming soon...'),
-        ],
-      ),
-    );
+    // Use the imported NotesTab with alias to avoid naming conflict
+    return const notes.NotesTab();
   }
 }
 
