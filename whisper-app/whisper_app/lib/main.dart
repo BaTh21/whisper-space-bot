@@ -75,14 +75,14 @@ class MyApp extends StatelessWidget {
       title: 'Whisper Space',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primaryColor: const Color(0xFF6C63FF),
+        primaryColor: const Color(0xFF6A11CB),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
+          seedColor: const Color(0xFF6A11CB),
           brightness: Brightness.light,
         ),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF6C63FF),
+          backgroundColor: Color(0xFF6A11CB),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
