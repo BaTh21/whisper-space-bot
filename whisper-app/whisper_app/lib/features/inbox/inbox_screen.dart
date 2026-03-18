@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/inbox/inbox_model/inbox_model.dart';
-import 'inbox_api_service.dart';
 import 'package:whisper_space_flutter/utils/snack_bar.dart';
+
+import 'inbox_api_service.dart';
 
 class InboxDialog extends StatefulWidget {
   final int? unreadCounts;
@@ -16,8 +17,8 @@ class InboxDialog extends StatefulWidget {
 class _InboxScreenState extends State<InboxDialog>
     with SingleTickerProviderStateMixin {
   late final InboxAPISource inboxApi;
-  List<InboxModel> inboxs = [];
-  Set<int> _selectedIds = {};
+  final List<InboxModel> _inboxs = []; // Made private and non-final
+  final Set<int> _selectedIds = {};
   bool _selectionMode = false;
 
   bool isLoading = true;
@@ -25,11 +26,14 @@ class _InboxScreenState extends State<InboxDialog>
   bool hasMore = true;
   String? error;
 
-  int limit = 20;
+  final int limit = 20;
   int offset = 0;
 
   late final ScrollController _scrollController;
   late final TabController _tabController;
+
+  // Getter for inboxs to maintain encapsulation
+  List<InboxModel> get inboxs => _inboxs;
 
   @override
   void initState() {
@@ -46,7 +50,9 @@ class _InboxScreenState extends State<InboxDialog>
 
     inboxApi = InboxAPISource(storageService: storageService);
 
-    await _loadInboxs();
+    if (mounted) {
+      await _loadInboxs();
+    }
   }
 
   Future<void> _loadInboxs() async {
@@ -65,21 +71,25 @@ class _InboxScreenState extends State<InboxDialog>
 
       final data = await inboxApi.getActivities(limit: limit, offset: offset);
 
-      setState(() {
-        inboxs.addAll(data);
-        offset += data.length;
-        isLoading = false;
-        isLoadingMore = false;
-        if (data.length < limit) {
-          hasMore = false; // No more data
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _inboxs.addAll(data);
+          offset += data.length;
+          isLoading = false;
+          isLoadingMore = false;
+          if (data.length < limit) {
+            hasMore = false;
+          }
+        });
+      }
     } catch (e) {
-      setState(() {
-        error = e.toString();
-        isLoading = false;
-        isLoadingMore = false;
-      });
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+          isLoading = false;
+          isLoadingMore = false;
+        });
+      }
     }
   }
 
@@ -92,13 +102,13 @@ class _InboxScreenState extends State<InboxDialog>
     }
   }
 
-  void _toggleSelection(InboxModel item){
+  void _toggleSelection(InboxModel item) {
     setState(() {
       _selectionMode = true;
-      if(_selectedIds.contains(item.id)){
+      if (_selectedIds.contains(item.id)) {
         _selectedIds.remove(item.id);
-        if(_selectedIds.isEmpty) _selectionMode = false;
-      }else{
+        if (_selectedIds.isEmpty) _selectionMode = false;
+      } else {
         _selectedIds.add(item.id);
       }
     });
@@ -115,25 +125,37 @@ class _InboxScreenState extends State<InboxDialog>
     try {
       await inboxApi.markAllActivitiesAsRead();
 
-      setState(() {
-        inboxs = inboxs.map((i) {
-          return InboxModel(
-            id: i.id,
-            type: i.type,
-            actor: i.actor,
-            recipient: i.recipient,
-            createdAt: i.createdAt,
-            isRead: true,
-            postId: i.postId,
-            commentId: i.commentId,
-            friendRequestId: i.friendRequestId,
-            groupId: i.groupId,
-            extraData: i.extraData,
+      if (mounted) {
+        setState(() {
+          for (int i = 0; i < _inboxs.length; i++) {
+            _inboxs[i] = InboxModel(
+              id: _inboxs[i].id,
+              type: _inboxs[i].type,
+              actor: _inboxs[i].actor,
+              recipient: _inboxs[i].recipient,
+              createdAt: _inboxs[i].createdAt,
+              isRead: true,
+              postId: _inboxs[i].postId,
+              commentId: _inboxs[i].commentId,
+              friendRequestId: _inboxs[i].friendRequestId,
+              groupId: _inboxs[i].groupId,
+              extraData: _inboxs[i].extraData,
+            );
+          }
+        });
+        
+        if (mounted) {
+          showTopSnackBar(
+            context, 
+            'All marked as read', 
+            backgroundColor: Colors.green,
           );
-        }).toList();
-      });
+        }
+      }
     } catch (e) {
-      _showError(e);
+      if (mounted) {
+        _showError(e);
+      }
     }
   }
 
@@ -143,12 +165,22 @@ class _InboxScreenState extends State<InboxDialog>
     try {
       await inboxApi.deleteSelectedActivities(_selectedIds.toList());
 
-      setState(() {
-        inboxs.removeWhere((i) => _selectedIds.contains(i.id));
-        _clearSelection();
-      });
+      if (mounted) {
+        setState(() {
+          _inboxs.removeWhere((i) => _selectedIds.contains(i.id));
+          _clearSelection();
+        });
+        
+        showTopSnackBar(
+          context, 
+          'Deleted successfully', 
+          backgroundColor: Colors.green,
+        );
+      }
     } catch (e) {
-      _showError(e);
+      if (mounted) {
+        _showError(e);
+      }
     }
   }
 
@@ -162,46 +194,129 @@ class _InboxScreenState extends State<InboxDialog>
   List<InboxModel> getFilteredInbox(int tabIndex) {
     switch (tabIndex) {
       case 1:
-        return inboxs.where((item) => !item.isRead).toList();
+        return _inboxs.where((item) => !item.isRead).toList();
       case 2:
-        return inboxs.where((item) => item.isRead).toList();
+        return _inboxs.where((item) => item.isRead).toList();
       case 0:
       default:
-        return inboxs;
+        return _inboxs;
+    }
+  }
+
+  Future<void> _markActivityAsRead(int activityId) async {
+    try {
+      await inboxApi.markActivityAsRead(activityId);
+      if (mounted) {
+        setState(() {
+          final index = _inboxs.indexWhere((i) => i.id == activityId);
+          if (index != -1) {
+            _inboxs[index] = InboxModel(
+              id: _inboxs[index].id,
+              type: _inboxs[index].type,
+              actor: _inboxs[index].actor,
+              recipient: _inboxs[index].recipient,
+              createdAt: _inboxs[index].createdAt,
+              isRead: true,
+              postId: _inboxs[index].postId,
+              commentId: _inboxs[index].commentId,
+              friendRequestId: _inboxs[index].friendRequestId,
+              groupId: _inboxs[index].groupId,
+              extraData: _inboxs[index].extraData,
+            );
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error marking activity as read: $e');
     }
   }
 
   Future<void> _acceptActivity(InboxModel item) async {
+    if (!mounted) return;
+    
     try {
-
       bool success = false;
+      String successMessage = '';
 
       if (item.type == 'friend_request' && item.friendRequestId != null) {
         await inboxApi.acceptFriendRequest(item.actor.id);
         success = true;
+        successMessage = 'Friend request accepted';
       } else if (item.type == 'group_invite' && item.groupId != null) {
         await inboxApi.acceptGroupInvite(item.groupId!);
         success = true;
+        successMessage = 'Group invite accepted';
       }
 
-      if (success) {
-        await inboxApi.deleteActivityById(item.id);
-
-        setState(() {
-          inboxs.removeWhere((i) => i.id == item.id);
-        });
-
-        showTopSnackBar(context, 'Accepted successfully!', backgroundColor: Colors.green);
+      if (success && mounted) {
+        await _markActivityAsRead(item.id);
+        
+        if (mounted) {
+          showTopSnackBar(
+            context, 
+            successMessage, 
+            backgroundColor: Colors.green,
+          );
+        }
       }
     } catch (e) {
-      showTopSnackBar(context, 'Failed to accept: $e', backgroundColor: Colors.red);
+      if (!mounted) return;
+      
+      String errorMessage = e.toString().replaceAll('Exception: ', '');
+      
+      if (errorMessage.contains('not found')) {
+        if (mounted) {
+          setState(() {
+            _inboxs.removeWhere((i) => i.id == item.id);
+          });
+          showTopSnackBar(
+            context, 
+            'This request is no longer available', 
+            backgroundColor: Colors.orange,
+          );
+        }
+      } else if (errorMessage.contains('already')) {
+        await _markActivityAsRead(item.id);
+        if (mounted) {
+          showTopSnackBar(
+            context, 
+            'You are already friends', 
+            backgroundColor: Colors.blue,
+          );
+        }
+      } else {
+        if (mounted) {
+          showTopSnackBar(
+            context, 
+            'Failed to accept: $errorMessage', 
+            backgroundColor: Colors.red,
+          );
+        }
+      }
     }
   }
 
   Widget _buildInboxList(List<InboxModel> items) {
     if (items.isEmpty) {
-      return const Center(
-        child: Text('No messages here', style: TextStyle(fontSize: 18)),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inbox_outlined,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No messages here',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -219,56 +334,134 @@ class _InboxScreenState extends State<InboxDialog>
 
         final item = items[index];
 
-        bool showAcceptButton = item.type == 'friend_request' || item.type == 'group_invite';
+        bool showAcceptButton = item.type == 'friend_request' || 
+                                item.type == 'group_invite';
 
-        return ListTile(
-          leading: _selectionMode
-              ? Checkbox(
-            value: _selectedIds.contains(item.id),
-            onChanged: (value) {
-              _toggleSelection(item);
-            },
-          )
-              : CircleAvatar(
-            backgroundImage: item.actor.avatarUrl != null
-                ? NetworkImage(item.actor.avatarUrl!)
-                : null,
-            child: item.actor.avatarUrl == null
-                ? Text(item.actor.username[0])
-                : null,
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          title: Text(item.actor.username),
-          subtitle: Text(item.extraData),
-          trailing: item.type == 'friend_request' || item.type == 'group_invite'
-              ? ElevatedButton(
-            onPressed: () {
-              _acceptActivity(item);
-            },
-            style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
+          color: item.isRead ? null : Colors.blue.shade50,
+          child: ListTile(
+            leading: _selectionMode
+                ? Checkbox(
+                    value: _selectedIds.contains(item.id),
+                    onChanged: (value) {
+                      _toggleSelection(item);
+                    },
+                  )
+                : Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundImage: item.actor.avatarUrl != null
+                            ? NetworkImage(item.actor.avatarUrl!)
+                            : null,
+                        child: item.actor.avatarUrl == null
+                            ? Text(
+                                item.actor.username.isNotEmpty 
+                                    ? item.actor.username[0].toUpperCase() 
+                                    : '?',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : null,
+                      ),
+                      if (!item.isRead)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+            title: Text(
+              item.actor.username,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            child: const Text('Accept'),
-          )
-              : (item.isRead
-              ? const Icon(Icons.mark_email_read, color: Colors.green)
-              : const Icon(Icons.mark_email_unread, color: Colors.red)),
-          onLongPress: () {
-            _toggleSelection(item);
-          },
-          onTap: () {
-            if (_selectionMode) {
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.extraData ?? ''),
+                const SizedBox(height: 4),
+                Text(
+                  _formatTime(item.createdAt),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+            trailing: showAcceptButton && !item.isRead
+                ? ElevatedButton(
+                    onPressed: () {
+                      _acceptActivity(item);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Accept'),
+                  )
+                : null,
+            onLongPress: () {
               _toggleSelection(item);
-            }
-          },
+            },
+            onTap: () {
+              if (_selectionMode) {
+                _toggleSelection(item);
+              } else if (!item.isRead) {
+                _markActivityAsRead(item.id);
+              }
+            },
+          ),
         );
       },
     );
   }
 
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+
+    if (difference.inDays > 7) {
+      return '${time.day}/${time.month}/${time.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
   void _showError(Object e) {
-    showTopSnackBar(context, 'Error: $e', backgroundColor: Colors.red,);
+    if (!mounted) return;
+    
+    showTopSnackBar(
+      context, 
+      'Error: ${e.toString().replaceAll('Exception: ', '')}', 
+      backgroundColor: Colors.red,
+    );
   }
 
   @override
@@ -280,9 +473,9 @@ class _InboxScreenState extends State<InboxDialog>
         ),
         leading: _selectionMode
             ? IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: _clearSelection,
-        )
+                icon: const Icon(Icons.close),
+                onPressed: _clearSelection,
+              )
             : null,
         actions: [
           PopupMenuButton<String>(
@@ -294,7 +487,6 @@ class _InboxScreenState extends State<InboxDialog>
                 case 'delete_selected':
                   _deleteSelected();
                   break;
-
               }
             },
             itemBuilder: (context) {
@@ -318,9 +510,9 @@ class _InboxScreenState extends State<InboxDialog>
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: Theme.of(context).primaryColor,
+          labelColor: Theme.of(context).primaryColor,
+          unselectedLabelColor: Colors.grey,
           tabs: const [
             Tab(text: 'All'),
             Tab(text: 'Unread'),
@@ -331,14 +523,42 @@ class _InboxScreenState extends State<InboxDialog>
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : error != null
-          ? Center(child: Text(error!))
-          : TabBarView(
-        controller: _tabController,
-        children: List.generate(
-          3,
-              (index) => _buildInboxList(getFilteredInbox(index)),
-        ),
-      ),
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.red.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        error!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            offset = 0;
+                            hasMore = true;
+                            _inboxs.clear();
+                          });
+                          _loadInboxs();
+                        },
+                        child: const Text('Try Again'),
+                      ),
+                    ],
+                  ),
+                )
+              : TabBarView(
+                  controller: _tabController,
+                  children: List.generate(
+                    3,
+                    (index) => _buildInboxList(getFilteredInbox(index)),
+                  ),
+                ),
     );
   }
 }

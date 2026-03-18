@@ -1,16 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
-import '../datasources/friend_api_source.dart';
+import 'package:whisper_space_flutter/features/friend/presentation/screens/friend_search_screen.dart';
 import 'package:whisper_space_flutter/utils/snack_bar.dart';
 
-enum _FriendAction {
-  viewProfile,
-  chat,
-  cancel,
-  accept,
-  block,
-  unblock,
-}
+import '../datasources/friend_api_source.dart';
 
 enum FriendStatus {
   friend,
@@ -38,9 +31,10 @@ FriendStatus parseStatus(String status) {
 
 class FriendBox extends StatelessWidget {
   final String name;
-  final String? avatarUrl; // allow null
+  final String? avatarUrl;
   final FriendStatus status;
   final Widget? trailing;
+  final int? mutualFriendsCount;
 
   final VoidCallback? onViewProfile;
   final VoidCallback? onOpenChat;
@@ -55,6 +49,7 @@ class FriendBox extends StatelessWidget {
     this.avatarUrl,
     required this.status,
     this.trailing,
+    this.mutualFriendsCount,
     this.onViewProfile,
     this.onOpenChat,
     this.onCancel,
@@ -95,24 +90,49 @@ class FriendBox extends StatelessWidget {
         },
         itemBuilder: (context) => _buildMenuItems(status),
         child: ListTile(
-          leading: CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.blueGrey,
-            backgroundImage:
-            avatarUrl != null && avatarUrl!.isNotEmpty
-                ? NetworkImage(avatarUrl!)
-                : null,
-            child: avatarUrl != null && avatarUrl!.isNotEmpty
-                ? null
-                : Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+          leading: Stack(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.blueGrey,
+                backgroundImage:
+                avatarUrl != null && avatarUrl!.isNotEmpty
+                    ? NetworkImage(avatarUrl!)
+                    : null,
+                child: avatarUrl != null && avatarUrl!.isNotEmpty
+                    ? null
+                    : Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-          title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name, 
+                  style: const TextStyle(fontWeight: FontWeight.bold)
+                ),
+              ),
+              if (mutualFriendsCount != null && mutualFriendsCount! > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$mutualFriendsCount',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ),
+            ],
+          ),
           subtitle: Text(_statusLabel(status)),
           trailing: const Icon(Icons.more_vert),
         ),
@@ -184,96 +204,199 @@ class FriendBox extends StatelessWidget {
   }
 }
 
-class SuggestFriendBox extends StatelessWidget {
+enum _FriendAction {
+  viewProfile,
+  chat,
+  cancel,
+  accept,
+  block,
+  unblock,
+}
+
+class EnhancedSuggestFriendBox extends StatelessWidget {
   final String name;
   final String? avatarUrl;
+  final int mutualFriendsCount;
+  final List<dynamic> mutualFriends;
+  final bool isOnline;
   final VoidCallback? onAdd;
+  final VoidCallback? onViewProfile;
 
-  const SuggestFriendBox({
+  const EnhancedSuggestFriendBox({
     super.key,
     required this.name,
-    required this.avatarUrl,
-    required this.onAdd
+    this.avatarUrl,
+    required this.mutualFriendsCount,
+    required this.mutualFriends,
+    this.isOnline = false,
+    this.onAdd,
+    this.onViewProfile,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 140, // Fixed width for inline box
+      width: 160,
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 36,
-                backgroundColor: Colors.blueGrey,
-                backgroundImage:
-                avatarUrl != null && avatarUrl!.isNotEmpty ? NetworkImage(avatarUrl!):null,
-                child: avatarUrl != null && avatarUrl!.isNotEmpty
-                    ? null
-                    : Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
+        elevation: 2,
+        child: InkWell(
+          onTap: onViewProfile,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.blueGrey,
+                      backgroundImage:
+                      avatarUrl != null && avatarUrl!.isNotEmpty 
+                          ? NetworkImage(avatarUrl!)
+                          : null,
+                      child: avatarUrl != null && avatarUrl!.isNotEmpty
+                          ? null
+                          : Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                  color: Colors.white, 
+                                  fontWeight: FontWeight.bold, 
+                                  fontSize: 24),
+                            ),
+                    ),
+                    if (isOnline)
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                name,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.person_add, size: 16),
-                label: const Text('Add', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                const SizedBox(height: 8),
+                Text(
+                  name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                if (mutualFriendsCount > 0)
+                  _buildMutualFriendsChip(),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.person_add, size: 16),
+                  label: const Text('Add', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: const Size(100, 32),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _buildMutualFriendsChip() {
+    if (mutualFriends.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          '$mutualFriendsCount mutual',
+          style: const TextStyle(fontSize: 10, color: Colors.grey),
+        ),
+      );
+    }
+
+    String mutualText = '';
+    if (mutualFriends.length == 1) {
+      mutualText = mutualFriends[0]['username'];
+    } else if (mutualFriends.length == 2) {
+      mutualText = '${mutualFriends[0]['username']} and ${mutualFriends[1]['username']}';
+    } else {
+      mutualText = '${mutualFriends[0]['username']}, ${mutualFriends[1]['username']} and ${mutualFriends.length - 2} others';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.people, size: 12, color: Colors.grey),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              mutualText,
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class SuggestFriendShowMoreBox extends StatelessWidget{
-  const SuggestFriendShowMoreBox({super.key});
+class SuggestionSectionHeader extends StatelessWidget {
+  final String title;
+  final VoidCallback? onViewAll;
+  final int itemCount;
+
+  const SuggestionSectionHeader({
+    super.key,
+    required this.title,
+    this.onViewAll,
+    required this.itemCount,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 140,
-      child: Card(
-        color: Colors.grey.shade200,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: InkWell(
-          onTap: (){
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Show more'))
-            );
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Center(
-            child: Text(
-              'Show More',
-              style: TextStyle(
-                color: Colors.blue.shade700,
-                fontWeight: FontWeight.bold,
-                fontSize: 16
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
             ),
           ),
-        ),
-      )
+          if (onViewAll != null && itemCount > 5)
+            TextButton(
+              onPressed: onViewAll,
+              child: const Text('View All'),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -288,24 +411,21 @@ class FriendScreen extends StatefulWidget {
 class _FriendScreenState extends State<FriendScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
   late FriendAPISource friendApi;
 
   bool isLoading = true;
+  bool isLoadingSuggestions = false;
 
-  List<Map<String, String>> suggestFriends = [];
-  List<Map<String, String>> allFriends = [];
-  List<Map<String, String>> pendingFriends = [];
-  List<Map<String, String>> requestFriends = [];
-  List<Map<String, String>> blockedFriends = [];
+  List<Map<String, dynamic>> suggestFriends = [];
+  List<Map<String, dynamic>> allFriends = [];
+  List<Map<String, dynamic>> pendingFriends = [];
+  List<Map<String, dynamic>> requestFriends = [];
+  List<Map<String, dynamic>> blockedFriends = [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-
-    friendApi = FriendAPISource(storageService: StorageService());
-
     initServicesAndLoad();
   }
 
@@ -314,79 +434,106 @@ class _FriendScreenState extends State<FriendScreen>
     await storageService.init();
 
     friendApi = FriendAPISource(storageService: storageService);
-
-    loadFriends();
+    await loadFriends();
+    await loadSuggestions();
   }
 
-  List<Map<String, String>> _mapAllFriends(List<dynamic> list){
-    return list.map<Map<String, String>>((f){
-
+  List<Map<String, dynamic>> _mapAllFriends(List<dynamic> list) {
+    return list.map<Map<String, dynamic>>((f) {
       return {
         'id': f['id'].toString(),
         'name': f['username'] ?? '',
         'avatar': f['avatar_url'] ?? '',
-        'status': f['status'] ?? ''
+        'status': f['status'] ?? '',
+        'email': f['email'] ?? '',
       };
     }).toList();
   }
 
-  List<Map<String, String>> _mapPendingFriends(List<dynamic> list){
-    return list.map<Map<String, String>>((f){
-
+  List<Map<String, dynamic>> _mapPendingFriends(List<dynamic> list) {
+    return list.map<Map<String, dynamic>>((f) {
       return {
         'pending_id': f['id'].toString(),
         'id': f['friend']['id'].toString(),
         'name': f['friend']['username'] ?? '',
         'avatar': f['friend']['avatar_url'] ?? '',
-        'status': f['status'] ?? ''
+        'status': f['status'] ?? '',
+        'email': f['friend']['email'] ?? '',
       };
     }).toList();
   }
 
-  List<Map<String, String>> _mapRequestingFriends(List<dynamic> list){
-    return list.map<Map<String, String>>((f){
+  List<Map<String, dynamic>> _mapRequestingFriends(List<dynamic> list) {
+    return list.map<Map<String, dynamic>>((f) {
       return {
         'id': f['requester_id'].toString(),
         'name': f['requester_username'] ?? '',
         'avatar': f['requester_avatar_url'] ?? '',
-        'status': f['status'] ?? ''
+        'status': f['status'] ?? '',
+        'email': f['requester_email'] ?? '',
       };
     }).toList();
   }
 
-  List<Map<String, String>> _mapBlockedUsers(List<dynamic> list){
-    return list.map<Map<String, String>>((f){
+  List<Map<String, dynamic>> _mapBlockedUsers(List<dynamic> list) {
+    return list.map<Map<String, dynamic>>((f) {
       return {
         'id': f['id'].toString(),
         'name': f['username'] ?? '',
         'avatar': f['avatar_url'] ?? '',
-        'status': f['status'] ?? ''
+        'status': f['status'] ?? '',
+        'email': f['email'] ?? '',
       };
     }).toList();
   }
 
-  List<Map<String, String>> _mapSuggestedUsers(List<dynamic> list){
-    return list.map<Map<String, String>> ((f){
+  List<Map<String, dynamic>> _mapSuggestedUsers(List<dynamic> list) {
+    return list.map<Map<String, dynamic>>((f) {
       return {
         'id': f['id'].toString(),
         'name': f['username'] ?? '',
         'avatar': f['avatar_url'] ?? '',
-        // 'status': f['status'] ?? ''
+        'email': f['email'] ?? '',
+        'mutual_friends_count': f['mutual_friends_count'] ?? 0,
+        'mutual_friends': f['mutual_friends'] ?? [],
+        'is_online': f['is_online'] ?? false,
       };
     }).toList();
+  }
+
+  Future<void> loadSuggestions() async {
+    setState(() {
+      isLoadingSuggestions = true;
+    });
+
+    try {
+      final suggestionData = await friendApi.getFriendSuggestions(limit: 10);
+      if (mounted) {
+        setState(() {
+          suggestFriends = _mapSuggestedUsers(suggestionData);
+          isLoadingSuggestions = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading suggestions: $e');
+      if (mounted) {
+        setState(() {
+          isLoadingSuggestions = false;
+        });
+      }
+    }
   }
 
   Future<void> loadFriends() async {
-    try{
+    try {
       final pendingData = await friendApi.getPendingRequests();
       final requestingData = await friendApi.getRequestingUsers();
       final blockedData = await friendApi.getBlockedUsers();
-      final suggestionData = await friendApi.getSuggestionUsers();
       final data = await friendApi.getFriends();
+      
       if (!mounted) return;
 
       setState(() {
-        suggestFriends = _mapSuggestedUsers(suggestionData);
         allFriends = _mapAllFriends(data);
         pendingFriends = _mapPendingFriends(pendingData);
         requestFriends = _mapRequestingFriends(requestingData);
@@ -394,77 +541,143 @@ class _FriendScreenState extends State<FriendScreen>
         isLoading = false;
       });
 
-    }catch(e){
+    } catch (e) {
       debugPrint('Error loading friend: $e');
-      setState(()=> isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
+  }
+
+  Future<void> _handleAddSuggestion(int userId, String userName) async {
+    try {
+      final response = await friendApi.addFriend(userId);
+      
+      if (mounted) {
+        showTopSnackBar(context, response['msg']);
+        await loadSuggestions();
+        await loadFriends();
+      }
+    } catch (e) {
+      if (mounted) {
+        showTopSnackBar(context, e.toString().replaceAll('Exception: ', ''));
+      }
+    }
+  }
+
+  void _navigateToAddFriends() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddFriendScreen(), // Renamed from FriendSearchScreen
+      ),
+    ).then((_) {
+      loadSuggestions();
+      loadFriends();
+    });
+  }
+
+  void _navigateToViewAllSuggestions() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AllSuggestionsScreen(
+          initialSuggestions: suggestFriends,
+          friendApi: friendApi,
+          onAddFriend: _handleAddSuggestion,
+        ),
+      ),
+    ).then((_) {
+      loadSuggestions();
+      loadFriends();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
+
     return Scaffold(
-        body: SingleChildScrollView(
+      appBar: AppBar(
+        title: const Text('Friends'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add), // Only one icon now
+            onPressed: _navigateToAddFriends,
+            tooltip: 'Add Friends',
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await loadFriends();
+          await loadSuggestions();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if(suggestFriends.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'Suggest Friend',
-                  style: Theme.of(context).textTheme.titleLarge,
+              // Suggestions Section
+              if (suggestFriends.isNotEmpty) ...[
+                SuggestionSectionHeader(
+                  title: 'People You May Know',
+                  onViewAll: suggestFriends.length > 5 
+                      ? _navigateToViewAllSuggestions 
+                      : null,
+                  itemCount: suggestFriends.length,
                 ),
-              ),
-              SizedBox(
-                height: 200,
-                child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    itemCount: suggestFriends.length + 1,
-                    itemBuilder: (context, index){
-                      if (index == suggestFriends.length){
-                        return const SuggestFriendShowMoreBox();
-                      }
-                      final friend = suggestFriends[index];
-                      final id = int.tryParse(friend['id'] ?? '');
-
-                      return SuggestFriendBox(
-                          name: friend['name']!,
-                          avatarUrl: friend['avatar']!,
-                          onAdd: id == null
-                            ? () {
-                            debugPrint('Invalid user id');
-                          }:() async{
-                            try{
-                              await friendApi.sendFriendRequest(id);
-
-                              showTopSnackBar(context, 'Friend request sent to ${friend['name']}');
-
-                              await loadFriends();
-
-                            }catch(e){
-                              showTopSnackBar(context, e.toString());
+                SizedBox(
+                  height: 240,
+                  child: isLoadingSuggestions
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          itemCount: suggestFriends.length > 5 ? 6 : suggestFriends.length,
+                          itemBuilder: (context, index) {
+                            if (index == 5) {
+                              return _buildViewMoreBox();
                             }
+                            
+                            final friend = suggestFriends[index];
+                            final id = int.tryParse(friend['id'] ?? '');
+                            
+                            return EnhancedSuggestFriendBox(
+                              name: friend['name']!,
+                              avatarUrl: friend['avatar'],
+                              mutualFriendsCount: friend['mutual_friends_count'] ?? 0,
+                              mutualFriends: friend['mutual_friends'] ?? [],
+                              isOnline: friend['is_online'] ?? false,
+                              onAdd: id == null
+                                  ? null
+                                  : () => _handleAddSuggestion(
+                                      id, 
+                                      friend['name']!
+                                    ),
+                              onViewProfile: () {
+                                debugPrint('View profile of ${friend['name']}');
+                              },
+                            );
                           },
-                      );
-                    }
+                        ),
                 ),
-              )],
-              const SizedBox(
-                height: 16
-              ),
+                const Divider(),
+              ],
+
+              // Friends Tabs Section
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                    'Your friends',
-                    style: Theme.of(context).textTheme.titleLarge),
+                  'Your Friends',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
               Container(
                 decoration: const BoxDecoration(
@@ -472,7 +685,6 @@ class _FriendScreenState extends State<FriendScreen>
                     top: BorderSide(color: Colors.grey, width: 0.2),
                     bottom: BorderSide(color: Colors.grey, width: 0.1),
                   ),
-                  color: Colors.transparent,
                 ),
                 child: TabBar(
                   controller: _tabController,
@@ -481,6 +693,7 @@ class _FriendScreenState extends State<FriendScreen>
                   indicatorColor: Theme.of(context).primaryColor,
                   indicatorWeight: 4,
                   indicatorSize: TabBarIndicatorSize.label,
+                  isScrollable: true,
                   tabs: const [
                     Tab(text: 'All Friends'),
                     Tab(text: 'Pending'),
@@ -494,90 +707,402 @@ class _FriendScreenState extends State<FriendScreen>
                 height: 400,
                 child: TabBarView(
                   controller: _tabController,
-                    children: [
-                      ListView(
-                        children: allFriends.map((f) {
-                          return FriendBox(
-                            name: f['name']!,
-                            avatarUrl: f['avatar'],
-                            status: FriendStatus.friend,
-                            onViewProfile: () {
-                              debugPrint('View profile ${f['name']}');
-                            },
-                            onOpenChat: () {
-                              debugPrint('Open chat with ${f['name']}');
-                            },
-                            onBlock: () async {
-                              final id = int.tryParse(f['id'] ?? '');
-                              if (id == null) return;
-                              await friendApi.blockUser(id);
-                              await loadFriends();
-                            },
-                          );
-                        }).toList(),
-                      ),
-                      ListView(
-                        children: pendingFriends.map((f) {
-                          return FriendBox(
-                            name: f['name']!,
-                            avatarUrl: f['avatar'],
-                            status: FriendStatus.pending,
-                            onCancel: () async {
-                              final id = int.tryParse(f['pending_id'] ?? '');
-                              if (id == null) return;
-                              await friendApi.cancelPending(id);
-                              await loadFriends();
-                            },
-                          );
-                        }).toList(),
-                      )
-                      ,
-                      ListView(
-                        children: requestFriends.map((f) {
-                          return FriendBox(
-                            name: f['name']!,
-                            avatarUrl: f['avatar'],
-                            status: FriendStatus.requesting,
-                            onAccept: () async {
-                              final id = int.tryParse(f['id'] ?? '');
-                              if (id == null) return;
-                              await friendApi.acceptFriendRequest(id);
-                              await loadFriends();
-                            },
-                            onBlock: () async {
-                              final id = int.tryParse(f['id'] ?? '');
-                              if (id == null) return;
-                              await friendApi.blockUser(id);
-                              await loadFriends();
-                            },
-                          );
-                        }).toList(),
-                      )
-                      ,
-                      ListView(
-                        children: blockedFriends.map((f) {
-                          return FriendBox(
-                            name: f['name']!,
-                            avatarUrl: f['avatar'],
-                            status: FriendStatus.blocked,
-                            onUnblock: () async {
-                              final id = int.tryParse(f['id'] ?? '');
-                              if (id == null) return;
-                              await friendApi.unblockUser(id);
-                              await loadFriends();
-                            },
-                          );
-                        }).toList(),
-                      )
-                    ]
+                  children: [
+                    _buildFriendsList(allFriends, FriendStatus.friend),
+                    _buildFriendsList(pendingFriends, FriendStatus.pending),
+                    _buildFriendsList(requestFriends, FriendStatus.requesting),
+                    _buildFriendsList(blockedFriends, FriendStatus.blocked),
+                  ],
                 ),
-              )
+              ),
             ],
           ),
-        )
-
-
+        ),
+      ),
     );
   }
 
+  Widget _buildViewMoreBox() {
+    return SizedBox(
+      width: 160,
+      child: Card(
+        color: Colors.grey.shade100,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: InkWell(
+          onTap: _navigateToViewAllSuggestions,
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_forward,
+                  size: 30,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'View All',
+                style: TextStyle(
+                  color: Colors.blue.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${suggestFriends.length} suggestions',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFriendsList(List<Map<String, dynamic>> friends, FriendStatus status) {
+    if (friends.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _getEmptyStateIcon(status),
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _getEmptyStateText(status),
+              style: TextStyle(color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: friends.length,
+      itemBuilder: (context, index) {
+        final f = friends[index];
+        return FriendBox(
+          name: f['name']!,
+          avatarUrl: f['avatar'],
+          status: status,
+          onViewProfile: () {
+            debugPrint('View profile ${f['name']}');
+          },
+          onOpenChat: () {
+            debugPrint('Open chat with ${f['name']}');
+          },
+          onCancel: status == FriendStatus.pending
+              ? () async {
+                  final id = int.tryParse(f['pending_id'] ?? '');
+                  if (id == null) return;
+                  try {
+                    await friendApi.cancelPending(id);
+                    await loadFriends();
+                  } catch (e) {
+                    showTopSnackBar(context, e.toString());
+                  }
+                }
+              : null,
+          onAccept: status == FriendStatus.requesting
+              ? () async {
+                  final id = int.tryParse(f['id'] ?? '');
+                  if (id == null) return;
+                  try {
+                    await friendApi.acceptFriendRequest(id);
+                    await loadFriends();
+                    await loadSuggestions();
+                  } catch (e) {
+                    showTopSnackBar(context, e.toString());
+                  }
+                }
+              : null,
+          onBlock: status == FriendStatus.friend || status == FriendStatus.requesting
+              ? () async {
+                  final id = int.tryParse(f['id'] ?? '');
+                  if (id == null) return;
+                  try {
+                    await friendApi.blockUser(id);
+                    await loadFriends();
+                    await loadSuggestions();
+                  } catch (e) {
+                    showTopSnackBar(context, e.toString());
+                  }
+                }
+              : null,
+          onUnblock: status == FriendStatus.blocked
+              ? () async {
+                  final id = int.tryParse(f['id'] ?? '');
+                  if (id == null) return;
+                  try {
+                    await friendApi.unblockUser(id);
+                    await loadFriends();
+                    await loadSuggestions();
+                  } catch (e) {
+                    showTopSnackBar(context, e.toString());
+                  }
+                }
+              : null,
+        );
+      },
+    );
+  }
+
+  IconData _getEmptyStateIcon(FriendStatus status) {
+    switch (status) {
+      case FriendStatus.friend:
+        return Icons.people_outline;
+      case FriendStatus.pending:
+        return Icons.hourglass_empty;
+      case FriendStatus.requesting:
+        return Icons.person_add_disabled;
+      case FriendStatus.blocked:
+        return Icons.block;
+    }
+  }
+
+  String _getEmptyStateText(FriendStatus status) {
+    switch (status) {
+      case FriendStatus.friend:
+        return 'No friends yet.\nConnect with people you may know above!';
+      case FriendStatus.pending:
+        return 'No pending requests';
+      case FriendStatus.requesting:
+        return 'No friend requests';
+      case FriendStatus.blocked:
+        return 'No blocked users';
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+}
+
+class AllSuggestionsScreen extends StatefulWidget {
+  final List<Map<String, dynamic>> initialSuggestions;
+  final FriendAPISource friendApi;
+  final Function(int, String) onAddFriend;
+
+  const AllSuggestionsScreen({
+    super.key,
+    required this.initialSuggestions,
+    required this.friendApi,
+    required this.onAddFriend,
+  });
+
+  @override
+  State<AllSuggestionsScreen> createState() => _AllSuggestionsScreenState();
+}
+
+class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
+  late List<Map<String, dynamic>> suggestions;
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    suggestions = List.from(widget.initialSuggestions);
+  }
+
+  Future<void> _refreshSuggestions() async {
+    setState(() => isLoading = true);
+    try {
+      final newSuggestions = await widget.friendApi.getFriendSuggestions(limit: 20);
+      if (mounted) {
+        setState(() {
+          suggestions = List<Map<String, dynamic>>.from(newSuggestions);
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('People You May Know'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshSuggestions,
+          ),
+        ],
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _refreshSuggestions,
+              child: suggestions.isEmpty
+                  ? ListView(
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.3,
+                        ),
+                        const Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.people_outline, size: 80, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text(
+                                'No suggestions available',
+                                style: TextStyle(fontSize: 16, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: suggestions.length,
+                      itemBuilder: (context, index) {
+                        final user = suggestions[index];
+                        final userId = int.tryParse(user['id'] ?? '');
+                        
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(12),
+                            leading: Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 30,
+                                  backgroundColor: Colors.blueGrey,
+                                  backgroundImage: user['avatar'] != null && 
+                                      user['avatar'].toString().isNotEmpty
+                                      ? NetworkImage(user['avatar'])
+                                      : null,
+                                  child: user['avatar'] == null || 
+                                      user['avatar'].toString().isEmpty
+                                      ? Text(
+                                          user['name'][0].toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 20,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                if (user['is_online'] == true)
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      width: 14,
+                                      height: 14,
+                                      decoration: BoxDecoration(
+                                        color: Colors.green,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            title: Text(
+                              user['name'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(user['email'] ?? ''),
+                                if (user['mutual_friends_count'] > 0) ...[
+                                  const SizedBox(height: 4),
+                                  _buildMutualFriendsText(user),
+                                ],
+                              ],
+                            ),
+                            trailing: ElevatedButton(
+                              onPressed: userId == null
+                                  ? null
+                                  : () async {
+                                      await widget.onAddFriend(userId, user['name']);
+                                      if (mounted) {
+                                        setState(() {
+                                          suggestions.removeAt(index);
+                                        });
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                              child: const Text('Add'),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+    );
+  }
+
+  Widget _buildMutualFriendsText(Map<String, dynamic> user) {
+    final count = user['mutual_friends_count'] ?? 0;
+    final mutualFriends = user['mutual_friends'] ?? [];
+    
+    if (mutualFriends.isEmpty) {
+      return Text(
+        '$count mutual ${count == 1 ? 'friend' : 'friends'}',
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      );
+    }
+
+    String names = '';
+    if (mutualFriends.length == 1) {
+      names = mutualFriends[0]['username'];
+    } else if (mutualFriends.length == 2) {
+      names = '${mutualFriends[0]['username']} and ${mutualFriends[1]['username']}';
+    } else {
+      names = '${mutualFriends[0]['username']}, ${mutualFriends[1]['username']} and ${mutualFriends.length - 2} others';
+    }
+
+    return Row(
+      children: [
+        const Icon(Icons.people, size: 14, color: Colors.grey),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            names,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
 }

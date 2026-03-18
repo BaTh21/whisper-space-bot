@@ -1,5 +1,6 @@
 import traceback
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_, and_, func
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -184,25 +185,57 @@ async def accept_friend_request(
     current_user: User = Depends(get_current_user)
 ):
     try:
+        print(f"Accepting friend request - Current user: {current_user.id}, Requester: {requester_id}")
+        
+        # Find the friend request
         friend_request = db.query(Friend).filter(
-            Friend.user_id == requester_id,
-            Friend.friend_id == current_user.id,
-            Friend.status == FriendshipStatus.pending
+            or_(
+                and_(
+                    Friend.user_id == requester_id,
+                    Friend.friend_id == current_user.id,
+                    Friend.status == FriendshipStatus.pending
+                ),
+                and_(
+                    Friend.user_id == current_user.id,
+                    Friend.friend_id == requester_id,
+                    Friend.status == FriendshipStatus.pending
+                )
+            )
         ).first()
 
         if not friend_request:
-            print(f"No pending request found for requester {requester_id} -> user {current_user.id}")
+            print(f"No pending request found between user {requester_id} and user {current_user.id}")
             raise HTTPException(status_code=404, detail="Friend request not found")
+
+        print(f"Found friend request: ID={friend_request.id}, from={friend_request.user_id}, to={friend_request.friend_id}")
 
         now = datetime.utcnow()
         friend_request.status = FriendshipStatus.accepted
         friend_request.updated_at = now
         db.commit()
 
+        # Get the requester details
         requester = db.query(User).filter(User.id == requester_id).first()
         if not requester:
             raise HTTPException(status_code=404, detail="Requester not found")
 
+        # Create activity for the requester
+        try:
+            from app.crud.activity import create_activity
+            activity = create_activity(
+                db,
+                actor_id=current_user.id,
+                recipient_id=requester_id,
+                activity_type=ActivityType.friend_request_accepted,  # Use the enum value
+                friend_request_id=friend_request.id,
+                extra_data=f"{current_user.username} accepted your friend request"
+            )
+            print(f"Activity created: {activity.id if activity else 'None'}")
+        except Exception as e:
+            print(f"Error creating activity: {e}")
+            traceback.print_exc()
+
+        # Send real-time notification via WebSocket
         acceptance_data = {
             "type": "friend_request_accepted",
             "data": {
@@ -235,7 +268,7 @@ async def accept_friend_request(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Server error: {str(e)}")
+        print(f"Server error in accept_friend_request: {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
@@ -475,3 +508,380 @@ async def check_blocked_status(
     except Exception as e:
         print(f"Error checking blocked status: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/search")
+async def search_users(
+    q: str = Query(..., min_length=1, max_length=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Search for users by username or email
+    Returns users with their friendship status
+    """
+    try:
+        # Search for users excluding current user
+        users = db.query(User).filter(
+            User.id != current_user.id,
+            User.is_active == True,
+            or_(
+                User.username.ilike(f"%{q}%"),
+                User.email.ilike(f"%{q}%")
+            )
+        ).limit(20).all()
+        
+        result = []
+        for user in users:
+            # Check friendship status
+            friendship = get_friend_request(db, current_user.id, user.id)
+            status = None
+            if friendship:
+                status = friendship.status.value
+            
+            # Get mutual friends count
+            mutual_count = get_mutual_friends_count(db, current_user.id, user.id)
+            
+            result.append({
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "avatar_url": user.avatar_url,
+                "friendship_status": status,
+                "mutual_friends_count": mutual_count,
+                "is_online": user.is_online if hasattr(user, 'is_online') else False,
+                "last_active": user.last_active.isoformat() if hasattr(user, 'last_active') and user.last_active else None
+            })
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error searching users: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/suggestions")
+async def get_friend_suggestions(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get friend suggestions based on:
+    1. Mutual friends (friends of friends)
+    2. Users with similar interests
+    3. Recently active users
+    """
+    try:
+        # Get all existing relationships to exclude
+        existing_relations = db.query(Friend).filter(
+            or_(
+                Friend.user_id == current_user.id,
+                Friend.friend_id == current_user.id
+            )
+        ).all()
+        
+        # Create set of excluded user IDs
+        excluded_ids = {current_user.id}
+        for rel in existing_relations:
+            if rel.user_id == current_user.id:
+                excluded_ids.add(rel.friend_id)
+            else:
+                excluded_ids.add(rel.user_id)
+        
+        # Get current user's friends (accepted)
+        my_friends = db.query(Friend).filter(
+            or_(
+                and_(Friend.user_id == current_user.id, Friend.status == FriendshipStatus.accepted),
+                and_(Friend.friend_id == current_user.id, Friend.status == FriendshipStatus.accepted)
+            )
+        ).all()
+        
+        my_friend_ids = []
+        for f in my_friends:
+            if f.user_id == current_user.id:
+                my_friend_ids.append(f.friend_id)
+            else:
+                my_friend_ids.append(f.user_id)
+        
+        # If user has friends, suggest friends of friends
+        if my_friend_ids:
+            # Get friends of my friends (mutual friends)
+            friends_of_friends = db.query(Friend).filter(
+                or_(
+                    Friend.user_id.in_(my_friend_ids),
+                    Friend.friend_id.in_(my_friend_ids)
+                ),
+                Friend.status == FriendshipStatus.accepted,
+                ~Friend.user_id.in_(list(excluded_ids)),
+                ~Friend.friend_id.in_(list(excluded_ids))
+            ).all()
+            
+            # Calculate mutual friend counts
+            suggestion_scores = {}
+            for fof in friends_of_friends:
+                # Get the suggested user ID (the one that's not my friend)
+                suggested_id = None
+                if fof.user_id in my_friend_ids and fof.friend_id not in my_friend_ids and fof.friend_id not in excluded_ids:
+                    suggested_id = fof.friend_id
+                elif fof.friend_id in my_friend_ids and fof.user_id not in my_friend_ids and fof.user_id not in excluded_ids:
+                    suggested_id = fof.user_id
+                
+                if suggested_id:
+                    suggestion_scores[suggested_id] = suggestion_scores.get(suggested_id, 0) + 1
+            
+            # Get top suggestions by mutual friend count
+            sorted_suggestions = sorted(suggestion_scores.items(), key=lambda x: x[1], reverse=True)
+            suggested_ids = [id for id, _ in sorted_suggestions[:limit]]
+            
+            # Fetch user details for suggested IDs
+            suggested_users = db.query(User).filter(User.id.in_(suggested_ids)).all()
+            
+            # Sort users by mutual friend count
+            suggested_users.sort(key=lambda u: suggestion_scores.get(u.id, 0), reverse=True)
+            
+            result = []
+            for user in suggested_users:
+                # Get mutual friends list (limited to 3 for display)
+                mutual_friends = get_mutual_friends_list(db, current_user.id, user.id, limit=3)
+                
+                result.append({
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "avatar_url": user.avatar_url,
+                    "mutual_friends_count": suggestion_scores.get(user.id, 0),
+                    "mutual_friends": mutual_friends,
+                    "is_online": user.is_online if hasattr(user, 'is_online') else False,
+                    "last_active": user.last_active.isoformat() if hasattr(user, 'last_active') and user.last_active else None
+                })
+            
+            return result
+        
+        # If user has no friends, suggest random active users
+        else:
+            random_users = db.query(User).filter(
+                User.id.notin_(list(excluded_ids)),
+                User.is_active == True
+            ).order_by(func.random()).limit(limit).all()
+            
+            result = []
+            for user in random_users:
+                result.append({
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "avatar_url": user.avatar_url,
+                    "mutual_friends_count": 0,
+                    "mutual_friends": [],
+                    "is_online": user.is_online if hasattr(user, 'is_online') else False,
+                    "last_active": user.last_active.isoformat() if hasattr(user, 'last_active') and user.last_active else None
+                })
+            
+            return result
+            
+    except Exception as e:
+        print(f"Error getting friend suggestions: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/add/{user_id}")
+async def add_friend_by_search(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Add a friend from search or suggestions"""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot add yourself")
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    existing = get_any_friendship(db, current_user.id, user_id)
+
+    if existing:
+        if existing.status == FriendshipStatus.accepted:
+            raise HTTPException(
+                status_code=409,
+                detail="Already friends"
+            )
+        elif existing.status == FriendshipStatus.pending:
+            # If current user sent the request
+            if existing.user_id == current_user.id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Friend request already sent"
+                )
+            # If current user received the request, auto-accept it
+            else:
+                existing.status = FriendshipStatus.accepted
+                existing.updated_at = datetime.utcnow()
+                db.commit()
+                
+                # Notify the other user
+                acceptance_data = {
+                    "type": "friend_request_accepted",
+                    "data": {
+                        "friend_request_id": existing.id,
+                        "friend_id": current_user.id,
+                        "friend_username": current_user.username,
+                        "friend_avatar_url": current_user.avatar_url or "",
+                        "accepted_at": datetime.utcnow().isoformat(),
+                        "message": f"{current_user.username} accepted your friend request!"
+                    }
+                }
+                
+                requester_room = f"user_{existing.user_id}"
+                if manager and hasattr(manager, 'broadcast_to_user'):
+                    try:
+                        asyncio.create_task(
+                            manager.broadcast_to_user(requester_room, acceptance_data)
+                        )
+                    except Exception as ws_error:
+                        print(f"WebSocket error: {ws_error}")
+                
+                return {
+                    "msg": "Friend request accepted",
+                    "friend_id": user_id,
+                    "friend_username": target_user.username
+                }
+        elif existing.status == FriendshipStatus.blocked:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot add blocked user"
+            )
+
+    # Create new friend request
+    friendship = Friend(
+        user_id=current_user.id,
+        friend_id=user_id,
+        status=FriendshipStatus.pending
+    )
+    
+    try:
+        db.add(friendship)
+        db.commit()
+        db.refresh(friendship)
+        
+        # Send notification
+        player_ids = [target_user.onesignal_player_id] if target_user.onesignal_player_id else None
+        
+        activity = create_activity(
+            db,
+            actor_id=current_user.id,
+            recipient_id=user_id,
+            activity_type=ActivityType.friend_request,
+            friend_request_id=friendship.id,
+            extra_data=f"{current_user.username} sent you a friend request",
+            player_ids=player_ids
+        )
+        
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Friend request already sent"
+        )
+        
+    return {
+        "msg": "Friend request sent",
+        "request_id": friendship.id,
+        "friend_id": user_id,
+        "friend_username": target_user.username
+    }
+
+
+# Helper functions
+def get_mutual_friends_count(db: Session, user_id: int, other_user_id: int) -> int:
+    """Get count of mutual friends between two users"""
+    try:
+        # Get user1's friends
+        user1_friends = db.query(Friend).filter(
+            or_(
+                and_(Friend.user_id == user_id, Friend.status == FriendshipStatus.accepted),
+                and_(Friend.friend_id == user_id, Friend.status == FriendshipStatus.accepted)
+            )
+        ).all()
+        
+        user1_friend_ids = set()
+        for f in user1_friends:
+            if f.user_id == user_id:
+                user1_friend_ids.add(f.friend_id)
+            else:
+                user1_friend_ids.add(f.user_id)
+        
+        # Get user2's friends
+        user2_friends = db.query(Friend).filter(
+            or_(
+                and_(Friend.user_id == other_user_id, Friend.status == FriendshipStatus.accepted),
+                and_(Friend.friend_id == other_user_id, Friend.status == FriendshipStatus.accepted)
+            )
+        ).all()
+        
+        user2_friend_ids = set()
+        for f in user2_friends:
+            if f.user_id == other_user_id:
+                user2_friend_ids.add(f.friend_id)
+            else:
+                user2_friend_ids.add(f.user_id)
+        
+        # Return count of mutual friends
+        return len(user1_friend_ids.intersection(user2_friend_ids))
+        
+    except Exception as e:
+        print(f"Error counting mutual friends: {str(e)}")
+        return 0
+
+
+def get_mutual_friends_list(db: Session, user_id: int, other_user_id: int, limit: int = 3) -> list[dict]:
+    """Get list of mutual friends between two users"""
+    try:
+        # Get user1's friends
+        user1_friends = db.query(Friend).filter(
+            or_(
+                and_(Friend.user_id == user_id, Friend.status == FriendshipStatus.accepted),
+                and_(Friend.friend_id == user_id, Friend.status == FriendshipStatus.accepted)
+            )
+        ).all()
+        
+        user1_friend_ids = set()
+        for f in user1_friends:
+            if f.user_id == user_id:
+                user1_friend_ids.add(f.friend_id)
+            else:
+                user1_friend_ids.add(f.user_id)
+        
+        # Get user2's friends
+        user2_friends = db.query(Friend).filter(
+            or_(
+                and_(Friend.user_id == other_user_id, Friend.status == FriendshipStatus.accepted),
+                and_(Friend.friend_id == other_user_id, Friend.status == FriendshipStatus.accepted)
+            )
+        ).all()
+        
+        user2_friend_ids = set()
+        for f in user2_friends:
+            if f.user_id == other_user_id:
+                user2_friend_ids.add(f.friend_id)
+            else:
+                user2_friend_ids.add(f.user_id)
+        
+        # Find mutual friends
+        mutual_ids = list(user1_friend_ids.intersection(user2_friend_ids))[:limit]
+        
+        if mutual_ids:
+            mutual_friends = db.query(User).filter(User.id.in_(mutual_ids)).all()
+            return [{
+                "id": f.id,
+                "username": f.username,
+                "avatar_url": f.avatar_url
+            } for f in mutual_friends]
+        
+        return []
+        
+    except Exception as e:
+        print(f"Error getting mutual friends list: {str(e)}")
+        return []

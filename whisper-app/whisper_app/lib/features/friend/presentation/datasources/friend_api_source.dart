@@ -1,7 +1,7 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:whisper_space_flutter/core/constants/api_constants.dart';
-
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 
 class FriendAPISource {
@@ -141,5 +141,69 @@ class FriendAPISource {
       return jsonDecode(response.body);
     }
     throw Exception('Failed to get suggested users ${response.statusCode}');
+  }
+  
+  Future<List<dynamic>> searchUsers(String query) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/friends/search?q=${Uri.encodeComponent(query)}'),
+      headers: await _authHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to search users: ${response.statusCode}');
+    }
+  }
+
+  // NEW: Get friend suggestions
+  Future<List<dynamic>> getFriendSuggestions({int limit = 10}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/friends/suggestions?limit=$limit'),
+      headers: await _authHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get friend suggestions: ${response.statusCode}');
+    }
+  }
+
+  // NEW: Add friend from search/suggestions
+  Future<Map<String, dynamic>> addFriend(int userId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/friends/add/$userId'),
+      headers: await _authHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception(jsonDecode(response.body)['detail']);
+    }
+  }
+
+  // Combined method to get all friend data at once
+  Future<Map<String, dynamic>> getAllFriendData() async {
+    try {
+      final results = await Future.wait([
+        getFriends(),
+        getPendingRequests(),
+        getRequestingUsers(),
+        getBlockedUsers(),
+        getFriendSuggestions(limit: 10),
+      ]);
+
+      return {
+        'friends': results[0],
+        'pending': results[1],
+        'requests': results[2],
+        'blocked': results[3],
+        'suggestions': results[4],
+      };
+    } catch (e) {
+      throw Exception('Failed to load friend data: $e');
+    }
   }
 }

@@ -48,25 +48,40 @@ def mark_activity_read(
     db.commit()
 
     return {"message": "Marked as read"}
+@router.delete("/{activity_id}")
+def delete_activity(
+    activity_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a single activity"""
+    activity = db.query(Activity).filter(
+        Activity.id == activity_id,
+        Activity.recipient_id == current_user.id
+    ).first()
 
-@router.delete("/delete")
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    db.delete(activity)
+    db.commit()
+    return {"message": "Activity deleted successfully"}
+
+@router.delete("/")
 def delete_activities(
     request: ActivityDeleteRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Delete multiple activities"""
     activities = db.query(Activity).filter(
         Activity.id.in_(request.ids),
         Activity.recipient_id == current_user.id
     ).all()
 
-    if not activities:
-        raise HTTPException(status_code=404, detail="No matching activities found")
-
     for activity in activities:
         db.delete(activity)
     db.commit()
-
     return {"message": f"Deleted {len(activities)} activities"}
 
 @router.post("/notify/all/")
