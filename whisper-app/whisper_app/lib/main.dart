@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:whisper_space_flutter/features/notes/data/datasources/notes_api_service.dart';
+import 'package:whisper_space_flutter/features/notes/presentation/providers/friend_provider.dart';
+import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
 
 import 'core/services/auth_service.dart';
 import 'core/services/storage_service.dart';
@@ -34,6 +37,16 @@ void main() async {
           ChangeNotifierProvider(
             create: (context) => FeedProvider(
               feedApiService: context.read<FeedApiService>(),
+            ),
+          ),
+          ChangeNotifierProvider(
+            create: (context) => NotesProvider(
+              NotesApiService(storageService: storageService),
+            ),
+          ),
+          ChangeNotifierProvider(
+            create: (context) => FriendProvider(
+              storageService: storageService,
             ),
           ),
         ],
