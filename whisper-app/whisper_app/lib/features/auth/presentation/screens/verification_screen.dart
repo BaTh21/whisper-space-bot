@@ -191,171 +191,212 @@ class VerificationScreenState extends State<VerificationScreen> {
     return LoadingOverlay(
       isLoading: _isLoading,
       child: Scaffold(
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 40),
-                const Icon(
-                  Icons.verified_user,
-                  size: 80,
-                  color: Colors.blue,
+        body: Stack(
+          children: [
+            // 🌈 Gradient Background
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Verify Your Email',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'We sent a 6-digit verification code to:',
-                  style: TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.email,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-                const SizedBox(height: 40),
+              ),
+            ),
 
-                // Instruction
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info, color: Colors.blue, size: 20),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Check your email inbox and spam folder for the verification code',
-                          style: TextStyle(fontSize: 14),
-                        ),
+            SafeArea(
+              child: SingleChildScrollView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.verified_user,
+                      size: 90,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Title
+                    Text(
+                      'Verify Your Email',
+                      style:
+                          Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Text(
+                      'Enter the 6-digit code sent to',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+
+                    const SizedBox(height: 5),
+
+                    Text(
+                      widget.email,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 30),
+                    ),
 
-                // Verification code input
-                const Text(
-                  'Enter verification code',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(6, (index) {
-                    return SizedBox(
-                      width: 50,
-                      child: TextFormField(
-                        controller: _controllers[index],
-                        focusNode: _focusNodes[index],
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.number,
-                        maxLength: 1,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        decoration: InputDecoration(
-                          counterText: '',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
+                    const SizedBox(height: 30),
+
+                    // 📦 White Card
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(25),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 30,
+                            offset: const Offset(0, 10),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide:
-                                const BorderSide(color: Colors.blue, width: 2),
-                          ),
-                        ),
-                        onChanged: (value) {
-                          if (value.isNotEmpty && index < 5) {
-                            _focusNodes[index + 1].requestFocus();
-                          }
-                          if (value.isEmpty && index > 0) {
-                            _focusNodes[index - 1].requestFocus();
-                          }
-                        },
+                        ],
                       ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 40),
-
-                // Verify Button
-                CustomButton(
-                  text: 'Verify Email',
-                  onPressed: _verify,
-                  fullWidth: true,
-                  icon: Icons.verified,
-                ),
-                const SizedBox(height: 20),
-
-                // Resend Code
-                Center(
-                  child: Column(
-                    children: [
-                      const Text(
-                        "Didn't receive the code?",
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_resendCountdown > 0)
-                        Text(
-                          'Resend code in $_resendCountdown seconds',
-                          style: const TextStyle(color: Colors.grey),
-                        )
-                      else
-                        TextButton(
-                          onPressed: _isResending ? null : _resendCode,
-                          child: _isResending
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Text(
-                                  'Resend Code',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                      child: Column(
+                        children: [
+                          // Info box
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info, color: Colors.blue, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Check inbox & spam folder for the code',
+                                    style: TextStyle(fontSize: 14),
                                   ),
                                 ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
+                              ],
+                            ),
+                          ),
 
-                // Back to register
-                Center(
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Use different email'),
-                  ),
+                          const SizedBox(height: 25),
+
+                          // Code input
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(6, (index) {
+                              return SizedBox(
+                                width: 45,
+                                child: TextFormField(
+                                  controller: _controllers[index],
+                                  focusNode: _focusNodes[index],
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  maxLength: 1,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  decoration: InputDecoration(
+                                    counterText: '',
+                                    filled: true,
+                                    fillColor: Colors.grey[100],
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                          color: Color(0xFF6A11CB), width: 2),
+                                    ),
+                                  ),
+                                  onChanged: (value) {
+                                    if (value.isNotEmpty && index < 5) {
+                                      _focusNodes[index + 1].requestFocus();
+                                    }
+                                    if (value.isEmpty && index > 0) {
+                                      _focusNodes[index - 1].requestFocus();
+                                    }
+                                  },
+                                ),
+                              );
+                            }),
+                          ),
+
+                          const SizedBox(height: 30),
+
+                          // Verify button
+                          CustomButton(
+                            text: 'Verify Email',
+                            onPressed: _verify,
+                            fullWidth: true,
+                            icon: Icons.verified,
+                            color: const Color(0xFF6A11CB),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Resend
+                          Column(
+                            children: [
+                              const Text(
+                                "Didn't receive the code?",
+                                style: TextStyle(fontSize: 15),
+                              ),
+                              const SizedBox(height: 6),
+                              if (_resendCountdown > 0)
+                                Text(
+                                  'Resend in $_resendCountdown s',
+                                  style: const TextStyle(color: Colors.grey),
+                                )
+                              else
+                                TextButton(
+                                  onPressed: _isResending ? null : _resendCode,
+                                  child: _isResending
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        )
+                                      : const Text(
+                                          'Resend Code',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF6A11CB),
+                                          ),
+                                        ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Back
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text(
+                        'Use different email',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
