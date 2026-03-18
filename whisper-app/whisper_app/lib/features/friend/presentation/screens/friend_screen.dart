@@ -43,20 +43,19 @@ class FriendBox extends StatelessWidget {
   final VoidCallback? onBlock;
   final VoidCallback? onUnblock;
 
-  const FriendBox({
-    super.key,
-    required this.name,
-    this.avatarUrl,
-    required this.status,
-    this.trailing,
-    this.mutualFriendsCount,
-    this.onViewProfile,
-    this.onOpenChat,
-    this.onCancel,
-    this.onAccept,
-    this.onBlock,
-    this.onUnblock
-  });
+  const FriendBox(
+      {super.key,
+      required this.name,
+      this.avatarUrl,
+      required this.status,
+      this.trailing,
+      this.mutualFriendsCount,
+      this.onViewProfile,
+      this.onOpenChat,
+      this.onCancel,
+      this.onAccept,
+      this.onBlock,
+      this.onUnblock});
 
   @override
   Widget build(BuildContext context) {
@@ -95,33 +94,31 @@ class FriendBox extends StatelessWidget {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: Colors.blueGrey,
-                backgroundImage:
-                avatarUrl != null && avatarUrl!.isNotEmpty
+                backgroundImage: avatarUrl != null && avatarUrl!.isNotEmpty
                     ? NetworkImage(avatarUrl!)
                     : null,
                 child: avatarUrl != null && avatarUrl!.isNotEmpty
                     ? null
                     : Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ],
           ),
           title: Row(
             children: [
               Expanded(
-                child: Text(
-                  name, 
-                  style: const TextStyle(fontWeight: FontWeight.bold)
-                ),
+                child: Text(name,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
               if (mutualFriendsCount != null && mutualFriendsCount! > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
@@ -154,8 +151,8 @@ class FriendBox extends StatelessWidget {
   }
 
   static List<PopupMenuEntry<_FriendAction>> _buildMenuItems(
-      FriendStatus status,
-      ) {
+    FriendStatus status,
+  ) {
     switch (status) {
       case FriendStatus.friend:
         return const [
@@ -255,16 +252,16 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
                       radius: 40,
                       backgroundColor: Colors.blueGrey,
                       backgroundImage:
-                      avatarUrl != null && avatarUrl!.isNotEmpty 
-                          ? NetworkImage(avatarUrl!)
-                          : null,
+                          avatarUrl != null && avatarUrl!.isNotEmpty
+                              ? NetworkImage(avatarUrl!)
+                              : null,
                       child: avatarUrl != null && avatarUrl!.isNotEmpty
                           ? null
                           : Text(
                               name.isNotEmpty ? name[0].toUpperCase() : '?',
                               style: const TextStyle(
-                                  color: Colors.white, 
-                                  fontWeight: FontWeight.bold, 
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
                                   fontSize: 24),
                             ),
                     ),
@@ -293,15 +290,15 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                if (mutualFriendsCount > 0)
-                  _buildMutualFriendsChip(),
+                if (mutualFriendsCount > 0) _buildMutualFriendsChip(),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
                   onPressed: onAdd,
                   icon: const Icon(Icons.person_add, size: 16),
                   label: const Text('Add', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     minimumSize: const Size(100, 32),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -335,9 +332,11 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
     if (mutualFriends.length == 1) {
       mutualText = mutualFriends[0]['username'];
     } else if (mutualFriends.length == 2) {
-      mutualText = '${mutualFriends[0]['username']} and ${mutualFriends[1]['username']}';
+      mutualText =
+          '${mutualFriends[0]['username']} and ${mutualFriends[1]['username']}';
     } else {
-      mutualText = '${mutualFriends[0]['username']}, ${mutualFriends[1]['username']} and ${mutualFriends.length - 2} others';
+      mutualText =
+          '${mutualFriends[0]['username']}, ${mutualFriends[1]['username']} and ${mutualFriends.length - 2} others';
     }
 
     return Container(
@@ -387,8 +386,8 @@ class SuggestionSectionHeader extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+                  fontWeight: FontWeight.bold,
+                ),
           ),
           if (onViewAll != null && itemCount > 5)
             TextButton(
@@ -530,7 +529,7 @@ class _FriendScreenState extends State<FriendScreen>
       final requestingData = await friendApi.getRequestingUsers();
       final blockedData = await friendApi.getBlockedUsers();
       final data = await friendApi.getFriends();
-      
+
       if (!mounted) return;
 
       setState(() {
@@ -540,7 +539,6 @@ class _FriendScreenState extends State<FriendScreen>
         blockedFriends = _mapBlockedUsers(blockedData);
         isLoading = false;
       });
-
     } catch (e) {
       debugPrint('Error loading friend: $e');
       if (mounted) {
@@ -552,7 +550,7 @@ class _FriendScreenState extends State<FriendScreen>
   Future<void> _handleAddSuggestion(int userId, String userName) async {
     try {
       final response = await friendApi.addFriend(userId);
-      
+
       if (mounted) {
         showTopSnackBar(context, response['msg']);
         await loadSuggestions();
@@ -569,7 +567,8 @@ class _FriendScreenState extends State<FriendScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const AddFriendScreen(), // Renamed from FriendSearchScreen
+        builder: (context) =>
+            const AddFriendScreen(), // Renamed from FriendSearchScreen
       ),
     ).then((_) {
       loadSuggestions();
@@ -602,16 +601,10 @@ class _FriendScreenState extends State<FriendScreen>
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Friends'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add), // Only one icon now
-            onPressed: _navigateToAddFriends,
-            tooltip: 'Add Friends',
-          ),
-        ],
-      ),
+      // appBar: AppBar(
+      //   // title: const Text('Friends'),
+
+      // ),
       body: RefreshIndicator(
         onRefresh: () async {
           await loadFriends();
@@ -626,8 +619,8 @@ class _FriendScreenState extends State<FriendScreen>
               if (suggestFriends.isNotEmpty) ...[
                 SuggestionSectionHeader(
                   title: 'People You May Know',
-                  onViewAll: suggestFriends.length > 5 
-                      ? _navigateToViewAllSuggestions 
+                  onViewAll: suggestFriends.length > 5
+                      ? _navigateToViewAllSuggestions
                       : null,
                   itemCount: suggestFriends.length,
                 ),
@@ -638,27 +631,28 @@ class _FriendScreenState extends State<FriendScreen>
                       : ListView.builder(
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemCount: suggestFriends.length > 5 ? 6 : suggestFriends.length,
+                          itemCount: suggestFriends.length > 5
+                              ? 6
+                              : suggestFriends.length,
                           itemBuilder: (context, index) {
                             if (index == 5) {
                               return _buildViewMoreBox();
                             }
-                            
+
                             final friend = suggestFriends[index];
                             final id = int.tryParse(friend['id'] ?? '');
-                            
+
                             return EnhancedSuggestFriendBox(
                               name: friend['name']!,
                               avatarUrl: friend['avatar'],
-                              mutualFriendsCount: friend['mutual_friends_count'] ?? 0,
+                              mutualFriendsCount:
+                                  friend['mutual_friends_count'] ?? 0,
                               mutualFriends: friend['mutual_friends'] ?? [],
                               isOnline: friend['is_online'] ?? false,
                               onAdd: id == null
                                   ? null
-                                  : () => _handleAddSuggestion(
-                                      id, 
-                                      friend['name']!
-                                    ),
+                                  : () =>
+                                      _handleAddSuggestion(id, friend['name']!),
                               onViewProfile: () {
                                 debugPrint('View profile of ${friend['name']}');
                               },
@@ -672,11 +666,21 @@ class _FriendScreenState extends State<FriendScreen>
               // Friends Tabs Section
               Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text(
-                  'Your Friends',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Your Friends',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.person_add),
+                      onPressed: _navigateToAddFriends,
+                      tooltip: 'Add Friends',
+                    ),
+                  ],
                 ),
               ),
               Container(
@@ -772,7 +776,8 @@ class _FriendScreenState extends State<FriendScreen>
     );
   }
 
-  Widget _buildFriendsList(List<Map<String, dynamic>> friends, FriendStatus status) {
+  Widget _buildFriendsList(
+      List<Map<String, dynamic>> friends, FriendStatus status) {
     if (friends.isEmpty) {
       return Center(
         child: Column(
@@ -834,19 +839,20 @@ class _FriendScreenState extends State<FriendScreen>
                   }
                 }
               : null,
-          onBlock: status == FriendStatus.friend || status == FriendStatus.requesting
-              ? () async {
-                  final id = int.tryParse(f['id'] ?? '');
-                  if (id == null) return;
-                  try {
-                    await friendApi.blockUser(id);
-                    await loadFriends();
-                    await loadSuggestions();
-                  } catch (e) {
-                    showTopSnackBar(context, e.toString());
-                  }
-                }
-              : null,
+          onBlock:
+              status == FriendStatus.friend || status == FriendStatus.requesting
+                  ? () async {
+                      final id = int.tryParse(f['id'] ?? '');
+                      if (id == null) return;
+                      try {
+                        await friendApi.blockUser(id);
+                        await loadFriends();
+                        await loadSuggestions();
+                      } catch (e) {
+                        showTopSnackBar(context, e.toString());
+                      }
+                    }
+                  : null,
           onUnblock: status == FriendStatus.blocked
               ? () async {
                   final id = int.tryParse(f['id'] ?? '');
@@ -927,7 +933,8 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
   Future<void> _refreshSuggestions() async {
     setState(() => isLoading = true);
     try {
-      final newSuggestions = await widget.friendApi.getFriendSuggestions(limit: 20);
+      final newSuggestions =
+          await widget.friendApi.getFriendSuggestions(limit: 20);
       if (mounted) {
         setState(() {
           suggestions = List<Map<String, dynamic>>.from(newSuggestions);
@@ -966,11 +973,13 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                         const Center(
                           child: Column(
                             children: [
-                              Icon(Icons.people_outline, size: 80, color: Colors.grey),
+                              Icon(Icons.people_outline,
+                                  size: 80, color: Colors.grey),
                               SizedBox(height: 16),
                               Text(
                                 'No suggestions available',
-                                style: TextStyle(fontSize: 16, color: Colors.grey),
+                                style:
+                                    TextStyle(fontSize: 16, color: Colors.grey),
                               ),
                             ],
                           ),
@@ -983,7 +992,7 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                       itemBuilder: (context, index) {
                         final user = suggestions[index];
                         final userId = int.tryParse(user['id'] ?? '');
-                        
+
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
                           shape: RoundedRectangleBorder(
@@ -996,12 +1005,12 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                                 CircleAvatar(
                                   radius: 30,
                                   backgroundColor: Colors.blueGrey,
-                                  backgroundImage: user['avatar'] != null && 
-                                      user['avatar'].toString().isNotEmpty
+                                  backgroundImage: user['avatar'] != null &&
+                                          user['avatar'].toString().isNotEmpty
                                       ? NetworkImage(user['avatar'])
                                       : null,
-                                  child: user['avatar'] == null || 
-                                      user['avatar'].toString().isEmpty
+                                  child: user['avatar'] == null ||
+                                          user['avatar'].toString().isEmpty
                                       ? Text(
                                           user['name'][0].toUpperCase(),
                                           style: const TextStyle(
@@ -1022,7 +1031,8 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                                       decoration: BoxDecoration(
                                         color: Colors.green,
                                         shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
+                                        border: Border.all(
+                                            color: Colors.white, width: 2),
                                       ),
                                     ),
                                   ),
@@ -1049,7 +1059,8 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                               onPressed: userId == null
                                   ? null
                                   : () async {
-                                      await widget.onAddFriend(userId, user['name']);
+                                      await widget.onAddFriend(
+                                          userId, user['name']);
                                       if (mounted) {
                                         setState(() {
                                           suggestions.removeAt(index);
@@ -1074,7 +1085,7 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
   Widget _buildMutualFriendsText(Map<String, dynamic> user) {
     final count = user['mutual_friends_count'] ?? 0;
     final mutualFriends = user['mutual_friends'] ?? [];
-    
+
     if (mutualFriends.isEmpty) {
       return Text(
         '$count mutual ${count == 1 ? 'friend' : 'friends'}',
@@ -1086,9 +1097,11 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
     if (mutualFriends.length == 1) {
       names = mutualFriends[0]['username'];
     } else if (mutualFriends.length == 2) {
-      names = '${mutualFriends[0]['username']} and ${mutualFriends[1]['username']}';
+      names =
+          '${mutualFriends[0]['username']} and ${mutualFriends[1]['username']}';
     } else {
-      names = '${mutualFriends[0]['username']}, ${mutualFriends[1]['username']} and ${mutualFriends.length - 2} others';
+      names =
+          '${mutualFriends[0]['username']}, ${mutualFriends[1]['username']} and ${mutualFriends.length - 2} others';
     }
 
     return Row(
