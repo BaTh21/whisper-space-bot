@@ -125,11 +125,11 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
           backgroundColor: Colors.green,
         );
         
-        // Remove from suggestions or search results
-        setState(() {
-          suggestions.removeWhere((user) => user['id'] == userId);
-          searchResults.removeWhere((user) => user['id'] == userId);
-        });
+        // Refresh both lists to update status
+        await _loadSuggestions();
+        if (hasSearched) {
+          await _performSearch();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -172,6 +172,13 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
     }
   }
 
+  bool _isButtonEnabled(String? status) {
+    if (status == null) return true;
+    return status.toLowerCase() != 'pending' && 
+           status.toLowerCase() != 'accepted' && 
+           status.toLowerCase() != 'blocked';
+  }
+
   Widget _buildMutualFriendsChip(int count) {
     if (count == 0) return const SizedBox.shrink();
     
@@ -193,6 +200,99 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildStatusBadge(String? status) {
+    if (status == null) return const SizedBox.shrink();
+    
+    switch (status.toLowerCase()) {
+      case 'accepted':
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.green.shade200),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle, size: 14, color: Colors.green),
+              const SizedBox(width: 4),
+              Text(
+                'Friends',
+                style: TextStyle(
+                  color: Colors.green.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        );
+      
+      case 'pending':
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.hourglass_empty, size: 14, color: Colors.orange),
+              const SizedBox(width: 4),
+              Text(
+                'Pending',
+                style: TextStyle(
+                  color: Colors.orange.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        );
+      
+      case 'blocked':
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.block, size: 14, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                'Blocked',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        );
+      
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   @override
@@ -333,9 +433,6 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
         final isOnline = user['is_online'] ?? false;
         final mutualCount = user['mutual_friends_count'] ?? 0;
         
-        // Skip if already friends
-        if (status == 'accepted') return const SizedBox.shrink();
-        
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           shape: RoundedRectangleBorder(
@@ -405,70 +502,32 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                   const SizedBox(height: 4),
               ],
             ),
-            trailing: status == 'pending'
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Pending',
-                      style: TextStyle(
-                        color: Colors.orange.shade800,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+            trailing: status != null
+                ? _buildStatusBadge(status)
+                : SizedBox(
+                    width: 70,
+                    child: ElevatedButton(
+                      onPressed: () => _handleAddFriend(
+                        user['id'], 
+                        user['username'],
                       ),
-                    ),
-                  )
-                : status == 'blocked'
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(
-                          'Blocked',
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      )
-                    : SizedBox(
-                        width: 70,
-                        child: ElevatedButton(
-                          onPressed: status == 'pending' || status == 'blocked'
-                              ? null
-                              : () => _handleAddFriend(
-                                  user['id'], 
-                                  user['username'],
-                                ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _getStatusButtonColor(status),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                          ),
-                          child: Text(
-                            _getFriendshipStatusText(status),
-                            style: const TextStyle(fontSize: 12),
-                          ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
                         ),
                       ),
+                      child: const Text(
+                        'Add',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
           ),
         );
       },
@@ -559,9 +618,6 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
           final mutualCount = user['mutual_friends_count'] ?? 0;
           final mutualFriends = user['mutual_friends'] ?? [];
           
-          // Skip if already friends
-          if (status == 'accepted') return const SizedBox.shrink();
-          
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
             shape: RoundedRectangleBorder(
@@ -640,73 +696,32 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                     ),
                 ],
               ),
-              trailing: status == 'pending'
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        'Pending',
-                        style: TextStyle(
-                          color: Colors.orange.shade800,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
+              trailing: status != null
+                  ? _buildStatusBadge(status)
+                  : SizedBox(
+                      width: 70,
+                      child: ElevatedButton(
+                        onPressed: () => _handleAddFriend(
+                          user['id'], 
+                          user['username'],
                         ),
-                      ),
-                    )
-                  : status == 'blocked'
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Text(
-                            'Blocked',
-                            style: TextStyle(
-                              color: Colors.grey.shade700,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        )
-                      : SizedBox(
-                          width: 70,
-                          child: ElevatedButton(
-                            onPressed: status == 'pending' || 
-                                    status == 'blocked'
-                                ? null
-                                : () => _handleAddFriend(
-                                    user['id'], 
-                                    user['username'],
-                                  ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: 
-                                  _getStatusButtonColor(status),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: 
-                                    BorderRadius.circular(20),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 8,
-                              ),
-                            ),
-                            child: Text(
-                              _getFriendshipStatusText(status),
-                              style: const TextStyle(fontSize: 12),
-                            ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
                           ),
                         ),
+                        child: const Text(
+                          'Add',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
             ),
           );
         },
