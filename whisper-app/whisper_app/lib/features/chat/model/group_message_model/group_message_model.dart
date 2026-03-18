@@ -167,20 +167,21 @@ class GroupMessageModel {
     ParentMessageModel? parentMessage,
   }) {
     return GroupMessageModel(
-        id: id ?? this.id,
-        incomingTempId: incomingTempId,
-        sender: sender,
-        forwardedBy: forwardedBy,
-        groupId: groupId,
-        content: content ?? this.content,
-        callContent: callContent,
-        createdAt: createdAt ?? this.createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        fileUrl: fileUrl ?? this.fileUrl,
-        voiceUrl: voiceUrl ?? this.voiceUrl,
-        seenBy: seenBy ?? this.seenBy,
-        tempId: tempId,
-        parentMessage: parentMessage,
-        type: type);
+      id: id ?? this.id,
+      incomingTempId: incomingTempId,
+      sender: sender,
+      forwardedBy: forwardedBy ?? this.forwardedBy,
+      groupId: groupId,
+      content: content ?? this.content,
+      callContent: callContent ?? this.callContent,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      fileUrl: fileUrl ?? this.fileUrl,
+      voiceUrl: voiceUrl ?? this.voiceUrl,
+      seenBy: seenBy ?? this.seenBy,
+      tempId: tempId ?? this.tempId,
+      parentMessage: parentMessage ?? this.parentMessage,
+      type: type ?? this.type,
+    );
   }
 }

@@ -573,6 +573,7 @@ async def websocket_group_chat(
                         "action": "edit",
                         "message_id": message_id,
                         "new_content": new_content,
+                        "message_type": "text",
                         "updated_at": to_local_iso(updated.updated_at, tz_offset_hours=7)
                     })
                     continue

@@ -39,6 +39,7 @@ dependencies:
   flutter_spinkit: ^5.2.0
   fluttertoast: ^9.0.0
   email_validator: ^3.0.0
+  awesome_emoji_picker: ^1.0.5
 
 dev_dependencies:
   flutter_test:

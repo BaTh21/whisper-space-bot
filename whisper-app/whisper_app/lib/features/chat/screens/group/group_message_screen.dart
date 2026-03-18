@@ -11,6 +11,7 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import './message_bubble_screen.dart';
+import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
 
 String _formatTime(DateTime dateTime) {
   final diff = DateTime.now().difference(dateTime);
@@ -50,10 +51,14 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
+  String? editingMessageId;
+  String? replyingToMessageId;
+  ParentMessageModel? replyingToMessage;
 
   final _recorder = AudioRecorder();
   bool _isRecording = false;
   String? _recordedFilePath;
+  bool _showEmojiPicker = false;
 
   late final StreamSubscription _wsSubscription;
 
@@ -195,9 +200,12 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
           final index = _messages.indexWhere(
             (m) => m.id == data['message_id'],
           );
+
           if (index != -1) {
-            _messages[index] =
-                _messages[index].copyWith(content: data['new_content']);
+            _messages[index] = _messages[index].copyWith(
+              content: data['new_content'],
+              updatedAt: DateTime.parse(data['updated_at']),
+            );
           }
         });
         return;
@@ -271,7 +279,32 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
-    widget.groupWebsocket.sendMessage(text);
+    if (editingMessageId != null) {
+      final index =
+          _messages.indexWhere((m) => m.id.toString() == editingMessageId);
+
+      if (index != -1) {
+        final oldMessage = _messages[index];
+        final editedMessage = oldMessage.copyWith(content: text);
+
+        setState(() {
+          _messages[index] = editedMessage;
+          editingMessageId = null;
+        });
+
+        widget.groupWebsocket.sendEditMessage(oldMessage.id, text);
+      }
+    } else {
+      widget.groupWebsocket.sendMessage(
+        text,
+        replyingToMessageId,
+      );
+
+      setState(() {
+        replyingToMessageId = null;
+        replyingToMessage = null;
+      });
+    }
     _controller.clear();
   }
 
@@ -426,6 +459,51 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     }
   }
 
+  void _handleBubbleAction(String action, dynamic msg) {
+    switch (action) {
+      case 'edit':
+        _controller.text = msg.content ?? '';
+        _controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: _controller.text.length),
+        );
+
+        setState(() {
+          editingMessageId = msg.id.toString();
+        });
+        break;
+
+      case 'delete':
+        widget.groupWebsocket.sendDeleteMessage(msg.id);
+        setState(() {
+          _messages.removeWhere((m) => m.id == msg.id);
+        });
+        break;
+
+      case 'reply':
+        setState(() {
+          replyingToMessageId = msg.id.toString();
+          replyingToMessage = ParentMessageModel(
+            id: msg.id,
+            sender: msg.sender,
+            content: msg.content,
+            callContent: msg.callContent,
+            fileUrl: msg.fileUrl,
+            voiceUrl: msg.voiceUrl,
+            type: msg.type,
+          );
+        });
+        break;
+
+      case 'pin':
+      case 'react':
+      case 'forward':
+      case 'save':
+      case 'preview':
+      case 'replace':
+        break;
+    }
+  }
+
   void _showAttachmentOptions() {
     showModalBottomSheet(
       context: context,
@@ -493,79 +571,272 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                   msg: msg,
                   isMe: isMe,
                   isSeen: isSeen,
+                  repliedMessage: msg.parentMessage,
+                  onAction: _handleBubbleAction,
                 ),
               );
             },
           ),
         ),
         SafeArea(
-          child: Container(
-            color: Theme.of(context).primaryColor, // solid background
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                // Image Picker Button
-                IconButton(
-                  icon: const Icon(Icons.attach_file, color: Colors.white),
-                  onPressed: _showAttachmentOptions,
-                ),
-
-                const SizedBox(width: 8),
-
-                // Voice Record Button
-                GestureDetector(
-                  onLongPressStart: (_) => _startRecording(),
-                  onLongPressEnd: (_) => _stopRecording(),
-                  child: Icon(
-                    _isRecording ? Icons.mic : Icons.mic_none,
-                    color: _isRecording ? Colors.red : Colors.white,
-                    size: 28,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (replyingToMessage != null)
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Reply icon
+                      const Icon(Icons.reply, size: 20, color: Colors.green),
+                      const SizedBox(width: 8),
 
-                const SizedBox(width: 8),
-
-                // Text Input
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _controller,
-                            decoration: const InputDecoration(
-                              hintText: 'Type a message...',
-                              border: InputBorder.none,
+                      // Message preview
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Replying to:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black54,
+                              ),
                             ),
-                            minLines: 1,
-                            maxLines: 5,
-                          ),
+                            const SizedBox(height: 2),
+
+                            // Dynamic preview based on type
+                            if (replyingToMessage!.type == 'text' &&
+                                replyingToMessage!.content != null)
+                              Text(
+                                replyingToMessage!.content!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            else if (replyingToMessage!.type == 'file' &&
+                                replyingToMessage!.fileUrl != null)
+                              Row(
+                                children: const [
+                                  Icon(Icons.insert_drive_file,
+                                      size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'File',
+                                      style: TextStyle(
+                                          fontSize: 13, color: Colors.black87),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else if (replyingToMessage!.type == 'voice' &&
+                                replyingToMessage!.voiceUrl != null)
+                              Row(
+                                children: const [
+                                  Icon(Icons.mic, size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Voice Message',
+                                    style: TextStyle(
+                                        fontSize: 13, color: Colors.black87),
+                                  ),
+                                ],
+                              )
+                            else if (replyingToMessage!.type == 'image' &&
+                                replyingToMessage!.fileUrl != null)
+                              Row(
+                                children: const [
+                                  Icon(Icons.image,
+                                      size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Image',
+                                    style: TextStyle(
+                                        fontSize: 13, color: Colors.black87),
+                                  ),
+                                ],
+                              )
+                            else if (replyingToMessage!.type == 'video' &&
+                                replyingToMessage!.fileUrl != null)
+                              Row(
+                                children: const [
+                                  Icon(Icons.videocam,
+                                      size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Video',
+                                    style: TextStyle(
+                                        fontSize: 13, color: Colors.black87),
+                                  ),
+                                ],
+                              )
+                            else
+                              const Text(
+                                'Attachment',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.black87),
+                              ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.emoji_emotions_outlined,
-                              color: Colors.grey),
-                          onPressed: () {},
+                      ),
+
+                      // Close button
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            replyingToMessageId = null;
+                            replyingToMessage = null;
+                          });
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Icon(Icons.close, color: Colors.red, size: 18),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-
-                const SizedBox(width: 8),
-
-                // Send Button
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.white),
-                  onPressed: _sendMessage,
+              if (editingMessageId != null)
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  color: Colors.grey.shade200,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit, size: 16, color: Colors.blue),
+                      const SizedBox(width: 6),
+                      const Expanded(
+                        child: Text(
+                          'Editing message',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => editingMessageId = null);
+                          _controller.clear();
+                        },
+                        child: const Icon(Icons.close,
+                            color: Colors.red, size: 18),
+                      )
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              Container(
+                color: Theme.of(context).primaryColor, // solid background
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    // Image Picker Button
+                    IconButton(
+                      icon: const Icon(Icons.attach_file, color: Colors.white),
+                      onPressed: _showAttachmentOptions,
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Voice Record Button
+                    GestureDetector(
+                      onLongPressStart: (_) => _startRecording(),
+                      onLongPressEnd: (_) => _stopRecording(),
+                      child: Icon(
+                        _isRecording ? Icons.mic : Icons.mic_none,
+                        color: _isRecording ? Colors.red : Colors.white,
+                        size: 28,
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Text Input
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.grey[300]!),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _controller,
+                                decoration: InputDecoration(
+                                  hintText: editingMessageId != null
+                                      ? 'Edit message...'
+                                      : 'Type a message...',
+                                  border: InputBorder.none,
+                                ),
+                                minLines: 1,
+                                maxLines: 5,
+                              ),
+                            ),
+
+                            // Emoji Button
+                            IconButton(
+                              icon: Icon(
+                                Icons.emoji_emotions_outlined,
+                                color: editingMessageId != null
+                                    ? Colors.blue
+                                    : Colors.grey,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _showEmojiPicker = !_showEmojiPicker;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Send Button
+                    IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed: _sendMessage,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Emoji Picker
+              if (_showEmojiPicker)
+                SizedBox(
+                  height: 250,
+                  child: AwesomeEmojiPicker(
+                    onEmojiSelected: (emoji) {
+                      _controller.text += emoji.char;
+                      _controller.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _controller.text.length),
+                      );
+                    },
+                    emojiSize: 32.0,
+                    cellSize: 48.0,
+                    categoryBarPadding: const EdgeInsets.symmetric(vertical: 8),
+                    categoryBarHeight: 30.0,
+                    iconSize: 30.0,
+                  ),
+                ),
+            ],
           ),
         )
       ],
