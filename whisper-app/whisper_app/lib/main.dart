@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,20 +11,20 @@ import 'features/feed/presentation/providers/feed_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     final storageService = StorageService();
     await storageService.init();
-    
+
     final authService = AuthService(storageService: storageService);
-    final feedApiService = FeedApiService(storageService: storageService); 
-    
+    final feedApiService = FeedApiService(storageService: storageService);
+
     runApp(
       MultiProvider(
         providers: [
           Provider<StorageService>(create: (_) => storageService),
           Provider<AuthService>(create: (_) => authService),
-          Provider<FeedApiService>(create: (_) => feedApiService), 
+          Provider<FeedApiService>(create: (_) => feedApiService),
           ChangeNotifierProvider(
             create: (context) => AuthProvider(
               authService: authService,
@@ -34,7 +33,7 @@ void main() async {
           ),
           ChangeNotifierProvider(
             create: (context) => FeedProvider(
-              feedApiService: context.read<FeedApiService>(), 
+              feedApiService: context.read<FeedApiService>(),
             ),
           ),
         ],
@@ -63,14 +62,14 @@ class MyApp extends StatelessWidget {
       title: 'Whisper Space',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primaryColor: const Color(0xFF6C63FF),
+        primaryColor: const Color(0xFF6A11CB),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
+          seedColor: const Color(0xFF6A11CB),
           brightness: Brightness.light,
         ),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF6C63FF),
+          backgroundColor: Color(0xFF6A11CB),
           foregroundColor: Colors.white,
           elevation: 0,
         ),
