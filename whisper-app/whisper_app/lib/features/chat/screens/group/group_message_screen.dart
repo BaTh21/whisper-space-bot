@@ -308,13 +308,12 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       if (index != -1) {
         setState(() {
           _messages[index] = _messages[index].copyWith(
-            id: message.id,
-            fileUrl: message.fileUrl,
-            content: message.content,
-            createdAt: message.createdAt,
-            seenBy: message.seenBy,
-            type: message.type
-          );
+              id: message.id,
+              fileUrl: message.fileUrl,
+              content: message.content,
+              createdAt: message.createdAt,
+              seenBy: message.seenBy,
+              type: message.type);
         });
       }
     } catch (e) {
@@ -333,18 +332,17 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     final type = _getFileType(file);
 
     final tempMessage = GroupMessageModel(
-      id: -1,
-      tempId: tempId,
-      sender: AuthorModel(
-        id: widget.currentUserId,
-        username: "me",
-        avatar: null,
-      ),
-      groupId: widget.groupId,
-      createdAt: DateTime.now(),
-      voiceUrl: file.path,
-      type: "voice"
-    );
+        id: -1,
+        tempId: tempId,
+        sender: AuthorModel(
+          id: widget.currentUserId,
+          username: "me",
+          avatar: null,
+        ),
+        groupId: widget.groupId,
+        createdAt: DateTime.now(),
+        voiceUrl: file.path,
+        type: "voice");
 
     setState(() {
       _messages.insert(0, tempMessage);
@@ -367,8 +365,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
               content: message.content,
               createdAt: message.createdAt,
               seenBy: message.seenBy,
-              type: message.type
-          );
+              type: message.type);
         });
       }
     } catch (e) {
@@ -412,13 +409,12 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       if (index != -1) {
         setState(() {
           _messages[index] = _messages[index].copyWith(
-            id: message.id,
-            fileUrl: message.fileUrl,
-            content: message.content,
-            createdAt: message.createdAt,
-            seenBy: message.seenBy,
-            type: message.type
-          );
+              id: message.id,
+              fileUrl: message.fileUrl,
+              content: message.content,
+              createdAt: message.createdAt,
+              seenBy: message.seenBy,
+              type: message.type);
         });
       }
     } catch (e) {
@@ -491,7 +487,8 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
               bool isUploading = msg.id == -1;
 
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: MessageBubble(
                   msg: msg,
                   isMe: isMe,

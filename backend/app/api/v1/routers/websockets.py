@@ -649,6 +649,7 @@ async def websocket_group_chat(
                         "avatar_url": msg.sender.avatar_url
                     },
                     "group_id": msg.group_id,
+                    "message_type": msg.message_type.value,
                     "content": msg.content,
                     "call_content": msg.call_content,
                     "created_at": to_local_iso(msg.created_at, tz_offset_hours=7),
