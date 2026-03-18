@@ -64,7 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _currentUserId = user.id;
         });
-        
+
         // Set current user ID in FeedProvider
         final feedProvider = Provider.of<FeedProvider>(context, listen: false);
         feedProvider.setCurrentUserId(user.id);
@@ -187,40 +187,53 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBottomNavBar() {
-    return NavigationBar(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (index) {
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home),
-          label: 'Feed',
+    const primaryColor = Color(0xFF6A11CB);
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25),
+        child: NavigationBar(
+          height: 70,
+          backgroundColor: Colors.white,
+          elevation: 10,
+          selectedIndex: _selectedIndex,
+          indicatorColor: primaryColor.withOpacity(0.15),
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+          onDestinationSelected: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.home_outlined, color: Colors.grey),
+              selectedIcon: Icon(Icons.home, color: primaryColor),
+              label: 'Feed',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.grey),
+              selectedIcon: Icon(Icons.chat_bubble, color: primaryColor),
+              label: 'Messages',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.group_outlined, color: Colors.grey),
+              selectedIcon: Icon(Icons.group, color: primaryColor),
+              label: 'Friends',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.note_outlined, color: Colors.grey),
+              selectedIcon: Icon(Icons.note, color: primaryColor),
+              label: 'Notes',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.person_outlined, color: Colors.grey),
+              selectedIcon: Icon(Icons.person, color: primaryColor),
+              label: 'Profile',
+            ),
+          ],
         ),
-        NavigationDestination(
-          icon: Icon(Icons.chat_bubble_outline),
-          selectedIcon: Icon(Icons.chat_bubble),
-          label: 'Messages',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.group_outlined),
-          selectedIcon: Icon(Icons.group),
-          label: 'Friends',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.note_outlined),
-          selectedIcon: Icon(Icons.note),
-          label: 'Notes',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outlined),
-          selectedIcon: Icon(Icons.person),
-          label: 'Profile',
-        ),
-      ],
+      ),
     );
   }
 
@@ -282,7 +295,7 @@ class _FeedTabState extends State<FeedTab> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    
+
     // Use post frame callback to ensure context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCurrentUser();
@@ -299,7 +312,7 @@ class _FeedTabState extends State<FeedTab> {
       setState(() {
         _currentUserId = user.id;
       });
-      
+
       // Set current user ID in FeedProvider
       final feedProvider = Provider.of<FeedProvider>(context, listen: false);
       feedProvider.setCurrentUserId(user.id);
@@ -308,10 +321,11 @@ class _FeedTabState extends State<FeedTab> {
 
   Future<void> _loadUserGroups() async {
     if (!mounted) return;
-    
+
     try {
       // Get FeedApiService from provider
-      final feedApiService = Provider.of<FeedApiService>(context, listen: false);
+      final feedApiService =
+          Provider.of<FeedApiService>(context, listen: false);
       final groups = await feedApiService.getUserGroups();
       if (mounted) {
         setState(() {
@@ -326,7 +340,7 @@ class _FeedTabState extends State<FeedTab> {
 
   Future<void> _initializeFeed() async {
     if (!mounted) return;
-    
+
     try {
       final feedProvider = Provider.of<FeedProvider>(context, listen: false);
       await feedProvider.loadInitialFeed();
@@ -336,14 +350,15 @@ class _FeedTabState extends State<FeedTab> {
     } catch (e) {
       print('Failed to initialize feed: $e');
       if (mounted) {
-        setState(() => _isInitialized = true); // Still set initialized to show error state
+        setState(() =>
+            _isInitialized = true); // Still set initialized to show error state
       }
     }
   }
 
   void _onScroll() {
     if (!mounted) return;
-    
+
     final currentScroll = _scrollController.position.pixels;
     if (currentScroll > 100 && _showCreateButton) {
       setState(() => _showCreateButton = false);
@@ -445,10 +460,10 @@ class _FeedTabState extends State<FeedTab> {
                           onLike: () => _handleLike(feedProvider, diary.id),
                           onFavorite: () =>
                               _handleFavorite(feedProvider, diary.id),
-                          onComment: (diaryId, content, parentId,
-                                  replyToUserId) =>
-                              _handleComment(
-                                  feedProvider, diaryId, content, parentId, replyToUserId),
+                          onComment:
+                              (diaryId, content, parentId, replyToUserId) =>
+                                  _handleComment(feedProvider, diaryId, content,
+                                      parentId, replyToUserId),
                           onEdit: (diaryToEdit) => _handleEditDiary(
                               context, feedProvider, diaryToEdit),
                           onDelete: (diaryId) => _handleDeleteDiary(
@@ -544,56 +559,56 @@ class _FeedTabState extends State<FeedTab> {
     }
   }
 
-void _handleDeleteDiary(
-    BuildContext context, FeedProvider feedProvider, int diaryId) async {
-  final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Delete Diary'),
-          content: const Text('Are you sure you want to delete this diary? '
-              'This action cannot be undone.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text(
-                'Delete',
-                style: TextStyle(color: Colors.red),
+  void _handleDeleteDiary(
+      BuildContext context, FeedProvider feedProvider, int diaryId) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete Diary'),
+            content: const Text('Are you sure you want to delete this diary? '
+                'This action cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
               ),
-            ),
-          ],
-        ),
-      ) ??
-      false;
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
 
-  if (confirmed) {
-    try {
-      await feedProvider.deleteDiary(diaryId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Diary deleted successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete diary: $e'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
+    if (confirmed) {
+      try {
+        await feedProvider.deleteDiary(diaryId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Diary deleted successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete diary: $e'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
   }
-}
 
   void _navigateToCreateDiary(FeedProvider feedProvider) {
     final feedApiService = Provider.of<FeedApiService>(context, listen: false);
@@ -606,7 +621,7 @@ void _handleDeleteDiary(
           onDiaryCreated: (DiaryModel diary) {
             feedProvider.diaries.insert(0, diary);
             _showSuccessSnackBar('Created: "${diary.title}"');
-            
+
             if (_scrollController.hasClients) {
               _scrollController.animateTo(
                 0,
@@ -652,13 +667,12 @@ class _RightSlidePageRoute extends PageRouteBuilder {
           pageBuilder: (context, animation, secondaryAnimation) => widget,
           transitionDuration: const Duration(milliseconds: 300),
           reverseTransitionDuration: const Duration(milliseconds: 300),
-          transitionsBuilder:
-              (context, animation, secondaryAnimation, child) {
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
             final begin = const Offset(1.0, 0.0);
             final end = Offset.zero;
             final curve = Curves.easeInOut;
-            final tween = Tween(begin: begin, end: end)
-                .chain(CurveTween(curve: curve));
+            final tween =
+                Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
             return SlideTransition(
               position: animation.drive(tween),
               child: child,
