@@ -107,6 +107,7 @@ class ParentMessageResponse(BaseModel):
     call_content: Optional[str] = None
     file_url: Optional[str] = None
     voice_url: Optional[str] = None
+    message_type: Optional[str] = None
     
 class MarkMessagesAsReadRequest(BaseModel):
     message_ids: List[int]

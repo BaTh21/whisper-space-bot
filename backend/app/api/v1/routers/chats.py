@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import cloudinary
 import cloudinary.uploader
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
@@ -40,7 +40,9 @@ def to_utc(dt):
 @router.get("/", response_model=list[ChatListItem])
 def list_chats(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0)
 ):
     chats = []
 
@@ -113,7 +115,7 @@ def list_chats(
         reverse=True
     )
 
-    return chats
+    return chats[offset: offset + limit]
 
 @router.get("/private/{friend_id}", response_model=List[MessageOut])
 async def get_private_chat(

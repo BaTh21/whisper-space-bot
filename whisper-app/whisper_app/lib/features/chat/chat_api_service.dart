@@ -13,21 +13,16 @@ class ChatAPISource {
   final StorageService storageService;
   final String baseUrl;
 
-  ChatAPISource({
-    required this.storageService,
-    String? baseUrl
-  }): baseUrl = baseUrl ?? ApiConstants.baseUrl;
+  ChatAPISource({required this.storageService, String? baseUrl})
+      : baseUrl = baseUrl ?? ApiConstants.baseUrl;
 
-  Future<Map<String, String>> _authHeaders() async{
+  Future<Map<String, String>> _authHeaders() async {
     final token = storageService.getToken();
     if (token == null) {
       throw Exception('Auth token is null');
     }
 
-    return{
-      ...ApiConstants.defaultHeaders,
-      'Authorization': 'Bearer $token'
-    };
+    return {...ApiConstants.defaultHeaders, 'Authorization': 'Bearer $token'};
   }
 
   Future<List<ChatListItemModel>> getChats() async {
@@ -38,7 +33,7 @@ class ChatAPISource {
 
     if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
-      return data.map((json)=>ChatListItemModel.fromJson(json)).toList();
+      return data.map((json) => ChatListItemModel.fromJson(json)).toList();
     } else {
       throw Exception(
         'Failed to load chats (${response.statusCode})',
@@ -50,49 +45,45 @@ class ChatAPISource {
     required String name,
     String? description,
     List<int> inviteUserIds = const [],
-  }) async{
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/groups/'),
-      headers: {
-        ...(await _authHeaders()),
-        'Content-Type':'application/json'
-      },
-      body: jsonEncode({
-        'name': name,
-        'description': description,
-        'invite_user_ids': inviteUserIds
-      }
-      )
-    );
-    if(response.statusCode == 201){
+  }) async {
+    final response = await http.post(Uri.parse('$baseUrl/api/v1/groups/'),
+        headers: {
+          ...(await _authHeaders()),
+          'Content-Type': 'application/json'
+        },
+        body: jsonEncode({
+          'name': name,
+          'description': description,
+          'invite_user_ids': inviteUserIds
+        }));
+    if (response.statusCode == 201) {
       final Map<String, dynamic> data = jsonDecode(response.body);
       return GroupDetailsModel.fromJson(data);
-    }
-    else{
+    } else {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
 
   Future<GroupDetailsModel> getGroupById(int groupId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/v1/groups/$groupId'),
-      headers: await _authHeaders()
-    );
+        Uri.parse('$baseUrl/api/v1/groups/$groupId'),
+        headers: await _authHeaders());
 
-    if(response.statusCode == 200){
+    if (response.statusCode == 200) {
       final Map<String, dynamic> data = jsonDecode(response.body);
       print('data $data');
       return GroupDetailsModel.fromJson(data);
-    }else{
-      throw Exception('Failed to group chat ($groupId) –  ${response.statusCode}');
+    } else {
+      throw Exception(
+          'Failed to group chat ($groupId) –  ${response.statusCode}');
     }
   }
 
   Future<GroupDetailsModel> updateGroupById(
-      int groupId, {
-        String? name,
-        String? description,
-      }) async {
+    int groupId, {
+    String? name,
+    String? description,
+  }) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/api/v1/groups/$groupId'),
       headers: {
@@ -115,33 +106,30 @@ class ChatAPISource {
 
   Future<void> deleteGroupId(int groupId) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/api/v1/groups/$groupId'),
-      headers: await _authHeaders()
-    );
-    if(response.statusCode != 204){
+        Uri.parse('$baseUrl/api/v1/groups/$groupId'),
+        headers: await _authHeaders());
+    if (response.statusCode != 204) {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
 
-  Future<void> leaveGroupById(int groupId) async{
+  Future<void> leaveGroupById(int groupId) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/api/v1/groups/leave/$groupId'),
-      headers: await _authHeaders()
-    );
-    if(response.statusCode != 204){
+        Uri.parse('$baseUrl/api/v1/groups/leave/$groupId'),
+        headers: await _authHeaders());
+    if (response.statusCode != 204) {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
 
   Future<List<UserModel>> getGroupMembers(int groupId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/v1/groups/$groupId/members/'),
-      headers: await _authHeaders()
-    );
-    if(response.statusCode == 200){
+        Uri.parse('$baseUrl/api/v1/groups/$groupId/members/'),
+        headers: await _authHeaders());
+    if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
-      return data.map((json)=>UserModel.fromJson(json)).toList();
-    }else{
+      return data.map((json) => UserModel.fromJson(json)).toList();
+    } else {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
@@ -172,14 +160,14 @@ class ChatAPISource {
   }
 
   Future<List<UserModel>> searchUsers(String query) async {
-    if(query.length < 2) return [];
+    if (query.length < 2) return [];
 
     final response = await http.get(
       Uri.parse('$baseUrl/api/v1/users/search?q=$query'),
       headers: await _authHeaders(),
     );
 
-    if(response.statusCode == 200){
+    if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
       return data.map((json) => UserModel.fromJson(json)).toList();
     } else {
@@ -189,20 +177,18 @@ class ChatAPISource {
 
   Future<void> inviteUser(int groupId, int userId) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/groups/$groupId/invites/$userId'),
-      headers: await _authHeaders()
-    );
-    if(response.statusCode != 200){
+        Uri.parse('$baseUrl/api/v1/groups/$groupId/invites/$userId'),
+        headers: await _authHeaders());
+    if (response.statusCode != 200) {
       throw Exception(jsonDecode(response.body));
     }
   }
 
   Future<void> removeMember(int groupId, int memberId) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/api/v1/groups/remove/$groupId/members/$memberId'),
-      headers: await _authHeaders()
-    );
-    if(response.statusCode != 204){
+        Uri.parse('$baseUrl/api/v1/groups/remove/$groupId/members/$memberId'),
+        headers: await _authHeaders());
+    if (response.statusCode != 204) {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
@@ -228,30 +214,29 @@ class ChatAPISource {
     }
   }
 
-  Future<List<GroupImage>> getGroupCovers(int groupId) async{
+  Future<List<GroupImage>> getGroupCovers(int groupId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/v1/groups/$groupId/cover'),
-      headers: await _authHeaders()
-    );
-    if(response.statusCode == 200){
+        Uri.parse('$baseUrl/api/v1/groups/$groupId/cover'),
+        headers: await _authHeaders());
+    if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
-      return data.map((json)=> GroupImage.fromJson(json)).toList();
-    }else{
+      return data.map((json) => GroupImage.fromJson(json)).toList();
+    } else {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
 
-  Future<void> deleteCoverById(int coverId) async{
+  Future<void> deleteCoverById(int coverId) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/api/v1/groups/cover/$coverId'),
-      headers: await _authHeaders()
-    );
-    if(response.statusCode != 204){
+        Uri.parse('$baseUrl/api/v1/groups/cover/$coverId'),
+        headers: await _authHeaders());
+    if (response.statusCode != 204) {
       throw Exception(jsonDecode(response.body)['detail']);
     }
   }
 
-  Future<GroupMessageModel> uploadFile(int groupId, File file, String tempId) async {
+  Future<GroupMessageModel> uploadFile(
+      int groupId, File file, String tempId) async {
     final uri = Uri.parse('$baseUrl/api/v1/messages/groups/$groupId');
 
     var request = http.MultipartRequest("POST", uri);
@@ -275,17 +260,21 @@ class ChatAPISource {
   }
 
   Future<GroupMessageModel> uploadVoice(
-      int groupId,
-      File file,
-      String tempId,
-      ) async {
+    int groupId,
+    File file,
+    String tempId,
+  ) async {
     final uri = Uri.parse('$baseUrl/api/v1/messages/groups/$groupId/voice');
 
     final request = http.MultipartRequest('POST', uri);
     request.headers.addAll(await _authHeaders());
 
     request.files.add(
-      await http.MultipartFile.fromPath('file', file.path, contentType: http.MediaType('audio', 'm4a'),),
+      await http.MultipartFile.fromPath(
+        'file',
+        file.path,
+        contentType: http.MediaType('audio', 'm4a'),
+      ),
     );
 
     request.fields['temp_id'] = tempId;
@@ -301,5 +290,26 @@ class ChatAPISource {
     final jsonData = json.decode(responseBody) as Map<String, dynamic>;
 
     return GroupMessageModel.fromJson(jsonData);
+  }
+
+  Future<GroupMessageModel> updateFileMessage(
+      int messageId, File file, String tempId) async {
+    final uri = Uri.parse('$baseUrl/api/v1/messages/$messageId/file');
+
+    final request = http.MultipartRequest('PUT', uri);
+
+    request.headers.addAll(await _authHeaders());
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    request.fields['temp_id'] = tempId;
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return GroupMessageModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to update file message: ${response.body}');
+    }
   }
 }

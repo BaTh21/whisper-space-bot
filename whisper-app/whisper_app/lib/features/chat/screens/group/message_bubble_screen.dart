@@ -8,6 +8,7 @@ import 'package:whisper_space_flutter/features/chat/video_player.dart';
 class MessageBubble extends StatelessWidget {
   final dynamic msg;
   final bool isMe;
+  final int currentUserId;
   final bool isSeen;
   final Function(String action, dynamic msg)? onAction;
   final ParentMessageModel? repliedMessage;
@@ -16,12 +17,13 @@ class MessageBubble extends StatelessWidget {
     super.key,
     required this.msg,
     required this.isMe,
+    required this.currentUserId,
     required this.isSeen,
     this.onAction,
     this.repliedMessage,
   });
 
-  bool get isUploading => msg.id == -1;
+  bool get isUploading => msg.isUploading == true || msg.id == -1;
 
   void _showBottomMenu(BuildContext context) {
     showModalBottomSheet(
@@ -44,7 +46,7 @@ class MessageBubble extends StatelessWidget {
           List<Map<String, dynamic>> moreActions = [
             if (msg.type != 'text')
               {'icon': Icons.save_alt, 'label': 'Save', 'value': 'save'},
-            if (msg.type != 'text')
+            if (msg.type != 'text' && msg.type != 'voice' && msg.type != 'file')
               {
                 'icon': Icons.visibility,
                 'label': 'Preview',
@@ -111,124 +113,55 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final maxWidth = MediaQuery.of(context).size.width * 0.5;
+
     return GestureDetector(
       onLongPress: () => _showBottomMenu(context),
       child: Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: (msg.fileUrl != null) ? 0 : 8,
-            vertical: (msg.fileUrl != null) ? 0 : 6,
-          ),
-          decoration: BoxDecoration(
-            color: (msg.fileUrl != null)
-                ? Colors.transparent
-                : isMe
-                    ? Theme.of(context).primaryColor
-                    : Colors.grey.shade300,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment:
-                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            children: [
-              if (msg.parentMessage != null)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 4),
-                  padding: const EdgeInsets.all(6),
-                  constraints: BoxConstraints(
-                    maxWidth: 200,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.reply, size: 16, color: Colors.green),
-                      const SizedBox(width: 4),
-
-                      Expanded(
-                        child: () {
-                          final parent = msg.parentMessage!;
-                          switch (parent.type) {
-                            case 'text':
-                              return Text(
-                                parent.content ?? '',
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.grey),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              );
-                            case 'file':
-                              return Row(
-                                children: const [
-                                  Icon(Icons.insert_drive_file,
-                                      size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text('File',
-                                      style: TextStyle(
-                                          fontSize: 12, color: Colors.grey)),
-                                ],
-                              );
-                            case 'voice':
-                              return Row(
-                                children: const [
-                                  Icon(Icons.mic, size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text('Voice Message',
-                                      style: TextStyle(
-                                          fontSize: 12, color: Colors.grey)),
-                                ],
-                              );
-                            case 'image':
-                              return Row(
-                                children: const [
-                                  Icon(Icons.image,
-                                      size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text('Image',
-                                      style: TextStyle(
-                                          fontSize: 12, color: Colors.grey)),
-                                ],
-                              );
-                            case 'video':
-                              return Row(
-                                children: const [
-                                  Icon(Icons.videocam,
-                                      size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text('Video',
-                                      style: TextStyle(
-                                          fontSize: 12, color: Colors.grey)),
-                                ],
-                              );
-                            default:
-                              return const Text(
-                                'Attachment',
-                                style:
-                                    TextStyle(fontSize: 12, color: Colors.grey),
-                              );
-                          }
-                        }(),
-                      ),
-                    ],
-                  ),
+        child: Column(
+          crossAxisAlignment:
+              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (msg.forwardedBy != null) _buildForwardLabel(msg),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: (msg.fileUrl != null) ? 0 : 8,
+                  vertical: (msg.fileUrl != null) ? 0 : 6,
                 ),
-              if (msg.type == "image" && msg.fileUrl != null)
-                _buildImage(context),
-              if (msg.type == "video" && msg.fileUrl != null)
-                _buildVideo(context),
-              if (msg.type == "file" && msg.fileUrl != null)
-                _buildFile(context),
-              if (msg.type == "voice" && msg.voiceUrl != null)
-                _buildVoice(context),
-              if (msg.type == "text" && msg.content != null)
-                _buildText(context),
-              if (msg.voiceUrl == null && msg.fileUrl == null)
-                _buildTime(context),
-            ],
-          ),
+                decoration: BoxDecoration(
+                  color: (msg.fileUrl != null)
+                      ? Colors.transparent
+                      : isMe
+                          ? Theme.of(context).primaryColor
+                          : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment:
+                      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    if (msg.parentMessage != null)
+                      _buildReplyLabel(msg, isMe: isMe),
+                    if (msg.type == "image" && msg.fileUrl != null)
+                      _buildImage(context),
+                    if (msg.type == "video" && msg.fileUrl != null)
+                      _buildVideo(context),
+                    if (msg.type == "file" && msg.fileUrl != null)
+                      _buildFile(context),
+                    if (msg.type == "voice" && msg.voiceUrl != null)
+                      _buildVoice(context),
+                    if (msg.type == "text" && msg.content != null)
+                      _buildText(context),
+                    if (msg.voiceUrl == null && msg.fileUrl == null)
+                      _buildTime(context),
+                  ],
+                ),
+              ),
+            )
+          ],
         ),
       ),
     );
@@ -277,26 +210,34 @@ class MessageBubble extends StatelessWidget {
   Widget _buildFile(BuildContext context) {
     final fileName = msg.fileUrl!.split('/').last;
 
-    return Container(
-      width: 220,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isMe ? Colors.blue.shade400 : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.insert_drive_file, size: 30),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              fileName,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+    return Stack(
+      children: [
+        Container(
+          width: 220,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isMe ? Theme.of(context).primaryColor : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(10),
           ),
-        ],
-      ),
+          child: Row(
+            children: [
+              const Icon(Icons.insert_drive_file, size: 30),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  fileName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isMe ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (isUploading) _uploadOverlay(),
+      ],
     );
   }
 
@@ -311,6 +252,7 @@ class MessageBubble extends StatelessWidget {
               url: msg.voiceUrl!,
               isOwn: isMe,
             ),
+            if (isUploading) _uploadOverlay(),
             Positioned(
               bottom: 0,
               right: 0,
@@ -375,8 +317,6 @@ class MessageBubble extends StatelessWidget {
             color: isMe ? Colors.white : Colors.black,
           ),
         ),
-
-        // ✅ Edited label
         if (isEdited) ...[
           const SizedBox(width: 4),
           Text(
@@ -388,7 +328,6 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
         ],
-
         if (isMe) ...[
           const SizedBox(width: 4),
           Icon(
@@ -408,10 +347,150 @@ class MessageBubble extends StatelessWidget {
           color: Colors.black45,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.white),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+            SizedBox(height: 8),
+            Text(
+              "Uploading...",
+              style: TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildReplyLabel(GroupMessageModel msg, {required bool isMe}) {
+    final parent = msg.parentMessage!;
+    final username = parent.sender.username;
+
+    Widget contentWidget;
+    switch (parent.type) {
+      case 'text':
+        contentWidget = Text(
+          parent.content ?? '',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+        break;
+      case 'file':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.insert_drive_file, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('File', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      case 'voice':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.mic, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('Voice Message',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      case 'image':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.image, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('Image', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      case 'video':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.videocam, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('Video', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      default:
+        contentWidget = const Text(
+          'Attachment',
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.reply,
+              size: 16, color: isMe ? Colors.white : Colors.black87),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reply to $username',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isMe ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                contentWidget,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForwardLabel(GroupMessageModel msg) {
+    if (msg.forwardedBy == null) return const SizedBox.shrink();
+
+    final isForwardedByMe = msg.forwardedBy!.id == currentUserId;
+    final displayName = isForwardedByMe ? 'You' : msg.forwardedBy!.username;
+    final avatarUrl = msg.forwardedBy!.avatar;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.forward, size: 14, color: Colors.grey),
+        const SizedBox(width: 4),
+        Text(
+          'Forwarded from ',
+          style: TextStyle(
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+            color: Colors.black87,
+          ),
+        ),
+        if (!isForwardedByMe && avatarUrl != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: CircleAvatar(
+              radius: 10,
+              backgroundImage: NetworkImage(avatarUrl),
+            ),
+          ),
+        Text(
+          displayName,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+      ],
     );
   }
 

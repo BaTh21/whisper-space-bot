@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/core/constants/api_constants.dart';
+import 'package:whisper_space_flutter/features/chat/model/chat_model/chat_list_model.dart';
 
 class GroupWebsocket {
   final int groupId;
@@ -18,8 +19,6 @@ class GroupWebsocket {
     final url = Uri.parse(
       '${ApiConstants.wsBaseUrl}/api/v1/ws/group/$groupId?token=$token',
     );
-
-    print('WS CONNECTING TO: $url');
 
     _channel = WebSocketChannel.connect(url);
 
@@ -59,6 +58,17 @@ class GroupWebsocket {
 
   void sendDeleteMessage(int messageId) {
     send({"action": "delete", "message_id": messageId});
+  }
+
+  void sendForward(int messageId, Set<int> users, Set<int> groups) {
+    send({
+      "action": "forward",
+      "message_id": messageId,
+      "targets": {
+        "users": users.toList(),
+        "groups": groups.toList(),
+      }
+    });
   }
 
   void sendPing() => send({"action": "ping"});
