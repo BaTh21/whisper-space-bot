@@ -1,4 +1,3 @@
-// lib/features/auth/presentation/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
@@ -12,8 +11,7 @@ import 'package:whisper_space_flutter/features/friend/presentation/screens/frien
 import 'package:whisper_space_flutter/features/inbox/inbox_api_service.dart';
 import 'package:whisper_space_flutter/features/inbox/inbox_screen.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
-import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_tab.dart'
-    as notes; // Import with alias
+import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_tab.dart' as notes;
 import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
 
 import 'login_screen.dart';
@@ -35,13 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? error;
   int _unreadCount = 0;
 
-  final List<Widget> _screens = [
-    const FeedTab(),
-    const MessagesTab(),
-    const FriendsTab(),
-    const NotesTab(), // This now uses the dynamic NotesTab
-    const ProfileTab(),
-  ];
+  late List<Widget> _screens;
 
   final List<String> _appBarTitles = [
     'Whisper Space',
@@ -58,6 +50,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _initServicesAndLoad();
   }
 
+  void _initializeScreens() {
+    _screens = [
+      const FeedTab(),
+      const MessagesTab(),
+      const FriendsTab(),
+      const notes.NotesTab(),
+      ProfileTab(
+        userId: _currentUserId,
+        onEditProfile: () => _navigateToEditProfile(),
+      ),
+    ];
+  }
+
   void _loadCurrentUser() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -68,7 +73,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _currentUserId = user.id;
         });
 
-        // Set current user ID in FeedProvider
+        _initializeScreens();
+
         final feedProvider = Provider.of<FeedProvider>(context, listen: false);
         feedProvider.setCurrentUserId(user.id);
       }
@@ -109,8 +115,26 @@ class _HomeScreenState extends State<HomeScreen> {
     await provider.loadSharedNotes();
   }
 
+  void _navigateToEditProfile() {
+    // Navigate to edit profile screen
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Edit profile feature coming soon'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_screens.isEmpty) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_appBarTitles[_selectedIndex]),
@@ -184,10 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => CreateDiaryScreen(
           feedApiService: feedApiService,
           onDiaryCreated: (DiaryModel diary) {
-            // Add to provider
             feedProvider.diaries.insert(0, diary);
-
-            // Show success message
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Created: "${diary.title}"'),
@@ -311,7 +332,6 @@ class _FeedTabState extends State<FeedTab> {
     super.initState();
     _scrollController.addListener(_onScroll);
 
-    // Use post frame callback to ensure context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCurrentUser();
       _loadUserGroups();
@@ -328,7 +348,6 @@ class _FeedTabState extends State<FeedTab> {
         _currentUserId = user.id;
       });
 
-      // Set current user ID in FeedProvider
       final feedProvider = Provider.of<FeedProvider>(context, listen: false);
       feedProvider.setCurrentUserId(user.id);
     }
@@ -338,7 +357,6 @@ class _FeedTabState extends State<FeedTab> {
     if (!mounted) return;
 
     try {
-      // Get FeedApiService from provider
       final feedApiService =
           Provider.of<FeedApiService>(context, listen: false);
       final groups = await feedApiService.getUserGroups();
@@ -349,7 +367,6 @@ class _FeedTabState extends State<FeedTab> {
       }
     } catch (e) {
       print('Failed to load groups: $e');
-      // Don't show error to user, just log it
     }
   }
 
@@ -365,8 +382,7 @@ class _FeedTabState extends State<FeedTab> {
     } catch (e) {
       print('Failed to initialize feed: $e');
       if (mounted) {
-        setState(() =>
-            _isInitialized = true); // Still set initialized to show error state
+        setState(() => _isInitialized = true);
       }
     }
   }
@@ -475,8 +491,7 @@ class _FeedTabState extends State<FeedTab> {
                           onLike: () => _handleLike(feedProvider, diary.id),
                           onFavorite: () =>
                               _handleFavorite(feedProvider, diary.id),
-                          onComment:
-                              (diaryId, content, parentId, replyToUserId) =>
+                          onComment: (diaryId, content, parentId, replyToUserId) =>
                                   _handleComment(feedProvider, diaryId, content,
                                       parentId, replyToUserId),
                           onEdit: (diaryToEdit) => _handleEditDiary(
@@ -493,8 +508,6 @@ class _FeedTabState extends State<FeedTab> {
       },
     );
   }
-
-  // ============ EVENT HANDLERS ============
 
   void _handleLike(FeedProvider feedProvider, int diaryId) async {
     try {
@@ -714,20 +727,98 @@ class FriendsTab extends StatelessWidget {
   }
 }
 
-// ============ DYNAMIC NOTES TAB ============
-// This now uses the actual Notes implementation
 class NotesTab extends StatelessWidget {
   const NotesTab({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Use the imported NotesTab with alias to avoid naming conflict
     return const notes.NotesTab();
   }
 }
 
-class ProfileTab extends StatelessWidget {
-  const ProfileTab({super.key});
+class ProfileTab extends StatefulWidget {
+  final int? userId;
+  final VoidCallback? onEditProfile;
+
+  const ProfileTab({
+    super.key,
+    this.userId,
+    this.onEditProfile,
+  });
+
+  @override
+  State<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<ProfileTab> {
+  int _postsCount = 0;
+  int _friendsCount = 0;
+  int _notesCount = 0;
+  int _likesCount = 0;
+  bool _isLoadingStats = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserStats();
+    });
+  }
+
+  Future<void> _loadUserStats() async {
+    setState(() {
+      _isLoadingStats = true;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final feedProvider = Provider.of<FeedProvider>(context, listen: false);
+      final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+      
+      final currentUser = authProvider.currentUser;
+      
+      if (currentUser != null) {
+        // Get posts count from feed provider
+        final userPosts = feedProvider.diaries
+            .where((diary) => diary.author.id == currentUser.id)
+            .length;
+        
+        // Get notes count
+        final userNotes = notesProvider.notes.length;
+        
+        // Get total likes received on user's posts
+        int totalLikes = 0;
+        final userDiaries = feedProvider.diaries
+            .where((diary) => diary.author.id == currentUser.id);
+        for (var diary in userDiaries) {
+          totalLikes += diary.likes.length;
+        }
+        
+        int friendsCount = 0;
+        try {
+        } catch (e) {
+          print('Failed to load friends count: $e');
+        }
+
+        if (mounted) {
+          setState(() {
+            _postsCount = userPosts;
+            _notesCount = userNotes;
+            _likesCount = totalLikes;
+            _friendsCount = friendsCount;
+            _isLoadingStats = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading user stats: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingStats = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -752,10 +843,15 @@ class ProfileTab extends StatelessWidget {
                             ? NetworkImage(user!.avatarUrl!)
                             : null,
                         child: user?.avatarUrl == null
-                            ? const Icon(
-                                Icons.person,
-                                size: 60,
-                                color: Colors.white,
+                            ? Text(
+                                user?.username.isNotEmpty == true
+                                    ? user!.username[0].toUpperCase()
+                                    : 'U',
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               )
                             : null,
                       ),
@@ -775,23 +871,61 @@ class ProfileTab extends StatelessWidget {
                           color: Colors.grey,
                         ),
                       ),
+                      if (user?.bio != null && user!.bio!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            user.bio!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 20),
-              const Card(
+              Card(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _StatItem(value: '24', label: 'Posts'),
-                      _StatItem(value: '128', label: 'Friends'),
-                      _StatItem(value: '15', label: 'Notes'),
-                      _StatItem(value: '42', label: 'Likes'),
-                    ],
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: _isLoadingStats
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _StatItem(
+                              value: _postsCount.toString(),
+                              label: 'Posts',
+                            ),
+                            _StatItem(
+                              value: _friendsCount.toString(),
+                              label: 'Friends',
+                            ),
+                            _StatItem(
+                              value: _notesCount.toString(),
+                              label: 'Notes',
+                            ),
+                            _StatItem(
+                              value: _likesCount.toString(),
+                              label: 'Likes',
+                            ),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 20),
