@@ -74,7 +74,6 @@ class _NotesTabState extends State<NotesTab>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F3FA),
       body: _isInitialized
           ? Column(
               children: [
@@ -83,15 +82,16 @@ class _NotesTabState extends State<NotesTab>
                 Container(
                   width: double.infinity,
                   margin:
-                      const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                      const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: Color.fromARGB(255, 224, 195, 255),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: TabBar(
                     controller: _tabController,
-                    isScrollable: true,
+                    isScrollable:
+                        false, // if you have 4 tab pls set this to true
                     indicator: BoxDecoration(
                       color: const Color(0xFF6A11CB),
                       borderRadius: BorderRadius.circular(30),
@@ -110,30 +110,27 @@ class _NotesTabState extends State<NotesTab>
                     tabs: const [
                       Tab(
                         child: Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                          child: Text("All Notes"),
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text("All Notes", textAlign: TextAlign.center),
                         ),
                       ),
                       Tab(
                         child: Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                          child: Text("Shared"),
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text("Shared", textAlign: TextAlign.center),
                         ),
                       ),
                       Tab(
                         child: Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                          child: Text("Archived"),
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text("Archived", textAlign: TextAlign.center),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                // 🔥 TAB CONTENT
+                // TAB CONTENT
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
@@ -152,7 +149,6 @@ class _NotesTabState extends State<NotesTab>
 
       // 🔥 MODERN FAB
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF6A11CB),
         elevation: 6,
         onPressed: _createNewNote,
         child: const Icon(Icons.add, size: 28),
