@@ -28,7 +28,7 @@ class GroupWebsocket {
         .asBroadcastStream();
 
     _broadcastStream!.listen(
-          (event) => print('WS DEBUG: $event'),
+      (event) => print('WS DEBUG: $event'),
       onError: (err) => print('WS ERROR: $err'),
       onDone: () => print('WS CLOSED'),
     );
@@ -40,17 +40,31 @@ class GroupWebsocket {
     _channel?.sink.add(jsonEncode(data));
   }
 
-  void sendMessage(String content, {String? tempId}) {
+  void sendMessage(String content, String? replyTo, {String? tempId}) {
     send({
       "message_type": "text",
+      "reply_to": replyTo,
       "content": content,
       "temp_id": tempId ?? DateTime.now().millisecondsSinceEpoch.toString(),
     });
   }
 
+  void sendEditMessage(int messageId, String newContent) {
+    send({
+      "action": "edit",
+      "message_id": messageId,
+      "new_content": newContent,
+    });
+  }
+
+  void sendDeleteMessage(int messageId) {
+    send({"action": "delete", "message_id": messageId});
+  }
+
   void sendPing() => send({"action": "ping"});
   void requestOnlineUsers() => send({"action": "online_users"});
-  void sendSeen(int messageId) => send({"action": "seen", "message_id": messageId});
+  void sendSeen(int messageId) =>
+      send({"action": "seen", "message_id": messageId});
 
   Stream<Map<String, dynamic>> get stream {
     if (_broadcastStream == null) {
