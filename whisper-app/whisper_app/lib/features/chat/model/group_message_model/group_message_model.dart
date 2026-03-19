@@ -64,7 +64,8 @@ class ParentMessageModel {
         callContent: json['call_content'],
         fileUrl: json['file_url'],
         voiceUrl: json['voice_url'],
-        type: json['message_type']);
+        type: json['message_type'],
+        );
   }
 }
 
@@ -84,6 +85,7 @@ class GroupMessageModel {
   final String? tempId;
   final ParentMessageModel? parentMessage;
   final String? type;
+  final bool isUploading;
 
   GroupMessageModel(
       {required this.id,
@@ -100,7 +102,9 @@ class GroupMessageModel {
       this.seenBy,
       this.tempId,
       this.parentMessage,
-      this.type});
+      this.type,
+      this.isUploading = false
+      });
 
   /// Optimistic message (before server response)
   factory GroupMessageModel.temp({
@@ -116,6 +120,7 @@ class GroupMessageModel {
       groupId: groupId,
       content: content,
       createdAt: DateTime.now(),
+      isUploading: true,
     );
   }
 
@@ -149,7 +154,9 @@ class GroupMessageModel {
         parentMessage: json['parent_message'] != null
             ? ParentMessageModel.fromJson(json['parent_message'])
             : null,
-        type: json['message_type']);
+        type: json['message_type'],
+        isUploading: false,
+        );
   }
 
   GroupMessageModel copyWith({
@@ -165,11 +172,13 @@ class GroupMessageModel {
     AuthorModel? forwardedBy,
     String? tempId,
     ParentMessageModel? parentMessage,
+    bool? isUploading,
+    AuthorModel? sender,
   }) {
     return GroupMessageModel(
       id: id ?? this.id,
       incomingTempId: incomingTempId,
-      sender: sender,
+      sender: sender ?? this.sender,
       forwardedBy: forwardedBy ?? this.forwardedBy,
       groupId: groupId,
       content: content ?? this.content,
@@ -182,6 +191,7 @@ class GroupMessageModel {
       tempId: tempId ?? this.tempId,
       parentMessage: parentMessage ?? this.parentMessage,
       type: type ?? this.type,
+      isUploading: isUploading ?? this.isUploading,
     );
   }
 }

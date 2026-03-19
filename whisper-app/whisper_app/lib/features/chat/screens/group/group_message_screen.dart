@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import './message_bubble_screen.dart';
 import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
+import './group_dialog//forward_dialog.dart';
 
 String _formatTime(DateTime dateTime) {
   final diff = DateTime.now().difference(dateTime);
@@ -226,6 +227,23 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
         }
         return;
 
+      case 'file_update':
+        final index = _messages.indexWhere(
+          (m) => m.id == data['message_id'] || m.tempId == data['temp_id'],
+        );
+
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+            fileUrl: data['file_url'],
+            type: data['message_type'],
+            updatedAt: DateTime.parse(data['updated_at']),
+            tempId: data['temp_id'],
+            isUploading: false,
+            sender: _messages[index].sender,
+          );
+        });
+        return;
+
       default:
         final message = GroupMessageModel.fromJson(data);
         setState(() => _messages.insert(0, message));
@@ -362,7 +380,6 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
   Future<void> _uploadVoice(File file) async {
     final tempId = DateTime.now().microsecondsSinceEpoch.toString();
-    final type = _getFileType(file);
 
     final tempMessage = GroupMessageModel(
         id: -1,
@@ -459,6 +476,55 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     }
   }
 
+  Future<void> _handleReplaceFile(dynamic msg) async {
+    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
+
+    final result = await FilePicker.platform.pickFiles();
+    if (result == null || result.files.single.path == null) return;
+
+    final file = File(result.files.single.path!);
+    final type = _getFileType(file);
+
+    final index = _messages.indexWhere((m) => m.id == msg.id);
+    if (index == -1) return;
+
+    final oldMessage = _messages[index];
+
+    try {
+      setState(() {
+        _messages[index] = oldMessage.copyWith(
+            tempId: tempId, fileUrl: file.path, type: type, isUploading: true);
+      });
+
+      final updatedMessage = await widget.chatApi.updateFileMessage(
+        msg.id,
+        file,
+        tempId,
+      );
+
+      setState(() {
+        _messages[index] = updatedMessage.copyWith(
+          sender: _messages[index].sender,
+          isUploading: false,
+        );
+      });
+    } catch (e) {
+      final rollbackIndex = _messages.indexWhere(
+        (m) => m.id == msg.id || m.tempId == tempId,
+      );
+
+      if (rollbackIndex != -1) {
+        setState(() {
+          _messages[rollbackIndex] = oldMessage;
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Replace failed")),
+      );
+    }
+  }
+
   void _handleBubbleAction(String action, dynamic msg) {
     switch (action) {
       case 'edit':
@@ -493,13 +559,16 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
           );
         });
         break;
-
+      case 'forward':
+        _showForwardDialog(msg);
+        break;
+      case 'replace':
+        _handleReplaceFile(msg);
+        break;
       case 'pin':
       case 'react':
-      case 'forward':
       case 'save':
       case 'preview':
-      case 'replace':
         break;
     }
   }
@@ -534,6 +603,26 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     );
   }
 
+  void _showForwardDialog(GroupMessageModel msg) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) {
+        return ForwardDialog(
+          currentGroupId: widget.groupId,
+          message: msg,
+          getChats: widget.chatApi.getChats,
+          onSend: (msgId, users, groups) {
+            widget.groupWebsocket.sendForward(msgId, users, groups);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Message forwarded")),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -562,7 +651,6 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
               final msg = _messages[index];
               final isMe = msg.sender.id == widget.currentUserId;
               final isSeen = msg.seenBy?.isNotEmpty ?? false;
-              bool isUploading = msg.id == -1;
 
               return Padding(
                 padding:
@@ -570,6 +658,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                 child: MessageBubble(
                   msg: msg,
                   isMe: isMe,
+                  currentUserId: widget.currentUserId,
                   isSeen: isSeen,
                   repliedMessage: msg.parentMessage,
                   onAction: _handleBubbleAction,

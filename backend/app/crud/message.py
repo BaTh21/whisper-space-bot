@@ -78,7 +78,6 @@ async def delete_message(db: Session, message_id: int, current_user_id: int):
 
     return {"detail": "Message has been deleted"}
 
-
 async def upload_file_message(
     db: Session,
     group_id: int,
@@ -158,54 +157,96 @@ async def upload_file_message(
     
     return save_message
 
-async def update_file_message(db: Session, message_id: int, file: UploadFile, current_user_id: int, temp_id: str):
-    
+async def update_file_message(
+    db: Session,
+    message_id: int,
+    file: UploadFile,
+    current_user_id: int,
+    temp_id: str,
+):
     message = db.query(GroupMessage).filter(GroupMessage.id == message_id).first()
     if not message:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Message not found")
 
     if message.sender_id != current_user_id:
-        raise HTTPException(status_code.status.HTTP_403_FORBIDDEN,
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Only sender can update")
-    
-    if message.file_url:    
+
+    # Delete old file if exists
+    if message.file_url:
         public_id = extract_public_id_from_url(message.file_url)
         delete_from_cloudinary(public_id)
-    
+
     file_extension = Path(file.filename).suffix.lower()
     if file_extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Only png and JPG are allowed")
-        
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="File is too large, Max size is 3MB")
-        
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type"
+        )
+
+    message_type = ALLOWED_EXTENSIONS[file_extension]
+
+    # Determine resource type for Cloudinary
+    resource_type = "image"
+    if message_type == "video":
+        resource_type = "video"
+    elif message_type == "file":
+        resource_type = "raw"
+
+    # Reset file pointer
+    file.file.seek(0)
+
+    # Check size (still optional)
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File is too large"
+        )
+
     unique_filename = f"groups/{message.group_id}/messages/{uuid.uuid4().hex}{file_extension}"
-    
-    upload_result = upload_to_cloudinary(content, public_id=unique_filename)
+
+    # Upload directly using file-like object (required for videos)
+    upload_result = upload_to_cloudinary(
+        file.file,
+        public_id=unique_filename,
+        resource_type=resource_type,
+    )
+
     if not upload_result or "secure_url" not in upload_result:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Failed to upload file")
-        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload file"
+        )
+
+    # Update message in DB
     message.public_id = upload_result["public_id"]
     message.file_url = upload_result["secure_url"]
-        
+    message.message_type = message_type
+    message.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(message)
-    
+
+    # Broadcast update via WebSocket
     payload = {
         "action": "file_update",
+        "sender": {
+            "id": message.sender.id,
+            "username": message.sender.username,
+            "avatar_url": message.sender.avatar_url,
+        },
         "message_id": message.id,
         "file_url": message.file_url,
+        "message_type": message.message_type,
         "updated_at": to_local_iso(message.updated_at, tz_offset_hours=7),
         "temp_id": temp_id,
     }
 
     await manager.broadcast(f"group_{message.group_id}", payload)
-    
+
     return message
 
 async def handle_seen_message(db, current_user_id, group_id, message_id, chat_id):

@@ -628,6 +628,7 @@ async def websocket_group_chat(
                     parent = msg.parent_message
                     parent_msg_data = {
                         "id": parent.id,
+                        "message_type": parent.message_type.value,
                         "content": parent.content,
                         "call_content": parent.call_content,
                         "file_url": parent.file_url,

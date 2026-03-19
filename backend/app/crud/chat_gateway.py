@@ -131,7 +131,7 @@ async def forward_message(
         if msg_type_value == "text":
             new_msg.content = payload.get("content")
 
-        elif msg_type_value in ("image", "file"):
+        elif msg_type_value in ("image", "file", "video"):
             new_msg.file_url = payload.get("content")
             new_msg.file_size = payload.get("file_size")
             new_msg.public_id = (
