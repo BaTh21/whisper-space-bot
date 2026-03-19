@@ -11,7 +11,9 @@ import 'package:whisper_space_flutter/features/feed/presentation/screens/edit_di
 import 'package:whisper_space_flutter/features/friend/presentation/screens/friend_screen.dart';
 import 'package:whisper_space_flutter/features/inbox/inbox_api_service.dart';
 import 'package:whisper_space_flutter/features/inbox/inbox_screen.dart';
-import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_tab.dart' as notes; // Import with alias
+import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
+import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_tab.dart'
+    as notes; // Import with alias
 import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
 
 import 'login_screen.dart';
@@ -101,6 +103,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _refreshNotes() async {
+    final provider = Provider.of<NotesProvider>(context, listen: false);
+    await provider.loadNotes();
+    await provider.loadSharedNotes();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -126,6 +134,12 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.logout),
               tooltip: 'Logout',
               onPressed: _showLogoutDialog,
+            )
+          else if (_selectedIndex == 3)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshNotes,
+              tooltip: 'Refresh',
             )
           else if (_selectedIndex == 0)
             IconButton(

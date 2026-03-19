@@ -14,7 +14,8 @@ class NotesTab extends StatefulWidget {
   State<NotesTab> createState() => _NotesTabState();
 }
 
-class _NotesTabState extends State<NotesTab> with SingleTickerProviderStateMixin {
+class _NotesTabState extends State<NotesTab>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isInitialized = false;
   int? _currentUserId;
@@ -23,7 +24,7 @@ class _NotesTabState extends State<NotesTab> with SingleTickerProviderStateMixin
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCurrentUser();
       _initializeNotes();
@@ -38,7 +39,7 @@ class _NotesTabState extends State<NotesTab> with SingleTickerProviderStateMixin
       setState(() {
         _currentUserId = user.id;
       });
-      
+
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
       notesProvider.setCurrentUserId(user.id);
     }
@@ -46,7 +47,7 @@ class _NotesTabState extends State<NotesTab> with SingleTickerProviderStateMixin
 
   Future<void> _initializeNotes() async {
     if (!mounted) return;
-    
+
     try {
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
       await Future.wait([
@@ -73,50 +74,88 @@ class _NotesTabState extends State<NotesTab> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Notes'),
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white, // Set active tab text color to white
-          unselectedLabelColor: Colors.white.withOpacity(0.7), // Set inactive tab text color to white with opacity
-          indicatorColor: Colors.white, // Optional: make indicator white too
-          tabs: const [
-            Tab(text: 'All Notes'),
-            Tab(text: 'Shared'),
-            Tab(text: 'Archived'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshNotes,
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF5F3FA),
       body: _isInitialized
-          ? TabBarView(
-              controller: _tabController,
+          ? Column(
               children: [
-                _AllNotesTab(),
-                _SharedNotesTab(),
-                _ArchivedNotesTab(),
+                const SizedBox(height: 10),
+                // ✨ MODERN SCROLLABLE TAB BAR
+                Container(
+                  width: double.infinity,
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    indicator: BoxDecoration(
+                      color: const Color(0xFF6A11CB),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey.shade600,
+                    labelStyle: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                    tabs: const [
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          child: Text("All Notes"),
+                        ),
+                      ),
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          child: Text("Shared"),
+                        ),
+                      ),
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          child: Text("Archived"),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 🔥 TAB CONTENT
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _AllNotesTab(),
+                      _SharedNotesTab(),
+                      _ArchivedNotesTab(),
+                    ],
+                  ),
+                ),
               ],
             )
           : const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Loading notes...'),
-                ],
-              ),
+              child: CircularProgressIndicator(),
             ),
+
+      // 🔥 MODERN FAB
       floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFF6A11CB),
+        elevation: 6,
         onPressed: _createNewNote,
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, size: 28),
       ),
     );
   }
@@ -176,7 +215,7 @@ class _AllNotesTab extends StatelessWidget {
         }
 
         final notes = provider.notes.where((note) => !note.isArchived).toList();
-        
+
         if (notes.isEmpty) {
           return Center(
             child: Column(
@@ -224,7 +263,7 @@ class _AllNotesTab extends StatelessWidget {
               final note = notes[index];
               final isOwner = provider.isOwner(note);
               final canEdit = provider.canEdit(note);
-              
+
               return NoteCard(
                 note: note,
                 isOwner: isOwner,
@@ -334,7 +373,7 @@ class _SharedNotesTab extends StatelessWidget {
             itemBuilder: (context, index) {
               final note = provider.sharedNotes[index];
               final canEdit = provider.canEdit(note);
-              
+
               return NoteCard(
                 note: note,
                 isOwner: false,
@@ -409,7 +448,8 @@ class _ArchivedNotesTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.archive_outlined, size: 80, color: Colors.grey),
+                const Icon(Icons.archive_outlined,
+                    size: 80, color: Colors.grey),
                 const SizedBox(height: 16),
                 const Text(
                   'No archived notes',
@@ -435,7 +475,7 @@ class _ArchivedNotesTab extends StatelessWidget {
               final note = provider.archivedNotes[index];
               final isOwner = provider.isOwner(note);
               final canEdit = provider.canEdit(note);
-              
+
               return NoteCard(
                 note: note,
                 isOwner: isOwner,
