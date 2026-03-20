@@ -251,19 +251,37 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomNavBar() {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDarkMode = themeProvider.isDarkMode;
-    
-    // Use different colors based on theme mode
-    final primaryColor = isDarkMode 
-        ? const Color(0xFF00BCD4) // Cyan for dark mode
-        : const Color(0xFF6A11CB); // Purple for light mode
+Widget _buildBottomNavBar() {
+  final themeProvider = Provider.of<ThemeProvider>(context);
+  final isDarkMode = themeProvider.isDarkMode;
+  
+  // Use different colors based on theme mode
+  final primaryColor = isDarkMode 
+      ? const Color(0xFF00BCD4) // Cyan for dark mode
+      : const Color(0xFF6A11CB); // Purple for light mode
 
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25),
+  return Padding(
+    padding: const EdgeInsets.all(12),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          navigationBarTheme: NavigationBarThemeData(
+            labelTextStyle: MaterialStateProperty.resolveWith((states) {
+              if (states.contains(MaterialState.selected)) {
+                return TextStyle(
+                  color: primaryColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                );
+              }
+              return TextStyle(
+                color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                fontSize: 12,
+              );
+            }),
+          ),
+        ),
         child: NavigationBar(
           height: 70,
           backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
@@ -278,35 +296,51 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           destinations: [
             NavigationDestination(
-              icon: Icon(Icons.home_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
+              icon: Icon(
+                Icons.home_outlined, 
+                color: isDarkMode ? Colors.white70 : Colors.grey,
+              ),
               selectedIcon: Icon(Icons.home, color: primaryColor),
               label: 'Feed',
             ),
             NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline, color: isDarkMode ? Colors.grey[400] : Colors.grey),
+              icon: Icon(
+                Icons.chat_bubble_outline, 
+                color: isDarkMode ? Colors.white70 : Colors.grey,
+              ),
               selectedIcon: Icon(Icons.chat_bubble, color: primaryColor),
               label: 'Messages',
             ),
             NavigationDestination(
-              icon: Icon(Icons.group_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
+              icon: Icon(
+                Icons.group_outlined, 
+                color: isDarkMode ? Colors.white70 : Colors.grey,
+              ),
               selectedIcon: Icon(Icons.group, color: primaryColor),
               label: 'Friends',
             ),
             NavigationDestination(
-              icon: Icon(Icons.note_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
+              icon: Icon(
+                Icons.note_outlined, 
+                color: isDarkMode ? Colors.white70 : Colors.grey,
+              ),
               selectedIcon: Icon(Icons.note, color: primaryColor),
               label: 'Notes',
             ),
             NavigationDestination(
-              icon: Icon(Icons.person_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
+              icon: Icon(
+                Icons.person_outlined, 
+                color: isDarkMode ? Colors.white70 : Colors.grey,
+              ),
               selectedIcon: Icon(Icons.person, color: primaryColor),
               label: 'Profile',
             ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _showLogoutDialog() async {
     final shouldLogout = await showDialog<bool>(
