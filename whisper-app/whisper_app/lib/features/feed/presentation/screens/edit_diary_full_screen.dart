@@ -1,3 +1,4 @@
+// lib/features/feed/presentation/screens/edit_diary_full_screen.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -61,16 +62,27 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
     }
     
     final context = this.context;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Diary'),
-        content: const Text('Are you sure you want to delete this diary? This action cannot be undone.'),
+        title: Text(
+          'Delete Diary',
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        content: Text(
+          'Are you sure you want to delete this diary? This action cannot be undone.',
+          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : null),
+            ),
           ),
           TextButton(
             onPressed: () async {
@@ -84,16 +96,12 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                 await widget.feedApiService!.deleteDiary(widget.diary.id);
                 
                 if (mounted) {
-                  // ✅ CRITICAL FIX: Call onDelete FIRST, then close the screen
                   widget.onDelete!(widget.diary.id);
                   
-                  // Show success message
                   _showSnackBar('Diary deleted successfully!', false);
                   
-                  // Wait a moment for the snackbar to show, then close
                   await Future.delayed(const Duration(milliseconds: 1500));
                   
-                  // Close the edit screen and return null to indicate deletion
                   Navigator.pop(context, null);
                 }
               } catch (e) {
@@ -110,598 +118,6 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Diary'),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: (_isLoading || _isDeleting) ? null : () {
-            if (_titleController.text != widget.diary.title || 
-                _contentController.text != widget.diary.content ||
-                _newImages.isNotEmpty ||
-                _newVideos.isNotEmpty) {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Discard Changes?'),
-                  content: const Text('You have unsaved changes. Are you sure you want to discard?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.pop(context);
-                      },
-                      child: const Text(
-                        'Discard',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            } else {
-              Navigator.pop(context);
-            }
-          },
-        ),
-        actions: [
-          if (widget.feedApiService != null && widget.onDelete != null)
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              onPressed: (_isLoading || _isDeleting) ? null : _deleteDiary,
-              tooltip: 'Delete Diary',
-            ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Title *',
-                    hintText: 'Give your diary a title',
-                    border: OutlineInputBorder(),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  maxLength: 255,
-                ),
-                
-                const SizedBox(height: 16),
-                
-                TextFormField(
-                  controller: _contentController,
-                  decoration: const InputDecoration(
-                    labelText: 'Content *',
-                    hintText: 'Write your thoughts here...',
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  maxLines: 8,
-                  minLines: 4,
-                ),
-                
-                const SizedBox(height: 16),
-                
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Privacy:',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.grey.shade50,
-                      ),
-                      child: Column(
-                        children: [
-                          _buildPrivacyOption(
-                            icon: Icons.lock,
-                            iconColor: Colors.red,
-                            title: 'Private',
-                            subtitle: 'Only you can see this',
-                            value: 'personal',
-                          ),
-                          Divider(height: 1, color: Colors.grey.shade300),
-                          _buildPrivacyOption(
-                            icon: Icons.public,
-                            iconColor: Colors.green,
-                            title: 'Public',
-                            subtitle: 'Everyone can see this',
-                            value: 'public',
-                          ),
-                          Divider(height: 1, color: Colors.grey.shade300),
-                          _buildPrivacyOption(
-                            icon: Icons.people,
-                            iconColor: Colors.blue,
-                            title: 'Friends Only',
-                            subtitle: 'Only your friends can see this',
-                            value: 'friends',
-                          ),
-                          Divider(height: 1, color: Colors.grey.shade300),
-                          _buildPrivacyOption(
-                            icon: Icons.group,
-                            iconColor: Colors.purple,
-                            title: 'Selected Groups',
-                            subtitle: 'Only selected groups can see this',
-                            value: 'group',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 16),
-                
-                if (_availableGroups.isNotEmpty && _shareType == 'group')
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Select Groups:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _availableGroups.map((group) {
-                          final isSelected = _selectedGroupIds.contains(group.id);
-                          return FilterChip(
-                            label: Text(group.name),
-                            selected: isSelected,
-                            onSelected: (_isLoading || _isDeleting) ? null : (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedGroupIds.add(group.id);
-                                } else {
-                                  _selectedGroupIds.remove(group.id);
-                                }
-                              });
-                            },
-                            selectedColor: Colors.blue.shade100,
-                            checkmarkColor: Colors.blue,
-                            avatar: CircleAvatar(
-                              backgroundColor: isSelected ? Colors.blue : Colors.grey.shade300,
-                              radius: 12,
-                              child: Text(
-                                group.name.substring(0, 1).toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isSelected ? Colors.white : Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      
-                      if (_selectedGroupIds.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          'Selected: ${_selectedGroupIds.length} group(s)',
-                          style: TextStyle(
-                            color: Colors.green.shade700,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                
-                const SizedBox(height: 16),
-                
-                if (_currentImages.isNotEmpty || _currentVideos.isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'Current Media:',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(width: 8),
-                          Chip(
-                            label: Text('${_currentImages.length + _currentVideos.length}'),
-                            backgroundColor: Colors.grey.shade200,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      
-                      if (_currentImages.isNotEmpty) ...[
-                        const Text('Images:', style: TextStyle(fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _currentImages.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final url = entry.value;
-                            return _buildCurrentMediaItem(url, false, index);
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      
-                      if (_currentVideos.isNotEmpty) ...[
-                        const Text('Videos:', style: TextStyle(fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _currentVideos.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final url = entry.value;
-                            return _buildCurrentMediaItem(url, true, index);
-                          }).toList(),
-                        ),
-                      ],
-                    ],
-                  ),
-                
-                const SizedBox(height: 16),
-                
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Add More Media (optional):',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: (_isLoading || _isDeleting) ? null : _pickImages,
-                            icon: const Icon(Icons.photo_library),
-                            label: const Text('Add Photos'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: (_isLoading || _isDeleting) ? null : _pickVideos,
-                            icon: const Icon(Icons.video_library),
-                            label: const Text('Add Video'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Max 10 images total, Max 3 videos total',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 12,
-                      ),
-                    ),
-                    
-                    if (_newImages.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          const Text('New Photos:', style: TextStyle(fontWeight: FontWeight.w500)),
-                          const SizedBox(width: 8),
-                          Chip(
-                            label: Text('${_newImages.length}'),
-                            backgroundColor: Colors.blue.shade50,
-                            side: BorderSide(color: Colors.blue.shade200),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _newImages.asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final file = entry.value;
-                          return _buildNewMediaItem(file, false, index);
-                        }).toList(),
-                      ),
-                    ],
-                    
-                    if (_newVideos.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          const Text('New Videos:', style: TextStyle(fontWeight: FontWeight.w500)),
-                          const SizedBox(width: 8),
-                          Chip(
-                            label: Text('${_newVideos.length}'),
-                            backgroundColor: Colors.green.shade50,
-                            side: BorderSide(color: Colors.green.shade200),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _newVideos.asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final file = entry.value;
-                          return _buildNewMediaItem(file, true, index);
-                        }).toList(),
-                      ),
-                    ],
-                  ],
-                ),
-                
-                const SizedBox(height: 32),
-                
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: (_isLoading || _isDeleting) ? null : _saveChanges,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).primaryColor,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('Update Diary', style: TextStyle(fontSize: 16)),
-                  ),
-                ),
-                
-                if (widget.feedApiService != null && widget.onDelete != null) ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: (_isLoading || _isDeleting) ? null : _deleteDiary,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: _isDeleting
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('Delete Diary', style: TextStyle(fontSize: 16)),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          
-          if (_isLoading || _isDeleting)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 16),
-                    Text(
-                      'Processing...',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrivacyOption({
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    required String value,
-  }) {
-    return InkWell(
-      onTap: (_isLoading || _isDeleting)
-          ? null
-          : () {
-              setState(() => _shareType = value);
-            },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: iconColor),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const Spacer(),
-                      Radio<String>(
-                        value: value,
-                        groupValue: _shareType,
-                        onChanged: (_isLoading || _isDeleting)
-                            ? null
-                            : (newValue) {
-                                if (newValue != null) {
-                                  setState(() => _shareType = newValue);
-                                }
-                              },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCurrentMediaItem(String url, bool isVideo, int index) {
-    return Stack(
-      children: [
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: isVideo
-              ? Container(
-                  color: Colors.grey.shade100,
-                  child: const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.videocam, size: 24, color: Colors.grey),
-                        SizedBox(height: 4),
-                        Text('Video', style: TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                )
-              : Image.network(
-                  url,
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey.shade100,
-                      child: const Center(
-                        child: Icon(Icons.broken_image, color: Colors.grey),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        Positioned(
-          top: 0,
-          right: 0,
-          child: GestureDetector(
-            onTap: (_isLoading || _isDeleting) ? null : () => _removeMedia(url, isVideo),
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.close,
-                size: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNewMediaItem(File file, bool isVideo, int index) {
-    return Stack(
-      children: [
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            border: Border.all(color: isVideo ? Colors.green : Colors.blue),
-            borderRadius: BorderRadius.circular(8),
-            color: isVideo ? Colors.green.shade50 : Colors.blue.shade50,
-          ),
-          child: isVideo
-              ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.videocam, size: 24, color: Colors.green),
-                      SizedBox(height: 4),
-                      Text('Video', style: TextStyle(fontSize: 10)),
-                    ],
-                  ),
-                )
-              : Image.file(
-                  file,
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: isVideo ? Colors.green.shade50 : Colors.blue.shade50,
-                      child: const Center(
-                        child: Icon(Icons.broken_image, color: Colors.grey),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        Positioned(
-          top: 0,
-          right: 0,
-          child: GestureDetector(
-            onTap: (_isLoading || _isDeleting) ? null : () => _removeNewMedia(file, isVideo),
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.close,
-                size: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -741,15 +157,27 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
   }
 
   void _removeMedia(String url, bool isVideo) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove Media'),
-        content: Text('Remove this ${isVideo ? 'video' : 'image'}?'),
+        title: Text(
+          'Remove Media',
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        content: Text(
+          'Remove this ${isVideo ? 'video' : 'image'}?',
+          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : null),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -841,11 +269,723 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
   void _showSnackBar(String message, bool isError) {
     if (!mounted) return;
     
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError 
+          ? (isDarkMode ? Colors.red[800] : Colors.red)
+          : (isDarkMode ? Colors.green[800] : Colors.green),
         duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Widget _buildPrivacyOption({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required String value,
+    required bool isDarkMode,
+    required Color textColor,
+    required Color subtitleColor,
+  }) {
+    return InkWell(
+      onTap: (_isLoading || _isDeleting)
+          ? null
+          : () {
+              setState(() => _shareType = value);
+            },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: iconColor),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: textColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      Radio<String>(
+                        value: value,
+                        groupValue: _shareType,
+                        onChanged: (_isLoading || _isDeleting)
+                            ? null
+                            : (newValue) {
+                                if (newValue != null) {
+                                  setState(() => _shareType = newValue);
+                                }
+                              },
+                        fillColor: MaterialStateProperty.resolveWith<Color>(
+                          (Set<MaterialState> states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return isDarkMode ? Colors.blue[400]! : Colors.blue;
+                            }
+                            return isDarkMode ? Colors.grey[600]! : Colors.grey;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: subtitleColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentMediaItem(String url, bool isVideo, int index, bool isDarkMode) {
+    return Stack(
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            border: Border.all(color: isDarkMode ? Colors.grey[700]! : Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: isVideo
+              ? Container(
+                  color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade100,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.videocam, size: 24, color: isDarkMode ? Colors.grey[400] : Colors.grey),
+                        const SizedBox(height: 4),
+                        Text('Video', style: TextStyle(fontSize: 10, color: isDarkMode ? Colors.grey[400] : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                )
+              : Image.network(
+                  url,
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade100,
+                      child: Center(
+                        child: Icon(Icons.broken_image, color: isDarkMode ? Colors.grey[600] : Colors.grey),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: GestureDetector(
+            onTap: (_isLoading || _isDeleting) ? null : () => _removeMedia(url, isVideo),
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.close,
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNewMediaItem(File file, bool isVideo, int index, bool isDarkMode) {
+    return Stack(
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isVideo 
+                ? (isDarkMode ? Colors.green[800]! : Colors.green)
+                : (isDarkMode ? Colors.blue[800]! : Colors.blue)
+            ),
+            borderRadius: BorderRadius.circular(8),
+            color: isVideo 
+              ? (isDarkMode ? Colors.green[900]!.withOpacity(0.3) : Colors.green.shade50)
+              : (isDarkMode ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue.shade50),
+          ),
+          child: isVideo
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.videocam, size: 24, color: isDarkMode ? Colors.green[400] : Colors.green),
+                      const SizedBox(height: 4),
+                      Text('Video', style: TextStyle(fontSize: 10, color: isDarkMode ? Colors.green[400] : Colors.green)),
+                    ],
+                  ),
+                )
+              : Image.file(
+                  file,
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: isDarkMode ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue.shade50,
+                      child: Center(
+                        child: Icon(Icons.broken_image, color: isDarkMode ? Colors.grey[600] : Colors.grey),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: GestureDetector(
+            onTap: (_isLoading || _isDeleting) ? null : () => _removeNewMedia(file, isVideo),
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.close,
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
+    final inputFillColor = isDarkMode ? const Color(0xFF2C2C2C) : Colors.white;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Edit Diary',
+          style: TextStyle(color: textColor),
+        ),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
+        leading: IconButton(
+          icon: Icon(Icons.close, color: textColor),
+          onPressed: (_isLoading || _isDeleting) ? null : () {
+            if (_titleController.text != widget.diary.title || 
+                _contentController.text != widget.diary.content ||
+                _newImages.isNotEmpty ||
+                _newVideos.isNotEmpty) {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('Discard Changes?', style: TextStyle(color: textColor)),
+                  content: Text(
+                    'You have unsaved changes. Are you sure you want to discard?',
+                    style: TextStyle(color: subtitleColor),
+                  ),
+                  backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Cancel', style: TextStyle(color: subtitleColor)),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Discard',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            } else {
+              Navigator.pop(context);
+            }
+          },
+        ),
+        actions: [
+          if (widget.feedApiService != null && widget.onDelete != null)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              onPressed: (_isLoading || _isDeleting) ? null : _deleteDiary,
+              tooltip: 'Delete Diary',
+            ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                TextFormField(
+                  controller: _titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Title *',
+                    hintText: 'Give your diary a title',
+                    labelStyle: TextStyle(color: textColor),
+                    hintStyle: TextStyle(color: subtitleColor),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    filled: true,
+                    fillColor: inputFillColor,
+                  ),
+                  style: TextStyle(color: textColor),
+                  maxLength: 255,
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Content
+                TextFormField(
+                  controller: _contentController,
+                  decoration: InputDecoration(
+                    labelText: 'Content *',
+                    hintText: 'Write your thoughts here...',
+                    labelStyle: TextStyle(color: textColor),
+                    hintStyle: TextStyle(color: subtitleColor),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignLabelWithHint: true,
+                    filled: true,
+                    fillColor: inputFillColor,
+                  ),
+                  style: TextStyle(color: textColor),
+                  maxLines: 8,
+                  minLines: 4,
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Privacy Section
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Privacy:',
+                      style: TextStyle(
+                        fontSize: 16, 
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: isDarkMode ? Colors.grey[700]! : Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                        color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+                      ),
+                      child: Column(
+                        children: [
+                          _buildPrivacyOption(
+                            icon: Icons.lock,
+                            iconColor: Colors.red,
+                            title: 'Private',
+                            subtitle: 'Only you can see this',
+                            value: 'personal',
+                            isDarkMode: isDarkMode,
+                            textColor: textColor,
+                            subtitleColor: subtitleColor!,
+                          ),
+                          Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                          _buildPrivacyOption(
+                            icon: Icons.public,
+                            iconColor: Colors.green,
+                            title: 'Public',
+                            subtitle: 'Everyone can see this',
+                            value: 'public',
+                            isDarkMode: isDarkMode,
+                            textColor: textColor,
+                            subtitleColor: subtitleColor!,
+                          ),
+                          Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                          _buildPrivacyOption(
+                            icon: Icons.people,
+                            iconColor: Colors.blue,
+                            title: 'Friends Only',
+                            subtitle: 'Only your friends can see this',
+                            value: 'friends',
+                            isDarkMode: isDarkMode,
+                            textColor: textColor,
+                            subtitleColor: subtitleColor!,
+                          ),
+                          Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                          _buildPrivacyOption(
+                            icon: Icons.group,
+                            iconColor: Colors.purple,
+                            title: 'Selected Groups',
+                            subtitle: 'Only selected groups can see this',
+                            value: 'group',
+                            isDarkMode: isDarkMode,
+                            textColor: textColor,
+                            subtitleColor: subtitleColor!,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Group Selection
+                if (_availableGroups.isNotEmpty && _shareType == 'group')
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select Groups:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold, 
+                          fontSize: 16,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _availableGroups.map((group) {
+                          final isSelected = _selectedGroupIds.contains(group.id);
+                          return FilterChip(
+                            label: Text(
+                              group.name,
+                              style: TextStyle(color: isSelected ? Colors.white : textColor),
+                            ),
+                            selected: isSelected,
+                            onSelected: (_isLoading || _isDeleting) ? null : (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedGroupIds.add(group.id);
+                                } else {
+                                  _selectedGroupIds.remove(group.id);
+                                }
+                              });
+                            },
+                            selectedColor: isDarkMode ? Colors.blue[700] : Colors.blue.shade100,
+                            checkmarkColor: Colors.white,
+                            backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
+                            avatar: CircleAvatar(
+                              backgroundColor: isSelected 
+                                ? (isDarkMode ? Colors.blue[400] : Colors.blue)
+                                : (isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                              radius: 12,
+                              child: Text(
+                                group.name.substring(0, 1).toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      
+                      if (_selectedGroupIds.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Selected: ${_selectedGroupIds.length} group(s)',
+                          style: TextStyle(
+                            color: isDarkMode ? Colors.green[400] : Colors.green.shade700,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                
+                const SizedBox(height: 16),
+                
+                // Current Media
+                if (_currentImages.isNotEmpty || _currentVideos.isNotEmpty)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Current Media:',
+                            style: TextStyle(
+                              fontSize: 16, 
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Chip(
+                            label: Text('${_currentImages.length + _currentVideos.length}'),
+                            backgroundColor: isDarkMode ? Colors.grey[700] : Colors.grey.shade200,
+                            labelStyle: TextStyle(color: textColor),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      
+                      if (_currentImages.isNotEmpty) ...[
+                        Text(
+                          'Images:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _currentImages.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final url = entry.value;
+                            return _buildCurrentMediaItem(url, false, index, isDarkMode);
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      
+                      if (_currentVideos.isNotEmpty) ...[
+                        Text(
+                          'Videos:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _currentVideos.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final url = entry.value;
+                            return _buildCurrentMediaItem(url, true, index, isDarkMode);
+                          }).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                
+                const SizedBox(height: 16),
+                
+                // Add New Media
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Add More Media (optional):',
+                      style: TextStyle(
+                        fontSize: 16, 
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: (_isLoading || _isDeleting) ? null : _pickImages,
+                            icon: const Icon(Icons.photo_library),
+                            label: const Text('Add Photos'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              backgroundColor: isDarkMode ? Colors.blue[800] : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: (_isLoading || _isDeleting) ? null : _pickVideos,
+                            icon: const Icon(Icons.video_library),
+                            label: const Text('Add Video'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              backgroundColor: isDarkMode ? Colors.green[800] : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Max 10 images total, Max 3 videos total',
+                      style: TextStyle(
+                        color: subtitleColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                    
+                    // New Images
+                    if (_newImages.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Text(
+                            'New Photos:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: textColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Chip(
+                            label: Text('${_newImages.length}'),
+                            backgroundColor: isDarkMode ? Colors.blue[900] : Colors.blue.shade50,
+                            labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                            side: BorderSide(color: isDarkMode ? Colors.blue[700]! : Colors.blue.shade200),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _newImages.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final file = entry.value;
+                          return _buildNewMediaItem(file, false, index, isDarkMode);
+                        }).toList(),
+                      ),
+                    ],
+                    
+                    // New Videos
+                    if (_newVideos.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Text(
+                            'New Videos:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: textColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Chip(
+                            label: Text('${_newVideos.length}'),
+                            backgroundColor: isDarkMode ? Colors.green[900] : Colors.green.shade50,
+                            labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+                            side: BorderSide(color: isDarkMode ? Colors.green[700]! : Colors.green.shade200),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _newVideos.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final file = entry.value;
+                          return _buildNewMediaItem(file, true, index, isDarkMode);
+                        }).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+                
+                const SizedBox(height: 32),
+                
+                // Update Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: (_isLoading || _isDeleting) ? null : _saveChanges,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('Update Diary', style: TextStyle(fontSize: 16)),
+                  ),
+                ),
+                
+                // Delete Button
+                if (widget.feedApiService != null && widget.onDelete != null) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: (_isLoading || _isDeleting) ? null : _deleteDiary,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: _isDeleting
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('Delete Diary', style: TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          
+          // Loading Overlay
+          if (_isLoading || _isDeleting)
+            Container(
+              color: isDarkMode ? Colors.black87 : Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      'Processing...',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

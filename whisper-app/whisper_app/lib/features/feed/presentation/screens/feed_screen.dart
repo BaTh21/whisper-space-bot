@@ -1,6 +1,7 @@
-// lib/features/feed/presentation/screens/feed_screen.dart - Simplified version
+// lib/features/feed/presentation/screens/feed_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
 import 'package:whisper_space_flutter/features/auth/data/models/diary_model.dart';
 import 'package:whisper_space_flutter/features/feed/data/datasources/feed_api_service.dart';
 import 'package:whisper_space_flutter/features/feed/presentation/providers/feed_provider.dart';
@@ -37,8 +38,17 @@ class _FeedScreenState extends State<FeedScreen> {
     super.dispose();
   }
 
+  void _toggleTheme() {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    themeProvider.toggleTheme(!themeProvider.isDarkMode);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.isDarkMode;
+    final primaryColor = Theme.of(context).primaryColor;
+
     return Consumer<FeedProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading && provider.diaries.isEmpty) {
@@ -50,14 +60,19 @@ class _FeedScreenState extends State<FeedScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                Icon(Icons.error_outline, 
+                  size: 64, 
+                  color: isDarkMode ? Colors.red[300] : Colors.red
+                ),
                 const SizedBox(height: 20),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
                   child: Text(
                     provider.error!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.red),
+                    style: TextStyle(
+                      color: isDarkMode ? Colors.red[300] : Colors.red,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -75,6 +90,25 @@ class _FeedScreenState extends State<FeedScreen> {
             title: const Text('Whisper Space'),
             elevation: 0,
             actions: [
+              // Theme Toggle Button
+              IconButton(
+                tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (Widget child, Animation<double> animation) {
+                    return RotationTransition(
+                      turns: animation,
+                      child: child,
+                    );
+                  },
+                  child: Icon(
+                    isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                    key: ValueKey<bool>(isDarkMode),
+                    color: isDarkMode ? Colors.yellow : Colors.white,
+                  ),
+                ),
+                onPressed: _toggleTheme,
+              ),
               IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh feed',
@@ -89,11 +123,12 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
           body: RefreshIndicator(
             onRefresh: () => provider.refreshFeed(),
-            child: _buildFeedContent(provider),
+            child: _buildFeedContent(provider, isDarkMode),
           ),
           floatingActionButton: FloatingActionButton(
             onPressed: () => _createNewPost(context, provider),
             tooltip: 'Create New Diary',
+            backgroundColor: primaryColor,
             child: const Icon(Icons.add),
           ),
         );
@@ -101,22 +136,30 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  Widget _buildFeedContent(FeedProvider provider) {
+  Widget _buildFeedContent(FeedProvider provider, bool isDarkMode) {
     if (provider.diaries.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.feed, size: 64, color: Colors.grey),
+            Icon(Icons.feed, 
+              size: 64, 
+              color: isDarkMode ? Colors.grey[600] : Colors.grey
+            ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'No posts yet',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 18, 
+                color: isDarkMode ? Colors.grey[400] : Colors.grey
+              ),
             ),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               'Be the first to share something!',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(
+                color: isDarkMode ? Colors.grey[500] : Colors.grey
+              ),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -180,13 +223,12 @@ class _FeedScreenState extends State<FeedScreen> {
 
   void _handleComment(FeedProvider feedProvider, int diaryId, String content,
       int? parentId, int? replyToUserId) async {
-    // Add parameters
     try {
       await feedProvider.createComment(
         diaryId: diaryId,
         content: content,
         parentId: parentId,
-        replyToUserId: replyToUserId, // Pass this
+        replyToUserId: replyToUserId,
       );
       _showSuccessSnackBar('Comment posted!');
     } catch (e) {
@@ -197,6 +239,7 @@ class _FeedScreenState extends State<FeedScreen> {
   void _handleEditDiary(
       BuildContext context, FeedProvider provider, DiaryModel diary) async {
     final feedApiService = Provider.of<FeedApiService>(context, listen: false);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
 
     final updatedDiary = await Navigator.push<DiaryModel>(
       context,
@@ -215,7 +258,6 @@ class _FeedScreenState extends State<FeedScreen> {
                 imageUrls: updatedDiary.images,
                 videoUrls: updatedDiary.videos,
               );
-
               return result;
             } catch (e) {
               rethrow;
@@ -239,71 +281,83 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
-void _handleDeleteDiary(
-    BuildContext context, FeedProvider feedProvider, int diaryId) async {
-  final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Delete Diary'),
-          content: const Text('Are you sure you want to delete this diary? '
-              'This action cannot be undone.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+  void _handleDeleteDiary(
+      BuildContext context, FeedProvider feedProvider, int diaryId) async {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete Diary'),
+            content: const Text('Are you sure you want to delete this diary? '
+                'This action cannot be undone.'),
+            backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
+            titleTextStyle: TextStyle(
+              color: isDarkMode ? Colors.white : null,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text(
-                'Delete',
-                style: TextStyle(color: Colors.red),
+            contentTextStyle: TextStyle(
+              color: isDarkMode ? Colors.white70 : null,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white70 : null,
+                  ),
+                ),
               ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (confirmed) {
+      try {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Deleting diary...'),
+              backgroundColor: isDarkMode ? Colors.grey[800] : null,
+              duration: const Duration(seconds: 1),
             ),
-          ],
-        ),
-      ) ??
-      false;
+          );
+        }
 
-  if (confirmed) {
-    try {
-      // Show loading indicator
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Deleting diary...'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
+        await feedProvider.deleteDiary(diaryId);
 
-      // Call the provider's delete method
-      await feedProvider.deleteDiary(diaryId);
-
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Diary deleted successfully'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      // Show error message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete diary: $e'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Diary deleted successfully'),
+              backgroundColor: isDarkMode ? Colors.green[800] : Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete diary: $e'),
+              backgroundColor: isDarkMode ? Colors.red[800] : Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
   }
-}
-
 
   void _createNewPost(BuildContext context, FeedProvider provider) {
     final feedApiService = Provider.of<FeedApiService>(context, listen: false);
@@ -323,20 +377,24 @@ void _handleDeleteDiary(
   }
 
   void _showErrorSnackBar(String message) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: isDarkMode ? Colors.red[800] : Colors.red,
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
   void _showSuccessSnackBar(String message) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green,
+        backgroundColor: isDarkMode ? Colors.green[800] : Colors.green,
         duration: const Duration(seconds: 3),
       ),
     );

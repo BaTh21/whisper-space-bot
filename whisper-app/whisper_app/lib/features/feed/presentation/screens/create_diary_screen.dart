@@ -25,7 +25,7 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
   
-  String _shareType = 'personal'; // Changed from 'private' to 'personal'
+  String _shareType = 'personal';
   final List<int> _selectedGroupIds = [];
   final List<File> _selectedImages = [];
   final List<File> _selectedVideos = [];
@@ -188,11 +188,11 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
         setState(() => _uploadingMedia = false);
       }
       
-      // Create diary - FIXED: _shareType is already 'personal' for private diaries
+      // Create diary
       final diary = await widget.feedApiService.createDiary(
         title: title,
         content: content,
-        shareType: _shareType, // 'personal', 'public', 'friends', 'group'
+        shareType: _shareType,
         groupIds: _selectedGroupIds,
         imageUrls: imageUrls,
         videoUrls: videoUrls,
@@ -225,38 +225,51 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
   void _showSnackBar(String message, {required bool isError}) {
     if (!mounted) return;
     
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError 
+          ? (isDarkMode ? Colors.red[800] : Colors.red)
+          : (isDarkMode ? Colors.green[800] : Colors.green),
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  Widget _buildGroupSelectionSection() {
-    if (!_showGroupSelection) return const SizedBox.shrink();
-    
+  Widget _buildGroupSelectionSection(
+    bool isDarkMode, 
+    Color textColor, 
+    Color subtitleColor
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
         Row(
           children: [
-            const Text(
+            Text(
               'Select Groups:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(
+                fontWeight: FontWeight.bold, 
+                fontSize: 16,
+                color: textColor,
+              ),
             ),
             const Spacer(),
             if (_loadingGroups)
-              const SizedBox(
+              SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: isDarkMode ? Colors.blue[400] : null,
+                ),
               )
             else
               IconButton(
-                icon: const Icon(Icons.refresh, size: 20),
+                icon: Icon(Icons.refresh, size: 20, color: textColor),
                 onPressed: _loadUserGroups,
                 tooltip: 'Refresh groups',
               ),
@@ -269,16 +282,16 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
             padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                const Icon(Icons.group, size: 48, color: Colors.grey),
+                Icon(Icons.group, size: 48, color: isDarkMode ? Colors.grey[600] : Colors.grey),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'No groups available',
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                  style: TextStyle(color: subtitleColor, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Create a group first or join existing ones',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  style: TextStyle(color: subtitleColor, fontSize: 12),
                 ),
               ],
             ),
@@ -292,7 +305,10 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                 children: _availableGroups.map((group) {
                   final isSelected = _selectedGroupIds.contains(group.id);
                   return FilterChip(
-                    label: Text(group.name),
+                    label: Text(
+                      group.name,
+                      style: TextStyle(color: isSelected ? Colors.white : textColor),
+                    ),
                     selected: isSelected,
                     onSelected: (selected) {
                       setState(() {
@@ -303,16 +319,19 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                         }
                       });
                     },
-                    selectedColor: Colors.blue.shade100,
-                    checkmarkColor: Colors.blue,
+                    selectedColor: isDarkMode ? Colors.blue[700] : Colors.blue.shade100,
+                    checkmarkColor: Colors.white,
+                    backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
                     avatar: CircleAvatar(
-                      backgroundColor: isSelected ? Colors.blue : Colors.grey.shade300,
+                      backgroundColor: isSelected 
+                        ? (isDarkMode ? Colors.blue[400] : Colors.blue)
+                        : (isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
                       radius: 12,
                       child: Text(
                         group.name.substring(0, 1).toUpperCase(),
                         style: TextStyle(
                           fontSize: 12,
-                          color: isSelected ? Colors.white : Colors.black,
+                          color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -326,7 +345,7 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                 Text(
                   'Selected: ${_selectedGroupIds.length} group(s)',
                   style: TextStyle(
-                    color: Colors.green.shade700,
+                    color: isDarkMode ? Colors.green[400] : Colors.green.shade700,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
@@ -338,13 +357,101 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
     );
   }
 
+  Widget _buildPrivacyOption({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required String value,
+    required bool isDarkMode,
+    required Color textColor,
+    required Color subtitleColor,
+  }) {
+    return InkWell(
+      onTap: _isLoading ? null : () {
+        setState(() {
+          _shareType = value;
+          _showGroupSelection = (value == 'group');
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: iconColor),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: textColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      Radio<String>(
+                        value: value,
+                        groupValue: _shareType,
+                        onChanged: _isLoading ? null : (newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              _shareType = newValue;
+                              _showGroupSelection = (newValue == 'group');
+                            });
+                          }
+                        },
+                        fillColor: MaterialStateProperty.resolveWith<Color>(
+                          (Set<MaterialState> states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return isDarkMode ? Colors.blue[400]! : Colors.blue;
+                            }
+                            return isDarkMode ? Colors.grey[600]! : Colors.grey;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: subtitleColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
+    final backgroundColor = isDarkMode ? const Color(0xFF1E1E1E) : null;
+    final inputFillColor = isDarkMode ? const Color(0xFF2C2C2C) : Colors.white;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create New Diary'),
+        title: Text(
+          'Create New Diary',
+          style: TextStyle(color: textColor),
+        ),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: Icon(Icons.close, color: textColor),
           onPressed: _isLoading ? null : () {
             if (_titleController.text.isNotEmpty || 
                 _contentController.text.isNotEmpty ||
@@ -353,12 +460,16 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
               showDialog(
                 context: context,
                 builder: (context) => AlertDialog(
-                  title: const Text('Discard Diary?'),
-                  content: const Text('You have unsaved changes. Are you sure you want to discard?'),
+                  title: Text('Discard Diary?', style: TextStyle(color: textColor)),
+                  content: Text(
+                    'You have unsaved changes. Are you sure you want to discard?',
+                    style: TextStyle(color: subtitleColor),
+                  ),
+                  backgroundColor: backgroundColor,
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      child: Text('Cancel', style: TextStyle(color: subtitleColor)),
                     ),
                     TextButton(
                       onPressed: () {
@@ -391,13 +502,18 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                   // Title
                   TextFormField(
                     controller: _titleController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Title *',
                       hintText: 'Give your diary a title',
-                      border: OutlineInputBorder(),
+                      labelStyle: TextStyle(color: textColor),
+                      hintStyle: TextStyle(color: subtitleColor),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: inputFillColor,
                     ),
+                    style: TextStyle(color: textColor),
                     maxLength: 255,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -415,14 +531,19 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                   // Content
                   TextFormField(
                     controller: _contentController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Content *',
                       hintText: 'Write your thoughts here...',
-                      border: OutlineInputBorder(),
+                      labelStyle: TextStyle(color: textColor),
+                      hintStyle: TextStyle(color: subtitleColor),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       alignLabelWithHint: true,
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: inputFillColor,
                     ),
+                    style: TextStyle(color: textColor),
                     maxLines: 8,
                     minLines: 4,
                     validator: (value) {
@@ -438,97 +559,69 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                   
                   const SizedBox(height: 16),
                   
-                  // Share Type - UPDATED: Show "Private" but use value "personal"
+                  // Share Type
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Privacy:',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16, 
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
+                          border: Border.all(color: isDarkMode ? Colors.grey[700]! : Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(8),
-                          color: Colors.grey.shade50,
+                          color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
                         ),
                         child: Column(
                           children: [
-                            RadioListTile<String>(
-                              title: const Row(
-                                children: [
-                                  Icon(Icons.lock, size: 20, color: Colors.red),
-                                  SizedBox(width: 8),
-                                  Text('Private'), // UI shows "Private"
-                                ],
-                              ),
-                              subtitle: const Text('Only you can see this'),
-                              value: 'personal', // But value is 'personal' for backend
-                              groupValue: _shareType,
-                              onChanged: _isLoading ? null : (value) {
-                                setState(() {
-                                  _shareType = value!;
-                                  _showGroupSelection = false;
-                                });
-                              },
+                            _buildPrivacyOption(
+                              icon: Icons.lock,
+                              iconColor: Colors.red,
+                              title: 'Private',
+                              subtitle: 'Only you can see this',
+                              value: 'personal',
+                              isDarkMode: isDarkMode,
+                              textColor: textColor,
+                              subtitleColor: subtitleColor!,
                             ),
-                            Divider(height: 1, color: Colors.grey.shade300),
-                            RadioListTile<String>(
-                              title: const Row(
-                                children: [
-                                  Icon(Icons.public, size: 20, color: Colors.green),
-                                  SizedBox(width: 8),
-                                  Text('Public'),
-                                ],
-                              ),
-                              subtitle: const Text('Everyone can see this'),
+                            Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                            _buildPrivacyOption(
+                              icon: Icons.public,
+                              iconColor: Colors.green,
+                              title: 'Public',
+                              subtitle: 'Everyone can see this',
                               value: 'public',
-                              groupValue: _shareType,
-                              onChanged: _isLoading ? null : (value) {
-                                setState(() {
-                                  _shareType = value!;
-                                  _showGroupSelection = false;
-                                });
-                              },
+                              isDarkMode: isDarkMode,
+                              textColor: textColor,
+                              subtitleColor: subtitleColor!,
                             ),
-                            Divider(height: 1, color: Colors.grey.shade300),
-                            RadioListTile<String>(
-                              title: const Row(
-                                children: [
-                                  Icon(Icons.people, size: 20, color: Colors.blue),
-                                  SizedBox(width: 8),
-                                  Text('Friends'),
-                                ],
-                              ),
-                              subtitle: const Text('Only your friends can see this'),
+                            Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                            _buildPrivacyOption(
+                              icon: Icons.people,
+                              iconColor: Colors.blue,
+                              title: 'Friends',
+                              subtitle: 'Only your friends can see this',
                               value: 'friends',
-                              groupValue: _shareType,
-                              onChanged: _isLoading ? null : (value) {
-                                setState(() {
-                                  _shareType = value!;
-                                  _showGroupSelection = false;
-                                });
-                              },
+                              isDarkMode: isDarkMode,
+                              textColor: textColor,
+                              subtitleColor: subtitleColor!,
                             ),
-                            Divider(height: 1, color: Colors.grey.shade300),
-                            RadioListTile<String>(
-                              title: const Row(
-                                children: [
-                                  Icon(Icons.group, size: 20, color: Colors.purple),
-                                  SizedBox(width: 8),
-                                  Text('Selected Groups'),
-                                ],
-                              ),
-                              subtitle: const Text('Only selected groups can see this'),
+                            Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                            _buildPrivacyOption(
+                              icon: Icons.group,
+                              iconColor: Colors.purple,
+                              title: 'Selected Groups',
+                              subtitle: 'Only selected groups can see this',
                               value: 'group',
-                              groupValue: _shareType,
-                              onChanged: _isLoading ? null : (value) {
-                                setState(() {
-                                  _shareType = value!;
-                                  _showGroupSelection = true;
-                                });
-                              },
+                              isDarkMode: isDarkMode,
+                              textColor: textColor,
+                              subtitleColor: subtitleColor!,
                             ),
                           ],
                         ),
@@ -537,7 +630,8 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                   ),
                   
                   // Group Selection (only shown when 'group' is selected)
-                  _buildGroupSelectionSection(),
+                  if (_showGroupSelection) 
+                    _buildGroupSelectionSection(isDarkMode, textColor, subtitleColor!),
                   
                   const SizedBox(height: 16),
                   
@@ -545,9 +639,13 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Media (optional):',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16, 
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -559,6 +657,7 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                               label: const Text('Add Photos'),
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 12),
+                                backgroundColor: isDarkMode ? Colors.blue[800] : null,
                               ),
                             ),
                           ),
@@ -570,6 +669,7 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                               label: const Text('Add Video'),
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 12),
+                                backgroundColor: isDarkMode ? Colors.green[800] : null,
                               ),
                             ),
                           ),
@@ -579,7 +679,13 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                       // Selected Images
                       if (_selectedImages.isNotEmpty) ...[
                         const SizedBox(height: 16),
-                        const Text('Selected Images:', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text(
+                          'Selected Images:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: textColor,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
@@ -593,7 +699,7 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                                   width: 80,
                                   height: 80,
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade300),
+                                    border: Border.all(color: isDarkMode ? Colors.grey[700]! : Colors.grey.shade300),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Image.file(
@@ -635,31 +741,39 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                       // Selected Videos
                       if (_selectedVideos.isNotEmpty) ...[
                         const SizedBox(height: 16),
-                        const Text('Selected Videos:', style: TextStyle(fontWeight: FontWeight.w500)),
+                        Text(
+                          'Selected Videos:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: textColor,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Column(
                           children: _selectedVideos.asMap().entries.map((entry) {
                             final index = entry.key;
                             final video = entry.value;
                             return Card(
+                              color: isDarkMode ? const Color(0xFF2C2C2C) : null,
                               child: ListTile(
                                 leading: Container(
                                   width: 40,
                                   height: 40,
                                   decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
+                                    color: isDarkMode ? Colors.green[900]!.withOpacity(0.3) : Colors.green.shade50,
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: const Icon(Icons.videocam, color: Colors.green),
+                                  child: Icon(Icons.videocam, color: isDarkMode ? Colors.green[400] : Colors.green),
                                 ),
                                 title: Text(
                                   video.path.split('/').last,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: textColor),
                                 ),
                                 subtitle: Text(
                                   'Video',
-                                  style: TextStyle(color: Colors.grey.shade600),
+                                  style: TextStyle(color: subtitleColor),
                                 ),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.close, color: Colors.red),
@@ -686,7 +800,7 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _submitDiary,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
+                        backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
                       ),
                       child: _isLoading
@@ -702,7 +816,7 @@ class _CreateDiaryScreenState extends State<CreateDiaryScreen> {
           // Loading overlay
           if (_isLoading || _uploadingMedia)
             Container(
-              color: Colors.black54,
+              color: isDarkMode ? Colors.black87 : Colors.black54,
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,

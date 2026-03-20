@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/auth/data/models/diary_model.dart';
 import 'package:whisper_space_flutter/features/chat/chat_screen.dart';
@@ -125,6 +126,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _toggleTheme() {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    themeProvider.toggleTheme(!themeProvider.isDarkMode);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_screens.isEmpty) {
@@ -135,12 +141,35 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.isDarkMode;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_appBarTitles[_selectedIndex]),
         centerTitle: true,
         elevation: 0,
         actions: [
+          // Theme Toggle Button
+          IconButton(
+            tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return RotationTransition(
+                  turns: animation,
+                  child: child,
+                );
+              },
+              child: Icon(
+                isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                key: ValueKey<bool>(isDarkMode),
+                color: isDarkMode ? Colors.yellow : Colors.white,
+              ),
+            ),
+            onPressed: _toggleTheme,
+          ),
+          // Inbox Button
           IconButton(
             tooltip: 'Inbox',
             onPressed: () async {
@@ -223,7 +252,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBottomNavBar() {
-    const primaryColor = Color(0xFF6A11CB);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.isDarkMode;
+    
+    // Use different colors based on theme mode
+    final primaryColor = isDarkMode 
+        ? const Color(0xFF00BCD4) // Cyan for dark mode
+        : const Color(0xFF6A11CB); // Purple for light mode
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -231,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(25),
         child: NavigationBar(
           height: 70,
-          backgroundColor: Colors.white,
+          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
           elevation: 10,
           selectedIndex: _selectedIndex,
           indicatorColor: primaryColor.withOpacity(0.15),
@@ -243,27 +278,27 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           destinations: [
             NavigationDestination(
-              icon: const Icon(Icons.home_outlined, color: Colors.grey),
+              icon: Icon(Icons.home_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
               selectedIcon: Icon(Icons.home, color: primaryColor),
               label: 'Feed',
             ),
             NavigationDestination(
-              icon: const Icon(Icons.chat_bubble_outline, color: Colors.grey),
+              icon: Icon(Icons.chat_bubble_outline, color: isDarkMode ? Colors.grey[400] : Colors.grey),
               selectedIcon: Icon(Icons.chat_bubble, color: primaryColor),
               label: 'Messages',
             ),
             NavigationDestination(
-              icon: const Icon(Icons.group_outlined, color: Colors.grey),
+              icon: Icon(Icons.group_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
               selectedIcon: Icon(Icons.group, color: primaryColor),
               label: 'Friends',
             ),
             NavigationDestination(
-              icon: const Icon(Icons.note_outlined, color: Colors.grey),
+              icon: Icon(Icons.note_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
               selectedIcon: Icon(Icons.note, color: primaryColor),
               label: 'Notes',
             ),
             NavigationDestination(
-              icon: const Icon(Icons.person_outlined, color: Colors.grey),
+              icon: Icon(Icons.person_outlined, color: isDarkMode ? Colors.grey[400] : Colors.grey),
               selectedIcon: Icon(Icons.person, color: primaryColor),
               label: 'Profile',
             ),
