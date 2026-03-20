@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
 import 'package:whisper_space_flutter/features/notes/data/datasources/notes_api_service.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/friend_provider.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
+import 'package:whisper_space_flutter/shared/widgets/theme/app_theme.dart';
 
 import 'core/services/auth_service.dart';
 import 'core/services/storage_service.dart';
@@ -28,6 +30,7 @@ void main() async {
           Provider<StorageService>(create: (_) => storageService),
           Provider<AuthService>(create: (_) => authService),
           Provider<FeedApiService>(create: (_) => feedApiService),
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
           ChangeNotifierProvider(
             create: (context) => AuthProvider(
               authService: authService,
@@ -74,19 +77,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Whisper Space',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: const Color(0xFF6A11CB),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6A11CB),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF6A11CB),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeProvider().themeMode,
       home: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
           if (authProvider.currentUser != null) {
