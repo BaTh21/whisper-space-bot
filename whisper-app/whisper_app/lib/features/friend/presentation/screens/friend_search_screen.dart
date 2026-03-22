@@ -22,9 +22,9 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
-  
+
   late FriendAPISource friendApi;
-  
+
   List<Map<String, dynamic>> suggestions = [];
   List<Map<String, dynamic>> searchResults = [];
   bool isLoading = true;
@@ -36,7 +36,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
   void initState() {
     super.initState();
     _initializeApi();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
     });
@@ -52,7 +52,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
 
   Future<void> _loadSuggestions() async {
     if (!mounted) return;
-    
+
     setState(() {
       isLoading = true;
       errorMessage = null;
@@ -117,15 +117,14 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
   Future<void> _handleAddFriend(int userId, String username) async {
     try {
       final response = await friendApi.addFriend(userId);
-      
+
       if (mounted) {
         showTopSnackBar(
-          context, 
+          context,
           response['msg'] ?? 'Friend request sent to $username',
           backgroundColor: Colors.green,
         );
-        
-        // Refresh both lists to update status
+
         await _loadSuggestions();
         if (hasSearched) {
           await _performSearch();
@@ -134,7 +133,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
     } catch (e) {
       if (mounted) {
         showTopSnackBar(
-          context, 
+          context,
           e.toString().replaceAll('Exception: ', ''),
           backgroundColor: Colors.red,
         );
@@ -142,60 +141,32 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
     }
   }
 
-  String _getFriendshipStatusText(String? status) {
-    if (status == null) return 'Add';
-    
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'Pending';
-      case 'accepted':
-        return 'Friends';
-      case 'blocked':
-        return 'Blocked';
-      default:
-        return 'Add';
-    }
-  }
-
-  Color _getStatusButtonColor(String? status) {
-    if (status == null) return Colors.blue;
-    
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return Colors.orange;
-      case 'accepted':
-        return Colors.green;
-      case 'blocked':
-        return Colors.grey;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  bool _isButtonEnabled(String? status) {
-    if (status == null) return true;
-    return status.toLowerCase() != 'pending' && 
-           status.toLowerCase() != 'accepted' && 
-           status.toLowerCase() != 'blocked';
-  }
-
   Widget _buildMutualFriendsChip(int count) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     if (count == 0) return const SizedBox.shrink();
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: isDarkMode ? Colors.grey[800] : Colors.grey.shade200,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.people, size: 12, color: Colors.grey),
+          Icon(
+            Icons.people,
+            size: 12,
+            color: isDarkMode ? Colors.white70 : Colors.grey,
+          ),
           const SizedBox(width: 4),
           Text(
             '$count mutual ${count == 1 ? 'friend' : 'friends'}',
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
+            style: TextStyle(
+              fontSize: 10,
+              color: isDarkMode ? Colors.white70 : Colors.grey,
+            ),
           ),
         ],
       ),
@@ -203,19 +174,20 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
   }
 
   Widget _buildStatusBadge(String? status) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     if (status == null) return const SizedBox.shrink();
-    
+
     switch (status.toLowerCase()) {
       case 'accepted':
         return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.green.shade50,
+            color: isDarkMode ? Colors.green[900] : Colors.green.shade50,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.green.shade200),
+            border: Border.all(
+              color: isDarkMode ? Colors.green[700]! : Colors.green.shade200,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -225,7 +197,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               Text(
                 'Friends',
                 style: TextStyle(
-                  color: Colors.green.shade700,
+                  color: isDarkMode ? Colors.green[300] : Colors.green.shade700,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -233,17 +205,16 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
             ],
           ),
         );
-      
+
       case 'pending':
         return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.orange.shade50,
+            color: isDarkMode ? Colors.orange[900] : Colors.orange.shade50,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.orange.shade200),
+            border: Border.all(
+              color: isDarkMode ? Colors.orange[700]! : Colors.orange.shade200,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -253,7 +224,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               Text(
                 'Pending',
                 style: TextStyle(
-                  color: Colors.orange.shade700,
+                  color: isDarkMode ? Colors.orange[300] : Colors.orange.shade700,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -261,27 +232,30 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
             ],
           ),
         );
-      
+
       case 'blocked':
         return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.grey.shade100,
+            color: isDarkMode ? Colors.grey[800] : Colors.grey.shade100,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.grey.shade300),
+            border: Border.all(
+              color: isDarkMode ? Colors.grey[700]! : Colors.grey.shade300,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.block, size: 14, color: Colors.grey),
+              Icon(
+                Icons.block,
+                size: 14,
+                color: isDarkMode ? Colors.white70 : Colors.grey,
+              ),
               const SizedBox(width: 4),
               Text(
                 'Blocked',
                 style: TextStyle(
-                  color: Colors.grey.shade700,
+                  color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -289,7 +263,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
             ],
           ),
         );
-      
+
       default:
         return const SizedBox.shrink();
     }
@@ -297,22 +271,47 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+    final inputFillColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade100;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Friends'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(80),
-          child: Padding(
+        title: Text(
+          'Add Friends',
+          style: TextStyle(color: textColor),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh, color: textColor),
+            onPressed: _loadSuggestions,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _searchController,
               focusNode: _searchFocusNode,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 hintText: 'Search by username or email...',
-                prefixIcon: const Icon(Icons.search),
+                hintStyle: TextStyle(
+                  color: isDarkMode ? Colors.white54 : Colors.grey,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: isDarkMode ? Colors.white70 : Colors.grey,
+                ),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear),
+                        icon: Icon(
+                          Icons.clear,
+                          color: isDarkMode ? Colors.white70 : Colors.grey,
+                        ),
                         onPressed: () {
                           _searchController.clear();
                           setState(() {
@@ -327,22 +326,12 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
-                fillColor: Colors.grey.shade100,
+                fillColor: inputFillColor,
               ),
               onSubmitted: (_) => _performSearch(),
               textInputAction: TextInputAction.search,
             ),
           ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadSuggestions,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: SizedBox(
@@ -350,6 +339,8 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               child: ElevatedButton(
                 onPressed: isSearching ? null : _performSearch,
                 style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -365,7 +356,6 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               ),
             ),
           ),
-          
           Expanded(
             child: hasSearched ? _buildSearchResults() : _buildSuggestions(),
           ),
@@ -375,6 +365,10 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
   }
 
   Widget _buildSearchResults() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+
     if (isSearching) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -384,16 +378,25 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: isDarkMode ? Colors.red[300] : Colors.red.shade300,
+            ),
             const SizedBox(height: 16),
             Text(
               errorMessage!,
-              style: const TextStyle(color: Colors.red),
+              style: TextStyle(
+                color: isDarkMode ? Colors.red[300] : Colors.red,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _performSearch,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+              ),
               child: const Text('Try Again'),
             ),
           ],
@@ -406,17 +409,27 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.person_search, size: 80, color: Colors.grey.shade400),
+            Icon(
+              Icons.person_search,
+              size: 80,
+              color: isDarkMode ? Colors.white38 : Colors.grey.shade400,
+            ),
             const SizedBox(height: 16),
             Text(
               'No users found for "${_searchController.text}"',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+              style: TextStyle(
+                color: subtitleColor,
+                fontSize: 16,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Try a different search term',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+              style: TextStyle(
+                color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
+                fontSize: 14,
+              ),
             ),
           ],
         ),
@@ -432,24 +445,25 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
         final status = user['friendship_status'];
         final isOnline = user['is_online'] ?? false;
         final mutualCount = user['mutual_friends_count'] ?? 0;
-        
+
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
+          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
           child: ListTile(
             contentPadding: const EdgeInsets.all(12),
             leading: Stack(
               children: [
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: Colors.blueGrey,
-                  backgroundImage: user['avatar_url'] != null && 
+                  backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
+                  backgroundImage: user['avatar_url'] != null &&
                       user['avatar_url'].toString().isNotEmpty
                       ? NetworkImage(user['avatar_url'])
                       : null,
-                  child: user['avatar_url'] == null || 
+                  child: user['avatar_url'] == null ||
                       user['avatar_url'].toString().isEmpty
                       ? Text(
                           user['username'][0].toUpperCase(),
@@ -482,9 +496,10 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                 Expanded(
                   child: Text(
                     user['username'],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: textColor,
                     ),
                   ),
                 ),
@@ -496,10 +511,9 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               children: [
                 Text(
                   user['email'],
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(color: subtitleColor, fontSize: 13),
                 ),
-                if (mutualCount > 0)
-                  const SizedBox(height: 4),
+                if (mutualCount > 0) const SizedBox(height: 4),
               ],
             ),
             trailing: status != null
@@ -508,11 +522,11 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                     width: 70,
                     child: ElevatedButton(
                       onPressed: () => _handleAddFriend(
-                        user['id'], 
+                        user['id'],
                         user['username'],
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
+                        backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
@@ -535,6 +549,10 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
   }
 
   Widget _buildSuggestions() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -547,17 +565,22 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
             Icon(
               Icons.error_outline,
               size: 64,
-              color: Colors.red.shade300,
+              color: isDarkMode ? Colors.red[300] : Colors.red.shade300,
             ),
             const SizedBox(height: 16),
             Text(
               errorMessage!,
-              style: const TextStyle(color: Colors.red),
+              style: TextStyle(
+                color: isDarkMode ? Colors.red[300] : Colors.red,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadSuggestions,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+              ),
               child: const Text('Try Again'),
             ),
           ],
@@ -579,13 +602,13 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                   Icon(
                     Icons.people_outline,
                     size: 80,
-                    color: Colors.grey.shade400,
+                    color: isDarkMode ? Colors.white38 : Colors.grey.shade400,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No suggestions available',
                     style: TextStyle(
-                      color: Colors.grey.shade600,
+                      color: subtitleColor,
                       fontSize: 16,
                     ),
                   ),
@@ -593,7 +616,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                   Text(
                     'Try searching for friends by name or email',
                     style: TextStyle(
-                      color: Colors.grey.shade500,
+                      color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
                       fontSize: 14,
                     ),
                   ),
@@ -617,24 +640,25 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
           final isOnline = user['is_online'] ?? false;
           final mutualCount = user['mutual_friends_count'] ?? 0;
           final mutualFriends = user['mutual_friends'] ?? [];
-          
+
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
+            color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
             child: ListTile(
               contentPadding: const EdgeInsets.all(12),
               leading: Stack(
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: Colors.blueGrey,
-                    backgroundImage: user['avatar_url'] != null && 
+                    backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
+                    backgroundImage: user['avatar_url'] != null &&
                         user['avatar_url'].toString().isNotEmpty
                         ? NetworkImage(user['avatar_url'])
                         : null,
-                    child: user['avatar_url'] == null || 
+                    child: user['avatar_url'] == null ||
                         user['avatar_url'].toString().isEmpty
                         ? Text(
                             user['username'][0].toUpperCase(),
@@ -670,9 +694,10 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                   Expanded(
                     child: Text(
                       user['username'],
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
+                        color: textColor,
                       ),
                     ),
                   ),
@@ -684,14 +709,15 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                 children: [
                   Text(
                     user['email'] ?? '',
-                    style: const TextStyle(fontSize: 13),
+                    style: TextStyle(color: subtitleColor, fontSize: 13),
                   ),
                   if (mutualCount > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: _buildMutualFriendsList(
-                        mutualFriends, 
+                        mutualFriends,
                         mutualCount,
+                        isDarkMode,
                       ),
                     ),
                 ],
@@ -702,11 +728,11 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                       width: 70,
                       child: ElevatedButton(
                         onPressed: () => _handleAddFriend(
-                          user['id'], 
+                          user['id'],
                           user['username'],
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
+                          backgroundColor: Theme.of(context).primaryColor,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
@@ -729,19 +755,23 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
     );
   }
 
-  Widget _buildMutualFriendsList(List<dynamic> mutualFriends, int totalCount) {
+  Widget _buildMutualFriendsList(
+    List<dynamic> mutualFriends,
+    int totalCount,
+    bool isDarkMode,
+  ) {
     if (mutualFriends.isEmpty) {
       return Text(
         '$totalCount mutual ${totalCount == 1 ? 'friend' : 'friends'}',
         style: TextStyle(
           fontSize: 12,
-          color: Colors.grey.shade600,
+          color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
         ),
       );
     }
 
     final names = mutualFriends.map((f) => f['username']).take(2).join(', ');
-    
+
     String text;
     if (mutualFriends.length == 1) {
       text = 'Mutual friend: ${mutualFriends[0]['username']}';
@@ -751,17 +781,21 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
       final remaining = totalCount - mutualFriends.length;
       text = 'Mutual friends: $names and ${remaining + (mutualFriends.length - 2)} others';
     }
-    
+
     return Row(
       children: [
-        const Icon(Icons.people, size: 14, color: Colors.grey),
+        Icon(
+          Icons.people,
+          size: 14,
+          color: isDarkMode ? Colors.white70 : Colors.grey,
+        ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             text,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey.shade600,
+              color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
               fontStyle: FontStyle.italic,
             ),
             overflow: TextOverflow.ellipsis,

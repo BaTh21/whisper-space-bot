@@ -43,25 +43,31 @@ class FriendBox extends StatelessWidget {
   final VoidCallback? onBlock;
   final VoidCallback? onUnblock;
 
-  const FriendBox(
-      {super.key,
-      required this.name,
-      this.avatarUrl,
-      required this.status,
-      this.trailing,
-      this.mutualFriendsCount,
-      this.onViewProfile,
-      this.onOpenChat,
-      this.onCancel,
-      this.onAccept,
-      this.onBlock,
-      this.onUnblock});
+  const FriendBox({
+    super.key,
+    required this.name,
+    this.avatarUrl,
+    required this.status,
+    this.trailing,
+    this.mutualFriendsCount,
+    this.onViewProfile,
+    this.onOpenChat,
+    this.onCancel,
+    this.onAccept,
+    this.onBlock,
+    this.onUnblock,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
       child: PopupMenuButton<_FriendAction>(
         position: PopupMenuPosition.under,
         offset: const Offset(200, 0),
@@ -87,13 +93,13 @@ class FriendBox extends StatelessWidget {
               break;
           }
         },
-        itemBuilder: (context) => _buildMenuItems(status),
+        itemBuilder: (context) => _buildMenuItems(status, isDarkMode),
         child: ListTile(
           leading: Stack(
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: Colors.blueGrey,
+                backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
                 backgroundImage: avatarUrl != null && avatarUrl!.isNotEmpty
                     ? NetworkImage(avatarUrl!)
                     : null,
@@ -112,26 +118,37 @@ class FriendBox extends StatelessWidget {
           title: Row(
             children: [
               Expanded(
-                child: Text(name,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
               ),
               if (mutualFriendsCount != null && mutualFriendsCount! > 0)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
+                    color: isDarkMode ? Colors.grey[800] : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '$mutualFriendsCount',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDarkMode ? Colors.white70 : Colors.grey,
+                    ),
                   ),
                 ),
             ],
           ),
-          subtitle: Text(_statusLabel(status)),
-          trailing: const Icon(Icons.more_vert),
+          subtitle: Text(
+            _statusLabel(status),
+            style: TextStyle(color: subtitleColor),
+          ),
+          trailing: Icon(Icons.more_vert, color: textColor),
         ),
       ),
     );
@@ -152,49 +169,52 @@ class FriendBox extends StatelessWidget {
 
   static List<PopupMenuEntry<_FriendAction>> _buildMenuItems(
     FriendStatus status,
+    bool isDarkMode,
   ) {
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+
     switch (status) {
       case FriendStatus.friend:
-        return const [
+        return [
           PopupMenuItem(
             value: _FriendAction.viewProfile,
-            child: Text('View Profile'),
+            child: Text('View Profile', style: TextStyle(color: textColor)),
           ),
           PopupMenuItem(
             value: _FriendAction.chat,
-            child: Text('Open Chat'),
+            child: Text('Open Chat', style: TextStyle(color: textColor)),
           ),
           PopupMenuItem(
             value: _FriendAction.block,
-            child: Text('Block'),
+            child: Text('Block', style: TextStyle(color: textColor)),
           ),
         ];
 
       case FriendStatus.pending:
-        return const [
+        return [
           PopupMenuItem(
             value: _FriendAction.cancel,
-            child: Text('Cancel Request'),
+            child: Text('Cancel Request', style: TextStyle(color: textColor)),
           ),
         ];
 
       case FriendStatus.requesting:
-        return const [
+        return [
           PopupMenuItem(
             value: _FriendAction.accept,
-            child: Text('Accept'),
+            child: Text('Accept', style: TextStyle(color: textColor)),
           ),
           PopupMenuItem(
             value: _FriendAction.block,
-            child: Text('Block'),
+            child: Text('Block', style: TextStyle(color: textColor)),
           ),
         ];
 
       case FriendStatus.blocked:
-        return const [
+        return [
           PopupMenuItem(
             value: _FriendAction.unblock,
-            child: Text('Unblock'),
+            child: Text('Unblock', style: TextStyle(color: textColor)),
           ),
         ];
     }
@@ -232,12 +252,16 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+
     return SizedBox(
       width: 160,
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 2,
+        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         child: InkWell(
           onTap: onViewProfile,
           borderRadius: BorderRadius.circular(12),
@@ -250,7 +274,7 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 40,
-                      backgroundColor: Colors.blueGrey,
+                      backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
                       backgroundImage:
                           avatarUrl != null && avatarUrl!.isNotEmpty
                               ? NetworkImage(avatarUrl!)
@@ -284,19 +308,24 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   name,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                if (mutualFriendsCount > 0) _buildMutualFriendsChip(),
+                if (mutualFriendsCount > 0) _buildMutualFriendsChip(isDarkMode),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
                   onPressed: onAdd,
                   icon: const Icon(Icons.person_add, size: 16),
                   label: const Text('Add', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Colors.white,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     minimumSize: const Size(100, 32),
@@ -313,17 +342,20 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
     );
   }
 
-  Widget _buildMutualFriendsChip() {
+  Widget _buildMutualFriendsChip(bool isDarkMode) {
     if (mutualFriends.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.grey.shade200,
+          color: isDarkMode ? Colors.grey[800] : Colors.grey.shade200,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
           '$mutualFriendsCount mutual',
-          style: const TextStyle(fontSize: 10, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 10,
+            color: isDarkMode ? Colors.white70 : Colors.grey,
+          ),
         ),
       );
     }
@@ -342,18 +374,25 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: isDarkMode ? Colors.grey[800] : Colors.grey.shade200,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.people, size: 12, color: Colors.grey),
+          Icon(
+            Icons.people,
+            size: 12,
+            color: isDarkMode ? Colors.white70 : Colors.grey,
+          ),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               mutualText,
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 10,
+                color: isDarkMode ? Colors.white70 : Colors.grey,
+              ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
             ),
@@ -378,6 +417,9 @@ class SuggestionSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Row(
@@ -387,12 +429,16 @@ class SuggestionSectionHeader extends StatelessWidget {
             title,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: textColor,
                 ),
           ),
           if (onViewAll != null && itemCount > 5)
             TextButton(
               onPressed: onViewAll,
-              child: const Text('View All'),
+              child: Text(
+                'View All',
+                style: TextStyle(color: Theme.of(context).primaryColor),
+              ),
             ),
         ],
       ),
@@ -568,7 +614,7 @@ class _FriendScreenState extends State<FriendScreen>
       context,
       MaterialPageRoute(
         builder: (context) =>
-            const AddFriendScreen(), // Renamed from FriendSearchScreen
+            const AddFriendScreen(),
       ),
     ).then((_) {
       loadSuggestions();
@@ -600,11 +646,10 @@ class _FriendScreenState extends State<FriendScreen>
       );
     }
 
-    return Scaffold(
-      // appBar: AppBar(
-      //   // title: const Text('Friends'),
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
 
-      // ),
+    return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
           await loadFriends();
@@ -673,10 +718,14 @@ class _FriendScreenState extends State<FriendScreen>
                       'Your Friends',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
+                            color: textColor,
                           ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.person_add),
+                      icon: Icon(
+                        Icons.person_add,
+                        color: textColor,
+                      ),
                       onPressed: _navigateToAddFriends,
                       tooltip: 'Add Friends',
                     ),
@@ -684,16 +733,22 @@ class _FriendScreenState extends State<FriendScreen>
                 ),
               ),
               Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Colors.grey, width: 0.2),
-                    bottom: BorderSide(color: Colors.grey, width: 0.1),
+                    top: BorderSide(
+                      color: isDarkMode ? Colors.white24 : Colors.grey,
+                      width: 0.2,
+                    ),
+                    bottom: BorderSide(
+                      color: isDarkMode ? Colors.white24 : Colors.grey,
+                      width: 0.1,
+                    ),
                   ),
                 ),
                 child: TabBar(
                   controller: _tabController,
                   labelColor: Theme.of(context).primaryColor,
-                  unselectedLabelColor: Colors.grey,
+                  unselectedLabelColor: isDarkMode ? Colors.white70 : Colors.grey,
                   indicatorColor: Theme.of(context).primaryColor,
                   indicatorWeight: 4,
                   indicatorSize: TabBarIndicatorSize.label,
@@ -727,10 +782,12 @@ class _FriendScreenState extends State<FriendScreen>
   }
 
   Widget _buildViewMoreBox() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return SizedBox(
       width: 160,
       child: Card(
-        color: Colors.grey.shade100,
+        color: isDarkMode ? Colors.grey[800] : Colors.grey.shade100,
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: InkWell(
@@ -743,20 +800,20 @@ class _FriendScreenState extends State<FriendScreen>
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
+                  color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.arrow_forward,
                   size: 30,
-                  color: Colors.grey,
+                  color: isDarkMode ? Colors.white70 : Colors.grey,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 'View All',
                 style: TextStyle(
-                  color: Colors.blue.shade700,
+                  color: isDarkMode ? Colors.cyan.shade300 : Colors.blue.shade700,
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
@@ -765,7 +822,7 @@ class _FriendScreenState extends State<FriendScreen>
               Text(
                 '${suggestFriends.length} suggestions',
                 style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
                   fontSize: 12,
                 ),
               ),
@@ -778,6 +835,10 @@ class _FriendScreenState extends State<FriendScreen>
 
   Widget _buildFriendsList(
       List<Map<String, dynamic>> friends, FriendStatus status) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+
     if (friends.isEmpty) {
       return Center(
         child: Column(
@@ -786,12 +847,14 @@ class _FriendScreenState extends State<FriendScreen>
             Icon(
               _getEmptyStateIcon(status),
               size: 64,
-              color: Colors.grey.shade400,
+              color: isDarkMode ? Colors.white38 : Colors.grey.shade400,
             ),
             const SizedBox(height: 16),
             Text(
               _getEmptyStateText(status),
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(
+                color: isDarkMode ? Colors.white54 : Colors.grey.shade600,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -950,12 +1013,19 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('People You May Know'),
+        title: Text(
+          'People You May Know',
+          style: TextStyle(color: textColor),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: Icon(Icons.refresh, color: textColor),
             onPressed: _refreshSuggestions,
           ),
         ],
@@ -970,16 +1040,21 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                         SizedBox(
                           height: MediaQuery.of(context).size.height * 0.3,
                         ),
-                        const Center(
+                        Center(
                           child: Column(
                             children: [
-                              Icon(Icons.people_outline,
-                                  size: 80, color: Colors.grey),
-                              SizedBox(height: 16),
+                              Icon(
+                                Icons.people_outline,
+                                size: 80,
+                                color: isDarkMode ? Colors.white38 : Colors.grey,
+                              ),
+                              const SizedBox(height: 16),
                               Text(
                                 'No suggestions available',
-                                style:
-                                    TextStyle(fontSize: 16, color: Colors.grey),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: subtitleColor,
+                                ),
                               ),
                             ],
                           ),
@@ -998,13 +1073,14 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
+                          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
                           child: ListTile(
                             contentPadding: const EdgeInsets.all(12),
                             leading: Stack(
                               children: [
                                 CircleAvatar(
                                   radius: 30,
-                                  backgroundColor: Colors.blueGrey,
+                                  backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
                                   backgroundImage: user['avatar'] != null &&
                                           user['avatar'].toString().isNotEmpty
                                       ? NetworkImage(user['avatar'])
@@ -1040,18 +1116,22 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                             ),
                             title: Text(
                               user['name'],
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
+                                color: textColor,
                               ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(user['email'] ?? ''),
+                                Text(
+                                  user['email'] ?? '',
+                                  style: TextStyle(color: subtitleColor),
+                                ),
                                 if (user['mutual_friends_count'] > 0) ...[
                                   const SizedBox(height: 4),
-                                  _buildMutualFriendsText(user),
+                                  _buildMutualFriendsText(user, isDarkMode),
                                 ],
                               ],
                             ),
@@ -1068,6 +1148,8 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                                       }
                                     },
                               style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).primaryColor,
+                                foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
@@ -1082,14 +1164,17 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
     );
   }
 
-  Widget _buildMutualFriendsText(Map<String, dynamic> user) {
+  Widget _buildMutualFriendsText(Map<String, dynamic> user, bool isDarkMode) {
     final count = user['mutual_friends_count'] ?? 0;
     final mutualFriends = user['mutual_friends'] ?? [];
 
     if (mutualFriends.isEmpty) {
       return Text(
         '$count mutual ${count == 1 ? 'friend' : 'friends'}',
-        style: const TextStyle(fontSize: 12, color: Colors.grey),
+        style: TextStyle(
+          fontSize: 12,
+          color: isDarkMode ? Colors.white70 : Colors.grey,
+        ),
       );
     }
 
@@ -1106,12 +1191,19 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
 
     return Row(
       children: [
-        const Icon(Icons.people, size: 14, color: Colors.grey),
+        Icon(
+          Icons.people,
+          size: 14,
+          color: isDarkMode ? Colors.white70 : Colors.grey,
+        ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             names,
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            style: TextStyle(
+              fontSize: 12,
+              color: isDarkMode ? Colors.white70 : Colors.grey,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),

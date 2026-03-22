@@ -1,3 +1,4 @@
+// main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
@@ -74,20 +75,24 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Whisper Space',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeProvider().themeMode,
-      home: Consumer<AuthProvider>(
-        builder: (context, authProvider, child) {
-          if (authProvider.currentUser != null) {
-            return const HomeScreen();
-          }
-          return const LoginScreen();
-        },
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'Whisper Space',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeProvider.themeMode,
+          home: Consumer<AuthProvider>(
+            builder: (context, authProvider, child) {
+              if (authProvider.currentUser != null) {
+                return const HomeScreen();
+              }
+              return const LoginScreen();
+            },
+          ),
+        );
+      },
     );
   }
 }
