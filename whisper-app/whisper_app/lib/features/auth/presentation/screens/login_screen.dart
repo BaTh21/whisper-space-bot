@@ -83,35 +83,51 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showErrorDialog(String message) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text(
+          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          title: Text(
             'Login Failed',
-            style: TextStyle(fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(message),
+              Text(
+                message,
+                style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+              ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.grey[700], size: 20),
+                    Icon(
+                      Icons.info_outline,
+                      color: isDarkMode ? Colors.white70 : Colors.grey[700],
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _getTipForError(message),
-                        style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                        style: TextStyle(
+                          color: isDarkMode ? Colors.white70 : Colors.grey[700],
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ],
@@ -150,6 +166,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final gradientStart = isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFF6A11CB);
+    final gradientEnd = isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFF2575FC);
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.white70;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -157,9 +180,9 @@ class _LoginScreenState extends State<LoginScreen> {
           Container(
             width: double.infinity,
             height: double.infinity,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                colors: [gradientStart, gradientEnd],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -170,8 +193,7 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -180,20 +202,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 20),
                     Text(
                       'Whisper Space',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 1.2,
-                              ),
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 1.2,
+                          ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Sign in to continue',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.white70, fontSize: 16),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: subtitleColor,
+                            fontSize: 16,
+                          ),
                     ),
                     const SizedBox(height: 40),
 
@@ -202,7 +223,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cardColor,
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
@@ -277,7 +298,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       },
                                 child: Text(
                                   'Forgot Password?',
-                                  style: TextStyle(color: Colors.grey[600]),
+                                  style: TextStyle(
+                                    color: isDarkMode ? Colors.cyan.shade300 : Colors.grey[600],
+                                  ),
                                 ),
                               ),
                             ),
@@ -286,17 +309,24 @@ class _LoginScreenState extends State<LoginScreen> {
                             Row(
                               children: [
                                 Expanded(
-                                    child: Divider(color: Colors.grey[300])),
+                                  child: Divider(
+                                    color: isDarkMode ? Colors.white24 : Colors.grey[300],
+                                  ),
+                                ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
                                   child: Text(
                                     'OR',
-                                    style: TextStyle(color: Colors.grey[600]),
+                                    style: TextStyle(
+                                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                                    ),
                                   ),
                                 ),
                                 Expanded(
-                                    child: Divider(color: Colors.grey[300])),
+                                  child: Divider(
+                                    color: isDarkMode ? Colors.white24 : Colors.grey[300],
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 10),
@@ -306,7 +336,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 Text(
                                   "Don't have an account? ",
-                                  style: TextStyle(color: Colors.grey[700]),
+                                  style: TextStyle(
+                                    color: isDarkMode ? Colors.white70 : Colors.grey[700],
+                                  ),
                                 ),
                                 TextButton(
                                   onPressed: _isLoading

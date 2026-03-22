@@ -27,11 +27,35 @@ class AuthTextField extends StatelessWidget {
     this.maxLines = 1,
     this.readOnly = false,
     this.onTap,
-    this.enabled = true,// Removed the extra "required" keyword at the end
+    this.enabled = true,
   });
   
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final isDisabled = !enabled || readOnly;
+    
+    final labelColor = isDisabled
+        ? (isDarkMode ? Colors.white38 : Colors.grey[400])
+        : (isDarkMode ? Colors.white70 : Colors.grey[800]);
+    
+    final hintColor = isDisabled
+        ? (isDarkMode ? Colors.white38 : Colors.grey[300])
+        : (isDarkMode ? Colors.white54 : Colors.grey[400]);
+    
+    final iconColor = isDisabled
+        ? (isDarkMode ? Colors.white38 : Colors.grey[400])
+        : (isDarkMode ? Colors.white54 : Colors.grey[600]);
+    
+    final borderColor = isDarkMode ? Colors.white24 : Colors.grey[300]!;
+    final fillColor = isDisabled
+        ? (isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100])
+        : (isDarkMode ? const Color(0xFF2C2C2C) : Colors.white);
+    
+    final textColor = isDisabled
+        ? (isDarkMode ? Colors.white54 : Colors.grey[600])
+        : (isDarkMode ? Colors.white : Colors.black);
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -39,7 +63,7 @@ class AuthTextField extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w600,
-            color: Colors.grey[800],
+            color: labelColor,
           ),
         ),
         const SizedBox(height: 8),
@@ -52,19 +76,27 @@ class AuthTextField extends StatelessWidget {
           maxLines: maxLines,
           readOnly: readOnly,
           onTap: onTap,
+          enabled: enabled,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 16,
+          ),
           decoration: InputDecoration(
             hintText: hintText,
-            hintStyle: TextStyle(color: Colors.grey[400]),
+            hintStyle: TextStyle(
+              color: hintColor,
+              fontSize: 14,
+            ),
             prefixIcon: prefixIcon != null 
-                ? Icon(prefixIcon, color: Colors.grey[600]) 
+                ? Icon(prefixIcon, color: iconColor, size: 20) 
                 : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[300]!),
+              borderSide: BorderSide(color: borderColor),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[300]!),
+              borderSide: BorderSide(color: borderColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -75,14 +107,30 @@ class AuthTextField extends StatelessWidget {
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 1),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.red.shade400 : Colors.red,
+                width: 1,
+              ),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 2),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.red.shade400 : Colors.red,
+                width: 2,
+              ),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.white24 : Colors.grey[200]!,
+              ),
             ),
             filled: true,
-            fillColor: readOnly ? Colors.grey[100] : Colors.white,
+            fillColor: fillColor,
+            errorStyle: TextStyle(
+              color: isDarkMode ? Colors.red.shade300 : Colors.red,
+              fontSize: 12,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,

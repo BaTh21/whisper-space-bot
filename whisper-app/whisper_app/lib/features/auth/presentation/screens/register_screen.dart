@@ -34,7 +34,6 @@ class RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _register() async {
-    // Hide keyboard
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) return;
@@ -58,7 +57,6 @@ class RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
 
     if (result.success) {
-      // ✅ Show success message and navigate to verification
       _showSuccessDialogAndNavigate(result.email!);
     } else {
       _showErrorDialog(result.message ?? 'Registration failed');
@@ -66,15 +64,21 @@ class RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showSuccessDialogAndNavigate(String email) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Row(
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Row(
           children: [
-            Icon(Icons.email, color: Colors.green),
-            SizedBox(width: 10),
-            Text('Check Your Email'),
+            const Icon(Icons.email, color: Colors.green),
+            const SizedBox(width: 10),
+            Text(
+              'Check Your Email',
+              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+            ),
           ],
         ),
         content: Column(
@@ -88,7 +92,7 @@ class RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 10),
             Text(
               'We sent a 6-digit verification code to:',
-              style: TextStyle(color: Colors.grey[700]),
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.grey[700]),
             ),
             const SizedBox(height: 5),
             Text(
@@ -99,21 +103,26 @@ class RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
             const SizedBox(height: 15),
-            const Text(
+            Text(
               'Please check your inbox and spam folder.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 14,
+                color: isDarkMode ? Colors.white54 : Colors.grey,
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context); // Close dialog
-              // Navigate to verification screen
+              Navigator.pop(context);
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
@@ -129,15 +138,27 @@ class RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showErrorDialog(String message) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Registration Failed'),
-        content: Text(message),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Registration Failed',
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        content: Text(
+          message,
+          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: Text(
+              'OK',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black),
+            ),
           ),
         ],
       ),
@@ -146,42 +167,43 @@ class RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final gradientStart = isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFF6A11CB);
+    final gradientEnd = isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFF2575FC);
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.white70;
+
     return LoadingOverlay(
-        isLoading: _isLoading,
-        child: Scaffold(
-          body: Stack(
-            children: [
-              // Full-screen gradient background
-              Container(
-                width: double.infinity,
-                height: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+      isLoading: _isLoading,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Full-screen gradient background
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [gradientStart, gradientEnd],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
               ),
+            ),
 
-              // Main content
-              SafeArea(
-                  child: Center(
+            // Main content
+            SafeArea(
+              child: Center(
                 child: SingleChildScrollView(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.person_add,
-                          size: 100, color: Colors.white),
+                      const Icon(Icons.person_add, size: 100, color: Colors.white),
                       const SizedBox(height: 20),
                       Text(
                         'Join Whisper Space',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                               letterSpacing: 1.2,
@@ -190,17 +212,17 @@ class RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 10),
                       Text(
                         'Create your account to get started',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(color: Colors.white70, fontSize: 16),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: subtitleColor,
+                              fontSize: 16,
+                            ),
                       ),
                       const SizedBox(height: 15),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: cardColor,
                           borderRadius: BorderRadius.circular(25),
                           boxShadow: [
                             BoxShadow(
@@ -290,17 +312,24 @@ class RegisterScreenState extends State<RegisterScreen> {
                               Row(
                                 children: [
                                   Expanded(
-                                      child: Divider(color: Colors.grey[300])),
+                                    child: Divider(
+                                      color: isDarkMode ? Colors.white24 : Colors.grey[300],
+                                    ),
+                                  ),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 16),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
                                     child: Text(
                                       'OR',
-                                      style: TextStyle(color: Colors.grey[600]),
+                                      style: TextStyle(
+                                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                                      ),
                                     ),
                                   ),
                                   Expanded(
-                                      child: Divider(color: Colors.grey[300])),
+                                    child: Divider(
+                                      color: isDarkMode ? Colors.white24 : Colors.grey[300],
+                                    ),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 1),
@@ -311,8 +340,9 @@ class RegisterScreenState extends State<RegisterScreen> {
                                 children: [
                                   Text(
                                     "Already have an account? ",
-                                    style:
-                                        Theme.of(context).textTheme.bodyMedium,
+                                    style: TextStyle(
+                                      color: isDarkMode ? Colors.white70 : Colors.black87,
+                                    ),
                                   ),
                                   TextButton(
                                     onPressed: _isLoading
@@ -321,8 +351,7 @@ class RegisterScreenState extends State<RegisterScreen> {
                                             Navigator.pushReplacement(
                                               context,
                                               MaterialPageRoute(
-                                                builder: (context) =>
-                                                    const LoginScreen(),
+                                                builder: (context) => const LoginScreen(),
                                               ),
                                             );
                                           },
@@ -343,9 +372,11 @@ class RegisterScreenState extends State<RegisterScreen> {
                     ],
                   ),
                 ),
-              )),
-            ],
-          ),
-        ));
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

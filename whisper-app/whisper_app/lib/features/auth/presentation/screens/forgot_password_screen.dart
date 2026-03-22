@@ -36,8 +36,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => _isLoading = true);
 
     final authProvider = context.read<AuthProvider>();
-    final result =
-        await authProvider.forgotPassword(_emailController.text.trim());
+    final result = await authProvider.forgotPassword(_emailController.text.trim());
 
     setState(() => _isLoading = false);
 
@@ -57,17 +56,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   void _showErrorDialog(String message) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     if (!mounted) return;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Error',
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        content: Text(
+          message,
+          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: Text(
+              'OK',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black),
+            ),
           ),
         ],
       ),
@@ -86,6 +97,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final gradientStart = isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFF6A11CB);
+    final gradientEnd = isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFF2575FC);
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.white70;
+
     return LoadingOverlay(
       isLoading: _isLoading,
       child: Scaffold(
@@ -95,9 +113,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             Container(
               width: double.infinity,
               height: double.infinity,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                  colors: [gradientStart, gradientEnd],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -106,22 +124,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
             SafeArea(
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const Icon(Icons.lock_reset,
-                        size: 100, color: Colors.white),
+                    const Icon(Icons.lock_reset, size: 100, color: Colors.white),
                     const SizedBox(height: 20),
 
                     Text(
                       'Reset Password',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                     ),
                     const SizedBox(height: 16),
 
@@ -130,20 +145,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           ? 'If the email is registered, you will receive password reset instructions.'
                           : 'Enter your email address and we will send you instructions to reset your password.',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.white70),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: subtitleColor,
+                          ),
                     ),
 
                     const SizedBox(height: 20),
 
-                    // ✅ FIXED: Container wraps everything
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cardColor,
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
@@ -200,21 +213,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
-                                    color: Colors.green[50],
+                                    color: isDarkMode ? Colors.green[900] : Colors.green[50],
                                     borderRadius: BorderRadius.circular(10),
-                                    border:
-                                        Border.all(color: Colors.green[100]!),
+                                    border: Border.all(
+                                      color: isDarkMode ? Colors.green[700]! : Colors.green[100]!,
+                                    ),
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.check_circle,
-                                          color: Colors.green[700], size: 30),
+                                      Icon(
+                                        Icons.check_circle,
+                                        color: isDarkMode ? Colors.green[300] : Colors.green[700],
+                                        size: 30,
+                                      ),
                                       const SizedBox(width: 16),
                                       Expanded(
                                         child: Text(
                                           'Check your email for reset instructions',
                                           style: TextStyle(
-                                            color: Colors.green[800],
+                                            color: isDarkMode ? Colors.green[300] : Colors.green[800],
                                             fontSize: 16,
                                           ),
                                         ),

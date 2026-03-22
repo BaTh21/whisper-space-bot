@@ -1,4 +1,5 @@
-import 'dart:async'; // Add this import
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -30,7 +31,6 @@ class VerificationScreenState extends State<VerificationScreen> {
     super.initState();
     _startResendTimer();
 
-    // Setup focus node listeners
     for (int i = 0; i < _controllers.length; i++) {
       _controllers[i].addListener(() {
         if (_controllers[i].text.isNotEmpty && i < _controllers.length - 1) {
@@ -92,7 +92,6 @@ class VerificationScreenState extends State<VerificationScreen> {
     if (!mounted) return;
 
     if (result.success) {
-      // Show success dialog
       _showSuccessDialog();
     } else {
       _showErrorDialog(result.message ?? 'Verification failed');
@@ -100,36 +99,42 @@ class VerificationScreenState extends State<VerificationScreen> {
   }
 
   void _showSuccessDialog() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Row(
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Row(
           children: [
-            Icon(Icons.verified_user, color: Colors.green),
-            SizedBox(width: 10),
-            Text('Email Verified!'),
+            const Icon(Icons.verified_user, color: Colors.green),
+            const SizedBox(width: 10),
+            Text(
+              'Email Verified!',
+              style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+            ),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Your email has been successfully verified.',
               textAlign: TextAlign.center,
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
               'You can now login to your account.',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: isDarkMode ? Colors.white54 : Colors.grey),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // Close dialog
-              // Navigate to login
+              Navigator.pop(context);
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
@@ -137,7 +142,10 @@ class VerificationScreenState extends State<VerificationScreen> {
                 ),
               );
             },
-            child: const Text('Go to Login'),
+            child: Text(
+              'Go to Login',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black),
+            ),
           ),
         ],
       ),
@@ -171,15 +179,27 @@ class VerificationScreenState extends State<VerificationScreen> {
   }
 
   void _showErrorDialog(String message) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Verification Failed'),
-        content: Text(message),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Verification Failed',
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        content: Text(
+          message,
+          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: Text(
+              'OK',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black),
+            ),
           ),
         ],
       ),
@@ -188,18 +208,26 @@ class VerificationScreenState extends State<VerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final gradientStart = isDarkMode ? const Color(0xFF0A0A0A) : const Color(0xFF6A11CB);
+    final gradientEnd = isDarkMode ? const Color(0xFF1E1E1E) : const Color(0xFF2575FC);
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.white70;
+    final inputFillColor = isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100];
+
     return LoadingOverlay(
       isLoading: _isLoading,
       child: Scaffold(
         body: Stack(
           children: [
-            // 🌈 Gradient Background
+            // Gradient Background
             Container(
               width: double.infinity,
               height: double.infinity,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                  colors: [gradientStart, gradientEnd],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -208,32 +236,25 @@ class VerificationScreenState extends State<VerificationScreen> {
 
             SafeArea(
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
                 child: Column(
                   children: [
-                    const Icon(
-                      Icons.verified_user,
-                      size: 90,
-                      color: Colors.white,
-                    ),
+                    const Icon(Icons.verified_user, size: 90, color: Colors.white),
                     const SizedBox(height: 20),
 
-                    // Title
                     Text(
                       'Verify Your Email',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                     ),
 
                     const SizedBox(height: 10),
 
                     Text(
                       'Enter the 6-digit code sent to',
-                      style: TextStyle(color: Colors.white70),
+                      style: TextStyle(color: subtitleColor),
                     ),
 
                     const SizedBox(height: 5),
@@ -249,12 +270,12 @@ class VerificationScreenState extends State<VerificationScreen> {
 
                     const SizedBox(height: 30),
 
-                    // 📦 White Card
+                    // White Card
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cardColor,
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
@@ -270,17 +291,24 @@ class VerificationScreenState extends State<VerificationScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.blue[50],
+                              color: isDarkMode ? Colors.blue[900] : Colors.blue[50],
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(Icons.info, color: Colors.blue, size: 20),
-                                SizedBox(width: 10),
+                                Icon(
+                                  Icons.info,
+                                  color: isDarkMode ? Colors.blue[300] : Colors.blue,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     'Check inbox & spam folder for the code',
-                                    style: TextStyle(fontSize: 14),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: isDarkMode ? Colors.white70 : Colors.black87,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -301,14 +329,15 @@ class VerificationScreenState extends State<VerificationScreen> {
                                   textAlign: TextAlign.center,
                                   keyboardType: TextInputType.number,
                                   maxLength: 1,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
+                                    color: textColor,
                                   ),
                                   decoration: InputDecoration(
                                     counterText: '',
                                     filled: true,
-                                    fillColor: Colors.grey[100],
+                                    fillColor: inputFillColor,
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: BorderSide.none,
@@ -316,7 +345,9 @@ class VerificationScreenState extends State<VerificationScreen> {
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: const BorderSide(
-                                          color: Color(0xFF6A11CB), width: 2),
+                                        color: Color(0xFF6A11CB),
+                                        width: 2,
+                                      ),
                                     ),
                                   ),
                                   onChanged: (value) {
@@ -348,25 +379,32 @@ class VerificationScreenState extends State<VerificationScreen> {
                           // Resend
                           Column(
                             children: [
-                              const Text(
+                              Text(
                                 "Didn't receive the code?",
-                                style: TextStyle(fontSize: 15),
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: textColor,
+                                ),
                               ),
                               const SizedBox(height: 6),
                               if (_resendCountdown > 0)
                                 Text(
                                   'Resend in $_resendCountdown s',
-                                  style: const TextStyle(color: Colors.grey),
+                                  style: TextStyle(
+                                    color: isDarkMode ? Colors.white54 : Colors.grey,
+                                  ),
                                 )
                               else
                                 TextButton(
                                   onPressed: _isResending ? null : _resendCode,
                                   child: _isResending
-                                      ? const SizedBox(
+                                      ? SizedBox(
                                           width: 20,
                                           height: 20,
                                           child: CircularProgressIndicator(
-                                              strokeWidth: 2),
+                                            strokeWidth: 2,
+                                            color: Theme.of(context).primaryColor,
+                                          ),
                                         )
                                       : const Text(
                                           'Resend Code',
@@ -387,9 +425,11 @@ class VerificationScreenState extends State<VerificationScreen> {
                     // Back
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text(
+                      child: Text(
                         'Use different email',
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(
+                          color: isDarkMode ? Colors.cyan.shade300 : Colors.white,
+                        ),
                       ),
                     ),
                   ],

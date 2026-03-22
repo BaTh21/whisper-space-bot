@@ -9,7 +9,6 @@ class PasswordField extends StatefulWidget {
   final bool readOnly;
   final bool enabled;
   
-  
   const PasswordField({
     super.key,
     required this.controller,
@@ -38,7 +37,29 @@ class _PasswordFieldState extends State<PasswordField> {
   
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final isDisabled = !widget.enabled || widget.readOnly;
+    
+    final labelColor = isDisabled
+        ? (isDarkMode ? Colors.white38 : Colors.grey[400])
+        : (isDarkMode ? Colors.white70 : Colors.grey[800]);
+    
+    final hintColor = isDisabled
+        ? (isDarkMode ? Colors.white38 : Colors.grey[300])
+        : (isDarkMode ? Colors.white54 : Colors.grey[400]);
+    
+    final iconColor = isDisabled
+        ? (isDarkMode ? Colors.white38 : Colors.grey[400])
+        : (isDarkMode ? Colors.white54 : Colors.grey[600]);
+    
+    final borderColor = isDarkMode ? Colors.white24 : Colors.grey[300]!;
+    final fillColor = isDisabled
+        ? (isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100])
+        : (isDarkMode ? const Color(0xFF2C2C2C) : Colors.white);
+    
+    final textColor = isDisabled
+        ? (isDarkMode ? Colors.white54 : Colors.grey[600])
+        : (isDarkMode ? Colors.white : Colors.black);
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -47,7 +68,7 @@ class _PasswordFieldState extends State<PasswordField> {
           widget.label,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w600,
-            color: isDisabled ? Colors.grey[400] : Colors.grey[800],
+            color: labelColor,
           ),
         ),
         const SizedBox(height: 8),
@@ -58,29 +79,36 @@ class _PasswordFieldState extends State<PasswordField> {
           onChanged: widget.onChanged,
           readOnly: widget.readOnly,
           enabled: widget.enabled,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 16,
+          ),
           decoration: InputDecoration(
             hintText: widget.hintText,
             hintStyle: TextStyle(
-              color: isDisabled ? Colors.grey[300] : Colors.grey[400],
+              color: hintColor,
+              fontSize: 14,
             ),
             prefixIcon: Icon(
               Icons.lock,
-              color: isDisabled ? Colors.grey[400] : Colors.grey[600],
+              color: iconColor,
+              size: 20,
             ),
             suffixIcon: IconButton(
               icon: Icon(
-                _obscureText ? Icons.visibility : Icons.visibility_off,
-                color: isDisabled ? Colors.grey[400] : Colors.grey[600],
+                _obscureText ? Icons.visibility_off : Icons.visibility,
+                color: iconColor,
+                size: 20,
               ),
               onPressed: _toggleVisibility,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[300]!),
+              borderSide: BorderSide(color: borderColor),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[300]!),
+              borderSide: BorderSide(color: borderColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -91,18 +119,30 @@ class _PasswordFieldState extends State<PasswordField> {
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 1),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.red.shade400 : Colors.red,
+                width: 1,
+              ),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 2),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.red.shade400 : Colors.red,
+                width: 2,
+              ),
             ),
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[200]!),
+              borderSide: BorderSide(
+                color: isDarkMode ? Colors.white24 : Colors.grey[200]!,
+              ),
             ),
             filled: true,
-            fillColor: isDisabled ? Colors.grey[100] : Colors.white,
+            fillColor: fillColor,
+            errorStyle: TextStyle(
+              color: isDarkMode ? Colors.red.shade300 : Colors.red,
+              fontSize: 12,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,
