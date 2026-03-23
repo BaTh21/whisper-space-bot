@@ -73,32 +73,38 @@ class _NotesTabState extends State<NotesTab>
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final tabBarBgColor = isDarkMode 
+        ? const Color(0xFF2C2C2C) 
+        : const Color(0xFFE0C3FF);
+    final indicatorColor = isDarkMode 
+        ? const Color(0xFF00BCD4) 
+        : const Color(0xFF6A11CB);
+    final unselectedColor = isDarkMode ? Colors.white54 : Colors.grey.shade600;
+
     return Scaffold(
       body: _isInitialized
           ? Column(
               children: [
                 const SizedBox(height: 10),
-                // ✨ MODERN SCROLLABLE TAB BAR
                 Container(
                   width: double.infinity,
-                  margin:
-                      const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                  margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Color.fromARGB(255, 224, 195, 255),
+                    color: tabBarBgColor,
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: TabBar(
                     controller: _tabController,
-                    isScrollable:
-                        false, // if you have 4 tab pls set this to true
+                    isScrollable: false,
                     indicator: BoxDecoration(
-                      color: const Color(0xFF6A11CB),
+                      color: indicatorColor,
                       borderRadius: BorderRadius.circular(30),
                     ),
                     indicatorSize: TabBarIndicatorSize.tab,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.grey.shade600,
+                    labelColor: isDarkMode ? Colors.black : Colors.white,
+                    unselectedLabelColor: unselectedColor,
                     labelStyle: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
@@ -129,8 +135,6 @@ class _NotesTabState extends State<NotesTab>
                     ],
                   ),
                 ),
-
-                // TAB CONTENT
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
@@ -146,11 +150,10 @@ class _NotesTabState extends State<NotesTab>
           : const Center(
               child: CircularProgressIndicator(),
             ),
-
-      // 🔥 MODERN FAB
       floatingActionButton: FloatingActionButton(
         elevation: 6,
         onPressed: _createNewNote,
+        backgroundColor: isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB),
         child: const Icon(Icons.add, size: 28),
       ),
     );
@@ -179,6 +182,11 @@ class _NotesTabState extends State<NotesTab>
 class _AllNotesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey;
+    final errorColor = isDarkMode ? Colors.red.shade300 : Colors.red;
+
     return Consumer<NotesProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) {
@@ -190,11 +198,11 @@ class _AllNotesTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                Icon(Icons.error_outline, size: 64, color: errorColor),
                 const SizedBox(height: 16),
                 Text(
                   provider.error!,
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: errorColor),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -217,16 +225,16 @@ class _AllNotesTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.note_outlined, size: 80, color: Colors.grey),
+                Icon(Icons.note_outlined, size: 80, color: subtitleColor),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'No notes yet',
-                  style: TextStyle(fontSize: 20, color: Colors.grey),
+                  style: TextStyle(fontSize: 20, color: subtitleColor),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Create your first note',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: subtitleColor),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
@@ -271,9 +279,9 @@ class _AllNotesTab extends StatelessWidget {
                     await provider.deleteNote(note.id);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Note deleted'),
-                          backgroundColor: Colors.green,
+                        SnackBar(
+                          content: const Text('Note deleted'),
+                          backgroundColor: isDarkMode ? Colors.green.shade800 : Colors.green,
                         ),
                       );
                     }
@@ -282,7 +290,7 @@ class _AllNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Failed to delete: $e'),
-                          backgroundColor: Colors.red,
+                          backgroundColor: isDarkMode ? Colors.red.shade800 : Colors.red,
                         ),
                       );
                     }
@@ -308,6 +316,11 @@ class _AllNotesTab extends StatelessWidget {
 class _SharedNotesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey;
+    final errorColor = isDarkMode ? Colors.red.shade300 : Colors.red;
+
     return Consumer<NotesProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) {
@@ -319,11 +332,11 @@ class _SharedNotesTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                Icon(Icons.error_outline, size: 64, color: errorColor),
                 const SizedBox(height: 16),
                 Text(
                   provider.error!,
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: errorColor),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -344,16 +357,16 @@ class _SharedNotesTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.people_outline, size: 80, color: Colors.grey),
+                Icon(Icons.people_outline, size: 80, color: subtitleColor),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'No shared notes',
-                  style: TextStyle(fontSize: 20, color: Colors.grey),
+                  style: TextStyle(fontSize: 20, color: subtitleColor),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Notes shared with you will appear here',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: subtitleColor),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -379,9 +392,9 @@ class _SharedNotesTab extends StatelessWidget {
                     await provider.leaveSharedNote(note.id);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Left shared note'),
-                          backgroundColor: Colors.green,
+                        SnackBar(
+                          content: const Text('Left shared note'),
+                          backgroundColor: isDarkMode ? Colors.green.shade800 : Colors.green,
                         ),
                       );
                     }
@@ -390,7 +403,7 @@ class _SharedNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Failed to leave: $e'),
-                          backgroundColor: Colors.red,
+                          backgroundColor: isDarkMode ? Colors.red.shade800 : Colors.red,
                         ),
                       );
                     }
@@ -408,6 +421,11 @@ class _SharedNotesTab extends StatelessWidget {
 class _ArchivedNotesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey;
+    final errorColor = isDarkMode ? Colors.red.shade300 : Colors.red;
+
     return Consumer<NotesProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) {
@@ -419,11 +437,11 @@ class _ArchivedNotesTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                Icon(Icons.error_outline, size: 64, color: errorColor),
                 const SizedBox(height: 16),
                 Text(
                   provider.error!,
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: errorColor),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -444,17 +462,16 @@ class _ArchivedNotesTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.archive_outlined,
-                    size: 80, color: Colors.grey),
+                Icon(Icons.archive_outlined, size: 80, color: subtitleColor),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'No archived notes',
-                  style: TextStyle(fontSize: 20, color: Colors.grey),
+                  style: TextStyle(fontSize: 20, color: subtitleColor),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Archived notes will appear here',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: subtitleColor),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -483,9 +500,9 @@ class _ArchivedNotesTab extends StatelessWidget {
                     await provider.deleteNote(note.id);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Note deleted'),
-                          backgroundColor: Colors.green,
+                        SnackBar(
+                          content: const Text('Note deleted'),
+                          backgroundColor: isDarkMode ? Colors.green.shade800 : Colors.green,
                         ),
                       );
                     }
@@ -494,7 +511,7 @@ class _ArchivedNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Failed to delete: $e'),
-                          backgroundColor: Colors.red,
+                          backgroundColor: isDarkMode ? Colors.red.shade800 : Colors.red,
                         ),
                       );
                     }

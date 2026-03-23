@@ -40,21 +40,43 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final inputFillColor = isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[100];
+    final backgroundColor = isDarkMode ? const Color(0xFF121212) : Colors.white;
+    
     final isOwner = Provider.of<NotesProvider>(context).isOwner(widget.note);
     
     if (!isOwner) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Share Settings')),
-        body: const Center(
-          child: Text('Only the owner can change share settings'),
+        backgroundColor: backgroundColor,
+        appBar: AppBar(
+          title: Text(
+            'Share Settings',
+            style: TextStyle(color: textColor),
+          ),
+          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
+        ),
+        body: Center(
+          child: Text(
+            'Only the owner can change share settings',
+            style: TextStyle(color: subtitleColor),
+          ),
         ),
       );
     }
 
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text('Share Note'),
+        title: Text(
+          'Share Note',
+          style: TextStyle(color: textColor),
+        ),
         elevation: 0,
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _updateSharing,
@@ -64,7 +86,10 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save'),
+                : Text(
+                    'Save',
+                    style: TextStyle(color: Theme.of(context).primaryColor),
+                  ),
           ),
         ],
       ),
@@ -73,26 +98,31 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
         children: [
           // Current sharing status
           Card(
+            color: cardColor,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Current Status',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Icon(
                         _getShareTypeIcon(widget.note.shareType),
-                        color: _getShareTypeColor(widget.note.shareType),
+                        color: _getShareTypeColor(widget.note.shareType, isDarkMode),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         _getShareTypeDescription(widget.note.shareType),
-                        style: const TextStyle(fontSize: 14),
+                        style: TextStyle(fontSize: 14, color: textColor),
                       ),
                     ],
                   ),
@@ -100,16 +130,16 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.link, size: 16, color: Colors.grey),
+                        Icon(Icons.link, size: 16, color: subtitleColor),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Share link available',
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: TextStyle(color: subtitleColor),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.copy, size: 16),
+                          icon: Icon(Icons.copy, size: 16, color: textColor),
                           onPressed: () => _copyShareLink(),
                           constraints: const BoxConstraints(),
                           padding: const EdgeInsets.all(4),
@@ -125,9 +155,13 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
           const SizedBox(height: 24),
           
           // Share type selector
-          const Text(
+          Text(
             'Share Type',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
           ),
           const SizedBox(height: 8),
           SegmentedButton<ShareType>(
@@ -149,6 +183,11 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
               ),
             ],
             selected: {_shareType},
+            style: ButtonStyle(
+              foregroundColor: MaterialStateProperty.resolveWith<Color>(
+                (states) => isDarkMode ? Colors.white : Colors.black,
+              ),
+            ),
             onSelectionChanged: (Set<ShareType> selected) {
               setState(() {
                 _shareType = selected.first;
@@ -165,25 +204,33 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
           if (_shareType == ShareType.shared) ...[
             // Edit permission
             Card(
+              color: cardColor,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Permissions',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     CheckboxListTile(
-                      title: const Text('Allow friends to edit'),
+                      title: Text(
+                        'Allow friends to edit',
+                        style: TextStyle(color: textColor),
+                      ),
                       value: _canEdit,
                       onChanged: (value) {
                         setState(() {
                           _canEdit = value ?? false;
                         });
                       },
-                      secondary: const Icon(Icons.edit),
+                      secondary: Icon(Icons.edit, color: subtitleColor),
                     ),
                   ],
                 ),
@@ -194,14 +241,19 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
             
             // Friend selection
             Card(
+              color: cardColor,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Share with friends',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Consumer<FriendProvider>(
@@ -219,16 +271,16 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
                           return Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
+                              color: inputFillColor,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Column(
+                            child: Column(
                               children: [
-                                Icon(Icons.people_outline, color: Colors.grey),
-                                SizedBox(height: 8),
+                                Icon(Icons.people_outline, color: subtitleColor),
+                                const SizedBox(height: 8),
                                 Text(
                                   'No friends yet',
-                                  style: TextStyle(color: Colors.grey),
+                                  style: TextStyle(color: subtitleColor),
                                 ),
                               ],
                             ),
@@ -239,8 +291,14 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
                           children: friendProvider.friends.map((friend) {
                             final isSelected = _selectedFriendIds.contains(friend.id);
                             return CheckboxListTile(
-                              title: Text(friend.username),
-                              subtitle: Text(friend.email),
+                              title: Text(
+                                friend.username,
+                                style: TextStyle(color: textColor),
+                              ),
+                              subtitle: Text(
+                                friend.email,
+                                style: TextStyle(color: subtitleColor),
+                              ),
                               value: isSelected,
                               onChanged: (selected) {
                                 setState(() {
@@ -252,12 +310,15 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
                                 });
                               },
                               secondary: CircleAvatar(
-                                backgroundColor: const Color(0xFF6C63FF),
+                                backgroundColor: Theme.of(context).primaryColor,
                                 backgroundImage: friend.avatarUrl != null
                                     ? NetworkImage(friend.avatarUrl!)
                                     : null,
                                 child: friend.avatarUrl == null
-                                    ? Text(friend.username[0].toUpperCase())
+                                    ? Text(
+                                        friend.username[0].toUpperCase(),
+                                        style: const TextStyle(color: Colors.white),
+                                      )
                                     : null,
                               ),
                             );
@@ -275,21 +336,31 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
           if (_shareType == ShareType.public) ...[
             const SizedBox(height: 16),
             Card(
+              color: cardColor,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Public Link Settings',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<int?>(
                       value: _expiresInHours,
-                      decoration: const InputDecoration(
+                      dropdownColor: isDarkMode ? const Color(0xFF2C2C2C) : Colors.white,
+                      style: TextStyle(color: textColor),
+                      decoration: InputDecoration(
                         labelText: 'Link expiration',
-                        border: OutlineInputBorder(),
+                        labelStyle: TextStyle(color: subtitleColor),
+                        border: const OutlineInputBorder(),
+                        filled: true,
+                        fillColor: inputFillColor,
                       ),
                       items: [
                         const DropdownMenuItem(
@@ -311,9 +382,9 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Anyone with the link can view this note',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: subtitleColor),
                     ),
                   ],
                 ),
@@ -329,8 +400,8 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: OutlinedButton.icon(
                 onPressed: _isLoading ? null : _confirmStopSharing,
-                icon: const Icon(Icons.stop, color: Colors.red),
-                label: const Text('Stop Sharing', style: TextStyle(color: Colors.red)),
+                icon: const Icon(Icons.stop),
+                label: const Text('Stop Sharing'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.red,
                   side: const BorderSide(color: Colors.red),
@@ -409,15 +480,27 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
   }
 
   Future<void> _confirmStopSharing() async {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Stop Sharing'),
-        content: const Text('This note will become private. Continue?'),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          'Stop Sharing',
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
+        ),
+        content: Text(
+          'This note will become private. Continue?',
+          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -472,14 +555,14 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
     }
   }
 
-  Color _getShareTypeColor(ShareType type) {
+  Color _getShareTypeColor(ShareType type, bool isDarkMode) {
     switch (type) {
       case ShareType.public:
-        return Colors.green;
+        return isDarkMode ? Colors.green.shade300 : Colors.green;
       case ShareType.shared:
-        return Colors.blue;
+        return isDarkMode ? Colors.cyan.shade300 : Colors.blue;
       case ShareType.private:
-        return Colors.grey;
+        return isDarkMode ? Colors.white54 : Colors.grey;
     }
   }
 

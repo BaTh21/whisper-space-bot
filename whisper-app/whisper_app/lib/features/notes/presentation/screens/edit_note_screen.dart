@@ -47,10 +47,21 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final labelColor = isDarkMode ? Colors.white70 : Colors.black87;
+    final backgroundColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
+    final inputFillColor = isDarkMode ? const Color(0xFF2C2C2C) : Colors.white;
+
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text('Edit Note'),
+        title: Text(
+          'Edit Note',
+          style: TextStyle(color: textColor),
+        ),
         elevation: 0,
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _updateNote,
@@ -60,7 +71,10 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save'),
+                : Text(
+                    'Save',
+                    style: TextStyle(color: Theme.of(context).primaryColor),
+                  ),
           ),
         ],
       ),
@@ -70,9 +84,13 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
           // Title field
           TextField(
             controller: _titleController,
-            decoration: const InputDecoration(
+            style: TextStyle(color: textColor),
+            decoration: InputDecoration(
               labelText: 'Title',
-              border: OutlineInputBorder(),
+              labelStyle: TextStyle(color: labelColor),
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: inputFillColor,
             ),
           ),
           
@@ -81,10 +99,14 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
           // Content field
           TextField(
             controller: _contentController,
-            decoration: const InputDecoration(
+            style: TextStyle(color: textColor),
+            decoration: InputDecoration(
               labelText: 'Content',
-              border: OutlineInputBorder(),
+              labelStyle: TextStyle(color: labelColor),
+              border: const OutlineInputBorder(),
               alignLabelWithHint: true,
+              filled: true,
+              fillColor: inputFillColor,
             ),
             maxLines: 10,
             keyboardType: TextInputType.multiline,
@@ -93,9 +115,13 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
           const SizedBox(height: 24),
           
           // Color selection
-          const Text(
+          Text(
             'Note Color',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -115,8 +141,8 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: _selectedColor == color
-                            ? const Color(0xFF6C63FF)
-                            : Colors.grey.shade300,
+                            ? Theme.of(context).primaryColor
+                            : (isDarkMode ? Colors.white24 : Colors.grey.shade300),
                         width: _selectedColor == color ? 3 : 1,
                       ),
                     ),
