@@ -1,3 +1,4 @@
+// lib/features/friend/presentation/screens/friend_screen.dart
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/friend/presentation/screens/friend_search_screen.dart';
@@ -648,6 +649,13 @@ class _FriendScreenState extends State<FriendScreen>
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black;
+    final tabBarBgColor = isDarkMode 
+        ? const Color(0xFF2C2C2C) 
+        : const Color(0xFFE0C3FF);
+    final indicatorColor = isDarkMode 
+        ? const Color(0xFF00BCD4) 
+        : const Color(0xFF6A11CB);
+    final unselectedColor = isDarkMode ? Colors.white54 : Colors.grey.shade600;
 
     return Scaffold(
       body: RefreshIndicator(
@@ -732,32 +740,59 @@ class _FriendScreenState extends State<FriendScreen>
                   ],
                 ),
               ),
+              
+              // Modern Tab Bar - Matching Notes Tab Style
               Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      color: isDarkMode ? Colors.white24 : Colors.grey,
-                      width: 0.2,
-                    ),
-                    bottom: BorderSide(
-                      color: isDarkMode ? Colors.white24 : Colors.grey,
-                      width: 0.1,
-                    ),
-                  ),
+                  color: tabBarBgColor,
+                  borderRadius: BorderRadius.circular(30),
                 ),
                 child: TabBar(
                   controller: _tabController,
-                  labelColor: Theme.of(context).primaryColor,
-                  unselectedLabelColor: isDarkMode ? Colors.white70 : Colors.grey,
-                  indicatorColor: Theme.of(context).primaryColor,
-                  indicatorWeight: 4,
-                  indicatorSize: TabBarIndicatorSize.label,
-                  isScrollable: true,
+                  isScrollable: false,
+                  indicator: BoxDecoration(
+                    color: indicatorColor,
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: isDarkMode ? Colors.black : Colors.white,
+                  unselectedLabelColor: unselectedColor,
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
                   tabs: const [
-                    Tab(text: 'All Friends'),
-                    Tab(text: 'Pending'),
-                    Tab(text: 'Requests'),
-                    Tab(text: 'Blocked'),
+                    Tab(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text("All Friends", textAlign: TextAlign.center),
+                      ),
+                    ),
+                    Tab(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text("Pending", textAlign: TextAlign.center),
+                      ),
+                    ),
+                    Tab(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text("Requests", textAlign: TextAlign.center),
+                      ),
+                    ),
+                    Tab(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text("Blocked", textAlign: TextAlign.center),
+                      ),
+                    ),
                   ],
                 ),
               ),
