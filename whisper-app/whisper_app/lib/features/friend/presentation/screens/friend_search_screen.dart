@@ -158,14 +158,14 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
           Icon(
             Icons.people,
             size: 12,
-            color: isDarkMode ? Colors.white70 : Colors.grey,
+            color: isDarkMode ? Colors.white70 : Colors.grey[600],
           ),
           const SizedBox(width: 4),
           Text(
             '$count mutual ${count == 1 ? 'friend' : 'friends'}',
             style: TextStyle(
               fontSize: 10,
-              color: isDarkMode ? Colors.white70 : Colors.grey,
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
             ),
           ),
         ],
@@ -249,13 +249,13 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               Icon(
                 Icons.block,
                 size: 14,
-                color: isDarkMode ? Colors.white70 : Colors.grey,
+                color: isDarkMode ? Colors.white70 : Colors.grey[600],
               ),
               const SizedBox(width: 4),
               Text(
                 'Blocked',
                 style: TextStyle(
-                  color: isDarkMode ? Colors.white70 : Colors.grey.shade700,
+                  color: isDarkMode ? Colors.white70 : Colors.grey[600],
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -273,18 +273,32 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black;
+    final appBarTextColor = isDarkMode ? Colors.white : Colors.black;
+    final appBarIconColor = isDarkMode ? Colors.white : Colors.black;
     final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
-    final inputFillColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.grey.shade100;
+    final hintColor = isDarkMode ? Colors.white54 : Colors.grey[500];
+    final iconColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+    final inputFillColor = isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade100;
+    final scaffoldBgColor = isDarkMode ? const Color(0xFF121212) : Colors.white;
 
     return Scaffold(
+      backgroundColor: scaffoldBgColor,
       appBar: AppBar(
         title: Text(
           'Add Friends',
-          style: TextStyle(color: textColor),
+          style: TextStyle(
+            color: appBarTextColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        elevation: 0,
+        iconTheme: IconThemeData(
+          color: appBarIconColor,
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh, color: textColor),
+            icon: Icon(Icons.refresh, color: appBarIconColor),
             onPressed: _loadSuggestions,
           ),
         ],
@@ -296,21 +310,25 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
             child: TextField(
               controller: _searchController,
               focusNode: _searchFocusNode,
-              style: TextStyle(color: textColor),
+              style: TextStyle(
+                color: textColor,
+                fontSize: 16,
+              ),
               decoration: InputDecoration(
                 hintText: 'Search by username or email...',
                 hintStyle: TextStyle(
-                  color: isDarkMode ? Colors.white54 : Colors.grey,
+                  color: hintColor,
+                  fontSize: 14,
                 ),
                 prefixIcon: Icon(
                   Icons.search,
-                  color: isDarkMode ? Colors.white70 : Colors.grey,
+                  color: iconColor,
                 ),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: Icon(
                           Icons.clear,
-                          color: isDarkMode ? Colors.white70 : Colors.grey,
+                          color: iconColor,
                         ),
                         onPressed: () {
                           _searchController.clear();
@@ -324,9 +342,25 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).primaryColor,
+                    width: 2,
+                  ),
                 ),
                 filled: true,
                 fillColor: inputFillColor,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
               ),
               onSubmitted: (_) => _performSearch(),
               textInputAction: TextInputAction.search,
@@ -368,6 +402,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black;
     final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+    final hintColor = isDarkMode ? Colors.white54 : Colors.grey[500];
 
     if (isSearching) {
       return const Center(child: CircularProgressIndicator());
@@ -388,6 +423,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               errorMessage!,
               style: TextStyle(
                 color: isDarkMode ? Colors.red[300] : Colors.red,
+                fontSize: 14,
               ),
               textAlign: TextAlign.center,
             ),
@@ -427,7 +463,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
             Text(
               'Try a different search term',
               style: TextStyle(
-                color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
+                color: hintColor,
                 fontSize: 14,
               ),
             ),
@@ -511,7 +547,10 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               children: [
                 Text(
                   user['email'],
-                  style: TextStyle(color: subtitleColor, fontSize: 13),
+                  style: TextStyle(
+                    color: subtitleColor,
+                    fontSize: 13,
+                  ),
                 ),
                 if (mutualCount > 0) const SizedBox(height: 4),
               ],
@@ -552,6 +591,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black;
     final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey[600];
+    final hintColor = isDarkMode ? Colors.white54 : Colors.grey[500];
 
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -572,6 +612,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
               errorMessage!,
               style: TextStyle(
                 color: isDarkMode ? Colors.red[300] : Colors.red,
+                fontSize: 14,
               ),
               textAlign: TextAlign.center,
             ),
@@ -616,7 +657,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                   Text(
                     'Try searching for friends by name or email',
                     style: TextStyle(
-                      color: isDarkMode ? Colors.white54 : Colors.grey.shade500,
+                      color: hintColor,
                       fontSize: 14,
                     ),
                   ),
@@ -709,7 +750,10 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
                 children: [
                   Text(
                     user['email'] ?? '',
-                    style: TextStyle(color: subtitleColor, fontSize: 13),
+                    style: TextStyle(
+                      color: subtitleColor,
+                      fontSize: 13,
+                    ),
                   ),
                   if (mutualCount > 0)
                     Padding(
@@ -765,7 +809,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
         '$totalCount mutual ${totalCount == 1 ? 'friend' : 'friends'}',
         style: TextStyle(
           fontSize: 12,
-          color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
+          color: isDarkMode ? Colors.white70 : Colors.grey[600],
         ),
       );
     }
@@ -787,7 +831,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
         Icon(
           Icons.people,
           size: 14,
-          color: isDarkMode ? Colors.white70 : Colors.grey,
+          color: isDarkMode ? Colors.white70 : Colors.grey[600],
         ),
         const SizedBox(width: 4),
         Expanded(
@@ -795,7 +839,7 @@ class _AddFriendScreenState extends State<AddFriendScreen> {
             text,
             style: TextStyle(
               fontSize: 12,
-              color: isDarkMode ? Colors.white70 : Colors.grey.shade600,
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
               fontStyle: FontStyle.italic,
             ),
             overflow: TextOverflow.ellipsis,
