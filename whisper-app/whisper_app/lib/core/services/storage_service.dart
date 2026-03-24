@@ -29,6 +29,15 @@ class StorageService {
     final token = _prefs.getString(_tokenKey);
     return token;
   }
+  Future<int?> getUserId() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getInt('user_id');
+}
+
+Future<void> setUserId(int userId) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt('user_id', userId);
+}
   
   // Token management
   Future<void> saveToken(String token) async {
