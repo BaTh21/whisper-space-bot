@@ -5,9 +5,11 @@ class User {
   final bool isVerified;
   final String? avatarUrl;
   final String? bio;
+  final bool isOnline;
+  final DateTime? lastSeen;
   final DateTime createdAt;
   final DateTime updatedAt;
-  
+
   User({
     required this.id,
     required this.username,
@@ -15,10 +17,12 @@ class User {
     required this.isVerified,
     this.avatarUrl,
     this.bio,
+    this.isOnline = false,
+    this.lastSeen,
     required this.createdAt,
     required this.updatedAt,
   });
-  
+
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'] as int,
@@ -29,9 +33,13 @@ class User {
       bio: json['bio'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      isOnline: json['is_online'] as bool? ?? false,
+      lastSeen: json['last_seen'] != null 
+          ? DateTime.parse(json['last_seen'] as String) 
+          : null,
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -42,10 +50,12 @@ class User {
       'bio': bio,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'is_online': isOnline,
+      'last_seen': lastSeen?.toIso8601String(),
     };
   }
 
-   User copyWith({
+  User copyWith({
     int? id,
     String? username,
     String? email,
@@ -54,6 +64,8 @@ class User {
     String? bio,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? isOnline,
+    DateTime? lastSeen,
   }) {
     return User(
       id: id ?? this.id,
@@ -64,11 +76,13 @@ class User {
       bio: bio ?? this.bio,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isOnline: isOnline ?? this.isOnline,
+      lastSeen: lastSeen ?? this.lastSeen,
     );
   }
-  
+
   @override
   String toString() {
-    return 'User{id: $id, username: $username, email: $email, isVerified: $isVerified}';
+    return 'User{id: $id, username: $username, email: $email, isVerified: $isVerified, isOnline: $isOnline}';
   }
 }
