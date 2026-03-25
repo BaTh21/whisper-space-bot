@@ -74,12 +74,10 @@ class _NotesTabState extends State<NotesTab>
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final tabBarBgColor = isDarkMode 
-        ? const Color(0xFF2C2C2C) 
-        : const Color(0xFFE0C3FF);
-    final indicatorColor = isDarkMode 
-        ? const Color(0xFF00BCD4) 
-        : const Color(0xFF6A11CB);
+    final tabBarBgColor =
+        isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE0C3FF);
+    final indicatorColor =
+        isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB);
     final unselectedColor = isDarkMode ? Colors.white54 : Colors.grey.shade600;
 
     return Scaffold(
@@ -89,13 +87,16 @@ class _NotesTabState extends State<NotesTab>
                 const SizedBox(height: 10),
                 Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: tabBarBgColor,
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: TabBar(
+                    indicatorColor: Colors.transparent,
+                    dividerColor: Colors.transparent,
                     controller: _tabController,
                     isScrollable: false,
                     indicator: BoxDecoration(
@@ -153,7 +154,8 @@ class _NotesTabState extends State<NotesTab>
       floatingActionButton: FloatingActionButton(
         elevation: 6,
         onPressed: _createNewNote,
-        backgroundColor: isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB),
+        backgroundColor:
+            isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB),
         child: const Icon(Icons.add, size: 28),
       ),
     );
@@ -281,7 +283,8 @@ class _AllNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('Note deleted'),
-                          backgroundColor: isDarkMode ? Colors.green.shade800 : Colors.green,
+                          backgroundColor:
+                              isDarkMode ? Colors.green.shade800 : Colors.green,
                         ),
                       );
                     }
@@ -290,7 +293,8 @@ class _AllNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Failed to delete: $e'),
-                          backgroundColor: isDarkMode ? Colors.red.shade800 : Colors.red,
+                          backgroundColor:
+                              isDarkMode ? Colors.red.shade800 : Colors.red,
                         ),
                       );
                     }
@@ -394,7 +398,8 @@ class _SharedNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('Left shared note'),
-                          backgroundColor: isDarkMode ? Colors.green.shade800 : Colors.green,
+                          backgroundColor:
+                              isDarkMode ? Colors.green.shade800 : Colors.green,
                         ),
                       );
                     }
@@ -403,7 +408,8 @@ class _SharedNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Failed to leave: $e'),
-                          backgroundColor: isDarkMode ? Colors.red.shade800 : Colors.red,
+                          backgroundColor:
+                              isDarkMode ? Colors.red.shade800 : Colors.red,
                         ),
                       );
                     }
@@ -502,7 +508,8 @@ class _ArchivedNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('Note deleted'),
-                          backgroundColor: isDarkMode ? Colors.green.shade800 : Colors.green,
+                          backgroundColor:
+                              isDarkMode ? Colors.green.shade800 : Colors.green,
                         ),
                       );
                     }
@@ -511,7 +518,8 @@ class _ArchivedNotesTab extends StatelessWidget {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Failed to delete: $e'),
-                          backgroundColor: isDarkMode ? Colors.red.shade800 : Colors.red,
+                          backgroundColor:
+                              isDarkMode ? Colors.red.shade800 : Colors.red,
                         ),
                       );
                     }

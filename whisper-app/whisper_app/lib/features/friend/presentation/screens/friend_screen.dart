@@ -100,7 +100,8 @@ class FriendBox extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
+                backgroundColor:
+                    isDarkMode ? Colors.grey[800] : Colors.blueGrey,
                 backgroundImage: avatarUrl != null && avatarUrl!.isNotEmpty
                     ? NetworkImage(avatarUrl!)
                     : null,
@@ -275,7 +276,8 @@ class EnhancedSuggestFriendBox extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 40,
-                      backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
+                      backgroundColor:
+                          isDarkMode ? Colors.grey[800] : Colors.blueGrey,
                       backgroundImage:
                           avatarUrl != null && avatarUrl!.isNotEmpty
                               ? NetworkImage(avatarUrl!)
@@ -614,8 +616,7 @@ class _FriendScreenState extends State<FriendScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            const AddFriendScreen(),
+        builder: (context) => const AddFriendScreen(),
       ),
     ).then((_) {
       loadSuggestions();
@@ -649,12 +650,10 @@ class _FriendScreenState extends State<FriendScreen>
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : Colors.black;
-    final tabBarBgColor = isDarkMode 
-        ? const Color(0xFF2C2C2C) 
-        : const Color(0xFFE0C3FF);
-    final indicatorColor = isDarkMode 
-        ? const Color(0xFF00BCD4) 
-        : const Color(0xFF6A11CB);
+    final tabBarBgColor =
+        isDarkMode ? const Color(0xFF2C2C2C) : const Color(0xFFE0C3FF);
+    final indicatorColor =
+        isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB);
     final unselectedColor = isDarkMode ? Colors.white54 : Colors.grey.shade600;
 
     return Scaffold(
@@ -740,7 +739,7 @@ class _FriendScreenState extends State<FriendScreen>
                   ],
                 ),
               ),
-              
+
               // Modern Tab Bar - Matching Notes Tab Style
               Container(
                 width: double.infinity,
@@ -753,6 +752,8 @@ class _FriendScreenState extends State<FriendScreen>
                 child: TabBar(
                   controller: _tabController,
                   isScrollable: false,
+                  indicatorColor: Colors.transparent,
+                  dividerColor: Colors.transparent,
                   indicator: BoxDecoration(
                     color: indicatorColor,
                     borderRadius: BorderRadius.circular(30),
@@ -848,7 +849,8 @@ class _FriendScreenState extends State<FriendScreen>
               Text(
                 'View All',
                 style: TextStyle(
-                  color: isDarkMode ? Colors.cyan.shade300 : Colors.blue.shade700,
+                  color:
+                      isDarkMode ? Colors.cyan.shade300 : Colors.blue.shade700,
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
@@ -1081,7 +1083,8 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                               Icon(
                                 Icons.people_outline,
                                 size: 80,
-                                color: isDarkMode ? Colors.white38 : Colors.grey,
+                                color:
+                                    isDarkMode ? Colors.white38 : Colors.grey,
                               ),
                               const SizedBox(height: 16),
                               Text(
@@ -1108,14 +1111,18 @@ class _AllSuggestionsScreenState extends State<AllSuggestionsScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                          color: isDarkMode
+                              ? const Color(0xFF1E1E1E)
+                              : Colors.white,
                           child: ListTile(
                             contentPadding: const EdgeInsets.all(12),
                             leading: Stack(
                               children: [
                                 CircleAvatar(
                                   radius: 30,
-                                  backgroundColor: isDarkMode ? Colors.grey[800] : Colors.blueGrey,
+                                  backgroundColor: isDarkMode
+                                      ? Colors.grey[800]
+                                      : Colors.blueGrey,
                                   backgroundImage: user['avatar'] != null &&
                                           user['avatar'].toString().isNotEmpty
                                       ? NetworkImage(user['avatar'])
