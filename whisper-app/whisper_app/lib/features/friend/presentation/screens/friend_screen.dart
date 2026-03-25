@@ -667,54 +667,6 @@ class _FriendScreenState extends State<FriendScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Suggestions Section
-              if (suggestFriends.isNotEmpty) ...[
-                SuggestionSectionHeader(
-                  title: 'People You May Know',
-                  onViewAll: suggestFriends.length > 5
-                      ? _navigateToViewAllSuggestions
-                      : null,
-                  itemCount: suggestFriends.length,
-                ),
-                SizedBox(
-                  height: 240,
-                  child: isLoadingSuggestions
-                      ? const Center(child: CircularProgressIndicator())
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemCount: suggestFriends.length > 5
-                              ? 6
-                              : suggestFriends.length,
-                          itemBuilder: (context, index) {
-                            if (index == 5) {
-                              return _buildViewMoreBox();
-                            }
-
-                            final friend = suggestFriends[index];
-                            final id = int.tryParse(friend['id'] ?? '');
-
-                            return EnhancedSuggestFriendBox(
-                              name: friend['name']!,
-                              avatarUrl: friend['avatar'],
-                              mutualFriendsCount:
-                                  friend['mutual_friends_count'] ?? 0,
-                              mutualFriends: friend['mutual_friends'] ?? [],
-                              isOnline: friend['is_online'] ?? false,
-                              onAdd: id == null
-                                  ? null
-                                  : () =>
-                                      _handleAddSuggestion(id, friend['name']!),
-                              onViewProfile: () {
-                                debugPrint('View profile of ${friend['name']}');
-                              },
-                            );
-                          },
-                        ),
-                ),
-                const Divider(),
-              ],
-
               // Friends Tabs Section
               Padding(
                 padding: const EdgeInsets.all(12),
