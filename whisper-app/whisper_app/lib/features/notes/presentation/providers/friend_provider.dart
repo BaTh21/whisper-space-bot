@@ -39,7 +39,7 @@ class FriendProvider extends ChangeNotifier {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/friends'), // Use ApiConstants
+        Uri.parse('${ApiConstants.baseUrl}/api/v1/friends/'),// Use ApiConstants
         headers: headers,
       );
 

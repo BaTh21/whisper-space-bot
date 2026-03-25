@@ -71,7 +71,7 @@ def delete_user_note(
     return {"message": "Note deleted successfully"}
 
 @router.post("/{note_id}/share", response_model=NoteOut)
-def share_note_endpoint(
+def share_note(
     note_id: int,
     share_data: ShareNoteRequest,
     db: Session = Depends(get_db),

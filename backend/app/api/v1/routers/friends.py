@@ -385,7 +385,7 @@ def unblock_user(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/", response_model=list[dict])
+@router.get("", response_model=list[dict])
 def list_friends(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

@@ -33,7 +33,8 @@ class FriendAPISource {
     } else {
       throw Exception('Failed to fetch friends: ${response.statusCode}');
     }
-  }
+}
+
 
   Future<void> sendFriendRequest(int userId) async {
     final response = await http.post(
