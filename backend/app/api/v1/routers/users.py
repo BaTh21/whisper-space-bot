@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import traceback
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.user import search, update, get_friend_suggestions
+from app.schemas.user import UserOut, UserUpdate, AvatarUploadResponse
+from app.crud.user import remove_avatar, search, update, get_friend_suggestions, update_avatar
 from app.models.user import User
 from app.schemas.user import UserOut, UserUpdate
+from app.core.cloudinary import delete_from_cloudinary, extract_public_id_from_url, upload_to_cloudinary
 
 router = APIRouter()
 
@@ -91,4 +96,5 @@ def remove_player_id(
     db.commit()
 
     return {"msg": "Notifications disabled"}
+
 

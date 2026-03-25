@@ -21,3 +21,8 @@ class UserUpdate(BaseModel):
     username: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
+    
+class AvatarUploadResponse(BaseModel):
+    success: bool
+    avatar_url: str
+    message: Optional[str] = None

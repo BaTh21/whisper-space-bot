@@ -37,6 +37,19 @@ def update(db: Session, user: User, user_in: UserUpdate) -> User:
     db.refresh(user)
     return user
 
+def update_avatar(db: Session, user: User, avatar_url: str) -> User:
+    user.avatar_url = avatar_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def remove_avatar(db: Session, user: User) -> User:
+    user.avatar_url = None
+    db.commit()
+    db.refresh(user)
+    return user
+
 
 def search(db: Session, q: str) -> List[User]:
     q_clean = q.strip()

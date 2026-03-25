@@ -170,4 +170,19 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+  Future<void> updateProfileImage(String imageUrl) async {
+  if (_currentUser != null) {
+    _currentUser = _currentUser!.copyWith(avatarUrl: imageUrl);
+    await storageService.saveUserData(_currentUser!.toJson());
+    notifyListeners();
+  }
+}
+
+Future<void> removeProfileImage() async {
+  if (_currentUser != null) {
+    _currentUser = _currentUser!.copyWith(avatarUrl: null);
+    await storageService.saveUserData(_currentUser!.toJson());
+    notifyListeners();
+  }
+}
 }

@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
+import 'package:whisper_space_flutter/core/services/image_upload_service.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/auth/data/models/diary_model.dart';
 import 'package:whisper_space_flutter/features/chat/chat_screen.dart';
@@ -251,96 +255,95 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-Widget _buildBottomNavBar() {
-  final themeProvider = Provider.of<ThemeProvider>(context);
-  final isDarkMode = themeProvider.isDarkMode;
-  
-  // Use different colors based on theme mode
-  final primaryColor = isDarkMode 
-      ? const Color(0xFF00BCD4) // Cyan for dark mode
-      : const Color(0xFF6A11CB); // Purple for light mode
+  Widget _buildBottomNavBar() {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.isDarkMode;
 
-  return Padding(
-    padding: const EdgeInsets.all(12),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(25),
-      child: Theme(
-        data: Theme.of(context).copyWith(
-          navigationBarTheme: NavigationBarThemeData(
-            labelTextStyle: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) {
+    final primaryColor = isDarkMode
+        ? const Color(0xFF00BCD4)
+        : const Color(0xFF6A11CB);
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25),
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            navigationBarTheme: NavigationBarThemeData(
+              labelTextStyle: MaterialStateProperty.resolveWith((states) {
+                if (states.contains(MaterialState.selected)) {
+                  return TextStyle(
+                    color: primaryColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  );
+                }
                 return TextStyle(
-                  color: primaryColor,
-                  fontWeight: FontWeight.w600,
+                  color: isDarkMode ? Colors.white70 : Colors.grey[600],
                   fontSize: 12,
                 );
-              }
-              return TextStyle(
-                color: isDarkMode ? Colors.white70 : Colors.grey[600],
-                fontSize: 12,
-              );
-            }),
+              }),
+            ),
+          ),
+          child: NavigationBar(
+            height: 70,
+            backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            elevation: 10,
+            selectedIndex: _selectedIndex,
+            indicatorColor: primaryColor.withOpacity(0.15),
+            labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+            onDestinationSelected: (index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+            destinations: [
+              NavigationDestination(
+                icon: Icon(
+                  Icons.home_outlined,
+                  color: isDarkMode ? Colors.white70 : Colors.grey,
+                ),
+                selectedIcon: Icon(Icons.home, color: primaryColor),
+                label: 'Feed',
+              ),
+              NavigationDestination(
+                icon: Icon(
+                  Icons.chat_bubble_outline,
+                  color: isDarkMode ? Colors.white70 : Colors.grey,
+                ),
+                selectedIcon: Icon(Icons.chat_bubble, color: primaryColor),
+                label: 'Messages',
+              ),
+              NavigationDestination(
+                icon: Icon(
+                  Icons.group_outlined,
+                  color: isDarkMode ? Colors.white70 : Colors.grey,
+                ),
+                selectedIcon: Icon(Icons.group, color: primaryColor),
+                label: 'Friends',
+              ),
+              NavigationDestination(
+                icon: Icon(
+                  Icons.note_outlined,
+                  color: isDarkMode ? Colors.white70 : Colors.grey,
+                ),
+                selectedIcon: Icon(Icons.note, color: primaryColor),
+                label: 'Notes',
+              ),
+              NavigationDestination(
+                icon: Icon(
+                  Icons.person_outlined,
+                  color: isDarkMode ? Colors.white70 : Colors.grey,
+                ),
+                selectedIcon: Icon(Icons.person, color: primaryColor),
+                label: 'Profile',
+              ),
+            ],
           ),
         ),
-        child: NavigationBar(
-          height: 70,
-          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-          elevation: 10,
-          selectedIndex: _selectedIndex,
-          indicatorColor: primaryColor.withOpacity(0.15),
-          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-          onDestinationSelected: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          destinations: [
-            NavigationDestination(
-              icon: Icon(
-                Icons.home_outlined, 
-                color: isDarkMode ? Colors.white70 : Colors.grey,
-              ),
-              selectedIcon: Icon(Icons.home, color: primaryColor),
-              label: 'Feed',
-            ),
-            NavigationDestination(
-              icon: Icon(
-                Icons.chat_bubble_outline, 
-                color: isDarkMode ? Colors.white70 : Colors.grey,
-              ),
-              selectedIcon: Icon(Icons.chat_bubble, color: primaryColor),
-              label: 'Messages',
-            ),
-            NavigationDestination(
-              icon: Icon(
-                Icons.group_outlined, 
-                color: isDarkMode ? Colors.white70 : Colors.grey,
-              ),
-              selectedIcon: Icon(Icons.group, color: primaryColor),
-              label: 'Friends',
-            ),
-            NavigationDestination(
-              icon: Icon(
-                Icons.note_outlined, 
-                color: isDarkMode ? Colors.white70 : Colors.grey,
-              ),
-              selectedIcon: Icon(Icons.note, color: primaryColor),
-              label: 'Notes',
-            ),
-            NavigationDestination(
-              icon: Icon(
-                Icons.person_outlined, 
-                color: isDarkMode ? Colors.white70 : Colors.grey,
-              ),
-              selectedIcon: Icon(Icons.person, color: primaryColor),
-              label: 'Profile',
-            ),
-          ],
-        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _showLogoutDialog() async {
     final shouldLogout = await showDialog<bool>(
@@ -561,8 +564,8 @@ class _FeedTabState extends State<FeedTab> {
                           onFavorite: () =>
                               _handleFavorite(feedProvider, diary.id),
                           onComment: (diaryId, content, parentId, replyToUserId) =>
-                                  _handleComment(feedProvider, diaryId, content,
-                                      parentId, replyToUserId),
+                              _handleComment(feedProvider, diaryId, content,
+                                  parentId, replyToUserId),
                           onEdit: (diaryToEdit) => _handleEditDiary(
                               context, feedProvider, diaryToEdit),
                           onDelete: (diaryId) => _handleDeleteDiary(
@@ -805,6 +808,7 @@ class NotesTab extends StatelessWidget {
   }
 }
 
+// ============ PROFILE TAB ============
 class ProfileTab extends StatefulWidget {
   final int? userId;
   final VoidCallback? onEditProfile;
@@ -825,48 +829,48 @@ class _ProfileTabState extends State<ProfileTab> {
   int _notesCount = 0;
   int _likesCount = 0;
   bool _isLoadingStats = true;
+  bool _isUploadingImage = false;
+  late ImageUploadService _imageUploadService;
 
   @override
   void initState() {
     super.initState();
+    _initServices();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserStats();
     });
   }
 
+  Future<void> _initServices() async {
+    final storageService = StorageService();
+    await storageService.init();
+
+   const String baseUrl = 'http://10.0.2.2:8000/api/v1/avatars';
+    _imageUploadService = ImageUploadService(baseUrl: baseUrl);
+  }
+
   Future<void> _loadUserStats() async {
-    setState(() {
-      _isLoadingStats = true;
-    });
+    setState(() => _isLoadingStats = true);
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final feedProvider = Provider.of<FeedProvider>(context, listen: false);
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-      
+
       final currentUser = authProvider.currentUser;
-      
+
       if (currentUser != null) {
-        // Get posts count from feed provider
         final userPosts = feedProvider.diaries
             .where((diary) => diary.author.id == currentUser.id)
             .length;
-        
-        // Get notes count
+
         final userNotes = notesProvider.notes.length;
-        
-        // Get total likes received on user's posts
+
         int totalLikes = 0;
         final userDiaries = feedProvider.diaries
             .where((diary) => diary.author.id == currentUser.id);
         for (var diary in userDiaries) {
           totalLikes += diary.likes.length;
-        }
-        
-        int friendsCount = 0;
-        try {
-        } catch (e) {
-          print('Failed to load friends count: $e');
         }
 
         if (mounted) {
@@ -874,19 +878,122 @@ class _ProfileTabState extends State<ProfileTab> {
             _postsCount = userPosts;
             _notesCount = userNotes;
             _likesCount = totalLikes;
-            _friendsCount = friendsCount;
             _isLoadingStats = false;
           });
         }
       }
     } catch (e) {
-      print('Error loading user stats: $e');
+      debugPrint('Error loading user stats: $e');
+      if (mounted) setState(() => _isLoadingStats = false);
+    }
+  }
+
+  Future<void> _handleImageChange(String? imagePath) async {
+    if (imagePath == null) {
+      await _removeProfileImage();
+    } else {
+      await _uploadProfileImage(File(imagePath));
+    }
+  }
+
+  Future<void> _uploadProfileImage(File imageFile) async {
+    setState(() => _isUploadingImage = true);
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final token = await _getToken();
+
+      final avatarUrl = await _imageUploadService.uploadProfileImage(imageFile, token);
+
+      if (avatarUrl != null && mounted) {
+        await authProvider.updateProfileImage(avatarUrl);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile picture updated successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoadingStats = false;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to upload image: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
+    }
+  }
+
+  Future<void> _removeProfileImage() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Profile Picture'),
+        content: const Text('Are you sure you want to remove your profile picture?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      setState(() => _isUploadingImage = true);
+
+      try {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final token = await _getToken();
+
+        final success = await _imageUploadService.deleteProfileImage(token);
+
+        if (success && mounted) {
+          await authProvider.removeProfileImage();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile picture removed'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to remove image: $e'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isUploadingImage = false);
       }
     }
+  }
+
+  Future<String> _getToken() async {
+    final storageService = StorageService();
+    await storageService.init();
+    return storageService.getToken() ?? '';
   }
 
   @override
@@ -905,24 +1012,71 @@ class _ProfileTabState extends State<ProfileTab> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: const Color(0xFF6C63FF),
-                        backgroundImage: user?.avatarUrl != null
-                            ? NetworkImage(user!.avatarUrl!)
-                            : null,
-                        child: user?.avatarUrl == null
-                            ? Text(
-                                user?.username.isNotEmpty == true
-                                    ? user!.username[0].toUpperCase()
-                                    : 'U',
-                                style: const TextStyle(
-                                  fontSize: 40,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                      // Profile picture with tap gesture
+                      GestureDetector(
+                        onTap: _showImagePickerOptions,
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundColor: const Color(0xFF6C63FF),
+                              backgroundImage: user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
+                                  ? (user.avatarUrl!.startsWith('http')
+                                      ? NetworkImage(user.avatarUrl!)
+                                      : FileImage(File(user.avatarUrl!)) as ImageProvider)
+                                  : null,
+                              child: user?.avatarUrl == null || user!.avatarUrl!.isEmpty
+                                  ? Text(
+                                      user?.username.isNotEmpty == true
+                                          ? user!.username[0].toUpperCase()
+                                          : 'U',
+                                      style: const TextStyle(
+                                        fontSize: 40,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            if (!_isUploadingImage)
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6C63FF),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(6),
+                                    child: Icon(
+                                      Icons.camera_alt,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                                 ),
-                              )
-                            : null,
+                              ),
+                            if (_isUploadingImage)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Color.fromRGBO(0, 0, 0, 0.5),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -959,6 +1113,29 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         ),
                       ],
+
+                      TextButton.icon(
+                        onPressed: _isUploadingImage ? null : () => _handleImageChange(null),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          size: 16,
+                          color: Colors.red,
+                        ),
+                        label: const Text(
+                          'Remove Photo',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -977,22 +1154,10 @@ class _ProfileTabState extends State<ProfileTab> {
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _StatItem(
-                              value: _postsCount.toString(),
-                              label: 'Posts',
-                            ),
-                            _StatItem(
-                              value: _friendsCount.toString(),
-                              label: 'Friends',
-                            ),
-                            _StatItem(
-                              value: _notesCount.toString(),
-                              label: 'Notes',
-                            ),
-                            _StatItem(
-                              value: _likesCount.toString(),
-                              label: 'Likes',
-                            ),
+                            _StatItem(value: _postsCount.toString(), label: 'Posts'),
+                            _StatItem(value: _friendsCount.toString(), label: 'Friends'),
+                            _StatItem(value: _notesCount.toString(), label: 'Notes'),
+                            _StatItem(value: _likesCount.toString(), label: 'Likes'),
                           ],
                         ),
                 ),
@@ -1001,29 +1166,13 @@ class _ProfileTabState extends State<ProfileTab> {
               Card(
                 child: Column(
                   children: [
-                    _buildMenuItem(
-                      Icons.settings,
-                      'Settings',
-                      () {},
-                    ),
+                    _buildMenuItem(Icons.settings, 'Settings', () {}),
                     const Divider(height: 0),
-                    _buildMenuItem(
-                      Icons.notifications,
-                      'Notifications',
-                      () {},
-                    ),
+                    _buildMenuItem(Icons.notifications, 'Notifications', () {}),
                     const Divider(height: 0),
-                    _buildMenuItem(
-                      Icons.privacy_tip,
-                      'Privacy',
-                      () {},
-                    ),
+                    _buildMenuItem(Icons.privacy_tip, 'Privacy', () {}),
                     const Divider(height: 0),
-                    _buildMenuItem(
-                      Icons.help,
-                      'Help & Support',
-                      () {},
-                    ),
+                    _buildMenuItem(Icons.help, 'Help & Support', () {}),
                   ],
                 ),
               ),
@@ -1031,10 +1180,15 @@ class _ProfileTabState extends State<ProfileTab> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    final homeState =
-                        context.findAncestorStateOfType<_HomeScreenState>();
-                    homeState?._showLogoutDialog();
+                  onPressed: () async {
+                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                    await authProvider.logout();
+                    if (mounted) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const LoginScreen()),
+                      );
+                    }
                   },
                   icon: const Icon(Icons.logout),
                   label: const Text('Logout'),
@@ -1049,6 +1203,66 @@ class _ProfileTabState extends State<ProfileTab> {
         );
       },
     );
+  }
+
+  void _showImagePickerOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF6C63FF)),
+              title: const Text('Take a Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImageFromSource(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Color(0xFF6C63FF)),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImageFromSource(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImageFromSource(ImageSource source) async {
+    final imagePicker = ImagePicker();
+    try {
+      final XFile? pickedFile = await imagePicker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (pickedFile != null && mounted) {
+        await _uploadProfileImage(File(pickedFile.path));
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
   }
 
   Widget _buildMenuItem(IconData icon, String title, VoidCallback onTap) {
@@ -1082,10 +1296,7 @@ class _StatItem extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.grey,
-          ),
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
       ],
     );
