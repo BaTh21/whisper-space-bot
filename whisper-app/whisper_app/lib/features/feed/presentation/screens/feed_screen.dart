@@ -1,4 +1,3 @@
-// lib/features/feed/presentation/screens/feed_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
@@ -27,9 +26,8 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   void _loadCurrentUser() {
-    // Load current user ID from your AuthProvider
-    // Replace this with your actual user ID retrieval
-    _currentUserId = 1; // Temporary - replace with actual user ID
+    // Replace with actual user ID retrieval
+    _currentUserId = 1;
   }
 
   @override
@@ -47,7 +45,8 @@ class _FeedScreenState extends State<FeedScreen> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDarkMode = themeProvider.isDarkMode;
-    final primaryColor = Theme.of(context).primaryColor;
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Consumer<FeedProvider>(
       builder: (context, provider, child) {
@@ -60,19 +59,15 @@ class _FeedScreenState extends State<FeedScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline, 
-                  size: 64, 
-                  color: isDarkMode ? Colors.red[300] : Colors.red
-                ),
+                Icon(Icons.error_outline,
+                    size: 64, color: colorScheme.error),
                 const SizedBox(height: 20),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
                   child: Text(
                     provider.error!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: isDarkMode ? Colors.red[300] : Colors.red,
-                    ),
+                    style: textTheme.bodyMedium?.copyWith(color: colorScheme.error),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -90,9 +85,10 @@ class _FeedScreenState extends State<FeedScreen> {
             title: const Text('Whisper Space'),
             elevation: 0,
             actions: [
-              // Theme Toggle Button
               IconButton(
-                tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                tooltip: isDarkMode
+                    ? 'Switch to Light Mode'
+                    : 'Switch to Dark Mode',
                 icon: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   transitionBuilder: (Widget child, Animation<double> animation) {
@@ -104,18 +100,18 @@ class _FeedScreenState extends State<FeedScreen> {
                   child: Icon(
                     isDarkMode ? Icons.light_mode : Icons.dark_mode,
                     key: ValueKey<bool>(isDarkMode),
-                    color: isDarkMode ? Colors.yellow : Colors.white,
+                    color: colorScheme.onPrimary,
                   ),
                 ),
                 onPressed: _toggleTheme,
               ),
               IconButton(
-                icon: const Icon(Icons.refresh),
+                icon: Icon(Icons.refresh, color: colorScheme.onPrimary),
                 tooltip: 'Refresh feed',
                 onPressed: () => provider.refreshFeed(),
               ),
               IconButton(
-                icon: const Icon(Icons.add),
+                icon: Icon(Icons.add, color: colorScheme.onPrimary),
                 tooltip: 'Create New Diary',
                 onPressed: () => _createNewPost(context, provider),
               ),
@@ -123,12 +119,12 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
           body: RefreshIndicator(
             onRefresh: () => provider.refreshFeed(),
-            child: _buildFeedContent(provider, isDarkMode),
+            child: _buildFeedContent(provider),
           ),
           floatingActionButton: FloatingActionButton(
             onPressed: () => _createNewPost(context, provider),
             tooltip: 'Create New Diary',
-            backgroundColor: primaryColor,
+            backgroundColor: colorScheme.primary,
             child: const Icon(Icons.add),
           ),
         );
@@ -136,29 +132,29 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  Widget _buildFeedContent(FeedProvider provider, bool isDarkMode) {
+  Widget _buildFeedContent(FeedProvider provider) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     if (provider.diaries.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.feed, 
-              size: 64, 
-              color: isDarkMode ? Colors.grey[600] : Colors.grey
-            ),
+            Icon(Icons.feed,
+                size: 64, color: colorScheme.onSurfaceVariant),
             const SizedBox(height: 20),
             Text(
               'No posts yet',
-              style: TextStyle(
-                fontSize: 18, 
-                color: isDarkMode ? Colors.grey[400] : Colors.grey
+              style: textTheme.headlineSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 10),
             Text(
               'Be the first to share something!',
-              style: TextStyle(
-                color: isDarkMode ? Colors.grey[500] : Colors.grey
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 20),
@@ -182,13 +178,15 @@ class _FeedScreenState extends State<FeedScreen> {
         return DiaryCard(
           diary: diary,
           onLike: () => _handleLike(provider, diary.id),
-          onFavorite: () => _handleFavorite(provider, diary.id, isOwner),
+          onFavorite: () =>
+              _handleFavorite(provider, diary.id, isOwner),
           onComment: (diaryId, content, parentId, replyToUserId) =>
               _handleComment(
                   provider, diaryId, content, parentId, replyToUserId),
           onEdit: (diaryToEdit) =>
               _handleEditDiary(context, provider, diaryToEdit),
-          onDelete: (diaryId) => _handleDeleteDiary(context, provider, diaryId),
+          onDelete: (diaryId) =>
+              _handleDeleteDiary(context, provider, diaryId),
           isOwner: isOwner,
         );
       },
@@ -239,7 +237,6 @@ class _FeedScreenState extends State<FeedScreen> {
   void _handleEditDiary(
       BuildContext context, FeedProvider provider, DiaryModel diary) async {
     final feedApiService = Provider.of<FeedApiService>(context, listen: false);
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
 
     final updatedDiary = await Navigator.push<DiaryModel>(
       context,
@@ -283,31 +280,27 @@ class _FeedScreenState extends State<FeedScreen> {
 
   void _handleDeleteDiary(
       BuildContext context, FeedProvider feedProvider, int diaryId) async {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Delete Diary'),
-            content: const Text('Are you sure you want to delete this diary? '
+            content: const Text(
+                'Are you sure you want to delete this diary? '
                 'This action cannot be undone.'),
-            backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
-            titleTextStyle: TextStyle(
-              color: isDarkMode ? Colors.white : null,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-            contentTextStyle: TextStyle(
-              color: isDarkMode ? Colors.white70 : null,
+            backgroundColor: colorScheme.surface,
+            titleTextStyle: textTheme.titleMedium,
+            contentTextStyle: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: Text(
                   'Cancel',
-                  style: TextStyle(
-                    color: isDarkMode ? Colors.white70 : null,
-                  ),
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
               ),
               TextButton(
@@ -328,7 +321,7 @@ class _FeedScreenState extends State<FeedScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text('Deleting diary...'),
-              backgroundColor: isDarkMode ? Colors.grey[800] : null,
+              backgroundColor: colorScheme.surface,
               duration: const Duration(seconds: 1),
             ),
           );
@@ -340,7 +333,7 @@ class _FeedScreenState extends State<FeedScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text('Diary deleted successfully'),
-              backgroundColor: isDarkMode ? Colors.green[800] : Colors.green,
+              backgroundColor: colorScheme.primary,
               duration: const Duration(seconds: 2),
             ),
           );
@@ -350,7 +343,7 @@ class _FeedScreenState extends State<FeedScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to delete diary: $e'),
-              backgroundColor: isDarkMode ? Colors.red[800] : Colors.red,
+              backgroundColor: colorScheme.error,
               duration: const Duration(seconds: 3),
             ),
           );
@@ -377,24 +370,22 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   void _showErrorSnackBar(String message) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+    final colorScheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isDarkMode ? Colors.red[800] : Colors.red,
+        backgroundColor: colorScheme.error,
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
   void _showSuccessSnackBar(String message) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+    final colorScheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isDarkMode ? Colors.green[800] : Colors.green,
+        backgroundColor: colorScheme.primary,
         duration: const Duration(seconds: 3),
       ),
     );

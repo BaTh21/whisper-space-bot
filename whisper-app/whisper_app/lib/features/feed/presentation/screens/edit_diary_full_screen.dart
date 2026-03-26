@@ -1,4 +1,3 @@
-// lib/features/feed/presentation/screens/edit_diary_full_screen.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,7 +9,7 @@ class EditDiaryFullScreen extends StatefulWidget {
   final DiaryModel diary;
   final Function(DiaryModel) onUpdate;
   final List<Group> availableGroups;
-  
+
   final FeedApiService? feedApiService;
   final Function(int)? onDelete;
 
@@ -32,15 +31,15 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
   late TextEditingController _contentController;
   late String _shareType;
   bool _isLoading = false;
-  
+
   List<String> _currentImages = [];
   List<String> _currentVideos = [];
   final List<File> _newImages = [];
   final List<File> _newVideos = [];
-  
+
   List<int> _selectedGroupIds = [];
   final ImagePicker _picker = ImagePicker();
-  
+
   List<Group> _availableGroups = [];
   bool _isDeleting = false;
 
@@ -57,51 +56,48 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
   }
 
   Future<void> _deleteDiary() async {
-    if (_isDeleting || widget.feedApiService == null || widget.onDelete == null) {
+    if (_isDeleting ||
+        widget.feedApiService == null ||
+        widget.onDelete == null) {
       return;
     }
-    
-    final context = this.context;
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          'Delete Diary',
-          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-        ),
+        title: Text('Delete Diary', style: textTheme.titleMedium),
         content: Text(
           'Are you sure you want to delete this diary? This action cannot be undone.',
-          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+          style: textTheme.bodyMedium
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: isDarkMode ? Colors.white70 : null),
-            ),
+            child: Text('Cancel',
+                style: TextStyle(color: colorScheme.onSurfaceVariant)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context); // Close confirmation dialog
-              
+              Navigator.pop(context);
+
               if (mounted) {
                 setState(() => _isDeleting = true);
               }
-              
+
               try {
                 await widget.feedApiService!.deleteDiary(widget.diary.id);
-                
+
                 if (mounted) {
                   widget.onDelete!(widget.diary.id);
-                  
+
                   _showSnackBar('Diary deleted successfully!', false);
-                  
+
                   await Future.delayed(const Duration(milliseconds: 1500));
-                  
+
                   Navigator.pop(context, null);
                 }
               } catch (e) {
@@ -157,27 +153,23 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
   }
 
   void _removeMedia(String url, bool isVideo) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          'Remove Media',
-          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-        ),
+        title: Text('Remove Media', style: textTheme.titleMedium),
         content: Text(
           'Remove this ${isVideo ? 'video' : 'image'}?',
-          style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87),
+          style:
+              textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: isDarkMode ? Colors.white70 : null),
-            ),
+            child: Text('Cancel',
+                style: TextStyle(color: colorScheme.onSurfaceVariant)),
           ),
           TextButton(
             onPressed: () {
@@ -252,9 +244,9 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
       );
 
       await widget.onUpdate(updatedDiary);
-      
+
       _showSnackBar('Diary updated successfully!', false);
-      
+
       if (mounted) {
         Navigator.pop(context, updatedDiary);
       }
@@ -268,15 +260,12 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
 
   void _showSnackBar(String message, bool isError) {
     if (!mounted) return;
-    
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
+    final colorScheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError 
-          ? (isDarkMode ? Colors.red[800] : Colors.red)
-          : (isDarkMode ? Colors.green[800] : Colors.green),
+        backgroundColor: isError ? colorScheme.error : colorScheme.primary,
         duration: const Duration(seconds: 3),
       ),
     );
@@ -288,10 +277,10 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
     required String title,
     required String subtitle,
     required String value,
-    required bool isDarkMode,
-    required Color textColor,
-    required Color subtitleColor,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return InkWell(
       onTap: (_isLoading || _isDeleting)
           ? null
@@ -312,10 +301,9 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                     children: [
                       Text(
                         title,
-                        style: TextStyle(
-                          fontSize: 16,
+                        style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w500,
-                          color: textColor,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                       const Spacer(),
@@ -332,9 +320,9 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                         fillColor: MaterialStateProperty.resolveWith<Color>(
                           (Set<MaterialState> states) {
                             if (states.contains(MaterialState.selected)) {
-                              return isDarkMode ? Colors.blue[400]! : Colors.blue;
+                              return colorScheme.primary;
                             }
-                            return isDarkMode ? Colors.grey[600]! : Colors.grey;
+                            return colorScheme.onSurface.withOpacity(0.5);
                           },
                         ),
                       ),
@@ -343,9 +331,8 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: subtitleColor,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -357,26 +344,32 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
     );
   }
 
-  Widget _buildCurrentMediaItem(String url, bool isVideo, int index, bool isDarkMode) {
+  Widget _buildCurrentMediaItem(String url, bool isVideo, int index) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Stack(
       children: [
         Container(
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            border: Border.all(color: isDarkMode ? Colors.grey[700]! : Colors.grey.shade300),
+            border: Border.all(color: colorScheme.outlineVariant),
             borderRadius: BorderRadius.circular(8),
           ),
           child: isVideo
               ? Container(
-                  color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade100,
+                  color: colorScheme.surfaceContainerHighest,
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.videocam, size: 24, color: isDarkMode ? Colors.grey[400] : Colors.grey),
+                        Icon(Icons.videocam,
+                            size: 24, color: colorScheme.onSurfaceVariant),
                         const SizedBox(height: 4),
-                        Text('Video', style: TextStyle(fontSize: 10, color: isDarkMode ? Colors.grey[400] : Colors.grey)),
+                        Text('Video',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -388,9 +381,10 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
-                      color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade100,
+                      color: colorScheme.surfaceContainerHighest,
                       child: Center(
-                        child: Icon(Icons.broken_image, color: isDarkMode ? Colors.grey[600] : Colors.grey),
+                        child: Icon(Icons.broken_image,
+                            color: colorScheme.onSurfaceVariant),
                       ),
                     );
                   },
@@ -400,7 +394,9 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
           top: 0,
           right: 0,
           child: GestureDetector(
-            onTap: (_isLoading || _isDeleting) ? null : () => _removeMedia(url, isVideo),
+            onTap: (_isLoading || _isDeleting)
+                ? null
+                : () => _removeMedia(url, isVideo),
             child: Container(
               padding: const EdgeInsets.all(2),
               decoration: const BoxDecoration(
@@ -419,7 +415,9 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
     );
   }
 
-  Widget _buildNewMediaItem(File file, bool isVideo, int index, bool isDarkMode) {
+  Widget _buildNewMediaItem(File file, bool isVideo, int index) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Stack(
       children: [
         Container(
@@ -427,23 +425,25 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
           height: 80,
           decoration: BoxDecoration(
             border: Border.all(
-              color: isVideo 
-                ? (isDarkMode ? Colors.green[800]! : Colors.green)
-                : (isDarkMode ? Colors.blue[800]! : Colors.blue)
+              color: isVideo ? colorScheme.tertiary : colorScheme.secondary,
             ),
             borderRadius: BorderRadius.circular(8),
-            color: isVideo 
-              ? (isDarkMode ? Colors.green[900]!.withOpacity(0.3) : Colors.green.shade50)
-              : (isDarkMode ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue.shade50),
+            color: isVideo
+                ? colorScheme.tertiaryContainer
+                : colorScheme.secondaryContainer,
           ),
           child: isVideo
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.videocam, size: 24, color: isDarkMode ? Colors.green[400] : Colors.green),
+                      Icon(Icons.videocam,
+                          size: 24, color: colorScheme.onTertiaryContainer),
                       const SizedBox(height: 4),
-                      Text('Video', style: TextStyle(fontSize: 10, color: isDarkMode ? Colors.green[400] : Colors.green)),
+                      Text('Video',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: colorScheme.onTertiaryContainer)),
                     ],
                   ),
                 )
@@ -454,9 +454,10 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
-                      color: isDarkMode ? Colors.blue[900]!.withOpacity(0.3) : Colors.blue.shade50,
+                      color: colorScheme.secondaryContainer,
                       child: Center(
-                        child: Icon(Icons.broken_image, color: isDarkMode ? Colors.grey[600] : Colors.grey),
+                        child: Icon(Icons.broken_image,
+                            color: colorScheme.onSecondaryContainer),
                       ),
                     );
                   },
@@ -466,7 +467,9 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
           top: 0,
           right: 0,
           child: GestureDetector(
-            onTap: (_isLoading || _isDeleting) ? null : () => _removeNewMedia(file, isVideo),
+            onTap: (_isLoading || _isDeleting)
+                ? null
+                : () => _removeNewMedia(file, isVideo),
             child: Container(
               padding: const EdgeInsets.all(2),
               decoration: const BoxDecoration(
@@ -487,57 +490,58 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
-    final textColor = isDarkMode ? Colors.white : Colors.black;
-    final subtitleColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
-    final inputFillColor = isDarkMode ? const Color(0xFF2C2C2C) : Colors.white;
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           'Edit Diary',
-          style: TextStyle(color: textColor),
+          style: textTheme.titleLarge?.copyWith(color: colorScheme.onPrimary),
         ),
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
         leading: IconButton(
-          icon: Icon(Icons.close, color: textColor),
-          onPressed: (_isLoading || _isDeleting) ? null : () {
-            if (_titleController.text != widget.diary.title || 
-                _contentController.text != widget.diary.content ||
-                _newImages.isNotEmpty ||
-                _newVideos.isNotEmpty) {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('Discard Changes?', style: TextStyle(color: textColor)),
-                  content: Text(
-                    'You have unsaved changes. Are you sure you want to discard?',
-                    style: TextStyle(color: subtitleColor),
-                  ),
-                  backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : null,
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('Cancel', style: TextStyle(color: subtitleColor)),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.pop(context);
-                      },
-                      child: const Text(
-                        'Discard',
-                        style: TextStyle(color: Colors.red),
+          icon: Icon(Icons.close, color: colorScheme.onPrimary),
+          onPressed: (_isLoading || _isDeleting)
+              ? null
+              : () {
+                  if (_titleController.text != widget.diary.title ||
+                      _contentController.text != widget.diary.content ||
+                      _newImages.isNotEmpty ||
+                      _newVideos.isNotEmpty) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text('Discard Changes?',
+                            style: textTheme.titleMedium),
+                        content: Text(
+                          'You have unsaved changes. Are you sure you want to discard?',
+                          style: textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text('Cancel',
+                                style: TextStyle(
+                                    color: colorScheme.onSurfaceVariant)),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              Navigator.pop(context);
+                            },
+                            child: const Text(
+                              'Discard',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-              );
-            } else {
-              Navigator.pop(context);
-            }
-          },
+                    );
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
         ),
         actions: [
           if (widget.feedApiService != null && widget.onDelete != null)
@@ -561,60 +565,65 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                   decoration: InputDecoration(
                     labelText: 'Title *',
                     hintText: 'Give your diary a title',
-                    labelStyle: TextStyle(color: textColor),
-                    hintStyle: TextStyle(color: subtitleColor),
+                    labelStyle: textTheme.bodyLarge
+                        ?.copyWith(color: colorScheme.onSurface),
+                    hintStyle: textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     filled: true,
-                    fillColor: inputFillColor,
+                    fillColor: colorScheme.surfaceContainerHighest,
                   ),
-                  style: TextStyle(color: textColor),
+                  style: textTheme.bodyLarge
+                      ?.copyWith(color: colorScheme.onSurface),
                   maxLength: 255,
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Content
                 TextFormField(
                   controller: _contentController,
                   decoration: InputDecoration(
                     labelText: 'Content *',
                     hintText: 'Write your thoughts here...',
-                    labelStyle: TextStyle(color: textColor),
-                    hintStyle: TextStyle(color: subtitleColor),
+                    labelStyle: textTheme.bodyLarge
+                        ?.copyWith(color: colorScheme.onSurface),
+                    hintStyle: textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignLabelWithHint: true,
                     filled: true,
-                    fillColor: inputFillColor,
+                    fillColor: colorScheme.surfaceContainerHighest,
                   ),
-                  style: TextStyle(color: textColor),
+                  style: textTheme.bodyLarge
+                      ?.copyWith(color: colorScheme.onSurface),
                   maxLines: 8,
                   minLines: 4,
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Privacy Section
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Privacy:',
-                      style: TextStyle(
-                        fontSize: 16, 
+                      style: textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: textColor,
+                        color: colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: isDarkMode ? Colors.grey[700]! : Colors.grey.shade300),
+                        border: Border.all(color: colorScheme.outlineVariant),
                         borderRadius: BorderRadius.circular(8),
-                        color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
+                        color: colorScheme.surfaceContainerHighest,
                       ),
                       child: Column(
                         children: [
@@ -624,51 +633,39 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                             title: 'Private',
                             subtitle: 'Only you can see this',
                             value: 'personal',
-                            isDarkMode: isDarkMode,
-                            textColor: textColor,
-                            subtitleColor: subtitleColor!,
                           ),
-                          Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                          Divider(height: 1, color: colorScheme.outlineVariant),
                           _buildPrivacyOption(
                             icon: Icons.public,
                             iconColor: Colors.green,
                             title: 'Public',
                             subtitle: 'Everyone can see this',
                             value: 'public',
-                            isDarkMode: isDarkMode,
-                            textColor: textColor,
-                            subtitleColor: subtitleColor!,
                           ),
-                          Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                          Divider(height: 1, color: colorScheme.outlineVariant),
                           _buildPrivacyOption(
                             icon: Icons.people,
                             iconColor: Colors.blue,
                             title: 'Friends Only',
                             subtitle: 'Only your friends can see this',
                             value: 'friends',
-                            isDarkMode: isDarkMode,
-                            textColor: textColor,
-                            subtitleColor: subtitleColor!,
                           ),
-                          Divider(height: 1, color: isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                          Divider(height: 1, color: colorScheme.outlineVariant),
                           _buildPrivacyOption(
                             icon: Icons.group,
                             iconColor: Colors.purple,
                             title: 'Selected Groups',
                             subtitle: 'Only selected groups can see this',
                             value: 'group',
-                            isDarkMode: isDarkMode,
-                            textColor: textColor,
-                            subtitleColor: subtitleColor!,
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Group Selection
                 if (_availableGroups.isNotEmpty && _shareType == 'group')
                   Column(
@@ -676,10 +673,9 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                     children: [
                       Text(
                         'Select Groups:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold, 
-                          fontSize: 16,
-                          color: textColor,
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -687,35 +683,41 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: _availableGroups.map((group) {
-                          final isSelected = _selectedGroupIds.contains(group.id);
+                          final isSelected =
+                              _selectedGroupIds.contains(group.id);
                           return FilterChip(
-                            label: Text(
-                              group.name,
-                              style: TextStyle(color: isSelected ? Colors.white : textColor),
-                            ),
+                            label: Text(group.name),
                             selected: isSelected,
-                            onSelected: (_isLoading || _isDeleting) ? null : (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedGroupIds.add(group.id);
-                                } else {
-                                  _selectedGroupIds.remove(group.id);
-                                }
-                              });
-                            },
-                            selectedColor: isDarkMode ? Colors.blue[700] : Colors.blue.shade100,
-                            checkmarkColor: Colors.white,
-                            backgroundColor: isDarkMode ? const Color(0xFF2C2C2C) : null,
+                            onSelected: (_isLoading || _isDeleting)
+                                ? null
+                                : (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _selectedGroupIds.add(group.id);
+                                      } else {
+                                        _selectedGroupIds.remove(group.id);
+                                      }
+                                    });
+                                  },
+                            selectedColor: colorScheme.primaryContainer,
+                            backgroundColor: colorScheme.surfaceContainerHighest,
+                            labelStyle: TextStyle(
+                              color: isSelected
+                                  ? colorScheme.onPrimaryContainer
+                                  : colorScheme.onSurface,
+                            ),
                             avatar: CircleAvatar(
-                              backgroundColor: isSelected 
-                                ? (isDarkMode ? Colors.blue[400] : Colors.blue)
-                                : (isDarkMode ? Colors.grey[700] : Colors.grey.shade300),
+                              backgroundColor: isSelected
+                                  ? colorScheme.primary
+                                  : colorScheme.surfaceContainerHighest,
                               radius: 12,
                               child: Text(
                                 group.name.substring(0, 1).toUpperCase(),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black),
+                                  color: isSelected
+                                      ? colorScheme.onPrimary
+                                      : colorScheme.onSurface,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -723,23 +725,22 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                           );
                         }).toList(),
                       ),
-                      
+
                       if (_selectedGroupIds.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         Text(
                           'Selected: ${_selectedGroupIds.length} group(s)',
-                          style: TextStyle(
-                            color: isDarkMode ? Colors.green[400] : Colors.green.shade700,
-                            fontSize: 14,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.primary,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ],
                   ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Current Media
                 if (_currentImages.isNotEmpty || _currentVideos.isNotEmpty)
                   Column(
@@ -749,28 +750,30 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                         children: [
                           Text(
                             'Current Media:',
-                            style: TextStyle(
-                              fontSize: 16, 
+                            style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: textColor,
+                              color: colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Chip(
-                            label: Text('${_currentImages.length + _currentVideos.length}'),
-                            backgroundColor: isDarkMode ? Colors.grey[700] : Colors.grey.shade200,
-                            labelStyle: TextStyle(color: textColor),
+                            label: Text(
+                                '${_currentImages.length + _currentVideos.length}'),
+                            backgroundColor:
+                                colorScheme.surfaceContainerHighest,
+                            labelStyle: textTheme.labelSmall
+                                ?.copyWith(color: colorScheme.onSurface),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      
+
                       if (_currentImages.isNotEmpty) ...[
                         Text(
                           'Images:',
-                          style: TextStyle(
+                          style: textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w500,
-                            color: textColor,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -780,18 +783,18 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                           children: _currentImages.asMap().entries.map((entry) {
                             final index = entry.key;
                             final url = entry.value;
-                            return _buildCurrentMediaItem(url, false, index, isDarkMode);
+                            return _buildCurrentMediaItem(url, false, index);
                           }).toList(),
                         ),
                         const SizedBox(height: 12),
                       ],
-                      
+
                       if (_currentVideos.isNotEmpty) ...[
                         Text(
                           'Videos:',
-                          style: TextStyle(
+                          style: textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w500,
-                            color: textColor,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -801,25 +804,24 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                           children: _currentVideos.asMap().entries.map((entry) {
                             final index = entry.key;
                             final url = entry.value;
-                            return _buildCurrentMediaItem(url, true, index, isDarkMode);
+                            return _buildCurrentMediaItem(url, true, index);
                           }).toList(),
                         ),
                       ],
                     ],
                   ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Add New Media
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Add More Media (optional):',
-                      style: TextStyle(
-                        fontSize: 16, 
+                      style: textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: textColor,
+                        color: colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -827,24 +829,34 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: (_isLoading || _isDeleting) ? null : _pickImages,
+                            onPressed: (_isLoading || _isDeleting)
+                                ? null
+                                : _pickImages,
                             icon: const Icon(Icons.photo_library),
                             label: const Text('Add Photos'),
                             style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              backgroundColor: isDarkMode ? Colors.blue[800] : null,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
+                              backgroundColor: colorScheme.secondaryContainer,
+                              foregroundColor:
+                                  colorScheme.onSecondaryContainer,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: (_isLoading || _isDeleting) ? null : _pickVideos,
+                            onPressed: (_isLoading || _isDeleting)
+                                ? null
+                                : _pickVideos,
                             icon: const Icon(Icons.video_library),
                             label: const Text('Add Video'),
                             style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              backgroundColor: isDarkMode ? Colors.green[800] : null,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
+                              backgroundColor: colorScheme.tertiaryContainer,
+                              foregroundColor:
+                                  colorScheme.onTertiaryContainer,
                             ),
                           ),
                         ),
@@ -853,12 +865,10 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Max 10 images total, Max 3 videos total',
-                      style: TextStyle(
-                        color: subtitleColor,
-                        fontSize: 12,
-                      ),
+                      style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant),
                     ),
-                    
+
                     // New Images
                     if (_newImages.isNotEmpty) ...[
                       const SizedBox(height: 16),
@@ -866,17 +876,17 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                         children: [
                           Text(
                             'New Photos:',
-                            style: TextStyle(
+                            style: textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w500,
-                              color: textColor,
+                              color: colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Chip(
                             label: Text('${_newImages.length}'),
-                            backgroundColor: isDarkMode ? Colors.blue[900] : Colors.blue.shade50,
-                            labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                            side: BorderSide(color: isDarkMode ? Colors.blue[700]! : Colors.blue.shade200),
+                            backgroundColor: colorScheme.secondaryContainer,
+                            labelStyle: textTheme.labelSmall?.copyWith(
+                                color: colorScheme.onSecondaryContainer),
                           ),
                         ],
                       ),
@@ -887,11 +897,11 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                         children: _newImages.asMap().entries.map((entry) {
                           final index = entry.key;
                           final file = entry.value;
-                          return _buildNewMediaItem(file, false, index, isDarkMode);
+                          return _buildNewMediaItem(file, false, index);
                         }).toList(),
                       ),
                     ],
-                    
+
                     // New Videos
                     if (_newVideos.isNotEmpty) ...[
                       const SizedBox(height: 16),
@@ -899,17 +909,17 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                         children: [
                           Text(
                             'New Videos:',
-                            style: TextStyle(
+                            style: textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w500,
-                              color: textColor,
+                              color: colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Chip(
                             label: Text('${_newVideos.length}'),
-                            backgroundColor: isDarkMode ? Colors.green[900] : Colors.green.shade50,
-                            labelStyle: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-                            side: BorderSide(color: isDarkMode ? Colors.green[700]! : Colors.green.shade200),
+                            backgroundColor: colorScheme.tertiaryContainer,
+                            labelStyle: textTheme.labelSmall?.copyWith(
+                                color: colorScheme.onTertiaryContainer),
                           ),
                         ],
                       ),
@@ -920,31 +930,34 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                         children: _newVideos.asMap().entries.map((entry) {
                           final index = entry.key;
                           final file = entry.value;
-                          return _buildNewMediaItem(file, true, index, isDarkMode);
+                          return _buildNewMediaItem(file, true, index);
                         }).toList(),
                       ),
                     ],
                   ],
                 ),
-                
+
                 const SizedBox(height: 32),
-                
+
                 // Update Button
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: (_isLoading || _isDeleting) ? null : _saveChanges,
+                    onPressed: (_isLoading || _isDeleting)
+                        ? null
+                        : _saveChanges,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
                     ),
                     child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('Update Diary', style: TextStyle(fontSize: 16)),
+                        ? CircularProgressIndicator(color: colorScheme.onPrimary)
+                        : const Text('Update Diary',
+                            style: TextStyle(fontSize: 16)),
                   ),
                 ),
-                
+
                 // Delete Button
                 if (widget.feedApiService != null && widget.onDelete != null) ...[
                   const SizedBox(height: 16),
@@ -952,25 +965,28 @@ class _EditDiaryFullScreenState extends State<EditDiaryFullScreen> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: (_isLoading || _isDeleting) ? null : _deleteDiary,
+                      onPressed: (_isLoading || _isDeleting)
+                          ? null
+                          : _deleteDiary,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
+                        backgroundColor: colorScheme.error,
+                        foregroundColor: colorScheme.onError,
                       ),
                       child: _isDeleting
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('Delete Diary', style: TextStyle(fontSize: 16)),
+                          ? CircularProgressIndicator(color: colorScheme.onError)
+                          : const Text('Delete Diary',
+                              style: TextStyle(fontSize: 16)),
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          
+
           // Loading Overlay
           if (_isLoading || _isDeleting)
             Container(
-              color: isDarkMode ? Colors.black87 : Colors.black54,
+              color: colorScheme.surface.withOpacity(0.7),
               child: const Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
