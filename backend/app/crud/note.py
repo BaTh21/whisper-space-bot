@@ -141,7 +141,7 @@ def toggle_pin_note(db: Session, note_id: int, user_id: int) -> Optional[Note]:
     """Toggle pin status - only owner can pin"""
     db_note = db.query(Note).filter(
         Note.id == note_id,
-        # Note.user_id == user_id 
+        Note.user_id == user_id  # Only owner can toggle pin
     ).first()
     
     if db_note:
@@ -150,6 +150,7 @@ def toggle_pin_note(db: Session, note_id: int, user_id: int) -> Optional[Note]:
         db.refresh(db_note)
         return db_note
     return None
+
 
 def archive_note(db: Session, note_id: int, user_id: int) -> Optional[Note]:
     """Toggle archive status - only owner can archive"""

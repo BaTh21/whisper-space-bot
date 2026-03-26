@@ -1,8 +1,6 @@
-// lib/features/notes/presentation/providers/notes_provider.dart
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/features/notes/data/datasources/notes_api_service.dart';
 import 'package:whisper_space_flutter/features/notes/data/models/note_model.dart';
-
 
 class NotesProvider extends ChangeNotifier {
   final NotesApiService _apiService;
@@ -34,7 +32,6 @@ class NotesProvider extends ChangeNotifier {
     return isOwner(note) || (note.canEdit && note.sharedWith.contains(_currentUserId));
   }
 
-  // Load all notes (active and archived)
   Future<void> loadNotes() async {
     _setLoading(true);
     _clearError();
@@ -42,9 +39,11 @@ class NotesProvider extends ChangeNotifier {
     try {
       final allNotes = await _apiService.getUserNotes(archived: false);
       _notes = allNotes;
+      _sortNotes(_notes);
       
       final archived = await _apiService.getUserNotes(archived: true);
       _archivedNotes = archived;
+      _sortNotes(_archivedNotes);
       
       _error = null;
     } catch (e) {
@@ -54,18 +53,17 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Load notes shared with me
   Future<void> loadSharedNotes() async {
     try {
       final notes = await _apiService.getSharedWithMe();
       _sharedNotes = notes;
+      _sortNotes(_sharedNotes);
       notifyListeners();
     } catch (e) {
       _error = e.toString();
     }
   }
 
-  // Create a new note
   Future<NoteModel> createNote({
     required String title,
     String? content,
@@ -78,7 +76,6 @@ class NotesProvider extends ChangeNotifier {
     _clearError();
     
     try {
-      // Convert Color to hex string without using deprecated value property
       final colorHex = '#${color.value.toRadixString(16).substring(2)}';
       
       final note = await _apiService.createNote(
@@ -93,6 +90,7 @@ class NotesProvider extends ChangeNotifier {
       );
       
       _notes.insert(0, note);
+      _sortNotes(_notes);
       _error = null;
       notifyListeners();
       return note;
@@ -104,7 +102,6 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Update a note
   Future<NoteModel> updateNote({
     required int noteId,
     String? title,
@@ -138,10 +135,13 @@ class NotesProvider extends ChangeNotifier {
       
       final updatedNote = await _apiService.updateNote(noteId, noteUpdate);
       
-      // Update in lists
       _updateNoteInList(_notes, updatedNote);
       _updateNoteInList(_archivedNotes, updatedNote);
       _updateNoteInList(_sharedNotes, updatedNote);
+      
+      _sortNotes(_notes);
+      _sortNotes(_archivedNotes);
+      _sortNotes(_sharedNotes);
       
       _error = null;
       notifyListeners();
@@ -154,7 +154,6 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Delete a note
   Future<void> deleteNote(int noteId) async {
     _setLoading(true);
     _clearError();
@@ -176,24 +175,15 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Toggle pin status
   Future<void> togglePin(int noteId) async {
     try {
       await _apiService.togglePin(noteId);
       
-      // Find and update the note locally
       final noteIndex = _notes.indexWhere((n) => n.id == noteId);
       if (noteIndex != -1) {
         final note = _notes[noteIndex];
         _notes[noteIndex] = note.copyWith(isPinned: !note.isPinned);
-        
-        // Reorder notes (pinned first)
-        _notes.sort((a, b) {
-          if (a.isPinned && !b.isPinned) return -1;
-          if (!a.isPinned && b.isPinned) return 1;
-          return b.updatedAt?.compareTo(a.updatedAt ?? a.createdAt) ?? 0;
-        });
-        
+        _sortNotes(_notes);
         notifyListeners();
       }
     } catch (e) {
@@ -202,24 +192,22 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Toggle archive status
   Future<void> toggleArchive(int noteId) async {
     try {
       await _apiService.toggleArchive(noteId);
       
-      // Find note in active notes
       final noteIndex = _notes.indexWhere((n) => n.id == noteId);
       if (noteIndex != -1) {
         final note = _notes[noteIndex];
         final updatedNote = note.copyWith(isArchived: !note.isArchived);
         
         if (updatedNote.isArchived) {
-          // Move to archived
           _notes.removeAt(noteIndex);
           _archivedNotes.insert(0, updatedNote);
+          _sortNotes(_archivedNotes);
         } else {
-          // Move to active
           _notes[noteIndex] = updatedNote;
+          _sortNotes(_notes);
         }
         
         notifyListeners();
@@ -230,7 +218,6 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Share a note
   Future<NoteModel> shareNote({
     required int noteId,
     required ShareType shareType,
@@ -255,6 +242,10 @@ class NotesProvider extends ChangeNotifier {
       _updateNoteInList(_archivedNotes, updatedNote);
       _updateNoteInList(_sharedNotes, updatedNote);
       
+      _sortNotes(_notes);
+      _sortNotes(_archivedNotes);
+      _sortNotes(_sharedNotes);
+      
       _error = null;
       notifyListeners();
       return updatedNote;
@@ -266,7 +257,6 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Stop sharing a note
   Future<NoteModel> stopSharing(int noteId) async {
     _setLoading(true);
     _clearError();
@@ -277,6 +267,9 @@ class NotesProvider extends ChangeNotifier {
       _updateNoteInList(_notes, updatedNote);
       _updateNoteInList(_archivedNotes, updatedNote);
       
+      _sortNotes(_notes);
+      _sortNotes(_archivedNotes);
+      
       _error = null;
       notifyListeners();
       return updatedNote;
@@ -288,16 +281,13 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Leave a shared note
   Future<void> leaveSharedNote(int noteId) async {
     _setLoading(true);
     _clearError();
     
     try {
       await _apiService.leaveSharedNote(noteId);
-      
       _sharedNotes.removeWhere((n) => n.id == noteId);
-      
       _error = null;
       notifyListeners();
     } catch (e) {
@@ -308,7 +298,6 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Get share link
   Future<String> getShareLink(int noteId) async {
     try {
       return await _apiService.getShareLink(noteId);
@@ -318,12 +307,22 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  // Helper methods
   void _updateNoteInList(List<NoteModel> list, NoteModel updatedNote) {
     final index = list.indexWhere((n) => n.id == updatedNote.id);
     if (index != -1) {
       list[index] = updatedNote;
     }
+  }
+
+  void _sortNotes(List<NoteModel> list) {
+    list.sort((a, b) {
+      if (a.isPinned != b.isPinned) {
+        return b.isPinned ? 1 : -1; // pinned first
+      }
+      final aDate = a.updatedAt ?? a.createdAt;
+      final bDate = b.updatedAt ?? b.createdAt;
+      return bDate.compareTo(aDate);
+    });
   }
 
   void _setLoading(bool loading) {

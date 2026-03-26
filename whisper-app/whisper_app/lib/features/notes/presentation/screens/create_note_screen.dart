@@ -1,4 +1,3 @@
-// lib/features/notes/presentation/screens/create_note_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/features/notes/data/models/note_model.dart';
@@ -27,12 +26,12 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
 
   final List<Color> _colorOptions = [
     Colors.white,
-    const Color(0xFFFFF3E0), // Cream
-    const Color(0xFFE8F5E9), // Mint
-    const Color(0xFFE3F2FD), // Light Blue
-    const Color(0xFFF3E5F5), // Lavender
-    const Color(0xFFFFF0F0), // Blush
-    const Color(0xFFFFF8E1), // Light Yellow
+    const Color(0xFFFFF3E0),
+    const Color(0xFFE8F5E9),
+    const Color(0xFFE3F2FD),
+    const Color(0xFFF3E5F5),
+    const Color(0xFFFFF0F0),
+    const Color(0xFFFFF8E1),
   ];
 
   @override
@@ -57,10 +56,12 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create New Note'),
-        elevation: 0,
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _createNote,
@@ -68,9 +69,15 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
-                : const Text('Save'),
+                : const Text(
+                    'Save',
+                    style: TextStyle(color: Colors.white),
+                  ),
           ),
         ],
       ),
@@ -79,7 +86,6 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Title field
             TextFormField(
               controller: _titleController,
               decoration: const InputDecoration(
@@ -98,7 +104,6 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
             
             const SizedBox(height: 16),
             
-            // Content field
             TextFormField(
               controller: _contentController,
               decoration: const InputDecoration(
@@ -113,10 +118,11 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
             
             const SizedBox(height: 24),
             
-            // Color selection
-            const Text(
+            Text(
               'Note Color',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             SizedBox(
@@ -136,14 +142,14 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: _selectedColor == color
-                              ? const Color(0xFF6C63FF)
-                              : Colors.grey.shade300,
+                              ? colorScheme.primary
+                              : theme.dividerColor,
                           width: _selectedColor == color ? 3 : 1,
                         ),
                         boxShadow: _selectedColor == color
                             ? [
                                 BoxShadow(
-                                  color: const Color(0xFF6C63FF).withValues(alpha: 0.3),
+                                  color: colorScheme.primary.withOpacity(0.3),
                                   blurRadius: 8,
                                   spreadRadius: 2,
                                 ),
@@ -171,7 +177,6 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                     ),
                     const SizedBox(height: 16),
                     
-                    // Share type selector
                     SegmentedButton<ShareType>(
                       segments: const [
                         ButtonSegment(
@@ -204,7 +209,6 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                     if (_shareType == ShareType.shared) ...[
                       const SizedBox(height: 16),
                       
-                      // Edit permission
                       CheckboxListTile(
                         title: const Text('Allow friends to edit'),
                         value: _canEdit,
@@ -218,7 +222,6 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                       
                       const SizedBox(height: 8),
                       
-                      // Friend selection
                       const Text(
                         'Share with friends:',
                         style: TextStyle(fontWeight: FontWeight.w500),
@@ -239,7 +242,7 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                             return Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
+                                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Column(
@@ -272,7 +275,7 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                                   });
                                 },
                                 secondary: CircleAvatar(
-                                  backgroundColor: const Color(0xFF6C63FF),
+                                  backgroundColor: colorScheme.primary,
                                   backgroundImage: friend.avatarUrl != null
                                       ? NetworkImage(friend.avatarUrl!)
                                       : null,
@@ -317,9 +320,9 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Note created successfully'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: const Text('Note created successfully'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
         
@@ -334,7 +337,7 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to create note: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
