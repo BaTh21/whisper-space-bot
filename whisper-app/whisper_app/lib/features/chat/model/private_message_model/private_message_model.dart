@@ -1,4 +1,3 @@
-// lib/features/chat/model/private_message_model/private_message_model.dart
 class PrivateMessageModel {
   final int id;
   final int senderId;
@@ -15,6 +14,8 @@ class PrivateMessageModel {
   final double? voiceDuration;
   final int? fileSize;
 
+  final MessageStatus status;
+
   PrivateMessageModel({
     required this.id,
     required this.senderId,
@@ -30,6 +31,7 @@ class PrivateMessageModel {
     this.receiverUsername,
     this.voiceDuration,
     this.fileSize,
+    this.status = MessageStatus.sent,
   });
 
   factory PrivateMessageModel.fromJson(Map<String, dynamic> json) {
@@ -38,7 +40,7 @@ class PrivateMessageModel {
       senderId: json['sender_id'],
       receiverId: json['receiver_id'],
       content: json['content'],
-      fileUrl: json['content'],
+      fileUrl: json['file_url'] ?? json['content'],
       messageType: json['message_type'],
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: json['edited_at'] != null
@@ -53,9 +55,31 @@ class PrivateMessageModel {
     );
   }
 
+  PrivateMessageModel copyWith({MessageStatus? status}) {
+    return PrivateMessageModel(
+      id: id,
+      senderId: senderId,
+      receiverId: receiverId,
+      content: content,
+      fileUrl: fileUrl,
+      messageType: messageType,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      isRead: isRead,
+      tempId: tempId,
+      senderUsername: senderUsername,
+      receiverUsername: receiverUsername,
+      voiceDuration: voiceDuration,
+      fileSize: fileSize,
+      status: status ?? this.status,
+    );
+  }
+
   bool get isImage => messageType == 'image';
   bool get isVideo => messageType == 'video';
   bool get isAudio => messageType == 'voice';
   bool get isText => messageType == 'text';
   bool get hasFile => isImage || isVideo || isAudio;
 }
+
+enum MessageStatus { sending, sent, failed }

@@ -411,47 +411,43 @@ Future<PrivateMessageModel> uploadPrivateFile({
   }
 
 
- Future<PrivateMessageModel> uploadPrivateVoice({
-    required int receiverId,
-    required File file,
-    required String tempId,
-    int? replyToId,
-    double? duration,
-  }) async {
-    final uri = Uri.parse('$baseUrl/api/v1/chats/private/$receiverId/voice');
+Future<PrivateMessageModel> uploadPrivateVoice({
+  required int receiverId,
+  required File file,
+  required String tempId,
+  required double voiceDuration,
+  int? replyToId,
+}) async {
+  final uri = Uri.parse('$baseUrl/api/v1/chats/private/$receiverId/voice');
+  final request = http.MultipartRequest('POST', uri);
+  request.headers.addAll(await _authHeaders());
 
-    final request = http.MultipartRequest('POST', uri);
-    request.headers.addAll(await _authHeaders());
-
-    // Your backend expects 'duration' and 'temp_id' as form fields
-    if (duration != null) {
-      request.fields['duration'] = duration.toString();
-    }
-    if (replyToId != null) {
-      request.fields['reply_to_id'] = replyToId.toString();
-    }
-    if (tempId.isNotEmpty) {
-      request.fields['temp_id'] = tempId;
-    }
-    
-    // Your backend expects 'voice_file' as the file field name
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'voice_file',  // Important: Must be 'voice_file' not 'file'
-        file.path,
-      ),
-    );
-
-    final response = await request.send();
-    final responseBody = await response.stream.bytesToString();
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final jsonData = json.decode(responseBody) as Map<String, dynamic>;
-      return PrivateMessageModel.fromJson(jsonData);
-    } else {
-      throw Exception('Voice upload failed: $responseBody');
-    }
+  // Fields required by the backend
+  request.fields['temp_id'] = tempId;
+  if (replyToId != null) {
+    request.fields['reply_to_id'] = replyToId.toString();
   }
+  // Critical: field name is 'duration' (not 'voice_duration')
+  request.fields['duration'] = voiceDuration.toString();
+
+  // File field name must be 'voice_file'
+  request.files.add(await http.MultipartFile.fromPath(
+    'voice_file',
+    file.path,
+  ));
+
+  final response = await request.send();
+  final responseBody = await response.stream.bytesToString();
+
+  if (response.statusCode == 200 || response.statusCode == 201) {
+    final jsonData = json.decode(responseBody) as Map<String, dynamic>;
+    return PrivateMessageModel.fromJson(jsonData);
+  } else {
+    print('Voice upload failed: ${response.statusCode}');
+    print('Response body: $responseBody');
+    throw Exception('Voice upload failed: $responseBody');
+  }
+}
 
 Future<void> markPrivateMessagesAsRead(int userId) async {
     final response = await http.post(
@@ -531,4 +527,5 @@ Future<User> getUserDetails(int userId) async {
       throw Exception('Failed to get reply context: ${response.statusCode}');
     }
   }
+  
 }

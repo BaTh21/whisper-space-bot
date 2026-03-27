@@ -1,4 +1,4 @@
-// lib/features/chat/screens/private/private_chat_screen.dart
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,11 +17,13 @@ import 'widgets/voice_recorder_widget.dart';
 class PrivateChatScreen extends StatefulWidget {
   final int userId;
   final String userName;
+  final VoidCallback? onChatUpdated;
 
   const PrivateChatScreen({
     super.key,
     required this.userId,
     required this.userName,
+    this.onChatUpdated,
   });
 
   @override
@@ -33,19 +35,23 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   late StorageService storageService;
   late TextEditingController _messageController;
   late ScrollController _scrollController;
-  
+
   List<PrivateMessageModel> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
-  String? _error;
   User? _userDetails;
-  
+  int _currentUserId = 0;
+
   final ImagePicker _imagePicker = ImagePicker();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final AudioRecorder _audioRecorder = AudioRecorder();
   String? _currentlyPlayingId;
-  
-  int _currentUserId = 0;
+  double _currentPlayingProgress = 0.0;
+  Timer? _playbackTimer;
+
+  final Set<String> _failedTempIds = {};
+  Timer? _pollTimer;
+  static const _pollInterval = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -53,177 +59,282 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _messageController = TextEditingController();
     _scrollController = ScrollController();
     _initServices();
-    
-    _audioPlayer.playerStateStream.listen((playerState) {
-      if (mounted && playerState.processingState == ProcessingState.completed) {
-        setState(() {
-          _currentlyPlayingId = null;
-        });
+
+    _audioPlayer.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        _stopPlayback();
+      }
+    });
+    _audioPlayer.positionStream.listen((position) {
+      if (mounted &&
+          _currentlyPlayingId != null &&
+          _audioPlayer.duration != null) {
+        final progress =
+            position.inMilliseconds / _audioPlayer.duration!.inMilliseconds;
+        setState(() => _currentPlayingProgress = progress);
       }
     });
   }
 
-Future<void> _initServices() async {
-  storageService = StorageService();
-  await storageService.init();
-  
-  try {
+  Future<void> _initServices() async {
+    storageService = StorageService();
+    await storageService.init();
     _currentUserId = await storageService.getUserId() ?? 0;
-  } catch (e) {
-    _currentUserId = 0;
+    chatApi = ChatAPISource(storageService: storageService);
+    await _loadUserDetails();
+    await _loadMessages();
+    _startPolling();
+    _markMessagesAsRead();
   }
-  
-  chatApi = ChatAPISource(storageService: storageService);
-  await _loadUserDetails();
-  await _loadMessages();
-}
+
+  void _startPolling() {
+    _pollTimer = Timer.periodic(_pollInterval, (timer) async {
+      await _fetchNewMessages();
+    });
+  }
+
+  Future<void> _fetchNewMessages() async {
+    try {
+      final latestMessages = await chatApi.getPrivateMessages(
+        userId: widget.userId,
+        limit: 20,
+      );
+      final newMessages = latestMessages.where((newMsg) {
+        return !_messages.any((existing) => existing.id == newMsg.id);
+      }).toList();
+      if (newMessages.isNotEmpty && mounted) {
+        setState(() {
+          _messages.addAll(newMessages);
+          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
+        _scrollToBottom();
+        _markMessagesAsRead();
+      }
+    } catch (e) {
+      // ignore polling errors
+    }
+  }
 
   Future<void> _loadUserDetails() async {
     try {
-      final userDetails = await chatApi.getUserDetails(widget.userId);
-      if (mounted) {
-        setState(() {
-          _userDetails = userDetails;
-        });
-      }
+      final user = await chatApi.getUserDetails(widget.userId);
+      if (mounted) setState(() => _userDetails = user);
     } catch (e) {
-      // Silently fail - user details not critical
+      // ignore
     }
   }
 
   Future<void> _loadMessages() async {
-  try {
-    final messages = await chatApi.getPrivateMessages(
-      userId: widget.userId,
-      limit: 50,
-    );
-    if (mounted) {
-      setState(() {
-        _messages = messages.reversed.toList();
-        _isLoading = false;
-      });
-      _scrollToBottom();
-    }
-  } catch (e) {
-    if (mounted) {
-      setState(() {
-        _messages = [];
-        _isLoading = false;
-        _error = null; 
-      });
+    try {
+      final messages = await chatApi.getPrivateMessages(
+        userId: widget.userId,
+        limit: 50,
+      );
+      if (mounted) {
+        setState(() {
+          _messages = messages.reversed.toList();
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
-}
 
   Future<void> _markMessagesAsRead() async {
     try {
       await chatApi.markPrivateMessagesAsRead(widget.userId);
     } catch (e) {
-      // Silently fail
+      // ignore
     }
   }
 
-  Future<void> _sendMessage({String? content, File? file, String? fileType}) async {
+  void _stopPlayback() {
+    setState(() {
+      _currentlyPlayingId = null;
+      _currentPlayingProgress = 0.0;
+    });
+    _playbackTimer?.cancel();
+    _playbackTimer = null;
+  }
+
+  void _playAudio(String url, String messageId) async {
+    if (_currentlyPlayingId == messageId) {
+      await _audioPlayer.stop();
+      _stopPlayback();
+    } else {
+      await _audioPlayer.stop();
+      _stopPlayback();
+      await _audioPlayer.setAudioSource(AudioSource.uri(Uri.parse(url)));
+      await _audioPlayer.play();
+      setState(() {
+        _currentlyPlayingId = messageId;
+        _currentPlayingProgress = 0.0;
+      });
+      _playbackTimer =
+          Timer.periodic(const Duration(milliseconds: 100), (timer) {
+        if (_audioPlayer.position >= _audioPlayer.duration!) {
+          _stopPlayback();
+          timer.cancel();
+        }
+      });
+    }
+  }
+
+  Future<void> _sendMessage({
+    String? content,
+    File? file,
+    String? fileType,
+    Duration? voiceDuration,
+  }) async {
     if ((content == null || content.trim().isEmpty) && file == null) return;
-    
+
     setState(() => _isSending = true);
-    
+
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
-    
+    final tempMessage = PrivateMessageModel(
+      id: 0,
+      senderId: _currentUserId,
+      receiverId: widget.userId,
+      content: content?.trim(),
+      fileUrl: null,
+      messageType: fileType ?? (content != null ? 'text' : null),
+      createdAt: DateTime.now(),
+      isRead: false,
+      tempId: tempId,
+      senderUsername: null,
+      receiverUsername: null,
+      voiceDuration: voiceDuration?.inSeconds.toDouble(),
+      status: MessageStatus.sending,
+    );
+
+    setState(() => _messages.add(tempMessage));
+    _scrollToBottom();
+
     try {
-      PrivateMessageModel? message;
-      
+      PrivateMessageModel? finalMessage;
       if (file != null) {
         if (fileType == 'audio') {
-          message = await chatApi.uploadPrivateVoice(
+          finalMessage = await chatApi.uploadPrivateVoice(
             receiverId: widget.userId,
             file: file,
             tempId: tempId,
+            voiceDuration: voiceDuration?.inSeconds.toDouble() ?? 0.0,
+            replyToId: null,
           );
         } else {
-          message = await chatApi.uploadPrivateFile(
+          finalMessage = await chatApi.uploadPrivateFile(
             receiverId: widget.userId,
             file: file,
             tempId: tempId,
           );
         }
       } else if (content != null && content.trim().isNotEmpty) {
-        message = await chatApi.sendPrivateMessage(
+        finalMessage = await chatApi.sendPrivateMessage(
           receiverId: widget.userId,
           content: content.trim(),
           tempId: tempId,
         );
       }
-      
-      if (message != null && mounted) {
+
+      if (finalMessage != null && mounted) {
         setState(() {
-          _messages.add(message!);
+          final index = _messages.indexWhere((m) => m.tempId == tempId);
+          if (index != -1) _messages[index] = finalMessage!;
           _messageController.clear();
         });
-        _scrollToBottom();
+        widget.onChatUpdated?.call();
+      } else {
+        setState(() {
+          final index = _messages.indexWhere((m) => m.tempId == tempId);
+          if (index != -1) {
+            _messages[index] =
+                _messages[index].copyWith(status: MessageStatus.failed);
+          }
+          _failedTempIds.add(tempId);
+        });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send message: $e')),
-        );
-      }
+      setState(() {
+        final index = _messages.indexWhere((m) => m.tempId == tempId);
+        if (index != -1) {
+          _messages[index] =
+              _messages[index].copyWith(status: MessageStatus.failed);
+        }
+        _failedTempIds.add(tempId);
+      });
     } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
-      }
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  Future<void> _retryMessage(PrivateMessageModel failedMessage) async {
+    if (failedMessage.tempId == null) return;
+    setState(() {
+      _messages.removeWhere((m) => m.tempId == failedMessage.tempId);
+      _failedTempIds.remove(failedMessage.tempId);
+    });
+    if (failedMessage.content != null) {
+      await _sendMessage(content: failedMessage.content);
+    } else if (failedMessage.hasFile && failedMessage.fileUrl != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot retry file upload at this time')),
+      );
     }
   }
 
   Future<void> _pickImage() async {
-    final permission = await Permission.photos.request();
-    if (!permission.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permission denied to pick images')),
-        );
+    if (await Permission.photos.request().isGranted) {
+      final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (picked != null) {
+        await _sendMessage(file: File(picked.path), fileType: 'image');
       }
-      return;
-    }
-
-    final pickedFile = await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null && mounted) {
-      await _sendMessage(file: File(pickedFile.path), fileType: 'image');
+    } else {
+      _showPermissionDeniedDialog('Photos');
     }
   }
 
   Future<void> _takePhoto() async {
-    final permission = await Permission.camera.request();
-    if (!permission.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permission denied to use camera')),
-        );
+    if (await Permission.camera.request().isGranted) {
+      final picked = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (picked != null) {
+        await _sendMessage(file: File(picked.path), fileType: 'image');
       }
-      return;
-    }
-
-    final pickedFile = await _imagePicker.pickImage(source: ImageSource.camera);
-    if (pickedFile != null && mounted) {
-      await _sendMessage(file: File(pickedFile.path), fileType: 'image');
+    } else {
+      _showPermissionDeniedDialog('Camera');
     }
   }
 
   Future<void> _pickVideo() async {
-    final permission = await Permission.photos.request();
-    if (!permission.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permission denied to pick videos')),
-        );
+    if (await Permission.photos.request().isGranted) {
+      final picked = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (picked != null) {
+        await _sendMessage(file: File(picked.path), fileType: 'video');
       }
-      return;
+    } else {
+      _showPermissionDeniedDialog('Photos');
     }
+  }
 
-    final pickedFile = await _imagePicker.pickVideo(source: ImageSource.gallery);
-    if (pickedFile != null && mounted) {
-      await _sendMessage(file: File(pickedFile.path), fileType: 'video');
-    }
+  void _showPermissionDeniedDialog(String permission) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$permission permission needed'),
+        content: Text('To share media, please grant $permission permission.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => openAppSettings(),
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -238,36 +349,22 @@ Future<void> _initServices() async {
     });
   }
 
-  void _playAudio(String url, String messageId) async {
-    if (_currentlyPlayingId == messageId) {
-      await _audioPlayer.stop();
-      if (mounted) {
-        setState(() => _currentlyPlayingId = null);
-      }
-    } else {
-      await _audioPlayer.stop();
-      await _audioPlayer.setAudioSource(AudioSource.uri(Uri.parse(url)));
-      await _audioPlayer.play();
-      if (mounted) {
-        setState(() => _currentlyPlayingId = messageId);
-      }
-    }
-  }
-
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     _audioPlayer.dispose();
     _audioRecorder.dispose();
+    _playbackTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF121212) : Colors.grey[100]!;
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF121212) : Colors.grey[100]!;
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -291,175 +388,132 @@ Future<void> _initServices() async {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadMessages,
-                        child: const Text('Retry'),
-                      ),
-                    ],
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    itemCount: _messages.length,
+                    itemBuilder: (_, index) {
+                      final msg = _messages[index];
+                      final isMe = msg.senderId == _currentUserId;
+                      return MessageBubble(
+                        message: msg,
+                        isMe: isMe,
+                        onPlayAudio: msg.isAudio
+                            ? () =>
+                                _playAudio(msg.fileUrl ?? '', msg.id.toString())
+                            : null,
+                        isPlaying: _currentlyPlayingId == msg.id.toString(),
+                        playingProgress:
+                            _currentlyPlayingId == msg.id.toString()
+                                ? _currentPlayingProgress
+                                : null,
+                        onRetry: msg.status == MessageStatus.failed
+                            ? () => _retryMessage(msg)
+                            : null,
+                      );
+                    },
                   ),
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 12,
-                        ),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          final isMe = message.senderId == _currentUserId;
-                          
-                          return MessageBubble(
-                            message: message,
-                            isMe: isMe,
-                            onPlayAudio: () => _playAudio(
-                              message.fileUrl ?? '',
-                              message.id.toString(),
-                            ),
-                            isPlaying: _currentlyPlayingId == message.id.toString(),
-                          );
-                        },
-                      ),
-                    ),
-                    _buildMessageInput(isDarkMode, backgroundColor),
-                  ],
                 ),
+                _buildInput(isDark, bg),
+              ],
+            ),
     );
   }
 
-  Widget _buildMessageInput(bool isDarkMode, Color backgroundColor) {
-    final primaryColor = Theme.of(context).primaryColor;
-    
+  Widget _buildInput(bool isDark, Color bg) {
+    final primary = Theme.of(context).primaryColor;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, -2))
         ],
       ),
       child: Row(
         children: [
           PopupMenuButton<String>(
-            icon: Icon(
-              Icons.attach_file,
-              color: isDarkMode ? Colors.white70 : Colors.grey[600],
-            ),
-            onSelected: (value) {
-              switch (value) {
-                case 'image_gallery':
-                  _pickImage();
-                  break;
-                case 'image_camera':
-                  _takePhoto();
-                  break;
-                case 'video':
-                  _pickVideo();
-                  break;
-              }
+            icon: Icon(Icons.attach_file,
+                color: isDark ? Colors.white70 : Colors.grey[600]),
+            onSelected: (v) {
+              if (v == 'image_gallery') _pickImage();
+              if (v == 'image_camera') _takePhoto();
+              if (v == 'video') _pickVideo();
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'image_gallery',
-                child: Row(
-                  children: [
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                  value: 'image_gallery',
+                  child: Row(children: [
                     Icon(Icons.photo_library, size: 20),
                     SizedBox(width: 12),
-                    Text('Gallery'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'image_camera',
-                child: Row(
-                  children: [
+                    Text('Gallery')
+                  ])),
+              PopupMenuItem(
+                  value: 'image_camera',
+                  child: Row(children: [
                     Icon(Icons.camera_alt, size: 20),
                     SizedBox(width: 12),
-                    Text('Camera'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'video',
-                child: Row(
-                  children: [
+                    Text('Camera')
+                  ])),
+              PopupMenuItem(
+                  value: 'video',
+                  child: Row(children: [
                     Icon(Icons.videocam, size: 20),
                     SizedBox(width: 12),
-                    Text('Video'),
-                  ],
-                ),
-              ),
+                    Text('Video')
+                  ])),
             ],
           ),
           const SizedBox(width: 4),
           VoiceRecorderWidget(
-            onRecordingComplete: (file) async {
-              await _sendMessage(file: file, fileType: 'audio');
-            },
+            onRecordingComplete: (file, dur) => _sendMessage(
+              file: file,
+              fileType: 'audio',
+              voiceDuration: dur,
+            ),
           ),
           const SizedBox(width: 4),
           Expanded(
             child: TextField(
               controller: _messageController,
               maxLines: null,
-              style: TextStyle(
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
               decoration: InputDecoration(
                 hintText: 'Type a message...',
                 hintStyle: TextStyle(
-                  color: isDarkMode ? Colors.white54 : Colors.grey[400],
-                ),
+                    color: isDark ? Colors.white54 : Colors.grey[400]),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none),
                 filled: true,
-                fillColor: backgroundColor,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
+                fillColor: bg,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
             ),
           ),
           const SizedBox(width: 8),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            child: IconButton(
-              onPressed: _isSending
-                  ? null
-                  : () => _sendMessage(content: _messageController.text),
-              icon: _isSending
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      Icons.send,
-                      color: _messageController.text.trim().isEmpty
-                          ? (isDarkMode ? Colors.white38 : Colors.grey[400])
-                          : primaryColor,
-                    ),
-            ),
+          IconButton(
+            onPressed: _isSending
+                ? null
+                : () => _sendMessage(content: _messageController.text),
+            icon: _isSending
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(Icons.send,
+                    color: _messageController.text.trim().isEmpty
+                        ? (isDark ? Colors.white38 : Colors.grey[400])
+                        : primary),
           ),
         ],
       ),

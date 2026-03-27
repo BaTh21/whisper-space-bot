@@ -1,4 +1,3 @@
-// lib/features/chat/screens/private/widgets/voice_recorder_widget.dart
 import 'dart:async';
 import 'dart:io';
 
@@ -8,12 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 class VoiceRecorderWidget extends StatefulWidget {
-  final Function(File) onRecordingComplete;
+  final Function(File, Duration) onRecordingComplete;
 
-  const VoiceRecorderWidget({
-    super.key,
-    required this.onRecordingComplete,
-  });
+  const VoiceRecorderWidget({super.key, required this.onRecordingComplete});
 
   @override
   State<VoiceRecorderWidget> createState() => _VoiceRecorderWidgetState();
@@ -35,18 +31,14 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
   Future<void> _startRecording() async {
     final permission = await Permission.microphone.request();
     if (!permission.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Microphone permission denied')),
-        );
-      }
+      _showPermissionDeniedDialog();
       return;
     }
 
     try {
       final directory = await getTemporaryDirectory();
       final path = '${directory.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      
+
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
@@ -55,14 +47,14 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
         ),
         path: path,
       );
-      
+
       if (mounted) {
         setState(() {
           _isRecording = true;
           _recordingDuration = Duration.zero;
         });
       }
-      
+
       _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (mounted) {
           setState(() {
@@ -71,28 +63,51 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
         }
       });
     } catch (e) {
-      // Use logging framework instead of print
       debugPrint('Failed to start recording: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to start recording')),
+      );
     }
   }
 
   Future<void> _stopRecording() async {
     if (!_isRecording) return;
-    
+
     _timer?.cancel();
     final path = await _recorder.stop();
-    
+
     if (mounted) {
-      setState(() {
-        _isRecording = false;
-      });
+      setState(() => _isRecording = false);
     }
-    
+
     if (path != null && _recordingDuration.inSeconds > 1) {
-      widget.onRecordingComplete(File(path));
+      widget.onRecordingComplete(File(path), _recordingDuration);
+    } else if (_recordingDuration.inSeconds <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recording too short')),
+      );
     }
-    
     _recordingDuration = Duration.zero;
+  }
+
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Microphone permission needed'),
+        content: const Text('To record voice messages, please grant microphone permission.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => openAppSettings(),
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -113,10 +128,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> {
                   const Icon(Icons.mic, color: Colors.white),
                   Text(
                     _formatDuration(_recordingDuration),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
                   ),
                 ],
               )

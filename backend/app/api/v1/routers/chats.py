@@ -1048,4 +1048,19 @@ async def edit_message(
         raise HTTPException(status_code=500, detail=f"Failed to edit message: {str(e)}")
     
 
-
+@router.post("/private/{friend_id}/read")
+def mark_private_messages_read(
+    friend_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Mark all messages from friend_id as read for the current user."""
+    # Update all unread messages where current_user is the receiver
+    db.query(PrivateMessage).filter(
+        PrivateMessage.sender_id == friend_id,
+        PrivateMessage.receiver_id == current_user.id,
+        PrivateMessage.is_read == False
+    ).update({PrivateMessage.is_read: True, PrivateMessage.read_at: datetime.now(timezone.utc)})
+    
+    db.commit()
+    return {"status": "success", "message": "Messages marked as read"}
