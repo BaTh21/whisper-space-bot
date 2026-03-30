@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/features/notes/data/models/note_model.dart';
+import 'package:whisper_space_flutter/features/notes/presentation/providers/friend_provider.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
 
 class EditNoteScreen extends StatefulWidget {
@@ -27,6 +28,9 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
   late final TextEditingController _contentController;
 
   late Color _selectedColor;
+  late ShareType _shareType;
+  late bool _canEdit;
+  late List<int> _selectedFriendIds;
   bool _isLoading = false;
 
   @override
@@ -35,6 +39,14 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
     _titleController = TextEditingController(text: widget.note.title);
     _contentController = TextEditingController(text: widget.note.content);
     _selectedColor = widget.note.color;
+    _shareType = widget.note.shareType;
+    _canEdit = widget.note.canEdit;
+    _selectedFriendIds = List.from(widget.note.sharedWith);
+
+    // Load friends for shared selection
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<FriendProvider>(context, listen: false).loadFriends();
+    });
   }
 
   @override
@@ -76,6 +88,7 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Title
             TextField(
               controller: _titleController,
               decoration: const InputDecoration(
@@ -84,6 +97,8 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // Content
             TextField(
               controller: _contentController,
               decoration: const InputDecoration(
@@ -95,6 +110,8 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
               keyboardType: TextInputType.multiline,
             ),
             const SizedBox(height: 24),
+
+            // Color picker
             Text(
               'Note Color',
               style: theme.textTheme.titleMedium?.copyWith(
@@ -135,6 +152,161 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
                 },
               ),
             ),
+            const SizedBox(height: 24),
+
+            // Share settings (without expiration – use share screen for that)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Share Settings',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 16),
+
+                    SegmentedButton<ShareType>(
+                      segments: const [
+                        ButtonSegment(
+                          value: ShareType.private,
+                          label: Text('Private'),
+                          icon: Icon(Icons.lock_outline),
+                        ),
+                        ButtonSegment(
+                          value: ShareType.shared,
+                          label: Text('Shared'),
+                          icon: Icon(Icons.people_outline),
+                        ),
+                        ButtonSegment(
+                          value: ShareType.public,
+                          label: Text('Public'),
+                          icon: Icon(Icons.public),
+                        ),
+                      ],
+                      selected: {_shareType},
+                      onSelectionChanged: (Set<ShareType> selected) {
+                        setState(() {
+                          _shareType = selected.first;
+                          if (_shareType != ShareType.shared) {
+                            _selectedFriendIds.clear();
+                          }
+                        });
+                      },
+                    ),
+
+                    if (_shareType == ShareType.shared) ...[
+                      const SizedBox(height: 16),
+
+                      CheckboxListTile(
+                        title: const Text('Allow friends to edit'),
+                        value: _canEdit,
+                        onChanged: (value) {
+                          setState(() {
+                            _canEdit = value ?? false;
+                          });
+                        },
+                        secondary: const Icon(Icons.edit),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      const Text(
+                        'Share with friends:',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+
+                      Consumer<FriendProvider>(
+                        builder: (context, friendProvider, child) {
+                          if (friendProvider.isLoading) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+
+                          if (friendProvider.friends.isEmpty) {
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5), // ✅ replaced withOpacity
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Column(
+                                children: [
+                                  Icon(Icons.people_outline, color: Colors.grey),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'No friends yet',
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return Column(
+                            children: friendProvider.friends.map((friend) {
+                              final isSelected = _selectedFriendIds.contains(friend.id);
+                              return CheckboxListTile(
+                                title: Text(friend.username),
+                                subtitle: Text(friend.email),
+                                value: isSelected,
+                                onChanged: (selected) {
+                                  setState(() {
+                                    if (selected == true) {
+                                      _selectedFriendIds.add(friend.id);
+                                    } else {
+                                      _selectedFriendIds.remove(friend.id);
+                                    }
+                                  });
+                                },
+                                secondary: CircleAvatar(
+                                  backgroundColor: colorScheme.primary,
+                                  backgroundImage: friend.avatarUrl != null
+                                      ? NetworkImage(friend.avatarUrl!)
+                                      : null,
+                                  child: friend.avatarUrl == null
+                                      ? Text(friend.username[0].toUpperCase())
+                                      : null,
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    ],
+
+                    if (_shareType == ShareType.public) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 20, color: Colors.amber),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'To set an expiration date for the public link, go to the Share screen (tap the share icon on the note card).',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -146,7 +318,7 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Title cannot be empty'),
-          backgroundColor: Theme.of(context).colorScheme.tertiary,
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
       return;
@@ -164,6 +336,9 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
             ? null
             : _contentController.text.trim(),
         color: _selectedColor,
+        shareType: _shareType,
+        sharedWith: _shareType == ShareType.shared ? _selectedFriendIds : null,
+        canEdit: _canEdit,
       );
 
       if (mounted) {

@@ -280,14 +280,16 @@ class NotesProvider extends ChangeNotifier {
       _setLoading(false);
     }
   }
-
+  
   Future<void> leaveSharedNote(int noteId) async {
     _setLoading(true);
     _clearError();
-    
+
     try {
       await _apiService.leaveSharedNote(noteId);
       _sharedNotes.removeWhere((n) => n.id == noteId);
+      // Remove also from own notes list (if present)
+      _notes.removeWhere((n) => n.id == noteId);
       _error = null;
       notifyListeners();
     } catch (e) {

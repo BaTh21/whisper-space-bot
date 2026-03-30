@@ -28,6 +28,16 @@ class _ShareNoteScreenState extends State<ShareNoteScreen> {
     _shareType = widget.note.shareType;
     _canEdit = widget.note.canEdit;
     _selectedFriendIds = List.from(widget.note.sharedWith);
+
+    // Load existing expiration time if note is public and has an expiration date
+    if (widget.note.shareType == ShareType.public && widget.note.shareExpires != null) {
+      final now = DateTime.now();
+      final remainingHours = widget.note.shareExpires!.difference(now).inHours;
+      if (remainingHours > 0) {
+        _expiresInHours = remainingHours;
+      }
+    }
+
     _loadFriends();
   }
 

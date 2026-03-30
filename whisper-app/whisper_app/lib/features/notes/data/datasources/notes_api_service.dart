@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:whisper_space_flutter/core/constants/api_constants.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/notes/data/models/note_model.dart';
+import 'package:whisper_space_flutter/features/notes/data/models/public_note_model.dart';
 
 class ShareNoteRequest {
   final ShareType shareType;
@@ -121,15 +122,10 @@ class NotesApiService {
   }
 
   String _getNotesUrl(String path, {Map<String, String>? queryParams}) {
-    // Start with base URL - no trailing slash
     String url = '$baseUrl/api/v1/notes';
-    
-    // Add path if not empty and not a query string
     if (path.isNotEmpty && !path.startsWith('?')) {
       url = '$url/$path';
     }
-    
-    // Add query parameters if provided
     if (queryParams != null && queryParams.isNotEmpty) {
       final queryString = queryParams.entries
           .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
@@ -138,16 +134,13 @@ class NotesApiService {
     } else if (path.startsWith('?')) {
       url = '$url$path';
     }
-    
     return url;
   }
-
-
 
   // Create a new note
   Future<NoteModel> createNote(NoteCreate note) async {
     final url = _getNotesUrl('');
-    
+
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(url),
@@ -155,11 +148,11 @@ class NotesApiService {
       body: jsonEncode(note.toJson()),
     );
 
-
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to create note: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to create note: ${response.statusCode} - ${response.body}');
     }
   }
 
@@ -167,46 +160,46 @@ class NotesApiService {
   Future<List<NoteModel>> getUserNotes({bool archived = false}) async {
     final queryParams = {'archived': archived.toString()};
     final url = _getNotesUrl('', queryParams: queryParams);
-    
+
     final headers = await _getHeaders();
     final response = await http.get(
       Uri.parse(url),
       headers: headers,
     );
 
-
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => NoteModel.fromJson(json)).toList();
     } else {
-      throw Exception('Failed to load notes: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to load notes: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Get a specific note
   Future<NoteModel> getNote(int noteId) async {
     final url = _getNotesUrl('$noteId');
-    
+
     final headers = await _getHeaders();
     final response = await http.get(
       Uri.parse(url),
       headers: headers,
     );
 
-
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
     } else if (response.statusCode == 404) {
       throw Exception('Note not found');
     } else {
-      throw Exception('Failed to load note: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to load note: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Update a note
   Future<NoteModel> updateNote(int noteId, NoteUpdate noteUpdate) async {
     final url = _getNotesUrl('$noteId');
-    
+
     final headers = await _getHeaders();
     final response = await http.put(
       Uri.parse(url),
@@ -214,13 +207,13 @@ class NotesApiService {
       body: jsonEncode(noteUpdate.toJson()),
     );
 
-
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
     } else if (response.statusCode == 404) {
       throw Exception('Note not found or no edit permission');
     } else {
-      throw Exception('Failed to update note: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to update note: ${response.statusCode} - ${response.body}');
     }
   }
 
@@ -234,16 +227,16 @@ class NotesApiService {
       headers: headers,
     );
 
-
     if (response.statusCode != 200) {
-      throw Exception('Failed to delete note: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to delete note: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Share a note
   Future<NoteModel> shareNote(int noteId, ShareNoteRequest shareData) async {
     final url = _getNotesUrl('$noteId/share');
-    
+
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(url),
@@ -251,124 +244,118 @@ class NotesApiService {
       body: jsonEncode(shareData.toJson()),
     );
 
-
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to share note: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to share note: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Stop sharing a note
   Future<NoteModel> stopSharing(int noteId) async {
     final url = _getNotesUrl('$noteId/stop-sharing');
-    
+
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(url),
       headers: headers,
     );
 
-
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to stop sharing: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to stop sharing: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Get public note by token
-  Future<NoteModel> getPublicNote(String shareToken) async {
+  Future<PublicNoteModel> getPublicNote(String shareToken) async {
     final url = _getNotesUrl('public/$shareToken');
-    
-    final response = await http.get(
-      Uri.parse(url),
-    );
-
+    final response = await http.get(Uri.parse(url));
 
     if (response.statusCode == 200) {
-      return NoteModel.fromJson(jsonDecode(response.body));
+      return PublicNoteModel.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to load public note: ${response.statusCode} - ${response.body}');
+      throw Exception('Failed to load public note: ${response.statusCode}');
     }
   }
 
   // Get notes shared with me
   Future<List<NoteModel>> getSharedWithMe() async {
     final url = _getNotesUrl('shared/with-me');
-    
+
     final headers = await _getHeaders();
     final response = await http.get(
       Uri.parse(url),
       headers: headers,
     );
 
-
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => NoteModel.fromJson(json)).toList();
     } else {
-      throw Exception('Failed to load shared notes: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to load shared notes: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Leave a shared note
   Future<NoteModel> leaveSharedNote(int noteId) async {
     final url = _getNotesUrl('$noteId/leave');
-    
+
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(url),
       headers: headers,
     );
 
-
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to leave note: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to leave note: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Get share link for public note
   Future<String> getShareLink(int noteId) async {
     final url = _getNotesUrl('$noteId/share-link');
-    
-    final headers = await _getHeaders();
     final response = await http.get(
       Uri.parse(url),
-      headers: headers,
+      headers: await _getHeaders(),
     );
-
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data['share_link'];
+      final relativeLink = data['share_link'];
+      return '$baseUrl$relativeLink'; // Full URL
     } else {
-      throw Exception('Failed to get share link: ${response.statusCode} - ${response.body}');
+      throw Exception('Failed to get share link: ${response.statusCode}');
     }
   }
 
   // Pin/unpin a note
   Future<void> togglePin(int noteId) async {
     final url = _getNotesUrl('$noteId/pin');
-    
+
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(url),
       headers: headers,
     );
 
-
     if (response.statusCode != 200) {
-      throw Exception('Failed to toggle pin: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to toggle pin: ${response.statusCode} - ${response.body}');
     }
   }
 
   // Archive/unarchive a note
   Future<void> toggleArchive(int noteId) async {
     final url = _getNotesUrl('$noteId/archive');
-    
+
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(url),
@@ -376,7 +363,8 @@ class NotesApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to toggle archive: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to toggle archive: ${response.statusCode} - ${response.body}');
     }
   }
 }
