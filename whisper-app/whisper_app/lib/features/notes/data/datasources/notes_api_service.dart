@@ -136,28 +136,17 @@ class NotesApiService {
           .join('&');
       url = '$url?$queryString';
     } else if (path.startsWith('?')) {
-      // If path starts with '?', it's a query string
       url = '$url$path';
     }
     
     return url;
   }
 
-  void _logUrl(String method, String url) {
-    print('📡 NotesApiService: $method $url');
-  }
 
-  void _logResponse(http.Response response, String url) {
-    print('📥 Response: ${response.statusCode} from $url');
-    if (response.statusCode >= 400) {
-      print('⚠️ Error body: ${response.body}');
-    }
-  }
 
   // Create a new note
   Future<NoteModel> createNote(NoteCreate note) async {
-    final url = _getNotesUrl(''); // This gives '/api/v1/notes' (no trailing slash)
-    _logUrl('POST', url);
+    final url = _getNotesUrl('');
     
     final headers = await _getHeaders();
     final response = await http.post(
@@ -166,7 +155,6 @@ class NotesApiService {
       body: jsonEncode(note.toJson()),
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
@@ -179,7 +167,6 @@ class NotesApiService {
   Future<List<NoteModel>> getUserNotes({bool archived = false}) async {
     final queryParams = {'archived': archived.toString()};
     final url = _getNotesUrl('', queryParams: queryParams);
-    _logUrl('GET', url);
     
     final headers = await _getHeaders();
     final response = await http.get(
@@ -187,7 +174,6 @@ class NotesApiService {
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -200,7 +186,6 @@ class NotesApiService {
   // Get a specific note
   Future<NoteModel> getNote(int noteId) async {
     final url = _getNotesUrl('$noteId');
-    _logUrl('GET', url);
     
     final headers = await _getHeaders();
     final response = await http.get(
@@ -208,7 +193,6 @@ class NotesApiService {
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
@@ -222,7 +206,6 @@ class NotesApiService {
   // Update a note
   Future<NoteModel> updateNote(int noteId, NoteUpdate noteUpdate) async {
     final url = _getNotesUrl('$noteId');
-    _logUrl('PUT', url);
     
     final headers = await _getHeaders();
     final response = await http.put(
@@ -231,7 +214,6 @@ class NotesApiService {
       body: jsonEncode(noteUpdate.toJson()),
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
@@ -245,15 +227,13 @@ class NotesApiService {
   // Delete a note
   Future<void> deleteNote(int noteId) async {
     final url = _getNotesUrl('$noteId');
-    _logUrl('DELETE', url);
-    
+
     final headers = await _getHeaders();
     final response = await http.delete(
       Uri.parse(url),
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode != 200) {
       throw Exception('Failed to delete note: ${response.statusCode} - ${response.body}');
@@ -263,7 +243,6 @@ class NotesApiService {
   // Share a note
   Future<NoteModel> shareNote(int noteId, ShareNoteRequest shareData) async {
     final url = _getNotesUrl('$noteId/share');
-    _logUrl('POST', url);
     
     final headers = await _getHeaders();
     final response = await http.post(
@@ -272,7 +251,6 @@ class NotesApiService {
       body: jsonEncode(shareData.toJson()),
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
@@ -284,7 +262,6 @@ class NotesApiService {
   // Stop sharing a note
   Future<NoteModel> stopSharing(int noteId) async {
     final url = _getNotesUrl('$noteId/stop-sharing');
-    _logUrl('POST', url);
     
     final headers = await _getHeaders();
     final response = await http.post(
@@ -292,7 +269,6 @@ class NotesApiService {
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
@@ -304,13 +280,11 @@ class NotesApiService {
   // Get public note by token
   Future<NoteModel> getPublicNote(String shareToken) async {
     final url = _getNotesUrl('public/$shareToken');
-    _logUrl('GET', url);
     
     final response = await http.get(
       Uri.parse(url),
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
@@ -322,7 +296,6 @@ class NotesApiService {
   // Get notes shared with me
   Future<List<NoteModel>> getSharedWithMe() async {
     final url = _getNotesUrl('shared/with-me');
-    _logUrl('GET', url);
     
     final headers = await _getHeaders();
     final response = await http.get(
@@ -330,7 +303,6 @@ class NotesApiService {
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -343,7 +315,6 @@ class NotesApiService {
   // Leave a shared note
   Future<NoteModel> leaveSharedNote(int noteId) async {
     final url = _getNotesUrl('$noteId/leave');
-    _logUrl('POST', url);
     
     final headers = await _getHeaders();
     final response = await http.post(
@@ -351,7 +322,6 @@ class NotesApiService {
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       return NoteModel.fromJson(jsonDecode(response.body));
@@ -363,7 +333,6 @@ class NotesApiService {
   // Get share link for public note
   Future<String> getShareLink(int noteId) async {
     final url = _getNotesUrl('$noteId/share-link');
-    _logUrl('GET', url);
     
     final headers = await _getHeaders();
     final response = await http.get(
@@ -371,7 +340,6 @@ class NotesApiService {
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -384,7 +352,6 @@ class NotesApiService {
   // Pin/unpin a note
   Future<void> togglePin(int noteId) async {
     final url = _getNotesUrl('$noteId/pin');
-    _logUrl('POST', url);
     
     final headers = await _getHeaders();
     final response = await http.post(
@@ -392,7 +359,6 @@ class NotesApiService {
       headers: headers,
     );
 
-    _logResponse(response, url);
 
     if (response.statusCode != 200) {
       throw Exception('Failed to toggle pin: ${response.statusCode} - ${response.body}');
@@ -402,15 +368,12 @@ class NotesApiService {
   // Archive/unarchive a note
   Future<void> toggleArchive(int noteId) async {
     final url = _getNotesUrl('$noteId/archive');
-    _logUrl('POST', url);
     
     final headers = await _getHeaders();
     final response = await http.post(
       Uri.parse(url),
       headers: headers,
     );
-
-    _logResponse(response, url);
 
     if (response.statusCode != 200) {
       throw Exception('Failed to toggle archive: ${response.statusCode} - ${response.body}');
