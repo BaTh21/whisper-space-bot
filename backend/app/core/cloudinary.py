@@ -20,7 +20,6 @@ def configure_cloudinary():
             api_secret=os.getenv('CLOUDINARY_API_SECRET'),
             secure=True
         )
-        print("✅ Cloudinary configured successfully")
     except Exception as e:
         print(f"❌ Cloudinary configuration failed: {str(e)}")
         raise
