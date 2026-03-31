@@ -17,7 +17,7 @@ class InboxDialog extends StatefulWidget {
 class _InboxScreenState extends State<InboxDialog>
     with SingleTickerProviderStateMixin {
   late final InboxAPISource inboxApi;
-  final List<InboxModel> _inboxs = []; // Made private and non-final
+  final List<InboxModel> _inboxs = [];
   final Set<int> _selectedIds = {};
   bool _selectionMode = false;
 
@@ -32,7 +32,6 @@ class _InboxScreenState extends State<InboxDialog>
   late final ScrollController _scrollController;
   late final TabController _tabController;
 
-  // Getter for inboxs to maintain encapsulation
   List<InboxModel> get inboxs => _inboxs;
 
   @override
@@ -95,7 +94,7 @@ class _InboxScreenState extends State<InboxDialog>
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200 &&
+            _scrollController.position.maxScrollExtent - 200 &&
         !isLoadingMore &&
         hasMore) {
       _loadInboxs();
@@ -143,11 +142,11 @@ class _InboxScreenState extends State<InboxDialog>
             );
           }
         });
-        
+
         if (mounted) {
           showTopSnackBar(
-            context, 
-            'All marked as read', 
+            context,
+            'All marked as read',
             backgroundColor: Colors.green,
           );
         }
@@ -170,10 +169,10 @@ class _InboxScreenState extends State<InboxDialog>
           _inboxs.removeWhere((i) => _selectedIds.contains(i.id));
           _clearSelection();
         });
-        
+
         showTopSnackBar(
-          context, 
-          'Deleted successfully', 
+          context,
+          'Deleted successfully',
           backgroundColor: Colors.green,
         );
       }
@@ -233,7 +232,7 @@ class _InboxScreenState extends State<InboxDialog>
 
   Future<void> _acceptActivity(InboxModel item) async {
     if (!mounted) return;
-    
+
     try {
       bool success = false;
       String successMessage = '';
@@ -250,28 +249,28 @@ class _InboxScreenState extends State<InboxDialog>
 
       if (success && mounted) {
         await _markActivityAsRead(item.id);
-        
+
         if (mounted) {
           showTopSnackBar(
-            context, 
-            successMessage, 
+            context,
+            successMessage,
             backgroundColor: Colors.green,
           );
         }
       }
     } catch (e) {
       if (!mounted) return;
-      
+
       String errorMessage = e.toString().replaceAll('Exception: ', '');
-      
+
       if (errorMessage.contains('not found')) {
         if (mounted) {
           setState(() {
             _inboxs.removeWhere((i) => i.id == item.id);
           });
           showTopSnackBar(
-            context, 
-            'This request is no longer available', 
+            context,
+            'This request is no longer available',
             backgroundColor: Colors.orange,
           );
         }
@@ -279,16 +278,16 @@ class _InboxScreenState extends State<InboxDialog>
         await _markActivityAsRead(item.id);
         if (mounted) {
           showTopSnackBar(
-            context, 
-            'You are already friends', 
+            context,
+            'You are already friends',
             backgroundColor: Colors.blue,
           );
         }
       } else {
         if (mounted) {
           showTopSnackBar(
-            context, 
-            'Failed to accept: $errorMessage', 
+            context,
+            'Failed to accept: $errorMessage',
             backgroundColor: Colors.red,
           );
         }
@@ -296,7 +295,12 @@ class _InboxScreenState extends State<InboxDialog>
     }
   }
 
+  // ========== THEME-AWARE UI ==========
+
   Widget _buildInboxList(List<InboxModel> items) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     if (items.isEmpty) {
       return Center(
         child: Column(
@@ -305,14 +309,14 @@ class _InboxScreenState extends State<InboxDialog>
             Icon(
               Icons.inbox_outlined,
               size: 64,
-              color: Colors.grey.shade400,
+              color: colorScheme.onSurface.withOpacity(0.5),
             ),
             const SizedBox(height: 16),
             Text(
               'No messages here',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.grey.shade600,
+                color: colorScheme.onSurface.withOpacity(0.6),
               ),
             ),
           ],
@@ -333,16 +337,18 @@ class _InboxScreenState extends State<InboxDialog>
         }
 
         final item = items[index];
-
-        bool showAcceptButton = item.type == 'friend_request' || 
-                                item.type == 'group_invite';
+        bool showAcceptButton = item.type == 'friend_request' ||
+            item.type == 'group_invite';
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          color: item.isRead ? null : Colors.blue.shade50,
+          // Highlight unread items using the primaryContainer color with opacity
+          color: item.isRead
+              ? null
+              : colorScheme.primaryContainer.withOpacity(0.3),
           child: ListTile(
             leading: _selectionMode
                 ? Checkbox(
@@ -360,8 +366,8 @@ class _InboxScreenState extends State<InboxDialog>
                             : null,
                         child: item.actor.avatarUrl == null
                             ? Text(
-                                item.actor.username.isNotEmpty 
-                                    ? item.actor.username[0].toUpperCase() 
+                                item.actor.username.isNotEmpty
+                                    ? item.actor.username[0].toUpperCase()
                                     : '?',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
@@ -377,10 +383,10 @@ class _InboxScreenState extends State<InboxDialog>
                             width: 12,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: Colors.red,
+                              color: colorScheme.error,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.white,
+                                color: theme.scaffoldBackgroundColor,
                                 width: 2,
                               ),
                             ),
@@ -390,7 +396,9 @@ class _InboxScreenState extends State<InboxDialog>
                   ),
             title: Text(
               item.actor.username,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,7 +409,7 @@ class _InboxScreenState extends State<InboxDialog>
                   _formatTime(item.createdAt),
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey.shade600,
+                    color: colorScheme.onSurface.withOpacity(0.6),
                   ),
                 ),
               ],
@@ -412,11 +420,11 @@ class _InboxScreenState extends State<InboxDialog>
                       _acceptActivity(item);
                     },
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.tertiary,
+                      foregroundColor: colorScheme.onTertiary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
                     ),
                     child: const Text('Accept'),
                   )
@@ -456,16 +464,19 @@ class _InboxScreenState extends State<InboxDialog>
 
   void _showError(Object e) {
     if (!mounted) return;
-    
+    final errorColor = Theme.of(context).colorScheme.error;
     showTopSnackBar(
-      context, 
-      'Error: ${e.toString().replaceAll('Exception: ', '')}', 
-      backgroundColor: Colors.red,
+      context,
+      'Error: ${e.toString().replaceAll('Exception: ', '')}',
+      backgroundColor: errorColor,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -510,9 +521,10 @@ class _InboxScreenState extends State<InboxDialog>
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Theme.of(context).primaryColor,
-          labelColor: Theme.of(context).primaryColor,
-          unselectedLabelColor: Colors.grey,
+          // Fix: Use white labels for visibility on colored app bar
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
           tabs: const [
             Tab(text: 'All'),
             Tab(text: 'Unread'),
@@ -530,12 +542,12 @@ class _InboxScreenState extends State<InboxDialog>
                       Icon(
                         Icons.error_outline,
                         size: 64,
-                        color: Colors.red.shade300,
+                        color: colorScheme.error,
                       ),
                       const SizedBox(height: 16),
                       Text(
                         error!,
-                        style: const TextStyle(color: Colors.red),
+                        style: TextStyle(color: colorScheme.error),
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton(
