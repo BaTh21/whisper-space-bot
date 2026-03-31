@@ -171,12 +171,6 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: _refreshNotes,
               tooltip: 'Refresh',
             )
-          else if (_selectedIndex == 0)
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: 'Create New Diary',
-              onPressed: () => _createNewDiaryFromHome(context),
-            )
         ],
       ),
       body: _screens[_selectedIndex],

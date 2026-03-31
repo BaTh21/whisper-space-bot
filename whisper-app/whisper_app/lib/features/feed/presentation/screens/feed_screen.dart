@@ -110,22 +110,11 @@ class _FeedScreenState extends State<FeedScreen> {
                 tooltip: 'Refresh feed',
                 onPressed: () => provider.refreshFeed(),
               ),
-              IconButton(
-                icon: Icon(Icons.add, color: colorScheme.onPrimary),
-                tooltip: 'Create New Diary',
-                onPressed: () => _createNewPost(context, provider),
-              ),
             ],
           ),
           body: RefreshIndicator(
             onRefresh: () => provider.refreshFeed(),
             child: _buildFeedContent(provider),
-          ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () => _createNewPost(context, provider),
-            tooltip: 'Create New Diary',
-            backgroundColor: colorScheme.primary,
-            child: const Icon(Icons.add),
           ),
         );
       },
