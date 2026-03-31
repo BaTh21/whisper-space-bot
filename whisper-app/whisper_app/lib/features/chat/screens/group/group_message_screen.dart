@@ -68,6 +68,8 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   int _offset = 0;
   final int _limit = 30;
 
+  final FocusNode _textFieldFocus = FocusNode();
+
   final allowedExtensions = {
     ".png": "image",
     ".jpg": "image",
@@ -631,6 +633,8 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       );
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       children: [
         Expanded(
@@ -826,14 +830,17 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                   ),
                 ),
               Container(
-                color: Theme.of(context).primaryColor, // solid background
+                color: isDark
+                    ? const Color(0xFF121212)
+                    : Colors.grey[100]!, // solid background
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   children: [
                     // Image Picker Button
                     IconButton(
-                      icon: const Icon(Icons.attach_file, color: Colors.white),
+                      icon: Icon(Icons.attach_file,
+                          color: isDark ? Colors.white : Colors.grey[700]),
                       onPressed: _showAttachmentOptions,
                     ),
 
@@ -845,7 +852,9 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                       onLongPressEnd: (_) => _stopRecording(),
                       child: Icon(
                         _isRecording ? Icons.mic : Icons.mic_none,
-                        color: _isRecording ? Colors.red : Colors.white,
+                        color: _isRecording
+                            ? Colors.red
+                            : (isDark ? Colors.white : Colors.grey[700]),
                         size: 28,
                       ),
                     ),
@@ -883,7 +892,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                                 Icons.emoji_emotions_outlined,
                                 color: editingMessageId != null
                                     ? Colors.blue
-                                    : Colors.grey,
+                                    : (isDark ? Colors.white70 : Colors.grey),
                               ),
                               onPressed: () {
                                 setState(() {
@@ -900,8 +909,14 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
                     // Send Button
                     IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white),
-                      onPressed: _sendMessage,
+                      icon: Icon(
+                        Icons.send,
+                        color: _controller.text.trim().isEmpty
+                            ? (isDark ? Colors.white38 : Colors.grey[400])
+                            : Theme.of(context).primaryColor,
+                      ),
+                      onPressed:
+                          _controller.text.trim().isEmpty ? null : _sendMessage,
                     ),
                   ],
                 ),

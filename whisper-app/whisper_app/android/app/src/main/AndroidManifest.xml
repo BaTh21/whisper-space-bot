@@ -1,4 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+
+    <!-- Camera -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- Microphone (if using recording, common for whisper apps) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- File access for older Android -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+
+    <!-- Optional: write (only if you actually save files) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
+
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+        
     <application
         android:label="whisper_app"
         android:name="${applicationName}"

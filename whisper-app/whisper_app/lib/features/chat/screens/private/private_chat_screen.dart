@@ -13,16 +13,22 @@ import '../../chat_api_service.dart';
 import '../../model/private_message_model/private_message_model.dart';
 import 'widgets/message_bubble.dart';
 import 'widgets/voice_recorder_widget.dart';
+import '../private/user_profile_screen.dart';
+import 'package:whisper_space_flutter/features/auth/presentation/screens/providers/auth_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
 
 class PrivateChatScreen extends StatefulWidget {
   final int userId;
   final String userName;
+  final String? avatarUrl;
   final VoidCallback? onChatUpdated;
 
   const PrivateChatScreen({
     super.key,
     required this.userId,
     required this.userName,
+    this.avatarUrl,
     this.onChatUpdated,
   });
 
@@ -40,7 +46,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   User? _userDetails;
-  int _currentUserId = 0;
+  int? _currentUserId;
 
   final ImagePicker _imagePicker = ImagePicker();
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -52,12 +58,14 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   final Set<String> _failedTempIds = {};
   Timer? _pollTimer;
   static const _pollInterval = Duration(seconds: 5);
+  bool _showEmojiPicker = false;
 
   @override
   void initState() {
     super.initState();
     _messageController = TextEditingController();
     _scrollController = ScrollController();
+    _loadCurrentUser();
     _initServices();
 
     _audioPlayer.playerStateStream.listen((state) {
@@ -79,12 +87,23 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Future<void> _initServices() async {
     storageService = StorageService();
     await storageService.init();
-    _currentUserId = await storageService.getUserId() ?? 0;
     chatApi = ChatAPISource(storageService: storageService);
     await _loadUserDetails();
     await _loadMessages();
     _startPolling();
     _markMessagesAsRead();
+  }
+
+  void _loadCurrentUser() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final user = authProvider.currentUser;
+      if (user != null) {
+        setState(() {
+          _currentUserId = user.id;
+        });
+      }
+    });
   }
 
   void _startPolling() {
@@ -195,11 +214,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
     final tempMessage = PrivateMessageModel(
       id: 0,
-      senderId: _currentUserId,
+      senderId: _currentUserId ?? 0,
       receiverId: widget.userId,
       content: content?.trim(),
       fileUrl: null,
-      messageType: fileType ?? (content != null ? 'text' : null),
+      messageType: fileType ?? (content != null ? 'text' : 'unknown'),
       createdAt: DateTime.now(),
       isRead: false,
       tempId: tempId,
@@ -285,7 +304,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   Future<void> _pickImage() async {
-    if (await Permission.photos.request().isGranted) {
+    Permission permission;
+
+    if (Platform.isAndroid) {
+      permission = Permission.photos; // Android < 13
+    } else {
+      permission = Permission.photos; // iOS  
+    }
+
+    final status = await permission.request();
+
+    if (status.isGranted) {
       final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
       if (picked != null) {
         await _sendMessage(file: File(picked.path), fileType: 'image');
@@ -296,11 +325,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   Future<void> _takePhoto() async {
-    if (await Permission.camera.request().isGranted) {
+    final status = await Permission.camera.request();
+
+    if (status.isGranted) {
       final picked = await _imagePicker.pickImage(source: ImageSource.camera);
       if (picked != null) {
         await _sendMessage(file: File(picked.path), fileType: 'image');
       }
+    } else if (status.isPermanentlyDenied) {
+      openAppSettings();
     } else {
       _showPermissionDeniedDialog('Camera');
     }
@@ -367,23 +400,73 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.userName),
-            if (_userDetails != null)
-              Text(
-                _userDetails!.isOnline ? 'Online' : 'Offline',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _userDetails!.isOnline ? Colors.green : Colors.grey,
-                ),
-              ),
-          ],
-        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
+        ),
+        title: GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserProfileScreen(
+                  userId: widget.userId,
+                  userName: widget.userName,
+                  avatarUrl: widget.avatarUrl,
+                ),
+              ),
+            );
+          },
+          child: Row(
+            children: [
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundImage: widget.avatarUrl != null
+                        ? NetworkImage(widget.avatarUrl!)
+                        : null,
+                    backgroundColor: widget.avatarUrl == null
+                        ? Colors.grey // fallback color when no image
+                        : Colors.transparent,
+                    child: widget.avatarUrl == null
+                        ? Text(widget.userName[0].toUpperCase())
+                        : null,
+                  ),
+                  if (_userDetails?.isOnline == true)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        height: 10,
+                        width: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.userName),
+                  if (_userDetails != null)
+                    Text(
+                      _userDetails!.isOnline ? 'Online' : 'Offline',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            _userDetails!.isOnline ? Colors.green : Colors.grey,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       body: _isLoading
@@ -424,99 +507,173 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
-  Widget _buildInput(bool isDark, Color bg) {
-    final primary = Theme.of(context).primaryColor;
+Widget _buildInput(bool isDark, Color bg) {
+  final primary = Theme.of(context).primaryColor;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        boxShadow: [
-          BoxShadow(
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          boxShadow: [
+            BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 4,
-              offset: const Offset(0, -2))
-        ],
-      ),
-      child: Row(
-        children: [
-          PopupMenuButton<String>(
-            icon: Icon(Icons.attach_file,
-                color: isDark ? Colors.white70 : Colors.grey[600]),
-            onSelected: (v) {
-              if (v == 'image_gallery') _pickImage();
-              if (v == 'image_camera') _takePhoto();
-              if (v == 'video') _pickVideo();
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
+              offset: const Offset(0, -2),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            PopupMenuButton<String>(
+              icon: Icon(Icons.attach_file,
+                  color: isDark ? Colors.white70 : Colors.grey[600]),
+              onSelected: (v) {
+                if (v == 'image_gallery') _pickImage();
+                if (v == 'image_camera') _takePhoto();
+                if (v == 'video') _pickVideo();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
                   value: 'image_gallery',
                   child: Row(children: [
                     Icon(Icons.photo_library, size: 20),
                     SizedBox(width: 12),
                     Text('Gallery')
-                  ])),
-              PopupMenuItem(
+                  ]),
+                ),
+                PopupMenuItem(
                   value: 'image_camera',
                   child: Row(children: [
                     Icon(Icons.camera_alt, size: 20),
                     SizedBox(width: 12),
                     Text('Camera')
-                  ])),
-              PopupMenuItem(
+                  ]),
+                ),
+                PopupMenuItem(
                   value: 'video',
                   child: Row(children: [
                     Icon(Icons.videocam, size: 20),
                     SizedBox(width: 12),
                     Text('Video')
-                  ])),
-            ],
-          ),
-          const SizedBox(width: 4),
-          VoiceRecorderWidget(
-            onRecordingComplete: (file, dur) => _sendMessage(
-              file: file,
-              fileType: 'audio',
-              voiceDuration: dur,
+                  ]),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              maxLines: null,
-              style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              decoration: InputDecoration(
-                hintText: 'Type a message...',
-                hintStyle: TextStyle(
-                    color: isDark ? Colors.white54 : Colors.grey[400]),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none),
-                filled: true,
-                fillColor: bg,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+
+            const SizedBox(width: 4),
+
+            VoiceRecorderWidget(
+              onRecordingComplete: (file, dur) => _sendMessage(
+                file: file,
+                fileType: 'audio',
+                voiceDuration: dur,
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: _isSending
-                ? null
-                : () => _sendMessage(content: _messageController.text),
-            icon: _isSending
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(Icons.send,
-                    color: _messageController.text.trim().isEmpty
-                        ? (isDark ? Colors.white38 : Colors.grey[400])
-                        : primary),
-          ),
-        ],
+
+            const SizedBox(width: 4),
+
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    /// TEXT FIELD
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        maxLines: null,
+                        onTap: () {
+                          if (_showEmojiPicker) {
+                            setState(() => _showEmojiPicker = false);
+                          }
+                        },
+                        style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black),
+                        decoration: InputDecoration(
+                          hintText: 'Type a message...',
+                          hintStyle: TextStyle(
+                            color:
+                                isDark ? Colors.white54 : Colors.grey[400],
+                          ),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+
+                    IconButton(
+                      icon: Icon(
+                        Icons.emoji_emotions_outlined,
+                        color: isDark ? Colors.white70 : Colors.grey,
+                      ),
+                      onPressed: () {
+                        FocusScope.of(context).unfocus();
+                        setState(() {
+                          _showEmojiPicker = !_showEmojiPicker;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            IconButton(
+              onPressed: _isSending ||
+                      _messageController.text.trim().isEmpty
+                  ? null
+                  : () => _sendMessage(
+                      content: _messageController.text.trim()),
+              icon: _isSending
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      Icons.send,
+                      color: _messageController.text.trim().isEmpty
+                          ? (isDark ? Colors.white38 : Colors.grey[400])
+                          : primary,
+                    ),
+            ),
+          ],
+        ),
       ),
-    );
-  }
+
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        height: _showEmojiPicker ? 250 : 0,
+        child: _showEmojiPicker
+            ? AwesomeEmojiPicker(
+                onEmojiSelected: (emoji) {
+                  final text = _messageController.text;
+                  final selection = _messageController.selection;
+
+                  final newText = text.replaceRange(
+                    selection.start,
+                    selection.end,
+                    emoji.char,
+                  );
+
+                  _messageController.text = newText;
+                  _messageController.selection =
+                      TextSelection.collapsed(
+                    offset: selection.start + emoji.char.length,
+                  );
+                },
+              )
+            : null,
+      ),
+    ],
+  );
+}
 }
