@@ -16,7 +16,9 @@ import 'package:whisper_space_flutter/features/friend/presentation/screens/frien
 import 'package:whisper_space_flutter/features/inbox/inbox_api_service.dart';
 import 'package:whisper_space_flutter/features/inbox/inbox_screen.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
-import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_tab.dart' as notes;
+import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_tab.dart'
+    as notes;
+import 'package:whisper_space_flutter/features/settings/screens/settings_screen.dart';
 import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
 
 import 'login_screen.dart';
@@ -156,7 +158,8 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           // Theme Toggle Button
           IconButton(
-            tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            tooltip:
+                isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
             icon: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
               transitionBuilder: (Widget child, Animation<double> animation) {
@@ -259,9 +262,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDarkMode = themeProvider.isDarkMode;
 
-    final primaryColor = isDarkMode
-        ? const Color(0xFF00BCD4)
-        : const Color(0xFF6A11CB);
+    final primaryColor =
+        isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB);
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -287,7 +289,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: NavigationBar(
             height: 70,
-            backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            backgroundColor:
+                isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
             elevation: 10,
             selectedIndex: _selectedIndex,
             indicatorColor: primaryColor.withOpacity(0.15),
@@ -563,9 +566,10 @@ class _FeedTabState extends State<FeedTab> {
                           onLike: () => _handleLike(feedProvider, diary.id),
                           onFavorite: () =>
                               _handleFavorite(feedProvider, diary.id),
-                          onComment: (diaryId, content, parentId, replyToUserId) =>
-                              _handleComment(feedProvider, diaryId, content,
-                                  parentId, replyToUserId),
+                          onComment:
+                              (diaryId, content, parentId, replyToUserId) =>
+                                  _handleComment(feedProvider, diaryId, content,
+                                      parentId, replyToUserId),
                           onEdit: (diaryToEdit) => _handleEditDiary(
                               context, feedProvider, diaryToEdit),
                           onDelete: (diaryId) => _handleDeleteDiary(
@@ -845,7 +849,7 @@ class _ProfileTabState extends State<ProfileTab> {
     final storageService = StorageService();
     await storageService.init();
 
-   const String baseUrl = 'http://10.0.2.2:8000/api/v1/avatars';
+    const String baseUrl = 'http://10.0.2.2:8000/api/v1/avatars';
     _imageUploadService = ImageUploadService(baseUrl: baseUrl);
   }
 
@@ -903,7 +907,8 @@ class _ProfileTabState extends State<ProfileTab> {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final token = await _getToken();
 
-      final avatarUrl = await _imageUploadService.uploadProfileImage(imageFile, token);
+      final avatarUrl =
+          await _imageUploadService.uploadProfileImage(imageFile, token);
 
       if (avatarUrl != null && mounted) {
         await authProvider.updateProfileImage(avatarUrl);
@@ -938,7 +943,8 @@ class _ProfileTabState extends State<ProfileTab> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Profile Picture'),
-        content: const Text('Are you sure you want to remove your profile picture?'),
+        content:
+            const Text('Are you sure you want to remove your profile picture?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1020,12 +1026,15 @@ class _ProfileTabState extends State<ProfileTab> {
                             CircleAvatar(
                               radius: 50,
                               backgroundColor: const Color(0xFF6C63FF),
-                              backgroundImage: user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
+                              backgroundImage: user?.avatarUrl != null &&
+                                      user!.avatarUrl!.isNotEmpty
                                   ? (user.avatarUrl!.startsWith('http')
                                       ? NetworkImage(user.avatarUrl!)
-                                      : FileImage(File(user.avatarUrl!)) as ImageProvider)
+                                      : FileImage(File(user.avatarUrl!))
+                                          as ImageProvider)
                                   : null,
-                              child: user?.avatarUrl == null || user!.avatarUrl!.isEmpty
+                              child: user?.avatarUrl == null ||
+                                      user!.avatarUrl!.isEmpty
                                   ? Text(
                                       user?.username.isNotEmpty == true
                                           ? user!.username[0].toUpperCase()
@@ -1115,7 +1124,9 @@ class _ProfileTabState extends State<ProfileTab> {
                       ],
 
                       TextButton.icon(
-                        onPressed: _isUploadingImage ? null : () => _handleImageChange(null),
+                        onPressed: _isUploadingImage
+                            ? null
+                            : () => _handleImageChange(null),
                         icon: const Icon(
                           Icons.delete_outline,
                           size: 16,
@@ -1154,10 +1165,15 @@ class _ProfileTabState extends State<ProfileTab> {
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _StatItem(value: _postsCount.toString(), label: 'Posts'),
-                            _StatItem(value: _friendsCount.toString(), label: 'Friends'),
-                            _StatItem(value: _notesCount.toString(), label: 'Notes'),
-                            _StatItem(value: _likesCount.toString(), label: 'Likes'),
+                            _StatItem(
+                                value: _postsCount.toString(), label: 'Posts'),
+                            _StatItem(
+                                value: _friendsCount.toString(),
+                                label: 'Friends'),
+                            _StatItem(
+                                value: _notesCount.toString(), label: 'Notes'),
+                            _StatItem(
+                                value: _likesCount.toString(), label: 'Likes'),
                           ],
                         ),
                 ),
@@ -1166,13 +1182,13 @@ class _ProfileTabState extends State<ProfileTab> {
               Card(
                 child: Column(
                   children: [
-                    _buildMenuItem(Icons.settings, 'Settings', () {}),
-                    const Divider(height: 0),
-                    _buildMenuItem(Icons.notifications, 'Notifications', () {}),
-                    const Divider(height: 0),
-                    _buildMenuItem(Icons.privacy_tip, 'Privacy', () {}),
-                    const Divider(height: 0),
-                    _buildMenuItem(Icons.help, 'Help & Support', () {}),
+                    _buildMenuItem(Icons.settings, 'Settings', () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const SettingsScreen()),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -1181,12 +1197,14 @@ class _ProfileTabState extends State<ProfileTab> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                    final authProvider =
+                        Provider.of<AuthProvider>(context, listen: false);
                     await authProvider.logout();
                     if (mounted) {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const LoginScreen()),
+                        MaterialPageRoute(
+                            builder: (context) => const LoginScreen()),
                       );
                     }
                   },
@@ -1234,7 +1252,8 @@ class _ProfileTabState extends State<ProfileTab> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library, color: Color(0xFF6C63FF)),
+              leading:
+                  const Icon(Icons.photo_library, color: Color(0xFF6C63FF)),
               title: const Text('Choose from Gallery'),
               onTap: () {
                 Navigator.pop(context);

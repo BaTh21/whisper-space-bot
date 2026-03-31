@@ -5,6 +5,7 @@ import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
 import 'package:whisper_space_flutter/features/notes/data/datasources/notes_api_service.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/friend_provider.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
+import 'package:whisper_space_flutter/features/settings/providers/settings_provider.dart';
 import 'package:whisper_space_flutter/shared/widgets/theme/app_theme.dart';
 
 import 'core/services/auth_service.dart';
@@ -24,6 +25,8 @@ void main() async {
 
     final authService = AuthService(storageService: storageService);
     final feedApiService = FeedApiService(storageService: storageService);
+    final settingsProvider = SettingsProvider();
+    await settingsProvider.loadSettings();
 
     runApp(
       MultiProvider(
@@ -32,6 +35,7 @@ void main() async {
           Provider<AuthService>(create: (_) => authService),
           Provider<FeedApiService>(create: (_) => feedApiService),
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          
           ChangeNotifierProvider(
             create: (context) => AuthProvider(
               authService: authService,
@@ -52,6 +56,9 @@ void main() async {
             create: (context) => FriendProvider(
               storageService: storageService,
             ),
+          ),
+          ChangeNotifierProvider<SettingsProvider>.value(
+            value: settingsProvider,
           ),
         ],
         child: const MyApp(),
