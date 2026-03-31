@@ -1,7 +1,7 @@
-// lib/features/notes/presentation/screens/notes_tab.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:whisper_space_flutter/features/auth/presentation/screens/providers/auth_provider.dart';
+import 'package:whisper_space_flutter/features/notes/data/models/note_model.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/providers/notes_provider.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/screens/create_note_screen.dart';
 import 'package:whisper_space_flutter/features/notes/presentation/screens/share_note_screen.dart';
@@ -185,7 +185,6 @@ class _AllNotesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDarkMode ? Colors.white : Colors.black87;
     final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey;
     final errorColor = isDarkMode ? Colors.red.shade300 : Colors.red;
 
@@ -221,6 +220,7 @@ class _AllNotesTab extends StatelessWidget {
         }
 
         final notes = provider.notes.where((note) => !note.isArchived).toList();
+        final currentUserId = provider.currentUserId;
 
         if (notes.isEmpty) {
           return Center(
@@ -268,12 +268,14 @@ class _AllNotesTab extends StatelessWidget {
             itemBuilder: (context, index) {
               final note = notes[index];
               final isOwner = provider.isOwner(note);
-              final canEdit = provider.canEdit(note);
+              final isSharedWithMe = !isOwner &&
+                  note.shareType == ShareType.shared &&
+                  note.sharedWith.contains(currentUserId);
 
               return NoteCard(
                 note: note,
                 isOwner: isOwner,
-                canEdit: canEdit,
+                canEdit: provider.canEdit(note),
                 onPinToggle: () => provider.togglePin(note.id),
                 onArchiveToggle: () => provider.toggleArchive(note.id),
                 onDelete: () async {
@@ -308,6 +310,35 @@ class _AllNotesTab extends StatelessWidget {
                     ),
                   ).then((_) => provider.loadNotes());
                 },
+                // ✅ Leave callback for shared notes
+                onLeave: isSharedWithMe
+                    ? () async {
+                        try {
+                          await provider.leaveSharedNote(note.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Left shared note'),
+                                backgroundColor: isDarkMode
+                                    ? Colors.green.shade800
+                                    : Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to leave: $e'),
+                                backgroundColor: isDarkMode
+                                    ? Colors.red.shade800
+                                    : Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    : null,
               );
             },
           ),
@@ -321,7 +352,6 @@ class _SharedNotesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDarkMode ? Colors.white : Colors.black87;
     final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey;
     final errorColor = isDarkMode ? Colors.red.shade300 : Colors.red;
 
@@ -428,7 +458,6 @@ class _ArchivedNotesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDarkMode ? Colors.white : Colors.black87;
     final subtitleColor = isDarkMode ? Colors.white70 : Colors.grey;
     final errorColor = isDarkMode ? Colors.red.shade300 : Colors.red;
 

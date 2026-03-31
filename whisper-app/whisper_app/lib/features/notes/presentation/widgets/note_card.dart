@@ -1,4 +1,3 @@
-// lib/features/notes/presentation/widgets/note_card.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:whisper_space_flutter/features/notes/data/models/note_model.dart';
@@ -30,8 +29,6 @@ class NoteCard extends StatelessWidget {
   });
 
   Color _getAdjustedColorForDarkMode(Color color) {
-    // For dark mode, darken the color while preserving the hue
-    // If the color is too light, darken it
     if (color.computeLuminance() > 0.7) {
       return Color.fromARGB(
         color.alpha,
@@ -55,7 +52,6 @@ class NoteCard extends StatelessWidget {
     final dateFormat = DateFormat('MMM d, yyyy • h:mm a');
     final lastUpdated = note.updatedAt ?? note.createdAt;
     
-    // Adjust card color for dark mode
     final cardColor = isDarkMode 
         ? _getAdjustedColorForDarkMode(note.color)
         : note.color;
@@ -81,7 +77,6 @@ class NoteCard extends StatelessWidget {
               // Header with author and share type
               Row(
                 children: [
-                  // Author info
                   CircleAvatar(
                     radius: 16,
                     backgroundColor: (isDarkMode ? borderColor : const Color(0xFF6C63FF)).withOpacity(0.2),
@@ -122,7 +117,6 @@ class NoteCard extends StatelessWidget {
                     ),
                   ),
                   
-                  // Share type indicator
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -157,7 +151,6 @@ class NoteCard extends StatelessWidget {
               
               const SizedBox(height: 12),
               
-              // Title and content preview
               Text(
                 note.title,
                 style: TextStyle(
@@ -232,7 +225,8 @@ class NoteCard extends StatelessWidget {
                       color: isDarkMode ? Colors.red.shade300 : Colors.red,
                       onTap: onDelete ?? () => _confirmDelete(context),
                     ),
-                  ] else if (note.shareType == ShareType.shared) ...[
+                  ] else if (onLeave != null) ...[
+                    // ✅ Leave button for shared notes (non-owner)
                     _buildActionButton(
                       context: context,
                       icon: Icons.exit_to_app,
@@ -345,8 +339,6 @@ class NoteCard extends StatelessWidget {
         builder: (context) => EditNoteScreen(note: note),
       ),
     );
-    
-    // The provider will handle the update
   }
 
   void _shareNote(BuildContext context) {

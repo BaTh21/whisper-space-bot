@@ -19,6 +19,7 @@ class NotesProvider extends ChangeNotifier {
   List<NoteModel> get archivedNotes => _archivedNotes;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  int? get currentUserId => _currentUserId;  // ✅ Added getter
 
   void setCurrentUserId(int userId) {
     _currentUserId = userId;
@@ -288,7 +289,6 @@ class NotesProvider extends ChangeNotifier {
     try {
       await _apiService.leaveSharedNote(noteId);
       _sharedNotes.removeWhere((n) => n.id == noteId);
-      // Remove also from own notes list (if present)
       _notes.removeWhere((n) => n.id == noteId);
       _error = null;
       notifyListeners();
@@ -319,7 +319,7 @@ class NotesProvider extends ChangeNotifier {
   void _sortNotes(List<NoteModel> list) {
     list.sort((a, b) {
       if (a.isPinned != b.isPinned) {
-        return b.isPinned ? 1 : -1; // pinned first
+        return b.isPinned ? 1 : -1;
       }
       final aDate = a.updatedAt ?? a.createdAt;
       final bDate = b.updatedAt ?? b.createdAt;
