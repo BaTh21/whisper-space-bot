@@ -132,10 +132,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _toggleTheme() {
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    themeProvider.toggleTheme(!themeProvider.isDarkMode);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,26 +152,6 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         elevation: 0,
         actions: [
-          // Theme Toggle Button
-          IconButton(
-            tooltip:
-                isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return RotationTransition(
-                  turns: animation,
-                  child: child,
-                );
-              },
-              child: Icon(
-                isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                key: ValueKey<bool>(isDarkMode),
-                color: isDarkMode ? Colors.yellow : Colors.white,
-              ),
-            ),
-            onPressed: _toggleTheme,
-          ),
           // Inbox Button
           IconButton(
             tooltip: 'Inbox',
