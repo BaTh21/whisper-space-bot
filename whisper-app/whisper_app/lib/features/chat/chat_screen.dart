@@ -386,6 +386,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                               builder: (_) => PrivateChatScreen(
                                                 userId: chat.id,
                                                 userName: chat.name,
+                                                avatarUrl: chat.avatar,
                                                 onChatUpdated: _loadChats,
                                               ),
                                             ),

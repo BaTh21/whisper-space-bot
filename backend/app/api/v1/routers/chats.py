@@ -640,13 +640,8 @@ async def send_media_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if message_type not in ["image", "video", "file"]:
+    if message_type and message_type not in ["image", "video", "file"]:
         raise HTTPException(status_code=400, detail="Invalid media type")
-    
-    if message_type == "image" and not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File is not an image")
-    if message_type == "video" and not file.content_type.startswith("video/"):
-        raise HTTPException(status_code=400, detail="File is not a video")
     
     try:
         if not is_friend(db, current_user.id, friend_id):
@@ -655,7 +650,7 @@ async def send_media_message(
         if not file.content_type:
             raise HTTPException(status_code=400, detail="Invalid file")
 
-        content_type = file.content_type
+        content_type = file.content_type or ""
 
         if content_type.startswith("image/"):
             detected_type = MessageType.image
@@ -669,18 +664,6 @@ async def send_media_message(
             detected_type = MessageType.file
             folder = "chat_files"
             resource_type = "raw"
-
-        if message_type:
-            detected_type = MessageType(message_type)
-            if message_type == "image":
-                resource_type = "image"
-                folder = "chat_images"
-            elif message_type == "video":
-                resource_type = "video"
-                folder = "chat_videos"
-            else:
-                resource_type = "raw"
-                folder = "chat_files"
 
         file_extension = file.filename.split('.')[-1] if '.' in file.filename else "bin"
         unique_filename = f"chat_{current_user.id}_{friend_id}_{uuid.uuid4().hex}.{file_extension}"

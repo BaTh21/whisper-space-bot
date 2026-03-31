@@ -43,9 +43,8 @@ class PrivateMessageModel {
       fileUrl: json['file_url'] ?? json['content'],
       messageType: json['message_type'],
       createdAt: DateTime.parse(json['created_at']),
-      updatedAt: json['edited_at'] != null
-          ? DateTime.parse(json['edited_at'])
-          : null,
+      updatedAt:
+          json['edited_at'] != null ? DateTime.parse(json['edited_at']) : null,
       isRead: json['is_read'] ?? false,
       tempId: json['temp_id'],
       senderUsername: json['sender_username'],
@@ -79,7 +78,8 @@ class PrivateMessageModel {
   bool get isVideo => messageType == 'video';
   bool get isAudio => messageType == 'voice';
   bool get isText => messageType == 'text';
-  bool get hasFile => isImage || isVideo || isAudio;
+  bool get isFile => messageType == 'file';
+  bool get hasFile => isImage || isVideo || isAudio || isFile;
 }
 
 enum MessageStatus { sending, sent, failed }

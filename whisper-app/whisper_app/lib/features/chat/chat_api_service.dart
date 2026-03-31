@@ -12,6 +12,19 @@ import '../chat/model/group_message_model/group_message_model.dart';
 import '../chat/model/group_model/group_details_model.dart';
 import '../chat/model/group_model/group_image_model.dart';
 import '../chat/model/group_model/user_model.dart';
+import 'package:http_parser/http_parser.dart';
+
+MediaType _getMediaType(String path) {
+  final ext = path.split('.').last.toLowerCase();
+
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
+    return MediaType('image', ext == 'jpg' ? 'jpeg' : ext);
+  } else if (['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv'].contains(ext)) {
+    return MediaType('video', ext);
+  } else {
+    return MediaType('application', 'octet-stream');
+  }
+}
 
 class ChatAPISource {
   final StorageService storageService;
@@ -396,9 +409,13 @@ Future<PrivateMessageModel> uploadPrivateFile({
     }
     
     request.files.add(
-      await http.MultipartFile.fromPath('file', file.path),
+      await http.MultipartFile.fromPath(
+        'file',
+        file.path,
+        contentType: _getMediaType(file.path),
+      ),
     );
-
+    
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 

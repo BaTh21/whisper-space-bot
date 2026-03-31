@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../model/private_message_model/private_message_model.dart';
 import 'image_viewer.dart';
+import 'package:whisper_space_flutter/features/chat/video_player.dart';
+import 'package:whisper_space_flutter/features/chat/voice_player.dart';
 
 class MessageBubble extends StatefulWidget {
   final PrivateMessageModel message;
@@ -61,12 +63,15 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final alignment = widget.isMe ? Alignment.centerRight : Alignment.centerLeft;
+    final alignment =
+        widget.isMe ? Alignment.centerRight : Alignment.centerLeft;
     final color = widget.isMe
         ? Theme.of(context).primaryColor
         : Theme.of(context).brightness == Brightness.dark
             ? Colors.grey[800]
             : Colors.grey[200];
+    final isMedia = widget.message.hasFile &&
+        (widget.message.isImage || widget.message.isVideo);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -77,66 +82,86 @@ class _MessageBubbleState extends State<MessageBubble> {
             maxWidth: MediaQuery.of(context).size.width * 0.75,
           ),
           child: Column(
-            crossAxisAlignment: widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment:
+                widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: _buildContent(),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 4, left: 8, right: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              if (isMedia)
+                // Media: Stack with absolute time/status
+                Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    Text(
-                      _formatTime(widget.message.createdAt),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white54
-                            : Colors.grey[600],
+                    _buildContent(), // image/video widget
+                    Positioned(
+                      bottom: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _formatTime(widget.message.createdAt),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (widget.isMe && widget.showStatus) ...[
+                              const SizedBox(width: 4),
+                              _buildStatusIconInline(),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
-                    if (widget.showStatus && widget.isMe) _buildStatusIcon(),
                   ],
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  constraints: const BoxConstraints(minHeight: 40),
+                  child: Column(
+                    crossAxisAlignment: widget.isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildContent(),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatTime(widget.message.createdAt),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color:
+                                  widget.isMe ? Colors.white : Colors.black54,
+                            ),
+                          ),
+                          if (widget.isMe && widget.showStatus) ...[
+                            const SizedBox(width: 4),
+                            _buildStatusIconInline(),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  Widget _buildStatusIcon() {
-    switch (widget.message.status) {
-      case MessageStatus.sending:
-        return const Padding(
-          padding: EdgeInsets.only(left: 4),
-          child: SizedBox(
-            width: 12,
-            height: 12,
-            child: CircularProgressIndicator(strokeWidth: 1.5),
-          ),
-        );
-      case MessageStatus.failed:
-        return Padding(
-          padding: const EdgeInsets.only(left: 4),
-          child: GestureDetector(
-            onTap: widget.onRetry,
-            child: const Icon(Icons.error_outline, size: 12, color: Colors.red),
-          ),
-        );
-      case MessageStatus.sent:
-        return const Padding(
-          padding: EdgeInsets.only(left: 4),
-          child: Icon(Icons.done, size: 12, color: Colors.grey),
-        );
-    }
   }
 
   Widget _buildContent() {
@@ -160,10 +185,39 @@ class _MessageBubbleState extends State<MessageBubble> {
       );
     }
 
+    if (widget.message.hasFile &&
+        widget.message.status == MessageStatus.sending) {
+      return Container(
+        width: 200,
+        height: 120,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     if (widget.message.hasFile) {
-      if (widget.message.isImage) return _buildImageContent();
-      if (widget.message.isVideo) return _buildVideoContent();
-      if (widget.message.isAudio) return _buildAudioContent();
+      if (widget.message.isImage) {
+        return _buildImageContent();
+      }
+
+      if (widget.message.isVideo && widget.message.fileUrl != null) {
+        return VideoMessagePlayer(
+          url: widget.message.fileUrl!,
+          isOwn: widget.isMe,
+        );
+      }
+
+      if (widget.message.isAudio && widget.message.fileUrl != null) {
+        return VoiceMessagePlayer(
+          url: widget.message.fileUrl!,
+          isOwn: widget.isMe,
+        );
+      }
+
+      return _buildFile();
     }
 
     return Text(
@@ -212,99 +266,58 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 
-  Widget _buildVideoContent() {
-    if (widget.message.status == MessageStatus.sending) {
-      return Container(
-        width: 200,
-        height: 200,
-        color: Colors.grey[300],
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (!_isVideoInitialized) {
-      return Container(
-        width: 200,
-        height: 200,
-        color: Colors.grey[300],
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return GestureDetector(
-      onTap: () {
-        if (_videoController!.value.isPlaying) {
-          _videoController!.pause();
-        } else {
-          _videoController!.play();
-        }
-        setState(() {});
-      },
-      child: Stack(
-        alignment: Alignment.center,
+  Widget _buildFile() {
+    final fileName = widget.message.fileUrl?.split('/').last ?? 'File';
+
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color:
+            widget.isMe ? Theme.of(context).primaryColor : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
         children: [
-          AspectRatio(
-            aspectRatio: _videoController!.value.aspectRatio,
-            child: VideoPlayer(_videoController!),
-          ),
-          if (!_videoController!.value.isPlaying)
-            Container(
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
+          const Icon(Icons.insert_drive_file, size: 30),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              fileName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: widget.isMe ? Colors.white : Colors.black87,
               ),
-              child: const Icon(Icons.play_arrow, color: Colors.white, size: 48),
             ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildAudioContent() {
-    final duration = widget.message.voiceDuration ?? 0;
-    final progress = widget.playingProgress ?? 0.0;
+  Widget _buildStatusIconInline() {
+    switch (widget.message.status) {
+      case MessageStatus.sending:
+        return const SizedBox(
+          width: 10,
+          height: 10,
+          child: CircularProgressIndicator(strokeWidth: 1.5),
+        );
 
-    return GestureDetector(
-      onTap: widget.onPlayAudio,
-      child: Container(
-        width: 200,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  widget.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                  color: widget.isMe ? Colors.white : Colors.blue,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    duration > 0
-                        ? _formatDuration(Duration(seconds: duration.toInt()))
-                        : 'Voice Message',
-                    style: TextStyle(color: widget.isMe ? Colors.white : null, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            LinearProgressIndicator(
-              value: widget.isPlaying ? progress : 0,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                widget.isMe ? Colors.white : Colors.blue,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+      case MessageStatus.failed:
+        return GestureDetector(
+          onTap: widget.onRetry,
+          child: const Icon(Icons.error, size: 12, color: Colors.red),
+        );
 
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+      case MessageStatus.sent:
+        return Icon(
+          Icons.done,
+          size: 12,
+          color: widget.isMe ? Colors.white70 : Colors.grey,
+        );
+    }
   }
 
   String _formatTime(DateTime dateTime) {
