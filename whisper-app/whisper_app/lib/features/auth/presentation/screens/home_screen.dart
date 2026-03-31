@@ -189,13 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Icon(Icons.mail_outline),
             ),
           ),
-          if (_selectedIndex == 4)
-            IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: 'Logout',
-              onPressed: _showLogoutDialog,
-            )
-          else if (_selectedIndex == 3)
+          if (_selectedIndex == 3)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _refreshNotes,
@@ -206,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.add),
               tooltip: 'Create New Diary',
               onPressed: () => _createNewDiaryFromHome(context),
-            ),
+            )
         ],
       ),
       body: _screens[_selectedIndex],
