@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../providers/settings_provider.dart';
 import 'help_support_screen.dart';
 import 'notification_settings_screen.dart';
 import 'privacy_screen.dart';
@@ -11,18 +9,10 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<SettingsProvider>(context);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
-          SwitchListTile(
-            title: const Text('Dark Mode'),
-            value: provider.darkMode,
-            onChanged: provider.toggleDarkMode,
-          ),
-
           ListTile(
             leading: const Icon(Icons.notifications),
             title: const Text('Notifications'),
