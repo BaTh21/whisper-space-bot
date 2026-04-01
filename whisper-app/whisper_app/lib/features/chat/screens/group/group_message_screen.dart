@@ -831,7 +831,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                 ),
               Container(
                 color: isDark
-                    ? const Color(0xFF121212)
+                    ? const Color(0xFF1E1E1E)
                     : Colors.grey[100]!, // solid background
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -866,7 +866,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
+                          color: isDark ? Color(0xFF121212) : Colors.grey[300],
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(color: Colors.grey[300]!),
                         ),

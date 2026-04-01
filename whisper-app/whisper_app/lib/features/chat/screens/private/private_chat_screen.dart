@@ -18,6 +18,8 @@ import 'package:whisper_space_flutter/features/auth/presentation/screens/provide
 import 'package:provider/provider.dart';
 import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
 
+import 'package:whisper_space_flutter/features/websocket/private_websocket.dart';
+
 class PrivateChatScreen extends StatefulWidget {
   final int userId;
   final String userName;
@@ -56,9 +58,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   Timer? _playbackTimer;
 
   final Set<String> _failedTempIds = {};
-  Timer? _pollTimer;
-  static const _pollInterval = Duration(seconds: 5);
   bool _showEmojiPicker = false;
+
+  late PrivateWebsocket _ws;
 
   @override
   void initState() {
@@ -90,7 +92,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     chatApi = ChatAPISource(storageService: storageService);
     await _loadUserDetails();
     await _loadMessages();
-    _startPolling();
+
+    _ws = PrivateWebsocket(
+        friendId: widget.userId, storageService: storageService);
+    await _connectWebsocket();
+
     _markMessagesAsRead();
   }
 
@@ -104,34 +110,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         });
       }
     });
-  }
-
-  void _startPolling() {
-    _pollTimer = Timer.periodic(_pollInterval, (timer) async {
-      await _fetchNewMessages();
-    });
-  }
-
-  Future<void> _fetchNewMessages() async {
-    try {
-      final latestMessages = await chatApi.getPrivateMessages(
-        userId: widget.userId,
-        limit: 20,
-      );
-      final newMessages = latestMessages.where((newMsg) {
-        return !_messages.any((existing) => existing.id == newMsg.id);
-      }).toList();
-      if (newMessages.isNotEmpty && mounted) {
-        setState(() {
-          _messages.addAll(newMessages);
-          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-        });
-        _scrollToBottom();
-        _markMessagesAsRead();
-      }
-    } catch (e) {
-      // ignore polling errors
-    }
   }
 
   Future<void> _loadUserDetails() async {
@@ -212,6 +190,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     setState(() => _isSending = true);
 
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+
     final tempMessage = PrivateMessageModel(
       id: 0,
       senderId: _currentUserId ?? 0,
@@ -222,9 +201,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       createdAt: DateTime.now(),
       isRead: false,
       tempId: tempId,
-      senderUsername: null,
-      receiverUsername: null,
-      voiceDuration: voiceDuration?.inSeconds.toDouble(),
       status: MessageStatus.sending,
     );
 
@@ -232,10 +208,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _scrollToBottom();
 
     try {
-      PrivateMessageModel? finalMessage;
       if (file != null) {
         if (fileType == 'audio') {
-          finalMessage = await chatApi.uploadPrivateVoice(
+          await chatApi.uploadPrivateVoice(
             receiverId: widget.userId,
             file: file,
             tempId: tempId,
@@ -243,36 +218,21 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             replyToId: null,
           );
         } else {
-          finalMessage = await chatApi.uploadPrivateFile(
+          await chatApi.uploadPrivateFile(
             receiverId: widget.userId,
             file: file,
             tempId: tempId,
           );
         }
-      } else if (content != null && content.trim().isNotEmpty) {
-        finalMessage = await chatApi.sendPrivateMessage(
-          receiverId: widget.userId,
+
+        return;
+      }
+
+      if (content != null && content.trim().isNotEmpty) {
+        _ws.sendText(
           content: content.trim(),
           tempId: tempId,
         );
-      }
-
-      if (finalMessage != null && mounted) {
-        setState(() {
-          final index = _messages.indexWhere((m) => m.tempId == tempId);
-          if (index != -1) _messages[index] = finalMessage!;
-          _messageController.clear();
-        });
-        widget.onChatUpdated?.call();
-      } else {
-        setState(() {
-          final index = _messages.indexWhere((m) => m.tempId == tempId);
-          if (index != -1) {
-            _messages[index] =
-                _messages[index].copyWith(status: MessageStatus.failed);
-          }
-          _failedTempIds.add(tempId);
-        });
       }
     } catch (e) {
       setState(() {
@@ -309,7 +269,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (Platform.isAndroid) {
       permission = Permission.photos; // Android < 13
     } else {
-      permission = Permission.photos; // iOS  
+      permission = Permission.photos; // iOS
     }
 
     final status = await permission.request();
@@ -384,13 +344,71 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _ws.disconnect();
     _messageController.dispose();
     _scrollController.dispose();
     _audioPlayer.dispose();
     _audioRecorder.dispose();
     _playbackTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _connectWebsocket() async {
+    try {
+      await _ws.connect();
+
+      _ws.messages.listen((data) {
+        if (!mounted) return;
+
+        final type = data['type'];
+
+        if (type == 'message') {
+          final message = PrivateMessageModel.fromJson(data);
+          final incomingTempId = data['temp_id'];
+
+          setState(() {
+            if (incomingTempId != null) {
+              final index =
+                  _messages.indexWhere((m) => m.tempId == incomingTempId);
+              if (index != -1) {
+                _messages[index] = message.copyWith(
+                  status: MessageStatus.sent,
+                );
+              } else {
+                _messages.add(message);
+              }
+            } else {
+              final exists = _messages.any((m) => m.id == message.id);
+              if (!exists) {
+                _messages.add(message);
+              }
+            }
+
+            _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          });
+
+          _scrollToBottom();
+        } else if (type == 'message_edited') {
+          final messageId = data['message_id'];
+          final newContent = data['new_content'];
+          final editedAt = data['edited_at'];
+
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == messageId);
+
+            if (index != -1) {
+              _messages[index] = _messages[index].copyWith(
+                content: newContent,
+                updatedAt: editedAt != null ? DateTime.parse(editedAt) : null,
+                isEdited: true,
+              );
+            }
+          });
+        }
+      });
+    } catch (e) {
+      print("WS Connection error: $e");
+    }
   }
 
   @override
@@ -427,7 +445,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         ? NetworkImage(widget.avatarUrl!)
                         : null,
                     backgroundColor: widget.avatarUrl == null
-                        ? Colors.grey // fallback color when no image
+                        ? Colors.grey
                         : Colors.transparent,
                     child: widget.avatarUrl == null
                         ? Text(widget.userName[0].toUpperCase())
@@ -507,173 +525,163 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     );
   }
 
-Widget _buildInput(bool isDark, Color bg) {
-  final primary = Theme.of(context).primaryColor;
+  Widget _buildInput(bool isDark, Color bg) {
+    final primary = Theme.of(context).primaryColor;
 
-  return Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, -2),
-            )
-          ],
-        ),
-        child: Row(
-          children: [
-            PopupMenuButton<String>(
-              icon: Icon(Icons.attach_file,
-                  color: isDark ? Colors.white70 : Colors.grey[600]),
-              onSelected: (v) {
-                if (v == 'image_gallery') _pickImage();
-                if (v == 'image_camera') _takePhoto();
-                if (v == 'video') _pickVideo();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'image_gallery',
-                  child: Row(children: [
-                    Icon(Icons.photo_library, size: 20),
-                    SizedBox(width: 12),
-                    Text('Gallery')
-                  ]),
-                ),
-                PopupMenuItem(
-                  value: 'image_camera',
-                  child: Row(children: [
-                    Icon(Icons.camera_alt, size: 20),
-                    SizedBox(width: 12),
-                    Text('Camera')
-                  ]),
-                ),
-                PopupMenuItem(
-                  value: 'video',
-                  child: Row(children: [
-                    Icon(Icons.videocam, size: 20),
-                    SizedBox(width: 12),
-                    Text('Video')
-                  ]),
-                ),
-              ],
-            ),
-
-            const SizedBox(width: 4),
-
-            VoiceRecorderWidget(
-              onRecordingComplete: (file, dur) => _sendMessage(
-                file: file,
-                fileType: 'audio',
-                voiceDuration: dur,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, -2),
+              )
+            ],
+          ),
+          child: Row(
+            children: [
+              PopupMenuButton<String>(
+                icon: Icon(Icons.attach_file,
+                    color: isDark ? Colors.white70 : Colors.grey[600]),
+                onSelected: (v) {
+                  if (v == 'image_gallery') _pickImage();
+                  if (v == 'image_camera') _takePhoto();
+                  if (v == 'video') _pickVideo();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'image_gallery',
+                    child: Row(children: [
+                      Icon(Icons.photo_library, size: 20),
+                      SizedBox(width: 12),
+                      Text('Gallery')
+                    ]),
+                  ),
+                  PopupMenuItem(
+                    value: 'image_camera',
+                    child: Row(children: [
+                      Icon(Icons.camera_alt, size: 20),
+                      SizedBox(width: 12),
+                      Text('Camera')
+                    ]),
+                  ),
+                  PopupMenuItem(
+                    value: 'video',
+                    child: Row(children: [
+                      Icon(Icons.videocam, size: 20),
+                      SizedBox(width: 12),
+                      Text('Video')
+                    ]),
+                  ),
+                ],
               ),
-            ),
-
-            const SizedBox(width: 4),
-
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: bg,
-                  borderRadius: BorderRadius.circular(24),
+              const SizedBox(width: 4),
+              VoiceRecorderWidget(
+                onRecordingComplete: (file, dur) => _sendMessage(
+                  file: file,
+                  fileType: 'audio',
+                  voiceDuration: dur,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    /// TEXT FIELD
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        maxLines: null,
-                        onTap: () {
-                          if (_showEmojiPicker) {
-                            setState(() => _showEmojiPicker = false);
-                          }
-                        },
-                        style: TextStyle(
-                            color: isDark ? Colors.white : Colors.black),
-                        decoration: InputDecoration(
-                          hintText: 'Type a message...',
-                          hintStyle: TextStyle(
-                            color:
-                                isDark ? Colors.white54 : Colors.grey[400],
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      /// TEXT FIELD
+                      Expanded(
+                        child: TextField(
+                          controller: _messageController,
+                          maxLines: null,
+                          onTap: () {
+                            if (_showEmojiPicker) {
+                              setState(() => _showEmojiPicker = false);
+                            }
+                          },
+                          style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            hintText: 'Type a message...',
+                            hintStyle: TextStyle(
+                              color: isDark ? Colors.white54 : Colors.grey[400],
+                            ),
+                            border: InputBorder.none,
                           ),
-                          border: InputBorder.none,
                         ),
                       ),
-                    ),
 
-                    IconButton(
-                      icon: Icon(
-                        Icons.emoji_emotions_outlined,
-                        color: isDark ? Colors.white70 : Colors.grey,
+                      IconButton(
+                        icon: Icon(
+                          Icons.emoji_emotions_outlined,
+                          color: isDark ? Colors.white70 : Colors.grey,
+                        ),
+                        onPressed: () {
+                          FocusScope.of(context).unfocus();
+                          setState(() {
+                            _showEmojiPicker = !_showEmojiPicker;
+                          });
+                        },
                       ),
-                      onPressed: () {
-                        FocusScope.of(context).unfocus();
-                        setState(() {
-                          _showEmojiPicker = !_showEmojiPicker;
-                        });
-                      },
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-
-            const SizedBox(width: 8),
-
-            IconButton(
-              onPressed: _isSending ||
-                      _messageController.text.trim().isEmpty
-                  ? null
-                  : () => _sendMessage(
-                      content: _messageController.text.trim()),
-              icon: _isSending
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      Icons.send,
-                      color: _messageController.text.trim().isEmpty
-                          ? (isDark ? Colors.white38 : Colors.grey[400])
-                          : primary,
-                    ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: _isSending || _messageController.text.trim().isEmpty
+                    ? null
+                    : () =>
+                        _sendMessage(content: _messageController.text.trim()),
+                icon: _isSending
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        Icons.send,
+                        color: _messageController.text.trim().isEmpty
+                            ? (isDark ? Colors.white38 : Colors.grey[400])
+                            : primary,
+                      ),
+              ),
+            ],
+          ),
         ),
-      ),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          height: _showEmojiPicker ? 250 : 0,
+          child: _showEmojiPicker
+              ? AwesomeEmojiPicker(
+                  onEmojiSelected: (emoji) {
+                    final text = _messageController.text;
+                    final selection = _messageController.selection;
 
-      AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        height: _showEmojiPicker ? 250 : 0,
-        child: _showEmojiPicker
-            ? AwesomeEmojiPicker(
-                onEmojiSelected: (emoji) {
-                  final text = _messageController.text;
-                  final selection = _messageController.selection;
+                    final newText = text.replaceRange(
+                      selection.start,
+                      selection.end,
+                      emoji.char,
+                    );
 
-                  final newText = text.replaceRange(
-                    selection.start,
-                    selection.end,
-                    emoji.char,
-                  );
-
-                  _messageController.text = newText;
-                  _messageController.selection =
-                      TextSelection.collapsed(
-                    offset: selection.start + emoji.char.length,
-                  );
-                },
-              )
-            : null,
-      ),
-    ],
-  );
-}
+                    _messageController.text = newText;
+                    _messageController.selection = TextSelection.collapsed(
+                      offset: selection.start + emoji.char.length,
+                    );
+                  },
+                )
+              : null,
+        ),
+      ],
+    );
+  }
 }
