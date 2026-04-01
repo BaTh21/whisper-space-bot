@@ -13,6 +13,7 @@ class PrivateMessageModel {
   final String? receiverUsername;
   final double? voiceDuration;
   final int? fileSize;
+  final bool isEdited;
 
   final MessageStatus status;
 
@@ -32,6 +33,7 @@ class PrivateMessageModel {
     this.voiceDuration,
     this.fileSize,
     this.status = MessageStatus.sent,
+    this.isEdited = false,
   });
 
   factory PrivateMessageModel.fromJson(Map<String, dynamic> json) {
@@ -45,6 +47,7 @@ class PrivateMessageModel {
       createdAt: DateTime.parse(json['created_at']),
       updatedAt:
           json['edited_at'] != null ? DateTime.parse(json['edited_at']) : null,
+      isEdited: json['edited_at'] != null,
       isRead: json['is_read'] ?? false,
       tempId: json['temp_id'],
       senderUsername: json['sender_username'],
@@ -54,7 +57,12 @@ class PrivateMessageModel {
     );
   }
 
-  PrivateMessageModel copyWith({MessageStatus? status}) {
+  PrivateMessageModel copyWith({
+    MessageStatus? status,
+    String? content,
+    DateTime? updatedAt,
+    bool? isEdited,
+  }) {
     return PrivateMessageModel(
       id: id,
       senderId: senderId,
@@ -71,6 +79,7 @@ class PrivateMessageModel {
       voiceDuration: voiceDuration,
       fileSize: fileSize,
       status: status ?? this.status,
+      isEdited: isEdited ?? this.isEdited,
     );
   }
 

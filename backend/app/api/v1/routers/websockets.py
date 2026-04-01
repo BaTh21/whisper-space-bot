@@ -407,12 +407,6 @@ async def handle_websocket_private(
                                 "type": "error",
                                 "error": "Message not found or not authorized to edit"
                             })
-                    except Exception as e:
-                        db.rollback()
-                        await websocket.send_json({
-                            "type": "error",
-                            "error": "Failed to edit message"
-                        })
                             
                     except Exception as e:
                         await websocket.send_json({

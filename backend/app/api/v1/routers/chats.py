@@ -637,6 +637,7 @@ async def send_media_message(
     file: UploadFile = File(...),
     message_type: str = Form(default=None),
     reply_to_id: int = Form(default=None),
+    temp_id: str = Form(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -724,6 +725,7 @@ async def send_media_message(
         broadcast_data = {
             "type": "message",
             "id": full_msg.id,
+            "temp_id": temp_id,
             "content": full_msg.content,
             "message_type": full_msg.message_type.value,
             "sender_id": full_msg.sender_id,

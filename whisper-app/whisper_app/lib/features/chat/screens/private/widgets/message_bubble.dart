@@ -15,6 +15,7 @@ class MessageBubble extends StatefulWidget {
   final double? playingProgress;
   final VoidCallback? onRetry;
   final bool showStatus;
+  final void Function(String, PrivateMessageModel message)? onAction;
 
   const MessageBubble({
     super.key,
@@ -25,6 +26,7 @@ class MessageBubble extends StatefulWidget {
     this.playingProgress,
     this.onRetry,
     this.showStatus = true,
+    this.onAction
   });
 
   @override
@@ -60,6 +62,90 @@ class _MessageBubbleState extends State<MessageBubble> {
     _videoController?.dispose();
     super.dispose();
   }
+
+  void _handleAction(String action) {
+    switch (action) {
+      case 'pin':
+        _pinMessage();
+        break;
+      case 'react':
+        _showReactions();
+        break;
+      case 'forward':
+        _forwardMessage();
+        break;
+      case 'reply':
+        _replyMessage();
+        break;
+      case 'save':
+        _saveMessage();
+        break;
+      case 'preview':
+        _previewMessage();
+        break;
+      case 'edit':
+        _editMessage();
+        break;
+      case 'delete':
+        _deleteMessage();
+        break;
+    }
+  }
+
+  void _pinMessage() => ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Message pinned')));
+
+  void _showReactions() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        content: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: ['👍', '❤️', '😂', '😮', '😢', '😡'].map((emoji) {
+            return GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Reacted with $emoji')));
+                // TODO: save reaction in backend
+              },
+              child: Text(emoji, style: const TextStyle(fontSize: 28)),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _forwardMessage() => ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Forward message')));
+
+  void _replyMessage() => ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Reply to message')));
+
+  void _saveMessage() => ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Message saved')));
+
+  void _previewMessage() {
+    if (widget.message.isImage && widget.message.fileUrl != null) {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => ImageViewer(imageUrl: widget.message.fileUrl!)));
+    } else if (widget.message.isVideo && widget.message.fileUrl != null) {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => VideoMessagePlayer(
+                  url: widget.message.fileUrl!, isOwn: widget.isMe)));
+    }
+  }
+
+  void _editMessage() => ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Edit message')));
+
+  void _deleteMessage() => ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Message deleted')));
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +227,9 @@ class _MessageBubbleState extends State<MessageBubble> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            _formatTime(widget.message.createdAt),
+                            widget.message.isEdited
+                                ? "${_formatTime(widget.message.createdAt)} (edited)"
+                                : _formatTime(widget.message.createdAt),
                             style: TextStyle(
                               fontSize: 10,
                               color:
@@ -165,9 +253,11 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildContent() {
+    Widget content;
+
     if (widget.message.status == MessageStatus.failed &&
         widget.message.content?.isNotEmpty == true) {
-      return Row(
+      content = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Expanded(
@@ -183,11 +273,9 @@ class _MessageBubbleState extends State<MessageBubble> {
           ),
         ],
       );
-    }
-
-    if (widget.message.hasFile &&
+    } else if (widget.message.hasFile &&
         widget.message.status == MessageStatus.sending) {
-      return Container(
+      content = Container(
         width: 200,
         height: 120,
         decoration: BoxDecoration(
@@ -196,33 +284,130 @@ class _MessageBubbleState extends State<MessageBubble> {
         ),
         child: const Center(child: CircularProgressIndicator()),
       );
+    } else if (widget.message.hasFile) {
+      if (widget.message.isImage)
+        content = _buildImageContent();
+      else if (widget.message.isVideo && widget.message.fileUrl != null) {
+        content = VideoMessagePlayer(
+            url: widget.message.fileUrl!, isOwn: widget.isMe);
+      } else if (widget.message.isAudio && widget.message.fileUrl != null) {
+        content = VoiceMessagePlayer(
+            url: widget.message.fileUrl!, isOwn: widget.isMe);
+      } else {
+        content = _buildFile();
+      }
+    } else {
+      content = Text(
+        widget.message.content ?? '',
+        style: TextStyle(color: widget.isMe ? Colors.white : null),
+      );
     }
 
-    if (widget.message.hasFile) {
-      if (widget.message.isImage) {
-        return _buildImageContent();
-      }
+    return GestureDetector(
+      onLongPress: _showMessageOptions,
+      child: content,
+    );
+  }
 
-      if (widget.message.isVideo && widget.message.fileUrl != null) {
-        return VideoMessagePlayer(
-          url: widget.message.fileUrl!,
-          isOwn: widget.isMe,
-        );
-      }
+  void _showMessageOptions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? Colors.grey[900]
+          : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        bool showMore = false;
 
-      if (widget.message.isAudio && widget.message.fileUrl != null) {
-        return VoiceMessagePlayer(
-          url: widget.message.fileUrl!,
-          isOwn: widget.isMe,
-        );
-      }
+        return StatefulBuilder(builder: (context, setState) {
+          List<Map<String, dynamic>> mainActions = [
+            {'icon': Icons.push_pin, 'label': 'Pin', 'value': 'pin'},
+            {'icon': Icons.reply, 'label': 'Reply', 'value': 'reply'},
+            {'icon': Icons.emoji_emotions, 'label': 'React', 'value': 'react'},
+            {'icon': Icons.forward, 'label': 'Forward', 'value': 'forward'},
+          ];
 
-      return _buildFile();
-    }
+          List<Map<String, dynamic>> moreActions = [
+            if (widget.message.hasFile ||
+                (widget.message.content?.isNotEmpty ?? false))
+              {'icon': Icons.save_alt, 'label': 'Save', 'value': 'save'},
+            if (widget.message.hasFile)
+              {
+                'icon': Icons.visibility,
+                'label': 'Preview',
+                'value': 'preview'
+              },
+            if (widget.isMe)
+              {'icon': Icons.edit, 'label': 'Edit', 'value': 'edit'},
+            if (widget.isMe)
+              {'icon': Icons.delete, 'label': 'Delete', 'value': 'delete'},
+          ];
 
-    return Text(
-      widget.message.content ?? '',
-      style: TextStyle(color: widget.isMe ? Colors.white : null),
+          final actionsToShow =
+              showMore ? [...mainActions, ...moreActions] : mainActions;
+
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.start,
+                  children: actionsToShow.map((action) {
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                        _handleAction(action['value'].toString());
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor:
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.grey[800]
+                                    : Colors.grey.shade200,
+                            child: Icon(
+                              action['icon'] as IconData,
+                              size: 28,
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white
+                                  : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            action['label'].toString(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white
+                                  : Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+                if (!showMore && moreActions.isNotEmpty)
+                  TextButton(
+                    onPressed: () => setState(() => showMore = true),
+                    child: const Text('More'),
+                  ),
+              ],
+            ),
+          );
+        });
+      },
     );
   }
 

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/core/constants/api_constants.dart';
-import 'package:whisper_space_flutter/features/chat/model/chat_model/chat_list_model.dart';
 
 class GroupWebsocket {
   final int groupId;
