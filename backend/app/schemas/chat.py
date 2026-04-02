@@ -52,7 +52,6 @@ class MessageSeenByUser(BaseModel):
     seen_at: str
     
 class ReplyPreview(BaseModel):
-    """Compact reply preview like Telegram"""
     id: int
     sender_username: str
     content: str
@@ -69,8 +68,7 @@ class MessageOut(TimestampMixin):
     message_type: MessageTypeInput  
     is_read: bool = False
     reply_to_id: Optional[int] = None
-    reply_to: Optional["MessageOut"] = None
-    reply_preview: Optional[ReplyPreview] = None
+    reply_to: Optional[ReplyPreview] = None
     read_at: Optional[str] = None  
     delivered_at: Optional[str] = None
     created_at: str 

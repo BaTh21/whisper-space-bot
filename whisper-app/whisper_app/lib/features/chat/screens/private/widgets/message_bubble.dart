@@ -17,17 +17,16 @@ class MessageBubble extends StatefulWidget {
   final bool showStatus;
   final void Function(String, PrivateMessageModel message)? onAction;
 
-  const MessageBubble({
-    super.key,
-    required this.message,
-    required this.isMe,
-    this.onPlayAudio,
-    this.isPlaying = false,
-    this.playingProgress,
-    this.onRetry,
-    this.showStatus = true,
-    this.onAction
-  });
+  const MessageBubble(
+      {super.key,
+      required this.message,
+      required this.isMe,
+      this.onPlayAudio,
+      this.isPlaying = false,
+      this.playingProgress,
+      this.onRetry,
+      this.showStatus = true,
+      this.onAction});
 
   @override
   State<MessageBubble> createState() => _MessageBubbleState();
@@ -40,14 +39,14 @@ class _MessageBubbleState extends State<MessageBubble> {
   @override
   void initState() {
     super.initState();
-    if (widget.message.isVideo && widget.message.fileUrl != null) {
+    if (widget.message.isVideo && widget.message.content != null) {
       _initializeVideo();
     }
   }
 
   Future<void> _initializeVideo() async {
     _videoController = VideoPlayerController.networkUrl(
-      Uri.parse(widget.message.fileUrl!),
+      Uri.parse(widget.message.content!),
     );
     try {
       await _videoController!.initialize();
@@ -107,7 +106,6 @@ class _MessageBubbleState extends State<MessageBubble> {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Reacted with $emoji')));
-                // TODO: save reaction in backend
               },
               child: Text(emoji, style: const TextStyle(fontSize: 28)),
             );
@@ -120,32 +118,41 @@ class _MessageBubbleState extends State<MessageBubble> {
   void _forwardMessage() => ScaffoldMessenger.of(context)
       .showSnackBar(const SnackBar(content: Text('Forward message')));
 
-  void _replyMessage() => ScaffoldMessenger.of(context)
-      .showSnackBar(const SnackBar(content: Text('Reply to message')));
+  void _replyMessage() {
+    if (widget.onAction != null) {
+      widget.onAction!("reply", widget.message);
+    }
+  }
 
   void _saveMessage() => ScaffoldMessenger.of(context)
       .showSnackBar(const SnackBar(content: Text('Message saved')));
 
   void _previewMessage() {
-    if (widget.message.isImage && widget.message.fileUrl != null) {
+    if (widget.message.isImage && widget.message.content != null) {
       Navigator.push(
           context,
           MaterialPageRoute(
-              builder: (_) => ImageViewer(imageUrl: widget.message.fileUrl!)));
-    } else if (widget.message.isVideo && widget.message.fileUrl != null) {
+              builder: (_) => ImageViewer(imageUrl: widget.message.content!)));
+    } else if (widget.message.isVideo && widget.message.content != null) {
       Navigator.push(
           context,
           MaterialPageRoute(
               builder: (_) => VideoMessagePlayer(
-                  url: widget.message.fileUrl!, isOwn: widget.isMe)));
+                  url: widget.message.content!, isOwn: widget.isMe)));
     }
   }
 
-  void _editMessage() => ScaffoldMessenger.of(context)
-      .showSnackBar(const SnackBar(content: Text('Edit message')));
+  void _editMessage() {
+    if (widget.onAction != null) {
+      widget.onAction!("edit", widget.message);
+    }
+  }
 
-  void _deleteMessage() => ScaffoldMessenger.of(context)
-      .showSnackBar(const SnackBar(content: Text('Message deleted')));
+  void _deleteMessage() {
+    if (widget.onAction != null) {
+      widget.onAction!("delete", widget.message);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -172,29 +179,99 @@ class _MessageBubbleState extends State<MessageBubble> {
                 widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
               if (isMedia)
-                // Media: Stack with absolute time/status
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    _buildContent(), // image/video widget
-                    Positioned(
-                      bottom: 6,
-                      right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(6),
+                GestureDetector(
+                  onLongPress: _showMessageOptions,
+                  child: Column(
+                    crossAxisAlignment: widget.isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.message.replyTo != null)
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.5,
+                          ),
+                          child: _buildReplyLabel(
+                            widget.message,
+                            isMe: widget.isMe,
+                          ),
                         ),
-                        child: Row(
+                      const SizedBox(height: 4),
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _buildContent(),
+                          Positioned(
+                            bottom: 6,
+                            right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _formatTime(widget.message.createdAt),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  if (widget.isMe && widget.showStatus) ...[
+                                    const SizedBox(width: 4),
+                                    _buildStatusIconInline(),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              else
+                GestureDetector(
+                  onLongPress: _showMessageOptions,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    constraints: const BoxConstraints(minHeight: 40),
+                    child: Column(
+                      crossAxisAlignment: widget.isMe
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.message.replyTo != null)
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.of(context).size.width * 0.5,
+                            ),
+                            child: _buildReplyLabel(widget.message,
+                                isMe: widget.isMe),
+                          ),
+                        _buildContent(),
+                        const SizedBox(height: 6),
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _formatTime(widget.message.createdAt),
-                              style: const TextStyle(
+                              widget.message.isEdited
+                                  ? "${_formatTime(widget.message.createdAt)} (edited)"
+                                  : _formatTime(widget.message.createdAt),
+                              style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.white,
+                                color:
+                                    widget.isMe ? Colors.white : Colors.black54,
                               ),
                             ),
                             if (widget.isMe && widget.showStatus) ...[
@@ -203,46 +280,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                             ],
                           ],
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  constraints: const BoxConstraints(minHeight: 40),
-                  child: Column(
-                    crossAxisAlignment: widget.isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildContent(),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.message.isEdited
-                                ? "${_formatTime(widget.message.createdAt)} (edited)"
-                                : _formatTime(widget.message.createdAt),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color:
-                                  widget.isMe ? Colors.white : Colors.black54,
-                            ),
-                          ),
-                          if (widget.isMe && widget.showStatus) ...[
-                            const SizedBox(width: 4),
-                            _buildStatusIconInline(),
-                          ],
-                        ],
-                      ),
-                    ],
                   ),
                 ),
             ],
@@ -273,26 +312,26 @@ class _MessageBubbleState extends State<MessageBubble> {
           ),
         ],
       );
-    } else if (widget.message.hasFile &&
-        widget.message.status == MessageStatus.sending) {
-      content = Container(
-        width: 200,
-        height: 120,
-        decoration: BoxDecoration(
-          color: Colors.grey[300],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Center(child: CircularProgressIndicator()),
-      );
+    } else if (widget.message.isAudio) {
+      if (widget.message.status == MessageStatus.sending) {
+        content = _buildSendingVoice();
+      } else if (widget.message.status == MessageStatus.failed) {
+        content = _buildFailedVoice();
+      } else {
+        content = VoiceMessagePlayer(
+          url: widget.message.content!,
+          isOwn: widget.isMe,
+        );
+      }
     } else if (widget.message.hasFile) {
       if (widget.message.isImage)
         content = _buildImageContent();
-      else if (widget.message.isVideo && widget.message.fileUrl != null) {
+      else if (widget.message.isVideo && widget.message.content != null) {
         content = VideoMessagePlayer(
-            url: widget.message.fileUrl!, isOwn: widget.isMe);
-      } else if (widget.message.isAudio && widget.message.fileUrl != null) {
+            url: widget.message.content!, isOwn: widget.isMe);
+      } else if (widget.message.isAudio && widget.message.content != null) {
         content = VoiceMessagePlayer(
-            url: widget.message.fileUrl!, isOwn: widget.isMe);
+            url: widget.message.content!, isOwn: widget.isMe);
       } else {
         content = _buildFile();
       }
@@ -424,13 +463,13 @@ class _MessageBubbleState extends State<MessageBubble> {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ImageViewer(imageUrl: widget.message.fileUrl!),
+          builder: (_) => ImageViewer(imageUrl: widget.message.content!),
         ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: CachedNetworkImage(
-          imageUrl: widget.message.fileUrl!,
+          imageUrl: widget.message.content!,
           placeholder: (_, __) => Container(
             width: 200,
             height: 200,
@@ -452,7 +491,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildFile() {
-    final fileName = widget.message.fileUrl?.split('/').last ?? 'File';
+    final fileName = widget.message.content?.split('/').last ?? 'File';
 
     return Container(
       width: 220,
@@ -503,6 +542,160 @@ class _MessageBubbleState extends State<MessageBubble> {
           color: widget.isMe ? Colors.white70 : Colors.grey,
         );
     }
+  }
+
+  Widget _buildSendingVoice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color:
+            widget.isMe ? Theme.of(context).primaryColor : Colors.grey.shade300,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            "Sending voice...",
+            style: TextStyle(
+              color: widget.isMe ? Colors.white : Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFailedVoice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.red.shade100,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error, size: 16, color: Colors.red),
+          const SizedBox(width: 6),
+          const Text("Failed"),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: widget.onRetry,
+            child: const Icon(Icons.refresh, size: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReplyLabel(PrivateMessageModel msg, {required bool isMe}) {
+    final isMedia =
+        msg.hasFile && (widget.message.isImage || widget.message.isVideo);
+    final parent = msg.replyTo!;
+    final username = parent.senderUsername;
+
+    Widget contentWidget;
+    switch (parent.messageType) {
+      case 'text':
+        contentWidget = Text(
+          parent.content,
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+        break;
+      case 'file':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.insert_drive_file, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('File', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      case 'voice':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.mic, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('Voice Message',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      case 'image':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.image, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('Image', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      case 'video':
+        contentWidget = Row(
+          children: const [
+            Icon(Icons.videocam, size: 14, color: Colors.grey),
+            SizedBox(width: 4),
+            Text('Video', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        );
+        break;
+      default:
+        contentWidget = const Text(
+          'Attachment',
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isMe
+            ? (isMedia
+                ? Theme.of(context).primaryColor
+                : Colors.white.withOpacity(0.2))
+            : Colors.grey,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(8),
+          topRight: Radius.circular(8),
+          bottomLeft: isMedia ? Radius.circular(0) : Radius.circular(8),
+          bottomRight: isMedia ? Radius.circular(0) : Radius.circular(8),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.reply,
+              size: 16, color: isMe ? Colors.white : Colors.black87),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reply to $username',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isMe ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                contentWidget,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatTime(DateTime dateTime) {

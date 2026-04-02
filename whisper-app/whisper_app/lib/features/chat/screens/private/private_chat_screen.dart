@@ -61,6 +61,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   bool _showEmojiPicker = false;
 
   late PrivateWebsocket _ws;
+  PrivateMessageModel? _editingMessage;
+  PrivateMessageModel? _replyingMessage;
 
   @override
   void initState() {
@@ -134,7 +136,9 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         });
         _scrollToBottom();
       }
-    } catch (e) {
+    } catch (e, stack) {
+      print('❌ LOAD MESSAGES ERROR: $e');
+      print(stack);
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -184,24 +188,64 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     File? file,
     String? fileType,
     Duration? voiceDuration,
+    int? replyToId,
   }) async {
-    if ((content == null || content.trim().isEmpty) && file == null) return;
+    final text = content?.trim();
+
+    if ((text == null || text.isEmpty) && file == null) return;
+
+    if (_editingMessage != null && text != null && text.isNotEmpty) {
+      try {
+        _ws.editMessage(
+          messageId: _editingMessage!.id,
+          newContent: text,
+        );
+
+        setState(() {
+          _editingMessage = null;
+          _messageController.clear();
+        });
+      } catch (e) {
+        debugPrint("Edit failed: $e");
+      }
+      return;
+    }
 
     setState(() => _isSending = true);
 
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
 
+    final durationSeconds =
+        voiceDuration != null ? voiceDuration.inMilliseconds / 1000.0 : null;
+
+    String? tempContent;
+    if (file != null) {
+      tempContent = file.path;
+    } else {
+      tempContent = text;
+    }
+
     final tempMessage = PrivateMessageModel(
       id: 0,
       senderId: _currentUserId ?? 0,
       receiverId: widget.userId,
-      content: content?.trim(),
-      fileUrl: null,
-      messageType: fileType ?? (content != null ? 'text' : 'unknown'),
+      content: tempContent,
+      messageType: fileType == 'audio' ? 'voice' : fileType,
       createdAt: DateTime.now(),
       isRead: false,
       tempId: tempId,
       status: MessageStatus.sending,
+      voiceDuration: durationSeconds,
+      replyToId: replyToId,
+      replyTo: _replyingMessage != null
+          ? ReplyMessage(
+              id: _replyingMessage!.id,
+              senderId: _currentUserId ?? 0,
+              senderUsername: _replyingMessage!.senderUsername ?? "You",
+              content: _replyingMessage!.content ?? "[Attachment]",
+              messageType: _replyingMessage!.messageType ?? "text",
+            )
+          : null,
     );
 
     setState(() => _messages.add(tempMessage));
@@ -209,30 +253,34 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
     try {
       if (file != null) {
+        final fileSize = await file.length();
+
+        if (fileSize > 15 * 1024 * 1024) {
+          throw Exception("File too large");
+        }
+
         if (fileType == 'audio') {
           await chatApi.uploadPrivateVoice(
             receiverId: widget.userId,
             file: file,
             tempId: tempId,
-            voiceDuration: voiceDuration?.inSeconds.toDouble() ?? 0.0,
-            replyToId: null,
+            voiceDuration: durationSeconds ?? 0.0,
+            replyToId: replyToId,
           );
         } else {
           await chatApi.uploadPrivateFile(
             receiverId: widget.userId,
             file: file,
             tempId: tempId,
+            replyToId: replyToId,
           );
         }
 
         return;
       }
 
-      if (content != null && content.trim().isNotEmpty) {
-        _ws.sendText(
-          content: content.trim(),
-          tempId: tempId,
-        );
+      if (text != null && text.isNotEmpty) {
+        _ws.sendText(content: text, tempId: tempId, replyToId: replyToId);
       }
     } catch (e) {
       setState(() {
@@ -243,8 +291,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         }
         _failedTempIds.add(tempId);
       });
+
+      debugPrint("Send failed: $e");
     } finally {
-      if (mounted) setState(() => _isSending = false);
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _replyingMessage = null;
+        });
+      }
     }
   }
 
@@ -256,7 +311,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     });
     if (failedMessage.content != null) {
       await _sendMessage(content: failedMessage.content);
-    } else if (failedMessage.hasFile && failedMessage.fileUrl != null) {
+    } else if (failedMessage.hasFile && failedMessage.content != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot retry file upload at this time')),
       );
@@ -277,7 +332,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (status.isGranted) {
       final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
       if (picked != null) {
-        await _sendMessage(file: File(picked.path), fileType: 'image');
+        await _sendMessage(
+          file: File(picked.path),
+          fileType: 'image',
+          replyToId: _replyingMessage?.id,
+        );
       }
     } else {
       _showPermissionDeniedDialog('Photos');
@@ -290,7 +349,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (status.isGranted) {
       final picked = await _imagePicker.pickImage(source: ImageSource.camera);
       if (picked != null) {
-        await _sendMessage(file: File(picked.path), fileType: 'image');
+        await _sendMessage(
+          file: File(picked.path),
+          fileType: 'image',
+          replyToId: _replyingMessage?.id,
+        );
       }
     } else if (status.isPermanentlyDenied) {
       openAppSettings();
@@ -303,7 +366,11 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     if (await Permission.photos.request().isGranted) {
       final picked = await _imagePicker.pickVideo(source: ImageSource.gallery);
       if (picked != null) {
-        await _sendMessage(file: File(picked.path), fileType: 'video');
+        await _sendMessage(
+          file: File(picked.path),
+          fileType: 'video',
+          replyToId: _replyingMessage?.id,
+        );
       }
     } else {
       _showPermissionDeniedDialog('Photos');
@@ -359,6 +426,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
 
       _ws.messages.listen((data) {
         if (!mounted) return;
+        print("ws data: ${data}");
 
         final type = data['type'];
 
@@ -370,9 +438,17 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
             if (incomingTempId != null) {
               final index =
                   _messages.indexWhere((m) => m.tempId == incomingTempId);
+
               if (index != -1) {
-                _messages[index] = message.copyWith(
+                final existing = _messages[index];
+                _messages[index] = existing.copyWith(
+                  id: message.id,
+                  content: message.content,
+                  messageType: message.messageType,
+                  voiceDuration: message.voiceDuration,
+                  fileSize: message.fileSize,
                   status: MessageStatus.sent,
+                  tempId: existing.tempId,
                 );
               } else {
                 _messages.add(message);
@@ -404,11 +480,59 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               );
             }
           });
+        } else if (type == 'message_deleted') {
+          final messageId = data['message_id'];
+
+          setState(() {
+            _messages.removeWhere((m) => m.id == messageId);
+          });
         }
       });
     } catch (e) {
       print("WS Connection error: $e");
     }
+  }
+
+  void _startEditing(PrivateMessageModel message) {
+    setState(() {
+      _editingMessage = message;
+      _messageController.text = message.content ?? '';
+    });
+    FocusScope.of(context).requestFocus(FocusNode());
+  }
+
+  Future<void> _deleteMessage(PrivateMessageModel message) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Delete message?"),
+        content: const Text("This action cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    _ws.deleteMessage(messageId: message.id);
+
+    setState(() {
+      _messages.removeWhere((m) => m.id == message.id);
+    });
+  }
+
+  void _replyMessage(PrivateMessageModel message) {
+    setState(() {
+      _replyingMessage = message;
+    });
   }
 
   @override
@@ -505,7 +629,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         isMe: isMe,
                         onPlayAudio: msg.isAudio
                             ? () =>
-                                _playAudio(msg.fileUrl ?? '', msg.id.toString())
+                                _playAudio(msg.content ?? '', msg.id.toString())
                             : null,
                         isPlaying: _currentlyPlayingId == msg.id.toString(),
                         playingProgress:
@@ -515,6 +639,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         onRetry: msg.status == MessageStatus.failed
                             ? () => _retryMessage(msg)
                             : null,
+                        onAction: (action, message) {
+                          if (action == 'edit') {
+                            _startEditing(message);
+                          } else if (action == 'delete') {
+                            _deleteMessage(message);
+                          } else if (action == 'reply') {
+                            _replyMessage(message);
+                          }
+                        },
                       );
                     },
                   ),
@@ -531,6 +664,56 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (_editingMessage != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            color: Colors.orange.withOpacity(0.1),
+            child: Row(
+              children: [
+                const Icon(Icons.edit, size: 16),
+                const SizedBox(width: 8),
+                const Expanded(child: Text("Editing message")),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _editingMessage = null;
+                      _messageController.clear();
+                    });
+                  },
+                  child: const Icon(Icons.close, size: 18),
+                )
+              ],
+            ),
+          ),
+        if (_replyingMessage != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.08),
+              border: const Border(
+                left: BorderSide(color: Colors.blue, width: 3),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.reply, size: 16, color: Colors.blue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _replyingMessage!.content ?? "[Attachment]",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    setState(() => _replyingMessage = null);
+                  },
+                  child: const Icon(Icons.close, size: 18),
+                )
+              ],
+            ),
+          ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
@@ -586,6 +769,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                   file: file,
                   fileType: 'audio',
                   voiceDuration: dur,
+                  replyToId: _replyingMessage?.id,
                 ),
               ),
               const SizedBox(width: 4),
@@ -640,8 +824,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               IconButton(
                 onPressed: _isSending || _messageController.text.trim().isEmpty
                     ? null
-                    : () =>
-                        _sendMessage(content: _messageController.text.trim()),
+                    : () => _sendMessage(
+                          content: _messageController.text.trim(),
+                          replyToId: _replyingMessage?.id,
+                        ),
                 icon: _isSending
                     ? const SizedBox(
                         width: 20,
