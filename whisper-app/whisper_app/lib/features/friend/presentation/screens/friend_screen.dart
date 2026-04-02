@@ -1,6 +1,7 @@
 // lib/features/friend/presentation/screens/friend_screen.dart
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
+import 'package:whisper_space_flutter/features/chat/screens/private/private_chat_screen.dart';
 import 'package:whisper_space_flutter/features/friend/presentation/screens/friend_search_screen.dart';
 import 'package:whisper_space_flutter/utils/snack_bar.dart';
 
@@ -864,7 +865,24 @@ class _FriendScreenState extends State<FriendScreen>
             debugPrint('View profile ${f['name']}');
           },
           onOpenChat: () {
-            debugPrint('Open chat with ${f['name']}');
+            // 👇 NEW: Navigate to private chat
+            final friendId = int.tryParse(f['id'] ?? '');
+            if (friendId == null) {
+              debugPrint('Invalid friend ID: ${f['id']}');
+              return;
+            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PrivateChatScreen(
+                  userId: friendId,
+                  userName: f['name']!,
+                  avatarUrl: f['avatar'] != null && f['avatar'].toString().isNotEmpty
+                      ? f['avatar']
+                      : null,
+                ),
+              ),
+            );
           },
           onCancel: status == FriendStatus.pending
               ? () async {
