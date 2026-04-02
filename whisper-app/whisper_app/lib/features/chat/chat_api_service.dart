@@ -391,7 +391,6 @@ Future<PrivateMessageModel> uploadPrivateFile({
     var request = http.MultipartRequest("POST", uri);
     request.headers.addAll(await _authHeaders());
     
-    // Determine message type based on file extension
     String messageType = 'file';
     final extension = file.path.split('.').last.toLowerCase();
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(extension)) {
@@ -439,15 +438,13 @@ Future<PrivateMessageModel> uploadPrivateVoice({
   final request = http.MultipartRequest('POST', uri);
   request.headers.addAll(await _authHeaders());
 
-  // Fields required by the backend
   request.fields['temp_id'] = tempId;
   if (replyToId != null) {
     request.fields['reply_to_id'] = replyToId.toString();
   }
-  // Critical: field name is 'duration' (not 'voice_duration')
+
   request.fields['duration'] = voiceDuration.toString();
 
-  // File field name must be 'voice_file'
   request.files.add(await http.MultipartFile.fromPath(
     'voice_file',
     file.path,
@@ -460,8 +457,6 @@ Future<PrivateMessageModel> uploadPrivateVoice({
     final jsonData = json.decode(responseBody) as Map<String, dynamic>;
     return PrivateMessageModel.fromJson(jsonData);
   } else {
-    print('Voice upload failed: ${response.statusCode}');
-    print('Response body: $responseBody');
     throw Exception('Voice upload failed: $responseBody');
   }
 }

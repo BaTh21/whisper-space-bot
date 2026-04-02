@@ -302,30 +302,38 @@ def serialize_message_type(message_type: MessageType | None) -> str:
 
 def build_reply_preview(reply: PrivateMessage) -> ReplyPreview:
     if reply.message_type == MessageType.voice:
-        content = "🎤 Voice message"
+        content = "Voice message"
+
     elif reply.message_type == MessageType.image:
-        content = "🖼️ Photo"
+        content = "Photo"
+
+    elif reply.message_type == MessageType.video:
+        content = "Video"
+
     elif reply.message_type == MessageType.file:
-        content = "📎 File"
-    else:
-        content = reply.content or ""
+        content = "File"
+
+    elif reply.message_type == MessageType.text:
+        content = reply.content or "Message"
         if len(content) > 100:
             content = content[:100] + "..."
 
+    else:
+        content = "Attachment"
+
     return ReplyPreview(
         id=reply.id,
-        sender_username=getattr(reply.sender, "username", "Unknown"),
+        sender_id=reply.sender_id,
+        sender_username=reply.sender.username if reply.sender else "Unknown",
         content=content,
         message_type=serialize_message_type(reply.message_type),
         voice_duration=reply.voice_duration,
         file_size=reply.file_size
     )
 
-
 def build_message_out(
     msg: PrivateMessage,
     reply_to: MessageOut | None,
-    reply_preview: ReplyPreview | None,
     seen_by: list
 ) -> MessageOut:
     return MessageOut(
@@ -341,7 +349,6 @@ def build_message_out(
 
         reply_to_id=msg.reply_to_id,
         reply_to=reply_to,
-        reply_preview=reply_preview,
 
         is_forwarded=msg.is_forwarded,
         forwarded_from_id=msg.forwarded_from_id,

@@ -19,7 +19,7 @@ from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadRespo
                              MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
 from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, extract_public_id_from_url
-from app.core.cloudinary import check_cloudinary_health, upload_voice_message
+from app.core.cloudinary import upload_voice_message
 from app.core.config import settings
 from app.crud.friend import get_friends
 from sqlalchemy import or_, and_
@@ -137,6 +137,7 @@ async def get_private_chat(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
+            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
         )
         .filter(
@@ -163,257 +164,19 @@ async def get_private_chat(
         ]
 
         reply_to_out = None
-        reply_preview = None
 
         if msg.reply_to:
-            reply = msg.reply_to
-
-            reply_to_out = MessageOut(
-                id=reply.id,
-                sender_id=reply.sender_id,
-                receiver_id=reply.receiver_id,
-                content=reply.content,
-                message_type=serialize_message_type(reply.message_type),
-                is_read=reply.is_read,
-                read_at=reply.read_at.isoformat() if reply.read_at else None,
-                delivered_at=reply.delivered_at.isoformat() if reply.delivered_at else None,
-                reply_to=None,
-                reply_to_id=reply.reply_to_id,
-                is_forwarded=reply.is_forwarded,
-                forwarded_from_id=reply.forwarded_from_id,
-                original_sender=reply.original_sender,
-                original_sender_avatar=reply.original_sender_avatar,
-                created_at=reply.created_at.isoformat(),
-                sender_username=getattr(reply.sender, "username", None),
-                sender_avatar_url=getattr(reply.sender, "avatar_url", None),
-                receiver_username=getattr(reply.receiver, "username", None),
-                voice_duration=reply.voice_duration,
-                file_size=reply.file_size,
-                seen_by=[]
-            )
-
-            reply_preview = build_reply_preview(reply)
+            reply_to_out = build_reply_preview(msg.reply_to)
 
         result.append(
             build_message_out(
                 msg=msg,
                 reply_to=reply_to_out,
-                reply_preview=reply_preview,
                 seen_by=seen_by
             )
         )
 
     return result
-
-@router.post("/private/{friend_id}", response_model=MessageOut)
-async def send_private_message(
-    friend_id: int,
-    msg_in: MessageCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        
-        if is_blocked(db, current_user.id, friend_id):
-            raise HTTPException(
-                status_code=403, 
-                detail="Cannot send message to blocked user"
-            )
-        
-        if is_blocked_by(db, current_user.id, friend_id):
-            raise HTTPException(
-                status_code=403, 
-                detail="This user has blocked you"
-            )
-            
-        if not is_friend(db, current_user.id, friend_id):
-            raise HTTPException(status_code=403, detail="Not friends")
-
-        msg = create_private_message(
-            db=db,
-            sender_id=current_user.id,
-            receiver_id=friend_id,
-            content=msg_in.content,
-            message_type=msg_in.message_type,
-            reply_to_id=msg_in.reply_to_id,
-            is_forwarded=msg_in.is_forwarded,
-            original_sender=msg_in.original_sender,
-            voice_duration=msg_in.voice_duration,
-            file_size=msg_in.file_size
-        )
-
-        full_msg = db.query(PrivateMessage).options(
-            joinedload(PrivateMessage.sender),
-            joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
-        ).filter(PrivateMessage.id == msg.id).first()
-
-        if not full_msg:
-            raise HTTPException(status_code=500, detail="Failed to retrieve created message")
-        
-        chat_id = _chat_id(current_user.id, friend_id)
-        
-        seen_by = []
-        for status in full_msg.seen_statuses:
-            seen_by.append({
-                "user_id": status.user.id,
-                "username": status.user.username,
-                "avatar_url": status.user.avatar_url,
-                "seen_at": status.seen_at.isoformat() if status.seen_at else None
-            })
-        
-        broadcast_data = {
-            "type": "message",
-            "id": full_msg.id,
-            "sender_id": full_msg.sender_id,
-            "receiver_id": full_msg.receiver_id,
-            "content": full_msg.content,
-            "message_type": full_msg.message_type.value,
-            "is_read": full_msg.is_read,
-            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
-            "delivered_at": full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-            "reply_to_id": full_msg.reply_to_id,
-            "is_forwarded": full_msg.is_forwarded,
-            "original_sender": full_msg.original_sender,
-            "created_at": full_msg.created_at.isoformat(),
-            "sender_username": full_msg.sender.username,
-            "sender_avatar_url": full_msg.sender.avatar_url,
-            "receiver_username": full_msg.receiver.username,
-            "voice_duration": full_msg.voice_duration,
-            "file_size": full_msg.file_size,
-            "seen_by": seen_by
-        }
-        
-        if full_msg.reply_to:
-            reply_content = full_msg.reply_to.content or ""
-            if full_msg.reply_to.message_type == MessageType.voice:
-                reply_content = "🎤 Voice message"
-            elif full_msg.reply_to.message_type == MessageType.image:
-                reply_content = "🖼️ Photo" 
-            elif full_msg.reply_to.message_type == MessageType.file:
-                reply_content = "📎 File"
-            elif len(reply_content) > 100:
-                reply_content = reply_content[:100] + "..."
-            
-            broadcast_data["reply_preview"] = {
-                "id": full_msg.reply_to.id,
-                "sender_username": full_msg.reply_to.sender.username,
-                "content": reply_content,
-                "message_type": full_msg.reply_to.message_type.value,
-                "voice_duration": full_msg.reply_to.voice_duration,
-                "file_size": full_msg.reply_to.file_size
-            }
-            
-            reply_seen_by = []
-            if full_msg.reply_to.seen_statuses:
-                for status in full_msg.reply_to.seen_statuses:
-                    reply_seen_by.append({
-                        "user_id": status.user.id,
-                        "username": status.user.username,
-                        "avatar_url": status.user.avatar_url,
-                        "seen_at": status.seen_at.isoformat() if status.seen_at else None
-                    })
-            
-            broadcast_data["reply_to"] = {
-                "id": full_msg.reply_to.id,
-                "sender_id": full_msg.reply_to.sender_id,
-                "receiver_id": full_msg.reply_to.receiver_id,
-                "content": full_msg.reply_to.content,
-                "message_type": full_msg.reply_to.message_type.value,
-                "is_read": full_msg.reply_to.is_read,
-                "read_at": full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
-                "delivered_at": full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
-                "reply_to_id": full_msg.reply_to.reply_to_id,
-                "is_forwarded": full_msg.reply_to.is_forwarded,
-                "original_sender": full_msg.reply_to.original_sender,
-                "created_at": full_msg.reply_to.created_at.isoformat(),
-                "sender_username": full_msg.reply_to.sender.username,
-                "receiver_username": full_msg.reply_to.receiver.username if full_msg.reply_to.receiver else None,
-                "voice_duration": full_msg.reply_to.voice_duration,
-                "file_size": full_msg.reply_to.file_size,
-                "seen_by": reply_seen_by
-            }
-        
-        await manager.broadcast(chat_id, broadcast_data)
-        
-        response = MessageOut(
-            id=full_msg.id,
-            sender_id=full_msg.sender_id,
-            receiver_id=full_msg.receiver_id,
-            content=full_msg.content,
-            message_type=full_msg.message_type.value,
-            is_read=full_msg.is_read,
-            read_at=full_msg.read_at.isoformat() if full_msg.read_at else None,
-            delivered_at=full_msg.delivered_at.isoformat() if full_msg.delivered_at else None,
-            reply_to_id=full_msg.reply_to_id,
-            is_forwarded=full_msg.is_forwarded,
-            original_sender=full_msg.original_sender,
-            sender_username=full_msg.sender.username,
-            receiver_username=full_msg.receiver.username,
-            voice_duration=full_msg.voice_duration,
-            file_size=full_msg.file_size,
-            seen_by=[MessageSeenByUser(**item) for item in seen_by],
-            created_at=full_msg.created_at.isoformat()
-        )
-        
-        if full_msg.reply_to:
-            reply_content = full_msg.reply_to.content or ""
-            if full_msg.reply_to.message_type == MessageType.voice:
-                reply_content = "🎤 Voice message"
-            elif full_msg.reply_to.message_type == MessageType.image:
-                reply_content = "🖼️ Photo"
-            elif full_msg.reply_to.message_type == MessageType.file:
-                reply_content = "📎 File"
-            elif len(reply_content) > 100:
-                reply_content = reply_content[:100] + "..."
-            
-            response.reply_preview = ReplyPreview(
-                id=full_msg.reply_to.id,
-                sender_username=full_msg.reply_to.sender.username,
-                content=reply_content,
-                message_type=full_msg.reply_to.message_type.value,
-                voice_duration=full_msg.reply_to.voice_duration,
-                file_size=full_msg.reply_to.file_size
-            )
-            
-            reply_seen_by = []
-            if full_msg.reply_to.seen_statuses:
-                for status in full_msg.reply_to.seen_statuses:
-                    reply_seen_by.append(MessageSeenByUser(
-                        user_id=status.user.id,
-                        username=status.user.username,
-                        avatar_url=status.user.avatar_url,
-                        seen_at=status.seen_at.isoformat() if status.seen_at else None
-                    ))
-            
-            response.reply_to = MessageOut(
-                id=full_msg.reply_to.id,
-                sender_id=full_msg.reply_to.sender_id,
-                receiver_id=full_msg.reply_to.receiver_id,
-                content=full_msg.reply_to.content,
-                message_type=full_msg.reply_to.message_type.value,
-                is_read=full_msg.reply_to.is_read,
-                read_at=full_msg.reply_to.read_at.isoformat() if full_msg.reply_to.read_at else None,
-                delivered_at=full_msg.reply_to.delivered_at.isoformat() if full_msg.reply_to.delivered_at else None,
-                reply_to_id=full_msg.reply_to.reply_to_id,
-                is_forwarded=full_msg.reply_to.is_forwarded,
-                original_sender=full_msg.reply_to.original_sender,
-                created_at=full_msg.reply_to.created_at.isoformat(),
-                sender_username=full_msg.reply_to.sender.username,
-                receiver_username=full_msg.reply_to.receiver.username if full_msg.reply_to.receiver else None,
-                voice_duration=full_msg.reply_to.voice_duration,
-                file_size=full_msg.reply_to.file_size,
-                seen_by=reply_seen_by
-            )
-        
-        return response
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
     
 @router.get("/private/message/{message_id}/reply-context")
 async def get_reply_context(
@@ -519,7 +282,7 @@ async def send_voice_message(
                 voice_duration=round(duration, 2),
                 file_size=file_size
             )
-        except Exception as db_error:
+        except Exception:
             raise HTTPException(status_code=500, detail="Failed to save message to database")
 
         full_msg = db.query(PrivateMessage).options(
@@ -548,24 +311,26 @@ async def send_voice_message(
             "type": "message",
             "id": full_msg.id,
             "temp_id": temp_id,
-            "sender_id": full_msg.sender_id,
-            "receiver_id": full_msg.receiver_id,
             "content": voice_url,
             "message_type": "voice",
+            "sender_id": full_msg.sender_id,
+            "receiver_id": full_msg.receiver_id,
+            "sender_username": full_msg.sender.username,
+            "sender_avatar_url": full_msg.sender.avatar_url,
+            "receiver_username": full_msg.receiver.username,
+            "created_at": full_msg.created_at.isoformat(),
+            "is_read": False,
             "voice_duration": round(duration, 2),
             "file_size": file_size,
             "reply_to_id": full_msg.reply_to_id,
-            "reply_preview": None,
-            "is_read": False,
-            "created_at": full_msg.created_at.isoformat(),
-            "sender_username": full_msg.sender.username,
-            "avatar_url": full_msg.sender.avatar_url or "",
+            "reply_to": None,
             "seen_by": seen_by,
         }
 
         if full_msg.reply_to:
             reply = full_msg.reply_to
             reply_text = "Voice message"
+
             if reply.message_type == MessageType.text:
                 reply_text = reply.content or "Message"
                 if len(reply_text) > 80:
@@ -575,7 +340,7 @@ async def send_voice_message(
             elif reply.message_type == MessageType.file:
                 reply_text = "File"
 
-            broadcast_data["reply_preview"] = {
+            broadcast_data["reply_to"] = {
                 "id": reply.id,
                 "sender_username": reply.sender.username,
                 "content": reply_text,
@@ -583,46 +348,10 @@ async def send_voice_message(
                 "voice_duration": reply.voice_duration,
                 "file_size": reply.file_size
             }
+            
+        await manager.broadcast(chat_id, broadcast_data)
 
-        broadcast_data["chat_id"] = _chat_id(current_user.id, friend_id)
-        await manager.send_to_user(friend_id, broadcast_data)
-
-        response = MessageOut(
-            id=full_msg.id,
-            temp_id=temp_id,
-            sender_id=full_msg.sender_id,
-            receiver_id=full_msg.receiver_id,
-            content=voice_url,
-            message_type="voice",
-            voice_duration=round(duration, 2),
-            file_size=file_size,
-            is_read=False,
-            created_at=full_msg.created_at.isoformat(),
-            sender_username=full_msg.sender.username,
-            receiver_username=full_msg.receiver.username,
-            seen_by=[MessageSeenByUser(**s) for s in seen_by],
-        )
-
-        if full_msg.reply_to:
-            reply = full_msg.reply_to
-            reply_text = "Voice message"
-            if reply.message_type == MessageType.text:
-                reply_text = (reply.content or "")[:100] + ("..." if len(reply.content or "") > 100 else "")
-            elif reply.message_type == MessageType.image:
-                reply_text = "Photo"
-            elif reply.message_type == MessageType.file:
-                reply_text = "File"
-
-            response.reply_preview = ReplyPreview(
-                id=reply.id,
-                sender_username=reply.sender.username,
-                content=reply_text,
-                message_type=reply.message_type.value,
-                voice_duration=reply.voice_duration,
-                file_size=reply.file_size
-            )
-
-        return response
+        return broadcast_data
 
     except HTTPException:
         raise
@@ -708,14 +437,14 @@ async def send_media_message(
             for status in full_msg.seen_statuses
         ]
 
-        reply_preview = None
+        reply_to = None
         if full_msg.reply_to_id:
             reply_msg = db.query(PrivateMessage).filter(
                 PrivateMessage.id == full_msg.reply_to_id
             ).first()
 
             if reply_msg:
-                reply_preview = {
+                reply_to = {
                     "id": reply_msg.id,
                     "content": reply_msg.content,
                     "message_type": reply_msg.message_type.value,
@@ -740,7 +469,7 @@ async def send_media_message(
             "voice_duration": full_msg.voice_duration,
             "file_size": full_msg.file_size,
             "reply_to_id": full_msg.reply_to_id,
-            "reply_preview": reply_preview,
+            "reply_to": reply_to,
             "is_forwarded": full_msg.is_forwarded,
             "original_sender": full_msg.original_sender,
             "seen_by": seen_by

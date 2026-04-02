@@ -53,16 +53,20 @@ class PrivateWebsocket {
   void sendText({
     required String content,
     required String tempId,
+    int? replyToId
   }) {
     if (webSocketChannel == null) {
       throw Exception("WebSocket not connected");
     }
+
+    if (content.trim().isEmpty) return;
 
     webSocketChannel!.sink.add(jsonEncode({
       "type": "message",
       "content": content,
       "message_type": "text",
       "temp_id": tempId,
+      "reply_to_id": replyToId
     }));
   }
 
@@ -76,6 +80,15 @@ class PrivateWebsocket {
       "message_id": messageId,
       "new_content": newContent,
     }));
+  }
+
+  void deleteMessage({required int messageId}) {
+    if (webSocketChannel == null) {
+      throw Exception("WebSocket not connected");
+    }
+
+    webSocketChannel!.sink
+        .add(jsonEncode({"type": "delete", "message_id": messageId}));
   }
 
   void _startHeartbeat() {
