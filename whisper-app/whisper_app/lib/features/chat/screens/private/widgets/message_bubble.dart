@@ -6,6 +6,8 @@ import '../../../model/private_message_model/private_message_model.dart';
 import 'image_viewer.dart';
 import 'package:whisper_space_flutter/features/chat/video_player.dart';
 import 'package:whisper_space_flutter/features/chat/voice_player.dart';
+import 'package:dio/dio.dart';
+import 'dart:io';
 
 class MessageBubble extends StatefulWidget {
   final PrivateMessageModel message;
@@ -36,7 +38,8 @@ class MessageBubble extends StatefulWidget {
 
 class _MessageBubbleState extends State<MessageBubble> {
   VideoPlayerController? _videoController;
-  bool _isVideoInitialized = false;
+  bool _isDownloading = false;
+  double _progress = 0.0;
 
   @override
   void initState() {
@@ -52,7 +55,6 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
     try {
       await _videoController!.initialize();
-      if (mounted) setState(() => _isVideoInitialized = true);
     } catch (e) {
       debugPrint('Video init failed: $e');
     }
@@ -129,8 +131,53 @@ class _MessageBubbleState extends State<MessageBubble> {
     }
   }
 
-  void _saveMessage() => ScaffoldMessenger.of(context)
-      .showSnackBar(const SnackBar(content: Text('Message saved')));
+  Future<void> _saveMessage() async {
+    try {
+      final url = widget.message.content;
+      if (url == null) return;
+
+      final fileName = url.split('/').last;
+
+      final dir = Directory('/storage/emulated/0/Download');
+      final filePath = '${dir.path}/$fileName';
+
+      setState(() {
+        _isDownloading = true;
+        _progress = 0;
+      });
+
+      await Dio().download(
+        url,
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _progress = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved to Downloads')),
+      );
+    } catch (e, stack) {
+      print("❌ ERROR: $e");
+      print("STACK: $stack");
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e')),
+      );
+    }
+  }
 
   void _previewMessage() {
     if (widget.message.isImage && widget.message.content != null) {
@@ -337,9 +384,9 @@ class _MessageBubbleState extends State<MessageBubble> {
         );
       }
     } else if (widget.message.hasFile) {
-      if (widget.message.isImage)
+      if (widget.message.isImage) {
         content = _buildImageContent();
-      else if (widget.message.isVideo && widget.message.content != null) {
+      } else if (widget.message.isVideo && widget.message.content != null) {
         content = VideoMessagePlayer(
             url: widget.message.content!, isOwn: widget.isMe);
       } else if (widget.message.isAudio && widget.message.content != null) {
@@ -357,7 +404,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     return GestureDetector(
       onLongPress: _showMessageOptions,
-      child: content,
+      child: _buildDownloadingOverlay(content),
     );
   }
 
@@ -383,15 +430,18 @@ class _MessageBubbleState extends State<MessageBubble> {
           ];
 
           List<Map<String, dynamic>> moreActions = [
-            if (widget.message.hasFile ||
-                (widget.message.content?.isNotEmpty ?? false))
-              {'icon': Icons.save_alt, 'label': 'Save', 'value': 'save'},
             if (widget.message.hasFile)
+              {'icon': Icons.autorenew, 'label': 'Replace', 'value': 'replace'},
+            if (widget.message.hasFile &&
+                widget.message.messageType != 'file' &&
+                widget.message.messageType != 'voice')
               {
                 'icon': Icons.visibility,
                 'label': 'Preview',
                 'value': 'preview'
               },
+            if (widget.message.hasFile)
+              {'icon': Icons.save_alt, 'label': 'Save', 'value': 'save'},
             if (widget.isMe)
               {'icon': Icons.edit, 'label': 'Edit', 'value': 'edit'},
             if (widget.isMe)
@@ -744,7 +794,6 @@ class _MessageBubbleState extends State<MessageBubble> {
                     color: textColor,
                   ),
                 ),
-
                 if (!isForwardedByMe &&
                     avatarUrl != null &&
                     avatarUrl.isNotEmpty)
@@ -752,7 +801,6 @@ class _MessageBubbleState extends State<MessageBubble> {
                     radius: 8,
                     backgroundImage: NetworkImage(avatarUrl),
                   ),
-
                 Text(
                   displayName,
                   style: TextStyle(
@@ -767,6 +815,31 @@ class _MessageBubbleState extends State<MessageBubble> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDownloadingOverlay(Widget child) {
+    if (!_isDownloading) return child;
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        child,
+        Container(
+          color: Colors.black.withOpacity(0.4),
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(value: _progress),
+            const SizedBox(height: 8),
+            Text(
+              "${(_progress * 100).toStringAsFixed(0)}%",
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

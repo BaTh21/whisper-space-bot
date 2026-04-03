@@ -20,6 +20,7 @@ import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
 
 import 'package:whisper_space_flutter/features/websocket/private_websocket.dart';
 import 'package:whisper_space_flutter/features/chat/screens/group/group_dialog/forward_dialog.dart';
+import 'package:file_picker/file_picker.dart';
 
 class PrivateChatScreen extends StatefulWidget {
   final int userId;
@@ -375,6 +376,22 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       }
     } else {
       _showPermissionDeniedDialog('Photos');
+    }
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+    );
+
+    if (result != null && result.files.single.path != null) {
+      final file = File(result.files.single.path!);
+
+      await _sendMessage(
+        file: file,
+        fileType: 'file',
+        replyToId: _replyingMessage?.id,
+      );
     }
   }
 
@@ -752,37 +769,66 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           child: Row(
             children: [
               PopupMenuButton<String>(
-                icon: Icon(Icons.attach_file,
-                    color: isDark ? Colors.white70 : Colors.grey[600]),
+                icon: Icon(
+                  Icons.attach_file,
+                  color: isDark ? Colors.white70 : Colors.grey[600],
+                ),
                 onSelected: (v) {
-                  if (v == 'image_gallery') _pickImage();
-                  if (v == 'image_camera') _takePhoto();
-                  if (v == 'video') _pickVideo();
+                  switch (v) {
+                    case 'document':
+                      _pickFile();
+                      break;
+                    case 'image_gallery':
+                      _pickImage();
+                      break;
+                    case 'image_camera':
+                      _takePhoto();
+                      break;
+                    case 'video':
+                      _pickVideo();
+                      break;
+                  }
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(
+                    value: 'document',
+                    child: Row(
+                      children: [
+                        Icon(Icons.insert_drive_file, size: 20),
+                        SizedBox(width: 12),
+                        Text('Document'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
                     value: 'image_gallery',
-                    child: Row(children: [
-                      Icon(Icons.photo_library, size: 20),
-                      SizedBox(width: 12),
-                      Text('Gallery')
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(Icons.photo_library, size: 20),
+                        SizedBox(width: 12),
+                        Text('Gallery'),
+                      ],
+                    ),
                   ),
                   PopupMenuItem(
                     value: 'image_camera',
-                    child: Row(children: [
-                      Icon(Icons.camera_alt, size: 20),
-                      SizedBox(width: 12),
-                      Text('Camera')
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(Icons.camera_alt, size: 20),
+                        SizedBox(width: 12),
+                        Text('Camera'),
+                      ],
+                    ),
                   ),
                   PopupMenuItem(
                     value: 'video',
-                    child: Row(children: [
-                      Icon(Icons.videocam, size: 20),
-                      SizedBox(width: 12),
-                      Text('Video')
-                    ]),
+                    child: Row(
+                      children: [
+                        Icon(Icons.videocam, size: 20),
+                        SizedBox(width: 12),
+                        Text('Video'),
+                      ],
+                    ),
                   ),
                 ],
               ),
