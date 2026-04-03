@@ -58,6 +58,11 @@ class PrivateMessageModel {
   final int? replyToId;
   final ReplyMessage? replyTo;
 
+  final bool isForwarded;
+  final int? forwardedFromId;
+  final String? originalSender;
+  final String? originalSenderAvatar;
+
   PrivateMessageModel(
       {required this.id,
       required this.senderId,
@@ -75,47 +80,58 @@ class PrivateMessageModel {
       this.status = MessageStatus.sent,
       this.isEdited = false,
       this.replyToId,
-      this.replyTo});
+      this.replyTo,
+      this.isForwarded = false,
+      this.forwardedFromId,
+      this.originalSender,
+      this.originalSenderAvatar});
 
   factory PrivateMessageModel.fromJson(Map<String, dynamic> json) {
     return PrivateMessageModel(
-      id: json['id'],
-      senderId: json['sender_id'],
-      receiverId: json['receiver_id'],
-      content: json['content'],
-      messageType: json['message_type'] ?? 'text',
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt:
-          json['edited_at'] != null ? DateTime.parse(json['edited_at']) : null,
-      isEdited: json['edited_at'] != null,
-      isRead: json['is_read'] ?? false,
-      tempId: json['temp_id'],
-      senderUsername: json['sender_username'],
-      receiverUsername: json['receiver_username'],
-      voiceDuration: json['voice_duration'] != null
-          ? (json['voice_duration'] as num).toDouble()
-          : null,
-      fileSize: json['file_size'],
-      replyToId: json['reply_to_id'],
-      replyTo: json['reply_to'] is Map<String, dynamic>
-          ? ReplyMessage.fromJson(json['reply_to'])
-          : null,
-    );
+        id: json['id'],
+        senderId: json['sender_id'],
+        receiverId: json['receiver_id'],
+        content: json['content'],
+        messageType: json['message_type'] ?? 'text',
+        createdAt: DateTime.parse(json['created_at']),
+        updatedAt: json['edited_at'] != null
+            ? DateTime.parse(json['edited_at'])
+            : null,
+        isEdited: json['edited_at'] != null,
+        isRead: json['is_read'] ?? false,
+        tempId: json['temp_id'],
+        senderUsername: json['sender_username'],
+        receiverUsername: json['receiver_username'],
+        voiceDuration: json['voice_duration'] != null
+            ? (json['voice_duration'] as num).toDouble()
+            : null,
+        fileSize: json['file_size'],
+        replyToId: json['reply_to_id'],
+        replyTo: json['reply_to'] is Map<String, dynamic>
+            ? ReplyMessage.fromJson(json['reply_to'])
+            : null,
+        isForwarded: json['is_forwarded'] ?? false,
+        forwardedFromId: json['forwarded_from_id'],
+        originalSender: json['original_sender'],
+        originalSenderAvatar: json['original_sender_avatar']);
   }
 
-  PrivateMessageModel copyWith({
-    int? id,
-    MessageStatus? status,
-    String? content,
-    DateTime? updatedAt,
-    bool? isEdited,
-    String? messageType,
-    double? voiceDuration,
-    int? fileSize,
-    String? tempId,
-    int? replyToId,
-    ReplyMessage? replyTo,
-  }) {
+  PrivateMessageModel copyWith(
+      {int? id,
+      MessageStatus? status,
+      String? content,
+      DateTime? updatedAt,
+      bool? isEdited,
+      String? messageType,
+      double? voiceDuration,
+      int? fileSize,
+      String? tempId,
+      int? replyToId,
+      ReplyMessage? replyTo,
+      bool? isForwarded,
+      int? forwardedFromId,
+      String? originalSender,
+      String? originalSenderAvatar}) {
     return PrivateMessageModel(
       id: id ?? this.id,
       senderId: senderId,
@@ -134,6 +150,10 @@ class PrivateMessageModel {
       isEdited: isEdited ?? this.isEdited,
       replyToId: replyToId ?? this.replyToId,
       replyTo: replyTo ?? this.replyTo,
+      isForwarded: isForwarded ?? this.isForwarded,
+      forwardedFromId: forwardedFromId ?? this.forwardedFromId,
+      originalSender: originalSender ?? this.originalSender,
+      originalSenderAvatar: originalSenderAvatar ?? this.originalSenderAvatar,
     );
   }
 
@@ -143,6 +163,7 @@ class PrivateMessageModel {
   bool get isText => messageType == 'text';
   bool get isFile => messageType == 'file';
   bool get hasFile => isImage || isVideo || isAudio || isFile;
+  bool get hasForwardInfo => isForwarded && originalSender != null;
 }
 
 enum MessageStatus { sending, sent, failed }

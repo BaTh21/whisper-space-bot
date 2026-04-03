@@ -19,6 +19,7 @@ import 'package:provider/provider.dart';
 import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
 
 import 'package:whisper_space_flutter/features/websocket/private_websocket.dart';
+import 'package:whisper_space_flutter/features/chat/screens/group/group_dialog/forward_dialog.dart';
 
 class PrivateChatScreen extends StatefulWidget {
   final int userId;
@@ -535,6 +536,25 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     });
   }
 
+  void _showForwardDialog(PrivateMessageModel msg) {
+    showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) {
+          return ForwardDialog(
+              currentGroupId: widget.userId,
+              messageId: msg.id,
+              messageType: "private",
+              onSend: (msgId, users, groups) {
+                _ws.forwardMessage(msgId, users, groups);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Message forwarded")),
+                );
+              },
+              getChats: chatApi.getChats);
+        });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -627,6 +647,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                       return MessageBubble(
                         message: msg,
                         isMe: isMe,
+                        currentUserId: _currentUserId,
                         onPlayAudio: msg.isAudio
                             ? () =>
                                 _playAudio(msg.content ?? '', msg.id.toString())
@@ -646,6 +667,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             _deleteMessage(message);
                           } else if (action == 'reply') {
                             _replyMessage(message);
+                          } else if (action == 'forward') {
+                            _showForwardDialog(message);
                           }
                         },
                       );

@@ -612,7 +612,8 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       builder: (_) {
         return ForwardDialog(
           currentGroupId: widget.groupId,
-          message: msg,
+          messageId: msg.id,
+          messageType: "group",
           getChats: widget.chatApi.getChats,
           onSend: (msgId, users, groups) {
             widget.groupWebsocket.sendForward(msgId, users, groups);

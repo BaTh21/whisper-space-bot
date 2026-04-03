@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/features/chat/model/chat_model/chat_list_model.dart';
-import 'package:whisper_space_flutter/features/chat/model/group_message_model/group_message_model.dart';
 
 class ForwardDialog extends StatefulWidget {
   final int currentGroupId;
-  final GroupMessageModel message;
+  final int messageId;
+  final String messageType;
   final Function(int messageId, Set<int> users, Set<int> groups) onSend;
   final Future<List<ChatListItemModel>> Function() getChats;
 
   const ForwardDialog({
     Key? key,
     required this.currentGroupId,
-    required this.message,
+    required this.messageId,
+    required this.messageType,
     required this.onSend,
     required this.getChats,
   }) : super(key: key);
@@ -36,7 +37,7 @@ class _ForwardDialogState extends State<ForwardDialog> {
     final fetchedChats = await widget.getChats();
     setState(() {
       chats = fetchedChats
-          .where((c) => !(c.id == widget.currentGroupId && c.type == "group"))
+          .where((c) => !(c.id == widget.currentGroupId && c.type == widget.messageType))
           .toList();
     });
   }
@@ -153,7 +154,7 @@ class _ForwardDialogState extends State<ForwardDialog> {
                   ? null
                   : () {
                       widget.onSend(
-                          widget.message.id, selectedUsers, selectedGroups);
+                          widget.messageId, selectedUsers, selectedGroups);
                       Navigator.pop(context);
                     },
               child: Text(

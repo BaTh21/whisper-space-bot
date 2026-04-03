@@ -10,6 +10,7 @@ import 'package:whisper_space_flutter/features/chat/voice_player.dart';
 class MessageBubble extends StatefulWidget {
   final PrivateMessageModel message;
   final bool isMe;
+  final int? currentUserId;
   final VoidCallback? onPlayAudio;
   final bool isPlaying;
   final double? playingProgress;
@@ -21,6 +22,7 @@ class MessageBubble extends StatefulWidget {
       {super.key,
       required this.message,
       required this.isMe,
+      this.currentUserId,
       this.onPlayAudio,
       this.isPlaying = false,
       this.playingProgress,
@@ -115,8 +117,11 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 
-  void _forwardMessage() => ScaffoldMessenger.of(context)
-      .showSnackBar(const SnackBar(content: Text('Forward message')));
+  void _forwardMessage() {
+    if (widget.onAction != null) {
+      widget.onAction!("forward", widget.message);
+    }
+  }
 
   void _replyMessage() {
     if (widget.onAction != null) {
@@ -178,6 +183,14 @@ class _MessageBubbleState extends State<MessageBubble> {
             crossAxisAlignment:
                 widget.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
+              if (widget.message.isForwarded &&
+                  widget.message.originalSender != null)
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.5,
+                  ),
+                  child: _buildForwardLabel(widget.message, isMe: widget.isMe),
+                ),
               if (isMedia)
                 GestureDetector(
                   onLongPress: _showMessageOptions,
@@ -690,6 +703,65 @@ class _MessageBubbleState extends State<MessageBubble> {
                 ),
                 const SizedBox(height: 2),
                 contentWidget,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForwardLabel(
+    PrivateMessageModel message, {
+    required bool isMe,
+  }) {
+    final isForwardedByMe = message.forwardedFromId == widget.currentUserId;
+
+    final displayName =
+        isForwardedByMe ? 'You' : (message.originalSender ?? 'Unknown');
+
+    final avatarUrl = message.originalSenderAvatar;
+
+    final textColor = isMe ? Colors.black87 : Colors.black87;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.forward, size: 14, color: textColor),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              children: [
+                Text(
+                  'Forwarded from',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: textColor,
+                  ),
+                ),
+
+                if (!isForwardedByMe &&
+                    avatarUrl != null &&
+                    avatarUrl.isNotEmpty)
+                  CircleAvatar(
+                    radius: 8,
+                    backgroundImage: NetworkImage(avatarUrl),
+                  ),
+
+                Text(
+                  displayName,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),

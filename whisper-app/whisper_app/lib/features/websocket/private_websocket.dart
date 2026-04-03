@@ -50,11 +50,8 @@ class PrivateWebsocket {
     return _broadcastStream!;
   }
 
-  void sendText({
-    required String content,
-    required String tempId,
-    int? replyToId
-  }) {
+  void sendText(
+      {required String content, required String tempId, int? replyToId}) {
     if (webSocketChannel == null) {
       throw Exception("WebSocket not connected");
     }
@@ -89,6 +86,18 @@ class PrivateWebsocket {
 
     webSocketChannel!.sink
         .add(jsonEncode({"type": "delete", "message_id": messageId}));
+  }
+
+  void forwardMessage(int messageId, Set<int> users, Set<int> groups) {
+    if (webSocketChannel == null) {
+      throw Exception("WebSocket not connected");
+    }
+
+    webSocketChannel!.sink.add(jsonEncode({
+      "type": "forward",
+      "message_id": messageId,
+      "targets": {"users": users.toList(), "groups": groups.toList()}
+    }));
   }
 
   void _startHeartbeat() {
