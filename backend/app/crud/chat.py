@@ -236,8 +236,6 @@ def edit_private_message(db: Session, message_id: int, user_id: int, new_content
                 detail="Message not found or you don't have permission to edit it."
             )
 
-        old_content = msg.content
-        
         msg.content = new_content.strip()
         msg.edited_at = datetime.now(timezone.utc)
         

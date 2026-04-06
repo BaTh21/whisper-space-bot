@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:whisper_space_flutter/core/constants/api_constants.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
@@ -329,6 +330,7 @@ class ChatAPISource {
       throw Exception('Failed to update file message: ${response.body}');
     }
   }
+
   Future<List<PrivateMessageModel>> getPrivateMessages({
     required int userId,
     int limit = 30,
@@ -349,11 +351,12 @@ class ChatAPISource {
           .map((e) => PrivateMessageModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } else {
-      throw Exception('Failed to load private messages: ${response.statusCode}');
+      throw Exception(
+          'Failed to load private messages: ${response.statusCode}');
     }
   }
 
- Future<PrivateMessageModel> sendPrivateMessage({
+  Future<PrivateMessageModel> sendPrivateMessage({
     required int receiverId,
     required String content,
     String? tempId,
@@ -380,7 +383,7 @@ class ChatAPISource {
     }
   }
 
-Future<PrivateMessageModel> uploadPrivateFile({
+  Future<PrivateMessageModel> uploadPrivateFile({
     required int receiverId,
     required File file,
     required String tempId,
@@ -390,7 +393,7 @@ Future<PrivateMessageModel> uploadPrivateFile({
 
     var request = http.MultipartRequest("POST", uri);
     request.headers.addAll(await _authHeaders());
-    
+
     String messageType = 'file';
     final extension = file.path.split('.').last.toLowerCase();
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(extension)) {
@@ -398,7 +401,7 @@ Future<PrivateMessageModel> uploadPrivateFile({
     } else if (['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv'].contains(extension)) {
       messageType = 'video';
     }
-    
+
     request.fields['message_type'] = messageType;
     if (replyToId != null) {
       request.fields['reply_to_id'] = replyToId.toString();
@@ -406,7 +409,7 @@ Future<PrivateMessageModel> uploadPrivateFile({
     if (tempId.isNotEmpty) {
       request.fields['temp_id'] = tempId;
     }
-    
+
     request.files.add(
       await http.MultipartFile.fromPath(
         'file',
@@ -414,7 +417,7 @@ Future<PrivateMessageModel> uploadPrivateFile({
         contentType: _getMediaType(file.path),
       ),
     );
-    
+
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 
@@ -426,67 +429,86 @@ Future<PrivateMessageModel> uploadPrivateFile({
     }
   }
 
+  Future<PrivateMessageModel> uploadPrivateVoice({
+    required int receiverId,
+    required File file,
+    required String tempId,
+    required double voiceDuration,
+    int? replyToId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/v1/chats/private/$receiverId/voice');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(await _authHeaders());
 
-Future<PrivateMessageModel> uploadPrivateVoice({
-  required int receiverId,
-  required File file,
-  required String tempId,
-  required double voiceDuration,
-  int? replyToId,
-}) async {
-  final uri = Uri.parse('$baseUrl/api/v1/chats/private/$receiverId/voice');
-  final request = http.MultipartRequest('POST', uri);
-  request.headers.addAll(await _authHeaders());
+    request.fields['temp_id'] = tempId;
+    if (replyToId != null) {
+      request.fields['reply_to_id'] = replyToId.toString();
+    }
 
-  request.fields['temp_id'] = tempId;
-  if (replyToId != null) {
-    request.fields['reply_to_id'] = replyToId.toString();
+    request.fields['duration'] = voiceDuration.toString();
+
+    request.files.add(await http.MultipartFile.fromPath(
+      'voice_file',
+      file.path,
+    ));
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final jsonData = json.decode(responseBody) as Map<String, dynamic>;
+      return PrivateMessageModel.fromJson(jsonData);
+    } else {
+      throw Exception('Voice upload failed: $responseBody');
+    }
   }
 
-  request.fields['duration'] = voiceDuration.toString();
+  Future<void> replaceFile({required int messageId, required File file}) async {
+    final uri =
+        Uri.parse('$baseUrl/api/v1/chats/private/$messageId/replace-file');
 
-  request.files.add(await http.MultipartFile.fromPath(
-    'voice_file',
-    file.path,
-  ));
+    final request = http.MultipartRequest('PUT', uri);
+    request.headers.addAll(await _authHeaders());
 
-  final response = await request.send();
-  final responseBody = await response.stream.bytesToString();
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
-  if (response.statusCode == 200 || response.statusCode == 201) {
-    final jsonData = json.decode(responseBody) as Map<String, dynamic>;
-    return PrivateMessageModel.fromJson(jsonData);
-  } else {
-    throw Exception('Voice upload failed: $responseBody');
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+
+    if (response.statusCode == 200) {
+      return;
+    } else {
+      throw Exception('Replace file failed $responseBody');
+    }
   }
-}
 
-Future<void> markPrivateMessagesAsRead(int userId) async {
+  Future<void> markPrivateMessagesAsRead(int userId) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/v1/chats/private/$userId/read'),
       headers: await _authHeaders(),
     );
 
     if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('Failed to mark messages as read: ${response.statusCode}');
+      throw Exception(
+          'Failed to mark messages as read: ${response.statusCode}');
     }
     return;
   }
 
-Future<User> getUserDetails(int userId) async {
-  final response = await http.get(
-    Uri.parse('$baseUrl/api/v1/users/$userId'),
-    headers: await _authHeaders(),
-  );
+  Future<User> getUserDetails(int userId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/users/$userId'),
+      headers: await _authHeaders(),
+    );
 
-  if (response.statusCode == 200) {
-    return User.fromJson(jsonDecode(response.body));
-  } else {
-    throw Exception('Failed to load user details: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      return User.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to load user details: ${response.statusCode}');
+    }
   }
-}
 
- Future<PrivateMessageModel> editPrivateMessage({
+  Future<PrivateMessageModel> editPrivateMessage({
     required int messageId,
     required String newContent,
   }) async {
@@ -507,6 +529,7 @@ Future<User> getUserDetails(int userId) async {
       throw Exception('Failed to edit message: ${response.body}');
     }
   }
+
   Future<void> deletePrivateMessage(int messageId) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/api/v1/chats/private/$messageId'),
@@ -517,7 +540,8 @@ Future<User> getUserDetails(int userId) async {
       throw Exception('Failed to delete message: ${response.statusCode}');
     }
   }
-   Future<void> deleteImageMessage(int messageId) async {
+
+  Future<void> deleteImageMessage(int messageId) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/api/v1/chats/private/image/$messageId'),
       headers: await _authHeaders(),
@@ -527,9 +551,11 @@ Future<User> getUserDetails(int userId) async {
       throw Exception('Failed to delete image message: ${response.statusCode}');
     }
   }
-   Future<PrivateMessageModel> getReplyContext(int messageId) async {
+
+  Future<PrivateMessageModel> getReplyContext(int messageId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/v1/chats/private/message/$messageId/reply-context'),
+      Uri.parse(
+          '$baseUrl/api/v1/chats/private/message/$messageId/reply-context'),
       headers: await _authHeaders(),
     );
 
@@ -539,5 +565,4 @@ Future<User> getUserDetails(int userId) async {
       throw Exception('Failed to get reply context: ${response.statusCode}');
     }
   }
-  
 }

@@ -13,6 +13,9 @@ import 'package:file_picker/file_picker.dart';
 import './message_bubble_screen.dart';
 import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
 import './group_dialog//forward_dialog.dart';
+import 'package:whisper_space_flutter/features/chat/video_player.dart';
+import 'package:whisper_space_flutter/features/chat/screens/private/widgets/image_viewer.dart';
+import 'package:dio/dio.dart';
 
 String _formatTime(DateTime dateTime) {
   final diff = DateTime.now().difference(dateTime);
@@ -67,6 +70,10 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   bool _isLoadingMore = false;
   int _offset = 0;
   final int _limit = 30;
+
+  bool _isDownloading = false;
+  double _progress = 0.0;
+  int? _downloadingMessageId;
 
   final FocusNode _textFieldFocus = FocusNode();
 
@@ -527,6 +534,72 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     }
   }
 
+  Future<void> _saveMessage(GroupMessageModel msg) async {
+    try {
+      final url = msg.fileUrl;
+      if (url == null) return;
+
+      final fileName = url.split('/').last;
+
+      final dir = Directory('/storage/emulated/0/Download');
+      final filePath = '${dir.path}/$fileName';
+
+      setState(() {
+        _isDownloading = true;
+        _progress = 0;
+        _downloadingMessageId = msg.id;
+      });
+
+      await Dio().download(
+        url,
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _progress = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+        _downloadingMessageId = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved to Downloads')),
+      );
+    } catch (e, stack) {
+      print("❌ ERROR: $e");
+      print("STACK: $stack");
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e')),
+      );
+    }
+  }
+
+  void _previewMessage(GroupMessageModel msg) {
+    if (msg.type == 'image' && msg.fileUrl != null) {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => ImageViewer(imageUrl: msg.fileUrl!)));
+    } else if (msg.type == 'video' && msg.fileUrl != null) {
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => VideoMessagePlayer(
+                  url: msg.fileUrl!,
+                  isOwn: msg.sender.id == widget.currentUserId)));
+    }
+  }
+
   void _handleBubbleAction(String action, dynamic msg) {
     switch (action) {
       case 'edit':
@@ -570,7 +643,9 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       case 'pin':
       case 'react':
       case 'save':
+        _saveMessage(msg);
       case 'preview':
+        _previewMessage(msg);
         break;
     }
   }
@@ -661,12 +736,16 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: MessageBubble(
+                  key: ValueKey(msg.id),
                   msg: msg,
                   isMe: isMe,
                   currentUserId: widget.currentUserId,
                   isSeen: isSeen,
                   repliedMessage: msg.parentMessage,
                   onAction: _handleBubbleAction,
+                  isDownloading:
+                      _isDownloading && _downloadingMessageId == msg.id,
+                  progress: _progress,
                 ),
               );
             },

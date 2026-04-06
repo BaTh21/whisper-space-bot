@@ -178,58 +178,58 @@ async def get_private_chat(
 
     return result
     
-@router.get("/private/message/{message_id}/reply-context")
-async def get_reply_context(
-    message_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    try:
-        message = db.query(PrivateMessage).options(
-            joinedload(PrivateMessage.sender),
-            joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
-        ).filter(PrivateMessage.id == message_id).first()
+# @router.get("/private/message/{message_id}/reply-context")
+# async def get_reply_context(
+#     message_id: int,
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_user)
+# ):
+#     try:
+#         message = db.query(PrivateMessage).options(
+#             joinedload(PrivateMessage.sender),
+#             joinedload(PrivateMessage.receiver),
+#             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+#         ).filter(PrivateMessage.id == message_id).first()
         
-        if not message:
-            raise HTTPException(status_code=404, detail="Message not found")
+#         if not message:
+#             raise HTTPException(status_code=404, detail="Message not found")
 
-        if current_user.id not in [message.sender_id, message.receiver_id]:
-            raise HTTPException(status_code=403, detail="No access to this message")
+#         if current_user.id not in [message.sender_id, message.receiver_id]:
+#             raise HTTPException(status_code=403, detail="No access to this message")
         
-        seen_by = []
-        for status in message.seen_statuses:
-            seen_by.append(MessageSeenByUser(
-                user_id=status.user.id,
-                username=status.user.username,
-                avatar_url=status.user.avatar_url,
-                seen_at=status.seen_at.isoformat() if status.seen_at else None
-            ))
+#         seen_by = []
+#         for status in message.seen_statuses:
+#             seen_by.append(MessageSeenByUser(
+#                 user_id=status.user.id,
+#                 username=status.user.username,
+#                 avatar_url=status.user.avatar_url,
+#                 seen_at=status.seen_at.isoformat() if status.seen_at else None
+#             ))
         
-        return MessageOut(
-            id=message.id,
-            sender_id=message.sender_id,
-            receiver_id=message.receiver_id,
-            content=message.content,
-            message_type=message.message_type.value,
-            is_read=message.is_read,
-            read_at=message.read_at.isoformat() if message.read_at else None,
-            delivered_at=message.delivered_at.isoformat() if message.delivered_at else None,
-            reply_to_id=message.reply_to_id,
-            is_forwarded=message.is_forwarded,
-            original_sender=message.original_sender,
-            created_at=message.created_at.isoformat(),
-            sender_username=message.sender.username,
-            receiver_username=message.receiver.username,
-            voice_duration=message.voice_duration,
-            file_size=message.file_size,
-            seen_by=seen_by
-        )
+#         return MessageOut(
+#             id=message.id,
+#             sender_id=message.sender_id,
+#             receiver_id=message.receiver_id,
+#             content=message.content,
+#             message_type=message.message_type.value,
+#             is_read=message.is_read,
+#             read_at=message.read_at.isoformat() if message.read_at else None,
+#             delivered_at=message.delivered_at.isoformat() if message.delivered_at else None,
+#             reply_to_id=message.reply_to_id,
+#             is_forwarded=message.is_forwarded,
+#             original_sender=message.original_sender,
+#             created_at=message.created_at.isoformat(),
+#             sender_username=message.sender.username,
+#             receiver_username=message.receiver.username,
+#             voice_duration=message.voice_duration,
+#             file_size=message.file_size,
+#             seen_by=seen_by
+#         )
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get reply context: {str(e)}")    
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Failed to get reply context: {str(e)}")    
 
 @router.post("/private/{friend_id}/voice", response_model=MessageOut)
 async def send_voice_message(
@@ -483,6 +483,66 @@ async def send_media_message(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    
+@router.put("/private/{message_id}/replace-file")
+async def replace_file_message(
+    message_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    msg = db.query(PrivateMessage).filter(
+        PrivateMessage.id == message_id,
+        PrivateMessage.sender_id == current_user.id
+    ).first()
+
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Detect type
+    file.file.seek(0)
+    content_type = file.content_type or ""
+    filename = file.filename.lower()
+
+    if content_type.startswith("image/") or filename.endswith((".jpg", ".jpeg", ".png")):
+        resource_type = "image"
+        folder = "chat_images"
+        msg.message_type = MessageType.image
+    elif content_type.startswith("video/") or filename.endswith((".mp4", ".mov")):
+        resource_type = "video"
+        folder = "chat_videos"
+        msg.message_type = MessageType.video
+    else:
+        resource_type = "raw"
+        folder = "chat_files"
+        msg.message_type = MessageType.file
+
+    upload_result = cloudinary.uploader.upload(
+        file.file,
+        folder=folder,
+        resource_type=resource_type
+    )
+
+    msg.content = upload_result["secure_url"]
+    msg.file_size = upload_result.get("bytes", 0)
+    msg.edited_at = datetime.utcnow()
+    msg.is_edited = True
+
+    db.commit()
+    db.refresh(msg)
+
+    chat_id = _chat_id(msg.sender_id, msg.receiver_id)
+
+    await manager.broadcast(chat_id, {
+        "type": "message_replaced",
+        "message_id": msg.id,
+        "new_content": msg.content,
+        "file_size": msg.file_size,
+        "message_type": msg.message_type.value,
+        "edited_at": msg.edited_at.isoformat()
+    })
+
+    return {"success": True}
 
 @router.delete("/private/image/{message_id}")
 async def delete_image_message(
@@ -670,29 +730,6 @@ async def get_private_chat(
         )
 
     return result
-
-    try:
-        message = db.query(PrivateMessage).filter(
-            PrivateMessage.id == message_id,
-            (PrivateMessage.sender_id == current_user.id) | (PrivateMessage.receiver_id == current_user.id)
-        ).first()
-        
-        if not message:
-            raise HTTPException(status_code=404, detail="Message not found")
-        
-        return {
-            "id": message.id,
-            "sender_id": message.sender_id,
-            "content": message.content,
-            "message_type": message.message_type.value,
-            "created_at": message.created_at.isoformat(),
-            "is_own_message": message.sender_id == current_user.id
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get message info: {str(e)}")
 
 @router.patch("/private/{message_id}")
 async def edit_message(

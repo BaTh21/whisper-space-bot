@@ -12,16 +12,19 @@ class MessageBubble extends StatelessWidget {
   final bool isSeen;
   final Function(String action, dynamic msg)? onAction;
   final ParentMessageModel? repliedMessage;
+  final bool isDownloading;
+  final double progress;
 
-  const MessageBubble({
-    super.key,
-    required this.msg,
-    required this.isMe,
-    required this.currentUserId,
-    required this.isSeen,
-    this.onAction,
-    this.repliedMessage,
-  });
+  const MessageBubble(
+      {super.key,
+      required this.msg,
+      required this.isMe,
+      required this.currentUserId,
+      required this.isSeen,
+      this.onAction,
+      this.repliedMessage,
+      this.isDownloading = false,
+      this.progress = 0.0});
 
   bool get isUploading => msg.isUploading == true || msg.id == -1;
 
@@ -54,7 +57,8 @@ class MessageBubble extends StatelessWidget {
               },
             if (msg.type != 'text' && msg.type != 'voice')
               {'icon': Icons.autorenew, 'label': 'Replace', 'value': 'replace'},
-            if (isMe) {'icon': Icons.edit, 'label': 'Edit', 'value': 'edit'},
+            if (isMe && msg.type == 'text')
+              {'icon': Icons.edit, 'label': 'Edit', 'value': 'edit'},
             if (isMe)
               {'icon': Icons.delete, 'label': 'Delete', 'value': 'delete'},
           ];
@@ -168,6 +172,7 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImage(BuildContext context) {
+    
     return Stack(
       children: [
         ClipRRect(
@@ -186,6 +191,26 @@ class MessageBubble extends StatelessWidget {
                   fit: BoxFit.cover,
                 ),
         ),
+        if (isDownloading)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(value: progress),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
         if (isUploading) _uploadOverlay(),
         _timeOverlay(),
       ],
@@ -196,11 +221,32 @@ class MessageBubble extends StatelessWidget {
     return Stack(
       children: [
         VideoMessagePlayer(
+          key: ValueKey(msg.id),
           url: msg.fileUrl!,
           isOwn: isMe,
           width: 250,
           height: 150,
         ),
+        if (isDownloading)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(value: progress),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
         if (isUploading) _uploadOverlay(),
         _timeOverlay(),
       ],
@@ -236,6 +282,30 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         ),
+
+        if (isDownloading)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(value: progress),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      color: isMe ? Colors.white : Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
         if (isUploading) _uploadOverlay(),
       ],
     );

@@ -93,7 +93,9 @@ class PrivateMessageModel {
         receiverId: json['receiver_id'],
         content: json['content'],
         messageType: json['message_type'] ?? 'text',
-        createdAt: DateTime.parse(json['created_at']),
+        createdAt: json['created_at'] != null
+            ? DateTime.parse(json['created_at'])
+            : DateTime.now().toUtc(),
         updatedAt: json['edited_at'] != null
             ? DateTime.parse(json['edited_at'])
             : null,

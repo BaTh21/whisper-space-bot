@@ -22,6 +22,8 @@ import 'package:whisper_space_flutter/features/websocket/private_websocket.dart'
 import 'package:whisper_space_flutter/features/chat/screens/group/group_dialog/forward_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 
+enum MessageType { text, image, video, voice, file }
+
 class PrivateChatScreen extends StatefulWidget {
   final int userId;
   final String userName;
@@ -504,6 +506,27 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           setState(() {
             _messages.removeWhere((m) => m.id == messageId);
           });
+        } else if (type == 'message_replaced') {
+          final messageId = data['message_id'];
+          final newContent = data['new_content'];
+          final editedAt = data['edited_at'];
+          final fileSize = data['file_size'];
+          final messageType = data['message_type'];
+
+          setState(() {
+            final index = _messages.indexWhere((m) => m.id == messageId);
+
+            if (index != -1) {
+              _messages[index] = _messages[index].copyWith(
+                content: newContent,
+                fileSize: fileSize,
+                messageType: messageType,
+                updatedAt: editedAt != null ? DateTime.parse(editedAt) : null,
+                isEdited: true,
+                status: MessageStatus.sent,
+              );
+            }
+          });
         }
       });
     } catch (e) {
@@ -570,6 +593,62 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               },
               getChats: chatApi.getChats);
         });
+  }
+
+  Future<File?> pickImage() async {
+    if (await Permission.photos.request().isGranted) {
+      final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (picked != null) return File(picked.path);
+    } else {
+      _showPermissionDeniedDialog('Photos');
+    }
+    return null;
+  }
+
+  Future<void> _replaceMessage(PrivateMessageModel msg) async {
+    try {
+      final file = await pickImage();
+      if (file == null) return;
+
+      final index = _messages.indexWhere((m) => m.id == msg.id);
+      if (index == -1) return;
+
+      final oldMessage = _messages[index];
+
+      String newType = 'file';
+      final ext = file.path.toLowerCase();
+      if (ext.endsWith('.jpg') ||
+          ext.endsWith('.jpeg') ||
+          ext.endsWith('.png')) {
+        newType = 'image';
+      } else if (ext.endsWith('.mp4') || ext.endsWith('.mov')) {
+        newType = 'video';
+      }
+
+      setState(() {
+        _messages[index] = oldMessage.copyWith(
+          content: file.path,
+          messageType: newType,
+          status: MessageStatus.sending,  
+          updatedAt: DateTime.now(),
+          isEdited: true,
+        );
+      });
+
+      await chatApi.replaceFile(
+        messageId: msg.id,
+        file: file,
+      );
+    } catch (e) {
+      final index = _messages.indexWhere((m) => m.id == msg.id);
+      if (index != -1) {
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+            status: MessageStatus.failed,
+          );
+        });
+      }
+    }
   }
 
   @override
@@ -686,6 +765,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             _replyMessage(message);
                           } else if (action == 'forward') {
                             _showForwardDialog(message);
+                          } else if (action == 'replace') {
+                            _replaceMessage(msg);
                           }
                         },
                       );

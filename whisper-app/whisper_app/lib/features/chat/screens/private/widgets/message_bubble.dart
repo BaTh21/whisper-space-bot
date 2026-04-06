@@ -86,6 +86,8 @@ class _MessageBubbleState extends State<MessageBubble> {
       case 'preview':
         _previewMessage();
         break;
+      case 'replace':
+        _replaceMessage();
       case 'edit':
         _editMessage();
         break;
@@ -206,6 +208,12 @@ class _MessageBubbleState extends State<MessageBubble> {
     }
   }
 
+  void _replaceMessage() {
+    if (widget.onAction != null) {
+      widget.onAction!("replace", widget.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final alignment =
@@ -276,7 +284,9 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    _formatTime(widget.message.createdAt),
+                                    widget.message.isEdited
+                                        ? "${_formatTime(widget.message.createdAt)} (edited)"
+                                        : _formatTime(widget.message.createdAt),
                                     style: const TextStyle(
                                       fontSize: 10,
                                       color: Colors.white,
@@ -442,7 +452,7 @@ class _MessageBubbleState extends State<MessageBubble> {
               },
             if (widget.message.hasFile)
               {'icon': Icons.save_alt, 'label': 'Save', 'value': 'save'},
-            if (widget.isMe)
+            if (widget.isMe && !widget.message.hasFile)
               {'icon': Icons.edit, 'label': 'Edit', 'value': 'edit'},
             if (widget.isMe)
               {'icon': Icons.delete, 'label': 'Delete', 'value': 'delete'},
