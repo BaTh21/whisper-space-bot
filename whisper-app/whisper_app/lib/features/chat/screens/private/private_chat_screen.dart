@@ -102,8 +102,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     _ws = PrivateWebsocket(
         friendId: widget.userId, storageService: storageService);
     await _connectWebsocket();
-
-    _markMessagesAsRead();
   }
 
   void _loadCurrentUser() {
@@ -119,12 +117,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   }
 
   Future<void> _loadUserDetails() async {
-    try {
-      final user = await chatApi.getUserDetails(widget.userId);
-      if (mounted) setState(() => _userDetails = user);
-    } catch (e) {
-      // ignore
-    }
+    final user = await chatApi.getUserDetails(widget.userId);
+    if (mounted) setState(() => _userDetails = user);
   }
 
   Future<void> _loadMessages() async {
@@ -144,14 +138,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       print('❌ LOAD MESSAGES ERROR: $e');
       print(stack);
       if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _markMessagesAsRead() async {
-    try {
-      await chatApi.markPrivateMessagesAsRead(widget.userId);
-    } catch (e) {
-      // ignore
     }
   }
 
@@ -629,7 +615,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         _messages[index] = oldMessage.copyWith(
           content: file.path,
           messageType: newType,
-          status: MessageStatus.sending,  
+          status: MessageStatus.sending,
           updatedAt: DateTime.now(),
           isEdited: true,
         );
@@ -808,30 +794,142 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           ),
         if (_replyingMessage != null)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.08),
-              border: const Border(
-                left: BorderSide(color: Colors.blue, width: 3),
-              ),
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.reply, size: 16, color: Colors.blue),
+                // Reply icon
+                const Icon(Icons.reply, size: 20, color: Colors.green),
                 const SizedBox(width: 8),
+
+                // Message preview
                 Expanded(
-                  child: Text(
-                    _replyingMessage!.content ?? "[Attachment]",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Label with username
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            const TextSpan(
+                              text: 'Replying to: ',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black54,
+                              ),
+                            ),
+                            TextSpan(
+                              text: _replyingMessage!.senderUsername,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+
+                      // Dynamic content preview
+                      Builder(
+                        builder: (_) {
+                          switch (_replyingMessage!.messageType) {
+                            case 'text':
+                              return Text(
+                                _replyingMessage!.content ?? '',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            case 'file':
+                              return Row(
+                                children: const [
+                                  Icon(Icons.insert_drive_file,
+                                      size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'File',
+                                      style: TextStyle(
+                                          fontSize: 13, color: Colors.black87),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            case 'voice':
+                              return Row(
+                                children: const [
+                                  Icon(Icons.mic, size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Voice Message',
+                                    style: TextStyle(
+                                        fontSize: 13, color: Colors.black87),
+                                  ),
+                                ],
+                              );
+                            case 'image':
+                              return Row(
+                                children: const [
+                                  Icon(Icons.image,
+                                      size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Image',
+                                    style: TextStyle(
+                                        fontSize: 13, color: Colors.black87),
+                                  ),
+                                ],
+                              );
+                            case 'video':
+                              return Row(
+                                children: const [
+                                  Icon(Icons.videocam,
+                                      size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Video',
+                                    style: TextStyle(
+                                        fontSize: 13, color: Colors.black87),
+                                  ),
+                                ],
+                              );
+                            default:
+                              return const Text(
+                                'Attachment',
+                                style: TextStyle(
+                                    fontSize: 13, color: Colors.black87),
+                              );
+                          }
+                        },
+                      ),
+                    ],
                   ),
                 ),
+
+                // Close button
                 GestureDetector(
                   onTap: () {
-                    setState(() => _replyingMessage = null);
+                    setState(() {
+                      _replyingMessage = null;
+                    });
                   },
-                  child: const Icon(Icons.close, size: 18),
-                )
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Icon(Icons.close, color: Colors.red, size: 18),
+                  ),
+                ),
               ],
             ),
           ),

@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
-from app.core.security import get_current_user_ws, verify_token
+from app.core.security import get_current_user_ws
 from app.crud.friend import is_friend
-from app.crud.chat import create_private_message, auto_end_call, send_heartbeat
+from app.crud.chat import create_private_message, send_heartbeat
 from app.models.user import User
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import PrivateMessage, MessageType
@@ -18,7 +18,7 @@ from app.models.group_message import GroupMessage
 from app.models.group_message_seen import GroupMessageSeen
 from app.schemas.chat import GroupMessageOut, ParentMessageResponse, AuthorResponse
 from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
-from app.crud.message import handle_forward_message, update_message, delete_message
+from app.crud.message import update_message, delete_message
 from app.helpers.to_utc_iso import to_local_iso
 from app.schemas.reaction import ReactionCreate
 from app.crud.chat_gateway import forward_message

@@ -489,19 +489,6 @@ class ChatAPISource {
     }
   }
 
-  Future<void> markPrivateMessagesAsRead(int userId) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/v1/chats/private/$userId/read'),
-      headers: await _authHeaders(),
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception(
-          'Failed to mark messages as read: ${response.statusCode}');
-    }
-    return;
-  }
-
   Future<User> getUserDetails(int userId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/v1/users/$userId'),

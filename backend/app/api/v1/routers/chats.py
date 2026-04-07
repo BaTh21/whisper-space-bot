@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.chat import create_private_message, edit_private_message, serialize_message_type, build_reply_preview, build_message_out
+from app.crud.chat import create_private_message, edit_private_message, build_reply_preview, build_message_out
 from app.crud.friend import is_blocked, is_blocked_by, is_friend
 from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import MessageType, PrivateMessage
@@ -138,7 +138,6 @@ async def get_private_chat(
             joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
         )
         .filter(
             ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
@@ -153,15 +152,6 @@ async def get_private_chat(
     result: list[MessageOut] = []
 
     for msg in messages:
-        seen_by = [
-            MessageSeenByUser(
-                user_id=s.user.id,
-                username=s.user.username,
-                avatar_url=s.user.avatar_url,
-                seen_at=s.seen_at.isoformat() if s.seen_at else None
-            )
-            for s in msg.seen_statuses
-        ]
 
         reply_to_out = None
 
@@ -172,64 +162,10 @@ async def get_private_chat(
             build_message_out(
                 msg=msg,
                 reply_to=reply_to_out,
-                seen_by=seen_by
             )
         )
 
-    return result
-    
-# @router.get("/private/message/{message_id}/reply-context")
-# async def get_reply_context(
-#     message_id: int,
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user)
-# ):
-#     try:
-#         message = db.query(PrivateMessage).options(
-#             joinedload(PrivateMessage.sender),
-#             joinedload(PrivateMessage.receiver),
-#             joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
-#         ).filter(PrivateMessage.id == message_id).first()
-        
-#         if not message:
-#             raise HTTPException(status_code=404, detail="Message not found")
-
-#         if current_user.id not in [message.sender_id, message.receiver_id]:
-#             raise HTTPException(status_code=403, detail="No access to this message")
-        
-#         seen_by = []
-#         for status in message.seen_statuses:
-#             seen_by.append(MessageSeenByUser(
-#                 user_id=status.user.id,
-#                 username=status.user.username,
-#                 avatar_url=status.user.avatar_url,
-#                 seen_at=status.seen_at.isoformat() if status.seen_at else None
-#             ))
-        
-#         return MessageOut(
-#             id=message.id,
-#             sender_id=message.sender_id,
-#             receiver_id=message.receiver_id,
-#             content=message.content,
-#             message_type=message.message_type.value,
-#             is_read=message.is_read,
-#             read_at=message.read_at.isoformat() if message.read_at else None,
-#             delivered_at=message.delivered_at.isoformat() if message.delivered_at else None,
-#             reply_to_id=message.reply_to_id,
-#             is_forwarded=message.is_forwarded,
-#             original_sender=message.original_sender,
-#             created_at=message.created_at.isoformat(),
-#             sender_username=message.sender.username,
-#             receiver_username=message.receiver.username,
-#             voice_duration=message.voice_duration,
-#             file_size=message.file_size,
-#             seen_by=seen_by
-#         )
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to get reply context: {str(e)}")    
+    return result  
 
 @router.post("/private/{friend_id}/voice", response_model=MessageOut)
 async def send_voice_message(
@@ -297,16 +233,6 @@ async def send_voice_message(
 
         chat_id = _chat_id(current_user.id, friend_id)
 
-        seen_by = [
-            {
-                "user_id": s.user.id,
-                "username": s.user.username,
-                "avatar_url": s.user.avatar_url,
-                "seen_at": s.seen_at.isoformat() if s.seen_at else None
-            }
-            for s in full_msg.seen_statuses
-        ]
-
         broadcast_data = {
             "type": "message",
             "id": full_msg.id,
@@ -324,7 +250,6 @@ async def send_voice_message(
             "file_size": file_size,
             "reply_to_id": full_msg.reply_to_id,
             "reply_to": None,
-            "seen_by": seen_by,
         }
 
         if full_msg.reply_to:
@@ -427,16 +352,6 @@ async def send_media_message(
 
         chat_id = _chat_id(current_user.id, friend_id)
 
-        seen_by = [
-            {
-                "user_id": status.user.id,
-                "username": status.user.username,
-                "avatar_url": status.user.avatar_url,
-                "seen_at": status.seen_at.isoformat() if status.seen_at else None
-            }
-            for status in full_msg.seen_statuses
-        ]
-
         reply_to = None
         if full_msg.reply_to_id:
             reply_msg = db.query(PrivateMessage).filter(
@@ -472,7 +387,6 @@ async def send_media_message(
             "reply_to": reply_to,
             "is_forwarded": full_msg.is_forwarded,
             "original_sender": full_msg.original_sender,
-            "seen_by": seen_by
         }
 
         await manager.broadcast(chat_id, broadcast_data)
@@ -651,86 +565,6 @@ async def delete_message_forever_endpoint(
         print(f"Delete error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete message: {str(e)}")
 
-@router.get("/private/{friend_id}", response_model=List[MessageOut])
-async def get_private_chat(
-    friend_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    if is_blocked(db, current_user.id, friend_id) or is_blocked_by(db, current_user.id, friend_id):
-        return []
-
-    if not is_friend(db, current_user.id, friend_id):
-        raise HTTPException(status_code=403, detail="Not friends")
-
-    messages = (
-        db.query(PrivateMessage)
-        .options(
-            joinedload(PrivateMessage.sender),
-            joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
-            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
-        )
-        .filter(
-            ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
-            ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == current_user.id))
-        )
-        .order_by(PrivateMessage.created_at.asc())
-        .all()
-    )
-
-    result = []
-
-    for msg in messages:
-        seen_by = [
-            MessageSeenByUser(
-                user_id=s.user.id,
-                username=s.user.username,
-                avatar_url=s.user.avatar_url,
-                seen_at=s.seen_at.isoformat() if s.seen_at else None
-            )
-            for s in msg.seen_statuses
-        ]
-
-        reply_to_out = None
-        reply_preview = None
-
-        if msg.reply_to:
-            reply_to_out = MessageOut(
-                id=msg.reply_to.id,
-                sender_id=msg.reply_to.sender_id,
-                receiver_id=msg.reply_to.receiver_id,
-                content=msg.reply_to.content,
-                message_type=serialize_message_type(msg.reply_to.message_type),
-                is_read=msg.reply_to.is_read,
-                read_at=msg.reply_to.read_at.isoformat() if msg.reply_to.read_at else None,
-                delivered_at=msg.reply_to.delivered_at.isoformat() if msg.reply_to.delivered_at else None,
-                reply_to=None,
-                reply_to_id=msg.reply_to.reply_to_id,
-                is_forwarded=msg.reply_to.is_forwarded,
-                original_sender=msg.reply_to.original_sender,
-                created_at=msg.reply_to.created_at.isoformat(),
-                sender_username=msg.reply_to.sender.username,
-                receiver_username=msg.reply_to.receiver.username,
-                voice_duration=msg.reply_to.voice_duration,
-                file_size=msg.reply_to.file_size,
-                seen_by=[]
-            )
-
-            reply_preview = build_reply_preview(msg.reply_to)
-
-        result.append(
-            build_message_out(
-                msg=msg,
-                reply_to=reply_to_out,
-                reply_preview=reply_preview,
-                seen_by=seen_by
-            )
-        )
-
-    return result
-
 @router.patch("/private/{message_id}")
 async def edit_message(
     message_id: int,
@@ -751,15 +585,6 @@ async def edit_message(
             raise HTTPException(status_code=404, detail="Message not found after edit")
 
         chat_id = _chat_id(full_msg.sender_id, full_msg.receiver_id)
-        
-        seen_by = []
-        for status in full_msg.seen_statuses:
-            seen_by.append({
-                "user_id": status.user.id,
-                "username": status.user.username,
-                "avatar_url": status.user.avatar_url,
-                "seen_at": status.seen_at.isoformat() if status.seen_at else None
-            })
 
         payload = {
             "type": "message_updated", 
@@ -775,8 +600,6 @@ async def edit_message(
             "receiver_username": full_msg.receiver.username if full_msg.receiver else None,
             "avatar_url": full_msg.sender.avatar_url,
             "is_read": full_msg.is_read,
-            "read_at": full_msg.read_at.isoformat() if full_msg.read_at else None,
-            "seen_by": seen_by,
             "voice_duration": full_msg.voice_duration,
             "file_size": full_msg.file_size,
             "is_forwarded": full_msg.is_forwarded,
@@ -797,21 +620,3 @@ async def edit_message(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to edit message: {str(e)}")
-    
-
-@router.post("/private/{friend_id}/read")
-def mark_private_messages_read(
-    friend_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Mark all messages from friend_id as read for the current user."""
-    # Update all unread messages where current_user is the receiver
-    db.query(PrivateMessage).filter(
-        PrivateMessage.sender_id == friend_id,
-        PrivateMessage.receiver_id == current_user.id,
-        PrivateMessage.is_read == False
-    ).update({PrivateMessage.is_read: True, PrivateMessage.read_at: datetime.now(timezone.utc)})
-    
-    db.commit()
-    return {"status": "success", "message": "Messages marked as read"}

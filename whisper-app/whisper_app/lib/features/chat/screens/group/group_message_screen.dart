@@ -982,7 +982,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Replying to:',
+                              'Replying to: ${replyingToMessage!.sender.username}',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,

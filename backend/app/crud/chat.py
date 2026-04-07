@@ -47,9 +47,6 @@ def create_private_message(
     forwarded_from_id=None
 ) -> PrivateMessage:
     try:
-        replied_message = None
-        if reply_to_id:
-            replied_message = validate_reply_message(db, reply_to_id, sender_id, receiver_id)
         
         try:
             msg_type_enum = MessageType(message_type)
@@ -332,7 +329,6 @@ def build_reply_preview(reply: PrivateMessage) -> ReplyPreview:
 def build_message_out(
     msg: PrivateMessage,
     reply_to: MessageOut | None,
-    seen_by: list
 ) -> MessageOut:
     return MessageOut(
         id=msg.id,
@@ -361,7 +357,6 @@ def build_message_out(
 
         voice_duration=msg.voice_duration,
         file_size=msg.file_size,
-        seen_by=seen_by
     )
 
 async def auto_end_call(chat_id: str, db):

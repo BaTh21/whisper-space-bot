@@ -82,7 +82,7 @@ class MessageOut(TimestampMixin):
     receiver_username: Optional[str] = None
     voice_duration: Optional[float] = None  # ADDED
     file_size: Optional[int] = None  # ADDED
-    seen_by: List[MessageSeenByUser] = Field(default_factory=list)
+    # seen_by: List[MessageSeenByUser] = Field(default_factory=list)
     
 class AuthorResponse(BaseModel):
     id: int
