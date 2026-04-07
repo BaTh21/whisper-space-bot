@@ -148,7 +148,7 @@ class MessageBubble extends StatelessWidget {
                       isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
                     if (msg.parentMessage != null)
-                      _buildReplyLabel(msg, isMe: isMe),
+                      _buildReplyLabel(context, msg, isMe: isMe),
                     if (msg.type == "image" && msg.fileUrl != null)
                       _buildImage(context),
                     if (msg.type == "video" && msg.fileUrl != null)
@@ -172,7 +172,6 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImage(BuildContext context) {
-    
     return Stack(
       children: [
         ClipRRect(
@@ -282,7 +281,6 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         ),
-
         if (isDownloading)
           Positioned.fill(
             child: Container(
@@ -305,7 +303,6 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-
         if (isUploading) _uploadOverlay(),
       ],
     );
@@ -432,9 +429,11 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildReplyLabel(GroupMessageModel msg, {required bool isMe}) {
+  Widget _buildReplyLabel(BuildContext context, GroupMessageModel msg,
+      {required bool isMe}) {
     final parent = msg.parentMessage!;
     final username = parent.sender.username;
+    final isMedia = (msg.type == 'image' || msg.type == 'video');
 
     Widget contentWidget;
     switch (parent.type) {
@@ -494,8 +493,17 @@ class MessageBubble extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(8),
+        color: isMe
+            ? (isMedia
+                ? Theme.of(context).primaryColor
+                : Colors.white.withOpacity(0.2))
+            : Colors.grey,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(8),
+          topRight: Radius.circular(8),
+          bottomLeft: isMedia ? Radius.circular(0) : Radius.circular(8),
+          bottomRight: isMedia ? Radius.circular(0) : Radius.circular(8),
+        ),
       ),
       child: Row(
         children: [

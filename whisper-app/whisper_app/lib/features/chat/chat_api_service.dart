@@ -254,7 +254,7 @@ class ChatAPISource {
   }
 
   Future<GroupMessageModel> uploadFile(
-      int groupId, File file, String tempId) async {
+      int groupId, File file, String tempId, String? parentMessageId) async {
     final uri = Uri.parse('$baseUrl/api/v1/messages/groups/$groupId');
 
     var request = http.MultipartRequest("POST", uri);
@@ -266,6 +266,9 @@ class ChatAPISource {
     );
 
     request.fields['temp_id'] = tempId;
+    if (parentMessageId != null) {
+      request.fields['parent_message_id'] = parentMessageId;
+    }
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
@@ -281,6 +284,7 @@ class ChatAPISource {
     int groupId,
     File file,
     String tempId,
+    String? parentMessageId
   ) async {
     final uri = Uri.parse('$baseUrl/api/v1/messages/groups/$groupId/voice');
 
@@ -296,6 +300,9 @@ class ChatAPISource {
     );
 
     request.fields['temp_id'] = tempId;
+    if (parentMessageId != null) {
+      request.fields['parent_message_id'] = parentMessageId;
+    }
 
     final response = await request.send();
 

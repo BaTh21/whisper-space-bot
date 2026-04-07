@@ -84,6 +84,7 @@ async def upload_file_message(
     file: UploadFile,
     current_user_id: int,
     temp_id: str,
+    parent_message_id: int | None = None,
 ):
     is_member = db.query(GroupMember).filter(
         GroupMember.group_id == group_id,
@@ -92,6 +93,15 @@ async def upload_file_message(
     if not is_member:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Only members can upload files")
+        
+    if parent_message_id:
+        parent_exists = db.query(GroupMessage).filter(
+            GroupMessage.id == parent_message_id,
+            GroupMessage.group_id == group_id
+        ).first()
+
+        if not parent_exists:
+            raise HTTPException(status_code=404, detail="Parent message not found")
         
     file_extension = Path(file.filename).suffix.lower()
 
@@ -133,11 +143,30 @@ async def upload_file_message(
         message_type=message_type,
         public_id=upload_result["public_id"],
         file_url=upload_result["secure_url"],    
-        content=None
+        content=None,
+        parent_message_id=parent_message_id,
     )
     db.add(save_message)
     db.commit()
     db.refresh(save_message)
+    
+    parent_msg_data = None
+
+    if save_message.parent_message:
+        parent = save_message.parent_message
+        parent_msg_data = {
+            "id": parent.id,
+            "message_type": parent.message_type.value if hasattr(parent.message_type, "value") else parent.message_type,
+            "content": parent.content,
+            "call_content": parent.call_content,
+            "file_url": parent.file_url,
+            "voice_url": parent.voice_url,
+            "sender": {
+                "id": parent.sender.id,
+                "username": parent.sender.username,
+                "avatar_url": parent.sender.avatar_url,
+            }
+        }
     
     payload = {
         "action": "file_upload",
@@ -151,6 +180,7 @@ async def upload_file_message(
         "file_url": save_message.file_url,
         "created_at": to_local_iso(save_message.created_at, tz_offset_hours=7),
         "temp_id": temp_id,
+        "parent_message": parent_msg_data 
     }
     
     await manager.broadcast(f"group_{group_id}", payload)
@@ -388,7 +418,8 @@ async def upload_voice_message(group_id: int,
                         #  duration: float,
                          db: Session,
                          current_user_id: int,
-                         temp_id: str
+                         temp_id: str,
+                         parent_message_id: int | None = None,
                          ):
     
     allowed_types = [
@@ -405,6 +436,15 @@ async def upload_voice_message(group_id: int,
     
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
+
+    if parent_message_id:
+        parent_exists = db.query(GroupMessage).filter(
+            GroupMessage.id == parent_message_id,
+            GroupMessage.group_id == group_id
+        ).first()
+
+        if not parent_exists:
+            raise HTTPException(status_code=404, detail="Parent message not found")
     
     upload_result = cloudinary.uploader.upload(
         content,
@@ -421,12 +461,31 @@ async def upload_voice_message(group_id: int,
         sender_id=current_user_id,
         message_type=MessageType.voice,
         voice_url = voice_url,
-        voice_public_id=voice_public_id
+        voice_public_id=voice_public_id,
+        parent_message_id=parent_message_id
     )
     
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
+    
+    parent_msg_data = None
+
+    if new_message.parent_message:
+        parent = new_message.parent_message
+        parent_msg_data = {
+            "id": parent.id,
+            "message_type": parent.message_type.value if hasattr(parent.message_type, "value") else parent.message_type,
+            "content": parent.content,
+            "call_content": parent.call_content,
+            "file_url": parent.file_url,
+            "voice_url": parent.voice_url,
+            "sender": {
+                "id": parent.sender.id,
+                "username": parent.sender.username,
+                "avatar_url": parent.sender.avatar_url,
+            }
+        }
     
     payload = {
         "action": "file_upload",
@@ -440,6 +499,7 @@ async def upload_voice_message(group_id: int,
         "voice_url": new_message.voice_url,
         "created_at": to_local_iso(new_message.created_at, tz_offset_hours=7),
         "temp_id": temp_id,
+        "parent_message": parent_msg_data 
     }
     
     await manager.broadcast(f"group_{group_id}", payload)

@@ -27,11 +27,12 @@ async def delete_message_by_id(message_id: int,
 async def upload_file_message_by_id(group_id: int,
                         file: UploadFile = File(...),
                         temp_id: str = Form(...),
+                        parent_message_id: int | None = Form(None),
                         db: Session = Depends(get_db),
                         current_user: User = Depends(get_current_user)
                         ):
     
-    return await upload_file_message(db, group_id, file, current_user.id, temp_id)
+    return await upload_file_message(db, group_id, file, current_user.id, temp_id, parent_message_id)
 
 @router.put("/{message_id}/file", response_model=GroupMessageResponse)
 async def update_file_message_by_id(
@@ -54,11 +55,12 @@ def get_seen_messages_(message_id: int,
 async def upload_voice_message_(group_id: int,
                           file: UploadFile = File(...),
                           temp_id: str = Form(...),
+                          parent_message_id: int | None = Form(None),
                         #   duration: float = Form(...),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(get_current_user)
                           ):
-    return await upload_voice_message(group_id, file, db, current_user.id, temp_id)
+    return await upload_voice_message(group_id, file, db, current_user.id, temp_id, parent_message_id)
 
 @router.delete("/{message_id}/voice", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_voice_message_by_id(message_id: int,

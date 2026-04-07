@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:core';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
 import 'package:whisper_space_flutter/features/websocket/group_websocket.dart';
 import 'package:whisper_space_flutter/features/chat/model/group_message_model/group_message_model.dart';
@@ -16,20 +17,6 @@ import './group_dialog//forward_dialog.dart';
 import 'package:whisper_space_flutter/features/chat/video_player.dart';
 import 'package:whisper_space_flutter/features/chat/screens/private/widgets/image_viewer.dart';
 import 'package:dio/dio.dart';
-
-String _formatTime(DateTime dateTime) {
-  final diff = DateTime.now().difference(dateTime);
-  if (diff.inMinutes < 1) {
-    return "Just now";
-  }
-  if (diff.inMinutes < 60) {
-    return "${diff.inMinutes}m";
-  } else if (diff.inHours < 24) {
-    return "${diff.inHours}h";
-  } else {
-    return "${diff.inDays}d";
-  }
-}
 
 class GroupMessageScreen extends StatefulWidget {
   final int groupId;
@@ -61,7 +48,6 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
   final _recorder = AudioRecorder();
   bool _isRecording = false;
-  String? _recordedFilePath;
   bool _showEmojiPicker = false;
 
   late final StreamSubscription _wsSubscription;
@@ -74,8 +60,6 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   bool _isDownloading = false;
   double _progress = 0.0;
   int? _downloadingMessageId;
-
-  final FocusNode _textFieldFocus = FocusNode();
 
   final allowedExtensions = {
     ".png": "image",
@@ -98,12 +82,23 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     return allowedExtensions[ext] ?? 'file';
   }
 
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+  Future<bool> _requestPermission(Permission permission) async {
+    final status = await permission.request();
+    return status.isGranted;
+  }
+
+  Future<void> _pickImage({required ImageSource source}) async {
+    final hasPermission = source == ImageSource.camera
+        ? await _requestPermission(Permission.camera)
+        : await _requestPermission(Permission.photos);
+
+    if (!hasPermission) return;
+
+    final XFile? image = await _picker.pickImage(source: source);
 
     if (image == null) return;
 
-    _uploadImage(File(image.path));
+    _uploadImage(File(image.path), parentMessageId: replyingToMessageId);
   }
 
   Future<void> _pickFiles() async {
@@ -121,7 +116,22 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
     if (!allowedExtensions.containsKey(ext)) return;
 
-    _uploadFile(file, allowedExtensions[ext]!);
+    _uploadFile(file, allowedExtensions[ext]!,
+        parentMessageId: replyingToMessageId);
+  }
+
+  Future<void> _pickVideo({required ImageSource source}) async {
+    final hasPermission = source == ImageSource.camera
+        ? await _requestPermission(Permission.camera)
+        : await _requestPermission(Permission.photos);
+
+    if (!hasPermission) return;
+
+    final XFile? video = await _picker.pickVideo(source: source);
+
+    if (video == null) return;
+
+    _uploadVideo(File(video.path), parentMessageId: replyingToMessageId);
   }
 
   Future<void> _startRecording() async {
@@ -143,7 +153,6 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
       setState(() {
         _isRecording = true;
-        _recordedFilePath = filePath;
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -157,7 +166,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     setState(() => _isRecording = false);
 
     if (path != null) {
-      _uploadVoice(File(path));
+      _uploadVoice(File(path), parentMessageId: replyingToMessageId);
     }
   }
 
@@ -335,111 +344,27 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     _controller.clear();
   }
 
-  Future<void> _uploadImage(File file) async {
+  Future<void> _uploadImage(File file, {String? parentMessageId}) async {
     final tempId = DateTime.now().microsecondsSinceEpoch.toString();
     final type = _getFileType(file);
 
-    final tempMessage = GroupMessageModel(
-        id: -1,
-        tempId: tempId,
-        sender: AuthorModel(
-          id: widget.currentUserId,
-          username: "me",
-          avatar: null,
-        ),
-        groupId: widget.groupId,
-        createdAt: DateTime.now(),
-        fileUrl: file.path,
-        type: type);
+    if (parentMessageId != null) {
+      final found = _messages.where((m) => m.id == parentMessageId);
 
-    setState(() {
-      _messages.insert(0, tempMessage);
-    });
+      if (found.isNotEmpty) {
+        final m = found.first;
 
-    try {
-      final message = await widget.chatApi.uploadFile(
-        widget.groupId,
-        file,
-        tempId,
-      );
-
-      final index = _messages.indexWhere((m) => m.tempId == tempId);
-
-      if (index != -1) {
-        setState(() {
-          _messages[index] = _messages[index].copyWith(
-              id: message.id,
-              fileUrl: message.fileUrl,
-              content: message.content,
-              createdAt: message.createdAt,
-              seenBy: message.seenBy,
-              type: message.type);
-        });
+        replyingToMessage = ParentMessageModel(
+          id: m.id,
+          sender: m.sender,
+          content: m.content,
+          callContent: m.callContent,
+          fileUrl: m.fileUrl,
+          voiceUrl: m.voiceUrl,
+          type: m.type,
+        );
       }
-    } catch (e) {
-      setState(() {
-        _messages.removeWhere((m) => m.tempId == tempId);
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Upload failed")),
-      );
     }
-  }
-
-  Future<void> _uploadVoice(File file) async {
-    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
-
-    final tempMessage = GroupMessageModel(
-        id: -1,
-        tempId: tempId,
-        sender: AuthorModel(
-          id: widget.currentUserId,
-          username: "me",
-          avatar: null,
-        ),
-        groupId: widget.groupId,
-        createdAt: DateTime.now(),
-        voiceUrl: file.path,
-        type: "voice");
-
-    setState(() {
-      _messages.insert(0, tempMessage);
-    });
-
-    try {
-      final message = await widget.chatApi.uploadVoice(
-        widget.groupId,
-        file,
-        tempId,
-      );
-
-      final index = _messages.indexWhere((m) => m.tempId == tempId);
-
-      if (index != -1) {
-        setState(() {
-          _messages[index] = _messages[index].copyWith(
-              id: message.id,
-              voiceUrl: message.voiceUrl,
-              content: message.content,
-              createdAt: message.createdAt,
-              seenBy: message.seenBy,
-              type: message.type);
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _messages.removeWhere((m) => m.tempId == tempId);
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Upload failed")),
-      );
-    }
-  }
-
-  Future<void> _uploadFile(File file, String type) async {
-    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
 
     final tempMessage = GroupMessageModel(
       id: -1,
@@ -453,27 +378,179 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       createdAt: DateTime.now(),
       fileUrl: file.path,
       type: type,
+      parentMessage: replyingToMessage,
+      isUploading: true,
     );
+
+    setState(() {
+      _messages.insert(0, tempMessage);
+    });
+
+    try {
+      final message = await widget.chatApi
+          .uploadFile(widget.groupId, file, tempId, parentMessageId);
+
+      final index = _messages.indexWhere((m) => m.tempId == tempId);
+
+      if (index != -1) {
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+            id: message.id,
+            fileUrl: message.fileUrl,
+            content: message.content,
+            createdAt: message.createdAt,
+            seenBy: message.seenBy,
+            type: message.type,
+            isUploading: false,
+          );
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.removeWhere((m) => m.tempId == tempId);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Upload failed")),
+      );
+    } finally {
+      setState(() {
+        replyingToMessageId = null;
+        replyingToMessage = null;
+      });
+    }
+  }
+
+  Future<void> _uploadVoice(File file, {String? parentMessageId}) async {
+    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
+
+    if (parentMessageId != null) {
+      final found = _messages.where((m) => m.id == parentMessageId);
+
+      if (found.isNotEmpty) {
+        final m = found.first;
+
+        replyingToMessage = ParentMessageModel(
+          id: m.id,
+          sender: m.sender,
+          content: m.content,
+          callContent: m.callContent,
+          fileUrl: m.fileUrl,
+          voiceUrl: m.voiceUrl,
+          type: m.type,
+        );
+      }
+    }
+
+    final tempMessage = GroupMessageModel(
+        id: -1,
+        tempId: tempId,
+        sender: AuthorModel(
+          id: widget.currentUserId,
+          username: "me",
+          avatar: null,
+        ),
+        groupId: widget.groupId,
+        createdAt: DateTime.now(),
+        voiceUrl: file.path,
+        type: "voice",
+        parentMessage: replyingToMessage,
+        isUploading: true);
+
+    setState(() {
+      _messages.insert(0, tempMessage);
+    });
+
+    try {
+      final message = await widget.chatApi
+          .uploadVoice(widget.groupId, file, tempId, parentMessageId);
+
+      final index = _messages.indexWhere((m) => m.tempId == tempId);
+
+      if (index != -1) {
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+            id: message.id,
+            voiceUrl: message.voiceUrl,
+            content: message.content,
+            createdAt: message.createdAt,
+            seenBy: message.seenBy,
+            type: message.type,
+            isUploading: false,
+          );
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.removeWhere((m) => m.tempId == tempId);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Upload failed")),
+      );
+    } finally {
+      setState(() {
+        replyingToMessageId = null;
+        replyingToMessage = null;
+      });
+    }
+  }
+
+  Future<void> _uploadFile(File file, String type,
+      {String? parentMessageId}) async {
+    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
+
+    if (parentMessageId != null) {
+      final found = _messages.where((m) => m.id == parentMessageId);
+
+      if (found.isNotEmpty) {
+        final m = found.first;
+
+        replyingToMessage = ParentMessageModel(
+          id: m.id,
+          sender: m.sender,
+          content: m.content,
+          callContent: m.callContent,
+          fileUrl: m.fileUrl,
+          voiceUrl: m.voiceUrl,
+          type: m.type,
+        );
+      }
+    }
+
+    final tempMessage = GroupMessageModel(
+        id: -1,
+        tempId: tempId,
+        sender: AuthorModel(
+          id: widget.currentUserId,
+          username: "me",
+          avatar: null,
+        ),
+        groupId: widget.groupId,
+        createdAt: DateTime.now(),
+        fileUrl: file.path,
+        type: type,
+        parentMessage: replyingToMessage,
+        isUploading: true);
 
     setState(() => _messages.insert(0, tempMessage));
 
     try {
-      final message = await widget.chatApi.uploadFile(
-        widget.groupId,
-        file,
-        tempId,
-      );
+      final message = await widget.chatApi
+          .uploadFile(widget.groupId, file, tempId, parentMessageId);
 
       final index = _messages.indexWhere((m) => m.tempId == tempId);
       if (index != -1) {
         setState(() {
           _messages[index] = _messages[index].copyWith(
-              id: message.id,
-              fileUrl: message.fileUrl,
-              content: message.content,
-              createdAt: message.createdAt,
-              seenBy: message.seenBy,
-              type: message.type);
+            id: message.id,
+            fileUrl: message.fileUrl,
+            content: message.content,
+            createdAt: message.createdAt,
+            seenBy: message.seenBy,
+            type: message.type,
+            isUploading: false,
+          );
         });
       }
     } catch (e) {
@@ -482,6 +559,86 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Upload failed")),
       );
+    } finally {
+      setState(() {
+        replyingToMessageId = null;
+        replyingToMessage = null;
+      });
+    }
+  }
+
+  Future<void> _uploadVideo(File file, {String? parentMessageId}) async {
+    final tempId = DateTime.now().microsecondsSinceEpoch.toString();
+
+    if (parentMessageId != null) {
+      final found = _messages.where((m) => m.id == parentMessageId);
+
+      if (found.isNotEmpty) {
+        final m = found.first;
+
+        replyingToMessage = ParentMessageModel(
+          id: m.id,
+          sender: m.sender,
+          content: m.content,
+          callContent: m.callContent,
+          fileUrl: m.fileUrl,
+          voiceUrl: m.voiceUrl,
+          type: m.type,
+        );
+      }
+    }
+
+    final tempMessage = GroupMessageModel(
+        id: -1,
+        tempId: tempId,
+        sender: AuthorModel(
+          id: widget.currentUserId,
+          username: "me",
+          avatar: null,
+        ),
+        groupId: widget.groupId,
+        createdAt: DateTime.now(),
+        fileUrl: file.path, // local preview
+        type: "video",
+        parentMessage: replyingToMessage,
+        isUploading: true);
+
+    setState(() {
+      _messages.insert(0, tempMessage);
+    });
+
+    try {
+      final message = await widget.chatApi
+          .uploadFile(widget.groupId, file, tempId, parentMessageId);
+
+      final index = _messages.indexWhere((m) => m.tempId == tempId);
+
+      if (index != -1) {
+        setState(() {
+          _messages[index] = _messages[index].copyWith(
+            id: message.id,
+            fileUrl: message.fileUrl,
+            content: message.content,
+            createdAt: message.createdAt,
+            seenBy: message.seenBy,
+            type: message.type,
+            isUploading: false,
+          );
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.removeWhere((m) => m.tempId == tempId);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Video upload failed")),
+      );
+    } finally {
+      setState(() {
+        replyingToMessageId = null;
+        replyingToMessage = null;
+      });
     }
   }
 
@@ -614,10 +771,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
         break;
 
       case 'delete':
-        widget.groupWebsocket.sendDeleteMessage(msg.id);
-        setState(() {
-          _messages.removeWhere((m) => m.id == msg.id);
-        });
+        _showDeleteDialog(msg);
         break;
 
       case 'reply':
@@ -658,19 +812,35 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
           child: Wrap(
             children: [
               ListTile(
-                leading: const Icon(Icons.image),
-                title: const Text('Image'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage();
-                },
-              ),
-              ListTile(
                 leading: const Icon(Icons.insert_drive_file),
-                title: const Text('File'),
+                title: const Text('Document'),
                 onTap: () {
                   Navigator.pop(context);
                   _pickFiles();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(source: ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(source: ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.videocam),
+                title: const Text('Video'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickVideo(source: ImageSource.gallery);
                 },
               ),
             ],
@@ -696,6 +866,41 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
               const SnackBar(content: Text("Message forwarded")),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showDeleteDialog(dynamic msg) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Message'),
+          content: const Text('Are you sure you want to delete this message?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // close dialog
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // close dialog
+
+                // Perform delete
+                widget.groupWebsocket.sendDeleteMessage(msg.id);
+                setState(() {
+                  _messages.removeWhere((m) => m.id == msg.id);
+                });
+              },
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
         );
       },
     );
