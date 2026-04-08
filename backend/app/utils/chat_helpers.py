@@ -4,7 +4,6 @@ from fastapi import HTTPException, status
 from datetime import datetime, timezone
 
 from app.models.private_message import PrivateMessage, MessageType
-from app.models.message_seen_status import MessageSeenStatus
 from app.models.group_message import GroupMessage
 from app.models.group_member import GroupMember
 

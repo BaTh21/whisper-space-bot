@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, Integer, ForeignKey, DateTime, UniqueConstraint
 from datetime import datetime
 from app.models.base import Base
 from sqlalchemy.orm import relationship
@@ -14,3 +14,7 @@ class GroupMessageSeen(Base):
 
     message = relationship("GroupMessage", back_populates="seen_by")
     user = relationship("User")
+    
+    __table_args__ = (
+        UniqueConstraint("message_id", "user_id", name="unique_message_user_seen"),
+    )

@@ -520,3 +520,6 @@ async def delete_voice_message(message: GroupMessage):
     except Exception as e:
         print(f"[Error] Failed to delete voice message id {message.id}: {str(e)}")
         
+def is_user_online(user_id: int) -> bool:
+    return user_id in manager.user_connections and len(manager.user_connections[user_id]) > 0
+        

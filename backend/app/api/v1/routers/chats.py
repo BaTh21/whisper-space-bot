@@ -10,9 +10,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.chat import create_private_message, edit_private_message, build_reply_preview, build_message_out
+from app.crud.chat import create_private_message, edit_private_message, build_reply_preview, build_message_out, mark_message_as_read
 from app.crud.friend import is_blocked, is_blocked_by, is_friend
-from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.user import User
 from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadResponse, ChatListItem,
@@ -26,6 +25,7 @@ from sqlalchemy import or_, and_
 from app.crud.group import get_user_groups
 from app.models.group_message import GroupMessage
 from datetime import timezone
+from app.crud.message import is_user_online
 
 router = APIRouter()
 
@@ -131,6 +131,30 @@ async def get_private_chat(
     if not is_friend(db, current_user.id, friend_id):
         raise HTTPException(status_code=403, detail="Not friends")
 
+    updated_count = db.query(PrivateMessage).filter(
+        PrivateMessage.sender_id == friend_id,
+        PrivateMessage.receiver_id == current_user.id,
+        PrivateMessage.is_read == False
+    ).update(
+        {
+            PrivateMessage.is_read: True,
+            PrivateMessage.read_at: datetime.utcnow()
+        },
+        synchronize_session=False
+    )
+
+    db.commit()
+    
+    if updated_count > 0:
+        await manager.send_to_user(
+            friend_id,
+            {
+                "type": "chat_read",
+                "reader_id": current_user.id,
+                "chat_with": friend_id
+            }
+        )
+
     messages = (
         db.query(PrivateMessage)
         .options(
@@ -148,7 +172,7 @@ async def get_private_chat(
         .limit(limit)
         .all()
     )
-
+    
     result: list[MessageOut] = []
 
     for msg in messages:
@@ -275,6 +299,10 @@ async def send_voice_message(
             }
             
         await manager.broadcast(chat_id, broadcast_data)
+        
+        is_online = is_user_online(friend_id)
+        if is_online:
+            await mark_message_as_read(db, friend_id, current_user.id)
 
         return broadcast_data
 
@@ -390,6 +418,10 @@ async def send_media_message(
         }
 
         await manager.broadcast(chat_id, broadcast_data)
+        
+        is_online = is_user_online(friend_id)
+        if is_online:
+            await mark_message_as_read(db, friend_id, current_user.id)
 
         return broadcast_data
 

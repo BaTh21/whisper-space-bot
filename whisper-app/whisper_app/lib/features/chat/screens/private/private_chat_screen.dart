@@ -513,6 +513,40 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               );
             }
           });
+        } else if (type == 'chat_read') {
+          final readerId = data['reader_id'];
+
+          if (readerId != widget.userId) return;
+
+          setState(() {
+            _messages = _messages.map((msg) {
+              if (msg.senderId == _currentUserId) {
+                return msg.copyWith(
+                  isRead: true,
+                  status: MessageStatus.read,
+                );
+              }
+              return msg;
+            }).toList();
+          });
+        } else if (type == 'messages_read') {
+          final messageIds = (data['message_ids'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [];
+
+          setState(() {
+            _messages = _messages.map((msg) {
+              if (msg.senderId == _currentUserId &&
+                  messageIds.contains(msg.id.toString())) {
+                return msg.copyWith(
+                  isRead: true,
+                  status: MessageStatus.read,
+                );
+              }
+              return msg;
+            }).toList();
+          });
         }
       });
     } catch (e) {
