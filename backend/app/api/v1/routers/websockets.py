@@ -17,9 +17,8 @@ from app.models.group_message import GroupMessage
 from app.models.group_message_seen import GroupMessageSeen
 from app.schemas.chat import GroupMessageOut, ParentMessageResponse, AuthorResponse
 from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
-from app.crud.message import update_message, delete_message, is_user_online
+from app.crud.message import update_message, delete_message, is_user_online, heartbeat, mark_user_as_read_if_online
 from app.helpers.to_utc_iso import to_local_iso
-from app.schemas.reaction import ReactionCreate
 from app.crud.chat_gateway import forward_message
 from app.services.websocket_manager import manager
 
@@ -95,7 +94,6 @@ async def global_websocket(websocket: WebSocket):
 async def handle_websocket_private(
     websocket: WebSocket,
     friend_id: int,
-    db: Session = Depends(get_db)
 ):
 
     current_user = None
@@ -126,7 +124,7 @@ async def handle_websocket_private(
         chat_id = _chat_id(current_user.id, friend_id)
         await manager.connect(chat_id, websocket, user_id=current_user.id)
         
-        heartbeat_task = asyncio.create_task(send_heartbeat(current_user.id))
+        heartbeat_task = asyncio.create_task(heartbeat(websocket, chat_id, current_user.id))
 
         while True:
             try:
@@ -477,6 +475,8 @@ async def websocket_group_chat(
 
         chat_id = f"group_{group_id}"
         await manager.connect(chat_id, websocket, user_id=current_user.id)
+        
+        heartbeat_task = asyncio.create_task(heartbeat(websocket, chat_id, current_user.id))
 
         try:
             while True:
@@ -626,16 +626,18 @@ async def websocket_group_chat(
 
                 try:
                     await manager.broadcast(chat_id, msg_out)
+                    
+                    await mark_user_as_read_if_online(db, current_user.id, group_id, msg.id)
                 except Exception as e:
                     print(f"[Broadcast Error] Group {group_id}: {e}")
                     await websocket.send_json({
                         "error": "Failed to broadcast message",
                         "temp_id": incoming_temp_id
                     })
-                    continue
-
+                    
         except WebSocketDisconnect:
             manager.disconnect(chat_id, websocket, user_id=current_user.id)
+            
         except Exception as e:
             traceback.print_exc()
             print(f"[WS Error] {e}")
@@ -646,6 +648,13 @@ async def websocket_group_chat(
         print(f"[WS Error] {e}")
         await websocket.close(code=1011, reason="Server error")
     finally:
+        if 'heartbeat_task' in locals():
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+        manager.disconnect(chat_id, websocket, user_id=current_user.id)
         db.close()
         
     

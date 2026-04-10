@@ -84,7 +84,7 @@ class GroupMessageResponse(BaseModel):
     # public_id: Optional[str] = None
     
     class Config:
-        form_attributes= True
+        from_attributes= True
     
 class GroupUpdate(BaseModel):
     name: Optional[str] = None

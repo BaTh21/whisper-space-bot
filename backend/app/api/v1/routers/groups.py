@@ -1,6 +1,6 @@
 # app/api/v1/routers/groups.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -8,8 +8,7 @@ from app.models.user import User
 from app.schemas.group import GroupCreate, GroupInviteOut, GroupMessageCreate, GroupOut, GroupUpdate, GroupInviteResponse, GroupImageResponse, GroupDetailsOut
 from app.services.websocket_manager import manager
 from app.crud.group import (
-    accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_invite_link,
-    get_group_invites, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member,
+    accept_group_invite, add_member, create_group_with_invites, get_group_diaries, get_group_members, get_pending_invites, get_user_groups, get_group, remove_member,
     leave_group, update_group, invite_user, delete_group_invite, delete_cover, get_group_covers, delete_group,
     get_or_create_invite_link, upload_group_cover, exists_member  # Added exists_member
 )
@@ -19,6 +18,7 @@ from app.crud.chat import get_group_messages
 from app.models.group_message import GroupMessage
 from app.schemas.chat import GroupMessageOut
 from app.models.group_invite import GroupInvite
+from app.crud.message import mark_all_as_read
 
 router = APIRouter()
 
@@ -69,43 +69,8 @@ def join_group(
     add_member(db, group_id, current_user.id)
     return {"msg": "Joined group"}
 
-@router.post("/{group_id}/message", response_model=GroupMessageOut)
-async def send_group_message(
-    group_id: int,
-    msg_in: GroupMessageCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    if not exists_member(db, group_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not a member")
-
-    message = GroupMessage(
-        group_id=group_id,
-        sender_id=current_user.id,
-        content=msg_in.content,
-        message_type=msg_in.message_type,
-    )
-    db.add(message)
-    db.commit()
-    db.refresh(message)
-
-    chat_id = f"group_{group_id}"
-    await manager.broadcast(
-        chat_id,
-        {
-            "id": message.id,
-            "sender_id": message.sender_id,
-            "group_id": message.group_id,
-            "content": message.content,
-            "message_type": message.message_type.value,
-            "created_at": message.created_at.isoformat(),
-        }
-    )
-
-    return message
-   
 @router.get("/{group_id}/message", response_model=List[GroupMessageOut])
-def get_group_messages_(
+async def get_group_messages_(
     group_id: int,
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=100),
@@ -116,6 +81,29 @@ def get_group_messages_(
         raise HTTPException(status_code=403, detail="Not a member of this group")
 
     messages = get_group_messages(db, group_id, limit, offset)
+
+    message_ids, now = await mark_all_as_read(db, group_id, current_user.id)
+
+    if message_ids:
+        payload = {
+            "action": "messages_read",
+            "group_id": group_id,
+            "user": {
+                "id": current_user.id,
+                "username": current_user.username,
+                "avatar_url": current_user.avatar_url,
+            },
+            "message_ids": message_ids,
+            "seen_at": now.isoformat(),
+        }
+
+        chat_id = f"group_{group_id}"
+
+        try:
+            await manager.broadcast(chat_id, payload)
+        except Exception as e:
+            print(f"[Broadcast Error]: {e}")
+
     return messages or []
 
 @router.post("/{token}/accept")

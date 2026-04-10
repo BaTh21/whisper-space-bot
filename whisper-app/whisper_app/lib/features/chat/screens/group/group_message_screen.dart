@@ -199,8 +199,6 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   }
 
   void _handleWsEvent(Map<String, dynamic> data) {
-    print('Websocket received data: $data');
-
     final action = data['action'];
 
     switch (action) {
@@ -235,8 +233,12 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
         );
 
         if (index != -1) {
+          final existingSeen = _messages[index].seenBy;
+
           setState(() {
-            _messages[index] = GroupMessageModel.fromJson(data);
+            _messages[index] = GroupMessageModel.fromJson(data).copyWith(
+              seenBy: existingSeen,
+            );
           });
         } else {
           setState(() {
@@ -259,6 +261,45 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
             isUploading: false,
             sender: _messages[index].sender,
           );
+        });
+        return;
+
+      case 'messages_read':
+        final messageIds = List<int>.from(data['message_ids'] ?? []);
+        if (messageIds.isEmpty) return;
+
+        List<AuthorModel> users = [];
+        if (data['users'] != null) {
+          users = (data['users'] as List)
+              .map((u) => AuthorModel.fromJson(u))
+              .toList();
+        } else if (data['user'] != null) {
+          users = [AuthorModel.fromJson(data['user'])];
+        }
+
+        final seenAt = DateTime.parse(data['seen_at']);
+
+        setState(() {
+          _messages = _messages.map((msg) {
+            if (!messageIds.contains(msg.id) &&
+                !(msg.tempId != null && messageIds.contains(msg.id))) {
+              return msg;
+            }
+
+            final currentSeen = msg.seenBy ?? [];
+
+            final updatedSeen = [
+              ...currentSeen,
+              ...users
+                  .where(
+                    (user) => !currentSeen.any((s) => s.user?.id == user.id),
+                  )
+                  .map((user) =>
+                      SeenMessageModel(id: 0, user: user, seenAt: seenAt)),
+            ];
+
+            return msg.copyWith(seenBy: updatedSeen);
+          }).toList();
         });
         return;
 
@@ -399,7 +440,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
             fileUrl: message.fileUrl,
             content: message.content,
             createdAt: message.createdAt,
-            seenBy: message.seenBy,
+            // seenBy: message.seenBy,
             type: message.type,
             isUploading: false,
           );
@@ -474,7 +515,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
             voiceUrl: message.voiceUrl,
             content: message.content,
             createdAt: message.createdAt,
-            seenBy: message.seenBy,
+            // seenBy: message.seenBy,
             type: message.type,
             isUploading: false,
           );
@@ -547,7 +588,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
             fileUrl: message.fileUrl,
             content: message.content,
             createdAt: message.createdAt,
-            seenBy: message.seenBy,
+            // seenBy: message.seenBy,
             type: message.type,
             isUploading: false,
           );
@@ -620,7 +661,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
             fileUrl: message.fileUrl,
             content: message.content,
             createdAt: message.createdAt,
-            seenBy: message.seenBy,
+            // seenBy: message.seenBy,
             type: message.type,
             isUploading: false,
           );
@@ -659,7 +700,12 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     try {
       setState(() {
         _messages[index] = oldMessage.copyWith(
-            tempId: tempId, fileUrl: file.path, type: type, isUploading: true);
+          tempId: tempId,
+          fileUrl: file.path,
+          type: type,
+          isUploading: true,
+          seenBy: oldMessage.seenBy,
+        );
       });
 
       final updatedMessage = await widget.chatApi.updateFileMessage(
@@ -669,9 +715,12 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
       );
 
       setState(() {
+        final current = _messages[index];
+
         _messages[index] = updatedMessage.copyWith(
           sender: _messages[index].sender,
           isUploading: false,
+          seenBy: current.seenBy,
         );
       });
     } catch (e) {
@@ -935,13 +984,18 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
               final msg = _messages[index];
               final isMe = msg.sender.id == widget.currentUserId;
-              final isSeen = msg.seenBy?.isNotEmpty ?? false;
+              final bool isSeen = msg.seenBy?.any(
+                    (s) => s.user?.id != widget.currentUserId,
+                  ) ??
+                  false;
 
               return Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: MessageBubble(
-                  key: ValueKey(msg.id),
+                  key: ValueKey(
+                    '${msg.id}-${msg.seenBy?.map((e) => e.user?.id).join(",")}',
+                  ),
                   msg: msg,
                   isMe: isMe,
                   currentUserId: widget.currentUserId,

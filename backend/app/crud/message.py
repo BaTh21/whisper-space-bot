@@ -1,9 +1,7 @@
 from app.models.group_message import GroupMessage, MessageType
 from app.models.group_member import GroupMember
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status, UploadFile
-from app.schemas.group import GroupMessageUpdate
-from app.schemas.chat import ParentMessageResponse, AuthorResponse, GroupMessageOut
+from fastapi import HTTPException, status, UploadFile, WebSocket
 from datetime import datetime, timezone
 from app.core.cloudinary import extract_public_id_from_url, upload_to_cloudinary, delete_from_cloudinary, configure_cloudinary
 from pathlib import Path
@@ -14,7 +12,7 @@ from app.helpers.to_utc_iso import to_local_iso
 from app.models.user import User
 import cloudinary
 import cloudinary.uploader
-from app.services.websocket_manager import manager
+import asyncio
 
 configure_cloudinary()
 
@@ -171,22 +169,37 @@ async def upload_file_message(
     payload = {
         "action": "file_upload",
         "id": save_message.id,
+        "group_id": group_id,
         "sender": {
             "id": save_message.sender.id,
             "username": save_message.sender.username,
             "avatar_url": save_message.sender.avatar_url,
         },
-        "message_type": save_message.message_type,
+        "message_type": save_message.message_type.value
+        if hasattr(save_message.message_type, "value")
+        else save_message.message_type,
         "file_url": save_message.file_url,
         "created_at": to_local_iso(save_message.created_at, tz_offset_hours=7),
         "temp_id": temp_id,
-        "parent_message": parent_msg_data 
+        "parent_message": parent_msg_data,
     }
     
-    await manager.broadcast(f"group_{group_id}", payload)
+    chat_id = f"group_{group_id}"
     
-    return save_message
-
+    try:
+    
+        await manager.broadcast(chat_id, payload)
+        await mark_user_as_read_if_online(db, current_user_id, group_id, save_message.id)
+        
+        return save_message
+        
+    except Exception as e:
+        print(f"[Broadcast Error] Group {group_id}: {e}")
+        await manager.send_json({
+            "error": "Failed to broadcast message",
+            "temp_id": temp_id
+        })
+    
 async def update_file_message(
     db: Session,
     message_id: int,
@@ -270,7 +283,9 @@ async def update_file_message(
         },
         "message_id": message.id,
         "file_url": message.file_url,
-        "message_type": message.message_type,
+        "message_type": message.message_type.value
+        if hasattr(message.message_type, "value")
+        else message.message_type,
         "updated_at": to_local_iso(message.updated_at, tz_offset_hours=7),
         "temp_id": temp_id,
     }
@@ -278,50 +293,6 @@ async def update_file_message(
     await manager.broadcast(f"group_{message.group_id}", payload)
 
     return message
-
-async def handle_seen_message(db, current_user_id, group_id, message_id, chat_id):
-    try:
-    
-        msg = db.query(GroupMessage).filter(
-            GroupMessage.id == message_id,
-            GroupMessage.group_id == group_id
-        ).first()
-        if not msg:
-            return 
-
-        seen_record = db.query(GroupMessageSeen).filter_by(
-            message_id = message_id,
-            user_id=current_user_id
-        ).first()
-        if seen_record and seen_record.seen:
-            return 
-        
-        now = datetime.utcnow()
-        
-        if not seen_record:
-            seen_record = GroupMessageSeen(
-                message_id=message_id,
-                user_id=current_user_id,
-                seen=True,
-                seen_at=now
-            )
-            db.add(seen_record)
-        else:
-            seen_record.seen = True
-            seen_record.seen_at = now
-            
-        db.commit()
-
-        await manager.broadcast(chat_id, {
-            "event": "message_seen",
-            "message_id": message_id,
-            "user_id": current_user_id,
-            "seen_at": now.isoformat(),
-        })
-
-    except Exception as e:
-        db.rollback()
-        print(f"[Seen Error] {e}")
         
 async def handle_forward_message(
     db: Session,
@@ -522,4 +493,93 @@ async def delete_voice_message(message: GroupMessage):
         
 def is_user_online(user_id: int) -> bool:
     return user_id in manager.user_connections and len(manager.user_connections[user_id]) > 0
+
+async def mark_all_as_read(db: Session, group_id: int, user_id: int):
+    subquery = (
+        db.query(GroupMessageSeen.message_id)
+        .filter(GroupMessageSeen.user_id == user_id)
+    )
+
+    unseen_messages = (
+        db.query(GroupMessage.id)
+        .filter(
+            GroupMessage.group_id == group_id,
+            GroupMessage.sender_id != user_id,
+            ~GroupMessage.id.in_(subquery)
+        )
+        .all()
+    )
+
+    if not unseen_messages:
+        return [], None
+
+    now = datetime.utcnow()
+
+    new_seen = [
+        GroupMessageSeen(
+            message_id=msg_id,
+            user_id=user_id,
+            seen_at=now
+        )
+        for (msg_id,) in unseen_messages
+    ]
+
+    db.bulk_save_objects(new_seen)
+    db.commit()
+
+    return [msg_id for (msg_id,) in unseen_messages], now
+    
+async def heartbeat(websocket: WebSocket, chat_id: str, user_id: int, interval: int = 30):
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await websocket.send_json({"action": "ping"})
+            except Exception:
+                # Connection is dead
+                print(f"[Heartbeat] Disconnecting user {user_id} from {chat_id}")
+                manager.disconnect(chat_id, websocket, user_id)
+                break
+    except asyncio.CancelledError:
+        # Task cancelled on normal disconnect
+        pass
+    
+async def mark_user_as_read_if_online(db: Session, current_user_id: int, group_id: int, message_id: int):
+
+    chat_id = f"group_{group_id}"
+    
+    online_users = manager.get_online_users_in_chat(chat_id)
+    online_users.discard(current_user_id)
+                
+    if online_users:
+        now = datetime.utcnow()
+
+        seen_entries = [
+            GroupMessageSeen(
+                message_id=message_id,
+                user_id=user_id,
+                seen_at=now
+            )
+            for user_id in online_users
+        ]
+        db.add_all(seen_entries)
+        db.commit()
         
+        users = db.query(User.id, User.username, User.avatar_url).filter(User.id.in_(online_users)).all()
+        user_list = [
+            {"id": u.id, "username": u.username, "avatar_url": u.avatar_url}
+            for u in users
+        ]
+
+        read_payload = {
+            "action": "messages_read",
+            "group_id": group_id,
+            "message_ids": [message_id],
+            "seen_at": now.isoformat(),
+            "users": user_list
+        }
+
+        try:
+            await manager.broadcast(chat_id, read_payload)
+        except Exception as e:
+            print(f"[Broadcast Error - read event] Group {group_id}: {e}")
