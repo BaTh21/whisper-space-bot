@@ -9,6 +9,8 @@ class User {
   final DateTime? lastSeen;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool is2faEnabled;
+  final bool isEmail2saEnabled;
 
   User({
     required this.id,
@@ -21,6 +23,8 @@ class User {
     this.lastSeen,
     required this.createdAt,
     required this.updatedAt,
+    required this.is2faEnabled,
+    required this.isEmail2saEnabled,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -34,9 +38,11 @@ class User {
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       isOnline: json['is_online'] as bool? ?? false,
-      lastSeen: json['last_seen'] != null 
-          ? DateTime.parse(json['last_seen'] as String) 
+      lastSeen: json['last_seen'] != null
+          ? DateTime.parse(json['last_seen'] as String)
           : null,
+      is2faEnabled: json['is_2fa_enabled'] as bool? ?? false,
+      isEmail2saEnabled: json['is_email_2sa_enabled'] as bool? ?? false,
     );
   }
 
@@ -52,6 +58,8 @@ class User {
       'updated_at': updatedAt.toIso8601String(),
       'is_online': isOnline,
       'last_seen': lastSeen?.toIso8601String(),
+      'is_2fa_enabled': is2faEnabled,
+      'is_email_2sa_enabled': isEmail2saEnabled,
     };
   }
 
@@ -66,6 +74,8 @@ class User {
     DateTime? updatedAt,
     bool? isOnline,
     DateTime? lastSeen,
+    bool? is2faEnabled,
+    bool? isEmail2saEnabled,
   }) {
     return User(
       id: id ?? this.id,
@@ -78,11 +88,13 @@ class User {
       updatedAt: updatedAt ?? this.updatedAt,
       isOnline: isOnline ?? this.isOnline,
       lastSeen: lastSeen ?? this.lastSeen,
+      is2faEnabled: is2faEnabled ?? this.is2faEnabled,
+      isEmail2saEnabled: isEmail2saEnabled ?? this.isEmail2saEnabled,
     );
   }
 
   @override
   String toString() {
-    return 'User{id: $id, username: $username, email: $email, isVerified: $isVerified, isOnline: $isOnline}';
+    return 'User{id: $id, username: $username, email: $email, isVerified: $isVerified, isOnline: $isOnline, is2faEnabled: $is2faEnabled, isEmail2saEnabled: $isEmail2saEnabled}';
   }
 }
