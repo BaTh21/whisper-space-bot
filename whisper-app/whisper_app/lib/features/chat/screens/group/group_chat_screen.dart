@@ -113,6 +113,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     try {
       await groupWs!.connect();
+      groupWs!.startHeartbeat();
 
       _wsSubscription = groupWs!.stream.listen(
             (jsonData) {

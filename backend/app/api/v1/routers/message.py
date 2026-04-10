@@ -4,7 +4,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.schemas.group import GroupMessageUpdate, GroupMessageOut, GroupMessageResponse
 from app.models.user import User
-from app.crud.message import update_message, delete_message, upload_file_message, update_file_message, get_seen_messages, upload_voice_message, delete_voice_message
+from app.crud.message import update_message, delete_message, upload_file_message, update_file_message, upload_voice_message, delete_voice_message
 from app.schemas.chat import GroupMessageSeen
 
 router = APIRouter();
@@ -43,13 +43,6 @@ async def update_file_message_by_id(
     current_user: User = Depends(get_current_user)
 ):
     return await update_file_message(db, message_id, file, current_user.id, temp_id)
-
-@router.get("/{message_id}/seen", response_model=list[GroupMessageSeen])
-def get_seen_messages_(message_id: int,
-                       current_user: User = Depends(get_current_user),
-                       db: Session = Depends(get_db)
-                       ):
-    return get_seen_messages(db, message_id)
 
 @router.post("/groups/{group_id}/voice", response_model=GroupMessageResponse)
 async def upload_voice_message_(group_id: int,

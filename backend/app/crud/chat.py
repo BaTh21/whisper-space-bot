@@ -7,7 +7,6 @@ from app.models.group_member import GroupMember
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import HTTPException,status
-from app.models.user_message_status import UserMessageStatus
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException
@@ -15,14 +14,10 @@ from app.schemas.chat import MessageCreate
 from app.crud.friend import get_friends
 import asyncio
 
-from app.models.user_message_status import UserMessageStatus
-from app.models.message_seen_status import MessageSeenStatus
-from app.utils.chat_helpers import validate_reply_message
 from app.models.user import User
 from sqlalchemy import or_, and_
 from app.crud.group import get_user_groups
-from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadResponse, ChatListItem,
-                             MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
+from app.schemas.chat import (MessageOut,ReplyPreview)
 from app.services.websocket_manager import manager
 
 def to_utc(dt):
@@ -76,7 +71,6 @@ def create_private_message(
         msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender)
         ).filter(PrivateMessage.id == msg.id).first()
         
@@ -168,7 +162,6 @@ def get_private_messages(db: Session, user_id: int, friend_id: int, limit: int =
     return db.query(PrivateMessage).options(
         joinedload(PrivateMessage.sender),
         joinedload(PrivateMessage.receiver),
-        joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
     ).filter(
         ((PrivateMessage.sender_id == user_id) & (PrivateMessage.receiver_id == friend_id)) |
         ((PrivateMessage.sender_id == friend_id) & (PrivateMessage.receiver_id == user_id))
@@ -257,12 +250,6 @@ def edit_private_message(db: Session, message_id: int, user_id: int, new_content
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Unexpected error while editing message: {str(e)}"
         )
-
-
-def delete_message_for_user(db: Session, message_id: int, user_id: int):
-    status = UserMessageStatus(user_id=user_id, message_id=message_id, is_deleted=True)
-    db.merge(status)
-    db.commit()
     
 def delete_message_forever(db: Session, message_id: int, user_id: int) -> dict:
     msg = db.query(PrivateMessage).options(
@@ -370,12 +357,12 @@ async def auto_end_call(chat_id: str, db):
 
     manager.call_timers.pop(chat_id, None)
     
-async def send_heartbeat():
+async def send_heartbeat(current_user: int):
             try:
                 while True:
                     await asyncio.sleep(25)
                     try:
-                        await websocket.send_json({
+                        await manager.send_json({
                             "type": "ping",
                             "timestamp": datetime.utcnow().isoformat()
                         })
@@ -386,3 +373,30 @@ async def send_heartbeat():
                 raise
             except Exception as e:
                 print(f"Heartbeat error: {e}")
+                
+async def mark_message_as_read(db: Session, user_id: int, chat_id: int):
+    unread_messages = db.query(PrivateMessage).filter(
+        PrivateMessage.receiver_id == user_id,
+        PrivateMessage.sender_id == chat_id,
+        PrivateMessage.is_read == False
+    ).all()
+    
+    now = datetime.utcnow()
+    message_ids = []
+
+    for m in unread_messages:
+        m.is_read = True
+        m.read_at = now
+        message_ids.append(m.id)
+        
+    db.commit()
+
+    await manager.send_to_user(
+        chat_id,
+        {
+            "type": "messages_read",
+            "message_ids": message_ids,
+            "reader_id": user_id
+        }
+    )
+

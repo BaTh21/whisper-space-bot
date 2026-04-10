@@ -58,14 +58,14 @@ class ParentMessageModel {
 
   factory ParentMessageModel.fromJson(Map<String, dynamic> json) {
     return ParentMessageModel(
-        id: json['id'],
-        sender: AuthorModel.fromJson(json['sender']),
-        content: json['content'],
-        callContent: json['call_content'],
-        fileUrl: json['file_url'],
-        voiceUrl: json['voice_url'],
-        type: json['message_type'],
-        );
+      id: json['id'],
+      sender: AuthorModel.fromJson(json['sender']),
+      content: json['content'],
+      callContent: json['call_content'],
+      fileUrl: json['file_url'],
+      voiceUrl: json['voice_url'],
+      type: json['message_type'],
+    );
   }
 }
 
@@ -103,8 +103,7 @@ class GroupMessageModel {
       this.tempId,
       this.parentMessage,
       this.type,
-      this.isUploading = false
-      });
+      this.isUploading = false});
 
   /// Optimistic message (before server response)
   factory GroupMessageModel.temp({
@@ -126,37 +125,40 @@ class GroupMessageModel {
 
   static final deletedUser = AuthorModel(id: 0, username: 'Deleted user');
 
-  factory GroupMessageModel.fromJson(Map<String, dynamic> json) {
+  factory GroupMessageModel.fromJson(
+    Map<String, dynamic> json, {
+    int? fallbackGroupId,
+  }) {
     return GroupMessageModel(
-        id: json['id'],
-        incomingTempId: json['incoming_temp_id'],
-        groupId: json['group_id'],
-        sender: json['sender'] != null
-            ? AuthorModel.fromJson(json['sender'])
-            : deletedUser,
-        forwardedBy: json['forwarded_by'] != null
-            ? AuthorModel.fromJson(json['forwarded_by'])
-            : null,
-        content: json['content'],
-        callContent: json['call_content'],
-        createdAt: DateTime.parse(json['created_at']),
-        updatedAt: json['updated_at'] != null
-            ? DateTime.parse(json['updated_at'])
-            : null,
-        fileUrl: json['file_url'],
-        voiceUrl: json['voice_url'],
-        seenBy: json['seen_by'] != null
-            ? (json['seen_by'] as List)
-                .map((e) => SeenMessageModel.fromJson(e))
-                .toList()
-            : null,
-        tempId: json['temp_id'],
-        parentMessage: json['parent_message'] != null
-            ? ParentMessageModel.fromJson(json['parent_message'])
-            : null,
-        type: json['message_type'],
-        isUploading: false,
-        );
+      id: json['id'] ?? -1,
+      incomingTempId: json['incoming_temp_id'],
+      groupId: json['group_id'] ?? fallbackGroupId ?? 0,
+      sender: json['sender'] != null
+          ? AuthorModel.fromJson(json['sender'])
+          : deletedUser,
+      forwardedBy: json['forwarded_by'] != null
+          ? AuthorModel.fromJson(json['forwarded_by'])
+          : null,
+      content: json['content'],
+      callContent: json['call_content'],
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : null,
+      fileUrl: json['file_url'],
+      voiceUrl: json['voice_url'],
+      seenBy: json['seen_by'] != null
+          ? (json['seen_by'] as List)
+              .map((e) => SeenMessageModel.fromJson(e))
+              .toList()
+          : [],
+      tempId: json['temp_id']?.toString(),
+      parentMessage: json['parent_message'] != null
+          ? ParentMessageModel.fromJson(json['parent_message'])
+          : null,
+      type: json['message_type'],
+      isUploading: false,
+    );
   }
 
   GroupMessageModel copyWith({

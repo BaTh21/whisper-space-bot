@@ -87,6 +87,8 @@ class PrivateMessageModel {
       this.originalSenderAvatar});
 
   factory PrivateMessageModel.fromJson(Map<String, dynamic> json) {
+    final isRead = json['is_read'] ?? false;
+
     return PrivateMessageModel(
         id: json['id'],
         senderId: json['sender_id'],
@@ -100,7 +102,8 @@ class PrivateMessageModel {
             ? DateTime.parse(json['edited_at'])
             : null,
         isEdited: json['edited_at'] != null,
-        isRead: json['is_read'] ?? false,
+        isRead: isRead,
+        status: isRead ? MessageStatus.read : MessageStatus.sent,
         tempId: json['temp_id'],
         senderUsername: json['sender_username'],
         receiverUsername: json['receiver_username'],
@@ -133,7 +136,9 @@ class PrivateMessageModel {
       bool? isForwarded,
       int? forwardedFromId,
       String? originalSender,
-      String? originalSenderAvatar}) {
+      String? originalSenderAvatar,
+      bool? isRead
+      }) {
     return PrivateMessageModel(
       id: id ?? this.id,
       senderId: senderId,
@@ -142,7 +147,7 @@ class PrivateMessageModel {
       messageType: messageType ?? this.messageType,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      isRead: isRead,
+      isRead: isRead ?? this.isRead,
       tempId: tempId ?? this.tempId,
       senderUsername: senderUsername,
       receiverUsername: receiverUsername,
@@ -168,4 +173,4 @@ class PrivateMessageModel {
   bool get hasForwardInfo => isForwarded && originalSender != null;
 }
 
-enum MessageStatus { sending, sent, failed }
+enum MessageStatus { sending, sent, delivered, read, failed }

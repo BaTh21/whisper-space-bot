@@ -10,17 +10,15 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db
 from app.core.security import get_current_user_ws
 from app.crud.friend import is_friend
-from app.crud.chat import create_private_message, send_heartbeat
+from app.crud.chat import create_private_message, send_heartbeat, mark_message_as_read
 from app.models.user import User
-from app.models.message_seen_status import MessageSeenStatus
 from app.models.private_message import PrivateMessage, MessageType
 from app.models.group_message import GroupMessage
 from app.models.group_message_seen import GroupMessageSeen
 from app.schemas.chat import GroupMessageOut, ParentMessageResponse, AuthorResponse
 from app.utils.chat_helpers import _chat_id, is_group_member, validate_reply_message
-from app.crud.message import update_message, delete_message
+from app.crud.message import update_message, delete_message, is_user_online, heartbeat, mark_user_as_read_if_online
 from app.helpers.to_utc_iso import to_local_iso
-from app.schemas.reaction import ReactionCreate
 from app.crud.chat_gateway import forward_message
 from app.services.websocket_manager import manager
 
@@ -96,7 +94,6 @@ async def global_websocket(websocket: WebSocket):
 async def handle_websocket_private(
     websocket: WebSocket,
     friend_id: int,
-    db: Session = Depends(get_db)
 ):
 
     current_user = None
@@ -112,6 +109,8 @@ async def handle_websocket_private(
         if not is_friend(db, current_user.id, friend_id):
             await websocket.close(code=4003, reason="Not friends")
             return
+
+        is_online = is_user_online(friend_id)
         
         await websocket.accept()
 
@@ -125,7 +124,7 @@ async def handle_websocket_private(
         chat_id = _chat_id(current_user.id, friend_id)
         await manager.connect(chat_id, websocket, user_id=current_user.id)
         
-        heartbeat_task = asyncio.create_task(send_heartbeat())
+        heartbeat_task = asyncio.create_task(heartbeat(websocket, chat_id, current_user.id))
 
         while True:
             try:
@@ -234,9 +233,8 @@ async def handle_websocket_private(
                         full_msg = db.query(PrivateMessage).options(
                             joinedload(PrivateMessage.sender),
                             joinedload(PrivateMessage.receiver),
-                            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
                             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
-                            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
+                            joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.seen_statuses)
                         ).filter(PrivateMessage.id == msg.id).first()
 
                         if not full_msg:
@@ -246,16 +244,6 @@ async def handle_websocket_private(
                                 "temp_id": temp_id
                             })
                             continue
-
-                        seen_by = []
-                        if full_msg.seen_statuses:
-                            for status in full_msg.seen_statuses:
-                                seen_by.append({
-                                    "user_id": status.user.id,
-                                    "username": status.user.username,
-                                    "avatar_url": status.user.avatar_url,
-                                    "seen_at": status.seen_at.isoformat() if status.seen_at else None
-                                })
 
                         message_data = {
                             "type": "message",
@@ -271,6 +259,7 @@ async def handle_websocket_private(
                             "avatar_url": full_msg.sender.avatar_url,
                             "voice_duration": full_msg.voice_duration,
                             "file_size": full_msg.file_size,
+                            "is_read": is_online,
                         }
 
                         if full_msg.reply_to:
@@ -284,24 +273,6 @@ async def handle_websocket_private(
                             elif len(reply_content) > 100:
                                 reply_content = reply_content[:100] + "..."
                             
-                            message_data["reply_preview"] = {
-                                "id": full_msg.reply_to.id,
-                                "sender_username": full_msg.reply_to.sender.username,
-                                "content": reply_content,
-                                "message_type": full_msg.reply_to.message_type.value,
-                                "voice_duration": full_msg.reply_to.voice_duration,
-                                "file_size": full_msg.reply_to.file_size
-                            }
-                            reply_seen_by = []
-                            if hasattr(full_msg.reply_to, 'seen_statuses') and full_msg.reply_to.seen_statuses:
-                                for status in full_msg.reply_to.seen_statuses:
-                                    reply_seen_by.append({
-                                        "user_id": status.user.id,
-                                        "username": status.user.username,
-                                        "avatar_url": status.user.avatar_url,
-                                        "seen_at": status.seen_at.isoformat() if status.seen_at else None
-                                    })
-                            
                             message_data["reply_to"] = {
                                 "id": full_msg.reply_to.id,
                                 "sender_id": full_msg.reply_to.sender_id,
@@ -314,6 +285,9 @@ async def handle_websocket_private(
                             }
 
                         await manager.broadcast(chat_id, message_data)
+                        
+                        if is_online:
+                            await mark_message_as_read(db, friend_id, current_user.id)
 
                     except Exception as e:
                         print(f"Error sending message: {e}")
@@ -348,9 +322,6 @@ async def handle_websocket_private(
                         ).first()
                         
                         if message:
-                            db.query(MessageSeenStatus).filter(
-                                MessageSeenStatus.message_id == message_id
-                            ).delete()
                             
                             db.delete(message)
                             db.commit()
@@ -504,6 +475,8 @@ async def websocket_group_chat(
 
         chat_id = f"group_{group_id}"
         await manager.connect(chat_id, websocket, user_id=current_user.id)
+        
+        heartbeat_task = asyncio.create_task(heartbeat(websocket, chat_id, current_user.id))
 
         try:
             while True:
@@ -513,8 +486,6 @@ async def websocket_group_chat(
                 parent_message_id = data.get("reply_to")  # Optional
                 action = data.get("action")
                 incoming_temp_id = data.get("temp_id")
-                to_user = data.get("to_user")
-                sdp = data.get("sdp")
                 
                 if action == "ping":
                     await websocket.send_json({"action": "pong"})
@@ -554,7 +525,6 @@ async def websocket_group_chat(
                 if action == "edit":
                     message_id = int(data.get("message_id"))
                     new_content = data.get("new_content")
-                    now = datetime.utcnow()
 
                     updated = update_message(
                         db=db,
@@ -656,16 +626,18 @@ async def websocket_group_chat(
 
                 try:
                     await manager.broadcast(chat_id, msg_out)
+                    
+                    await mark_user_as_read_if_online(db, current_user.id, group_id, msg.id)
                 except Exception as e:
                     print(f"[Broadcast Error] Group {group_id}: {e}")
                     await websocket.send_json({
                         "error": "Failed to broadcast message",
                         "temp_id": incoming_temp_id
                     })
-                    continue
-
+                    
         except WebSocketDisconnect:
             manager.disconnect(chat_id, websocket, user_id=current_user.id)
+            
         except Exception as e:
             traceback.print_exc()
             print(f"[WS Error] {e}")
@@ -676,6 +648,13 @@ async def websocket_group_chat(
         print(f"[WS Error] {e}")
         await websocket.close(code=1011, reason="Server error")
     finally:
+        if 'heartbeat_task' in locals():
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+        manager.disconnect(chat_id, websocket, user_id=current_user.id)
         db.close()
         
     

@@ -614,6 +614,20 @@ class _MessageBubbleState extends State<MessageBubble> {
           size: 12,
           color: widget.isMe ? Colors.white70 : Colors.grey,
         );
+
+      case MessageStatus.delivered:
+        return Icon(
+          Icons.done_all,
+          size: 12,
+          color: widget.isMe ? Colors.white70 : Colors.grey,
+        );
+
+      case MessageStatus.read:
+        return const Icon(
+          Icons.done_all,
+          size: 12,
+          color: Colors.blue,
+        );
     }
   }
 

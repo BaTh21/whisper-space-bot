@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
@@ -8,6 +9,7 @@ class GroupWebsocket {
   final StorageService storageService;
   WebSocketChannel? _channel;
   Stream<Map<String, dynamic>>? _broadcastStream;
+  Timer? _pingTimer;
 
   GroupWebsocket({required this.groupId, required this.storageService});
 
@@ -26,12 +28,22 @@ class GroupWebsocket {
         .asBroadcastStream();
 
     _broadcastStream!.listen(
-      (event) => print('WS DEBUG: $event'),
+      (event) => print('WS RECIEVED: $event'),
       onError: (err) => print('WS ERROR: $err'),
       onDone: () => print('WS CLOSED'),
     );
 
     return _channel!;
+  }
+
+  void startHeartbeat({Duration interval = const Duration(seconds: 30)}) {
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(interval, (_) => sendPing());
+  }
+
+  void stopHeartbeat() {
+    _pingTimer?.cancel();
+    _pingTimer = null;
   }
 
   void send(Map<String, dynamic> data) {
@@ -72,8 +84,6 @@ class GroupWebsocket {
 
   void sendPing() => send({"action": "ping"});
   void requestOnlineUsers() => send({"action": "online_users"});
-  void sendSeen(int messageId) =>
-      send({"action": "seen", "message_id": messageId});
 
   Stream<Map<String, dynamic>> get stream {
     if (_broadcastStream == null) {
@@ -83,6 +93,7 @@ class GroupWebsocket {
   }
 
   void disconnect() {
+    stopHeartbeat();
     _channel?.sink.close();
     _channel = null;
     _broadcastStream = null;

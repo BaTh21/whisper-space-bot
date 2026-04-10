@@ -6,7 +6,7 @@ import 'package:whisper_space_flutter/features/chat/voice_player.dart';
 import 'package:whisper_space_flutter/features/chat/video_player.dart';
 
 class MessageBubble extends StatelessWidget {
-  final dynamic msg;
+  final GroupMessageModel msg;
   final bool isMe;
   final int currentUserId;
   final bool isSeen;
@@ -211,7 +211,7 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
         if (isUploading) _uploadOverlay(),
-        _timeOverlay(),
+        _timeOverlay(context),
       ],
     );
   }
@@ -247,7 +247,7 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
         if (isUploading) _uploadOverlay(),
-        _timeOverlay(),
+        _timeOverlay(context),
       ],
     );
   }
@@ -264,20 +264,54 @@ class MessageBubble extends StatelessWidget {
             color: isMe ? Theme.of(context).primaryColor : Colors.grey.shade200,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.insert_drive_file, size: 30),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  fileName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: isMe ? Colors.white : Colors.black87,
+              Row(
+                children: [
+                  const Icon(Icons.insert_drive_file, size: 30),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isMe ? Colors.white : Colors.black87,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    _formatTime(msg.createdAt),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (isMe) ...[
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () {
+                        if ((msg.seenBy?.isNotEmpty ?? false)) {
+                          _showSeenUsers(context, msg.seenBy!);
+                        }
+                      },
+                      child: Icon(
+                        isSeen ? Icons.done_all : Icons.check,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (isUploading) _uploadOverlay(),
             ],
           ),
         ),
@@ -303,7 +337,6 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-        if (isUploading) _uploadOverlay(),
       ],
     );
   }
@@ -344,10 +377,17 @@ class MessageBubble extends StatelessWidget {
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
-                      Icon(
-                        isSeen ? Icons.done_all : Icons.check,
-                        size: 14,
-                        color: Colors.white,
+                      GestureDetector(
+                        onTap: () {
+                          if ((msg.seenBy?.isNotEmpty ?? false)) {
+                            _showSeenUsers(context, msg.seenBy!);
+                          }
+                        },
+                        child: Icon(
+                          isSeen ? Icons.done_all : Icons.check,
+                          size: 14,
+                          color: Colors.white,
+                        ),
                       ),
                     ],
                   ],
@@ -397,10 +437,17 @@ class MessageBubble extends StatelessWidget {
         ],
         if (isMe) ...[
           const SizedBox(width: 4),
-          Icon(
-            isSeen ? Icons.done_all : Icons.check,
-            size: 14,
-            color: isSeen ? Colors.white : Colors.grey,
+          GestureDetector(
+            onTap: () {
+              if ((msg.seenBy?.isNotEmpty ?? false)) {
+                _showSeenUsers(context, msg.seenBy!);
+              }
+            },
+            child: Icon(
+              isSeen ? Icons.done_all : Icons.check,
+              size: 14,
+              color: Colors.white,
+            ),
           ),
         ],
       ],
@@ -572,8 +619,48 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _timeOverlay() {
-    final isEdited = msg.updatedAt != null && msg.updatedAt != msg.createdAt;
+  void _showSeenUsers(BuildContext context, List<SeenMessageModel> seenBy) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'Seen by',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              ...seenBy.map((seen) {
+                final username = seen.user?.username ?? 'Unknown';
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundImage: seen.user?.avatar != null
+                        ? NetworkImage(seen.user!.avatar!)
+                        : null,
+                    child: seen.user?.avatar == null
+                        ? const Icon(Icons.person)
+                        : null,
+                  ),
+                  title: Text(username),
+                  subtitle: Text(
+                    // optional: format seenAt nicely
+                    '${seen.seenAt.hour.toString().padLeft(2, '0')}:${seen.seenAt.minute.toString().padLeft(2, '0')}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _timeOverlay(BuildContext context) {
 
     return Positioned(
       bottom: 4,
@@ -587,21 +674,7 @@ class MessageBubble extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              _formatTime(msg.createdAt),
-              style: const TextStyle(fontSize: 11, color: Colors.white),
-            ),
-            if (isEdited) ...[
-              const SizedBox(width: 4),
-              const Text(
-                'edited',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.white70,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
+            _buildTime(context)
           ],
         ),
       ),

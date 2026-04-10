@@ -12,7 +12,6 @@ from app.services.websocket_manager import manager
 from app.models.user import User
 from app.models.message_reaction import MessageReaction
 from app.models.private_message import PrivateMessage
-from app.models.message_seen_status import MessageSeenStatus
 from app.models.diary import Diary
 from app.models.diary_like import DiaryLike
 from app.models.diary_favorite import DiaryFavorite

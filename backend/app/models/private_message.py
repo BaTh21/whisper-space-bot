@@ -50,18 +50,3 @@ class PrivateMessage(Base):
                          back_populates="message", 
                          cascade="all, delete-orphan",
                          lazy="selectin") 
-
-    # Many-to-many relationship for seen users (read-only)
-    seen_by_users = relationship(
-        "User",
-        secondary="message_seen_status",
-        back_populates="seen_messages",
-        viewonly=True
-    )
-
-    # Relationship to seen statuses (for creating/updating)
-    seen_statuses = relationship(
-        "MessageSeenStatus",
-        back_populates="message",
-        cascade="all, delete-orphan"
-    )
