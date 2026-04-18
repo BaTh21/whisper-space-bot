@@ -1,29 +1,28 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:whisper_space_flutter/features/auth/data/models/device_info.dart';
 import 'package:whisper_space_flutter/features/auth/data/models/system_log.dart';
-
-
 
 class SecurityApi {
   final Dio _dio;
 
   SecurityApi(this._dio);
 
-  // Helper to get authenticated requests (assumes token is already in Dio interceptor)
+  // Helper to build full URL with /api/v1 prefix
+  String _url(String path) => '/api/v1$path';
+
+  // Helper for POST requests
   Future<Response> _post(String path, dynamic data) async {
     try {
-      return await _dio.post(path, data: data);
+      return await _dio.post(_url(path), data: data);
     } on DioException catch (e) {
       throw _handleError(e);
     }
   }
 
+  // Helper for GET requests
   Future<Response> _get(String path) async {
     try {
-      return await _dio.get(path);
+      return await _dio.get(_url(path));
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -46,7 +45,7 @@ class SecurityApi {
 
   // Change password
   Future<void> changePassword(String oldPassword, String newPassword) async {
-    await _post('/change-password', {
+    await _post('/auth/change-password', {
       'old_password': oldPassword,
       'new_password': newPassword,
     });
@@ -54,12 +53,12 @@ class SecurityApi {
 
   // Request email change (send code)
   Future<void> requestEmailChange(String newEmail) async {
-    await _post('/change-email/request', {'new_email': newEmail});
+    await _post('/auth/change-email/request', {'new_email': newEmail});
   }
 
   // Verify email change with code
   Future<void> verifyEmailChange(String newEmail, String code) async {
-    await _post('/change-email/verify', {
+    await _post('/auth/change-email/verify', {
       'new_email': newEmail,
       'code': code,
     });
@@ -67,7 +66,7 @@ class SecurityApi {
 
   // 2FA: get setup secret & QR URI
   Future<Map<String, String>> setup2FA() async {
-    final response = await _post('/2fa/setup', {});
+    final response = await _post('/auth/2fa/setup', {});
     return {
       'secret': response.data['secret'],
       'qr_uri': response.data['qr_uri'],
@@ -76,27 +75,27 @@ class SecurityApi {
 
   // Enable 2FA with TOTP code
   Future<void> enable2FA(String code) async {
-    await _post('/2fa/enable', {'code': code});
+    await _post('/auth/2fa/enable', {'code': code});
   }
 
   // Disable 2FA with TOTP code
   Future<void> disable2FA(String code) async {
-    await _post('/2fa/disable', {'code': code});
+    await _post('/auth/2fa/disable', {'code': code});
   }
 
   // Enable email 2SA
   Future<void> enableEmail2SA() async {
-    await _post('/2sa/email/enable', {});
+    await _post('/auth/2sa/email/enable', {});
   }
 
   // Disable email 2SA
   Future<void> disableEmail2SA() async {
-    await _post('/2sa/email/disable', {});
+    await _post('/auth/2sa/email/disable', {});
   }
 
   // Deactivate account
   Future<void> deactivateAccount(String password) async {
-    await _post('/deactivate-account', {'password': password});
+    await _post('/auth/deactivate-account', {'password': password});
   }
 
   // Get user activity logs
