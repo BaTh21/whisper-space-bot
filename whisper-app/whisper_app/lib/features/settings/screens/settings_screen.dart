@@ -5,7 +5,6 @@ import 'package:whisper_space_flutter/core/providers/theme_provider.dart';
 
 import 'help_support_screen.dart';
 import 'notification_settings_screen.dart';
-import 'privacy_screen.dart';
 import 'security_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -45,16 +44,6 @@ class SettingsScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.lock),
-            title: const Text('Privacy'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PrivacyScreen()),
               );
             },
           ),
