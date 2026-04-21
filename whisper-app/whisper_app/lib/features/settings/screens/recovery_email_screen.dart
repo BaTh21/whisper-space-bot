@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:whisper_space_flutter/services/security_api.dart';
 
-
-
 class RecoveryEmailScreen extends StatefulWidget {
   final SecurityApi securityApi;
   final String currentEmail;
-  const RecoveryEmailScreen({super.key, required this.securityApi, required this.currentEmail});
+  const RecoveryEmailScreen(
+      {super.key, required this.securityApi, required this.currentEmail});
 
   @override
   State<RecoveryEmailScreen> createState() => _RecoveryEmailScreenState();
@@ -23,7 +22,8 @@ class _RecoveryEmailScreenState extends State<RecoveryEmailScreen> {
   DateTime? _codeSentAt;
 
   final TextEditingController _emailController = TextEditingController();
-  final List<TextEditingController> _codeControllers = List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _codeControllers =
+      List.generate(6, (_) => TextEditingController());
 
   @override
   void dispose() {
@@ -104,51 +104,67 @@ class _RecoveryEmailScreenState extends State<RecoveryEmailScreen> {
             if (_step == 1) ...[
               TextField(
                 controller: _emailController,
-                decoration: const InputDecoration(labelText: 'New Email Address'),
+                decoration:
+                    const InputDecoration(labelText: 'New Email Address'),
                 keyboardType: TextInputType.emailAddress,
-                onChanged: (v) => _newEmail = v.trim(),
+                onChanged: (v) => setState(() {
+                  _newEmail = v.trim();
+                }),
               ),
               const SizedBox(height: 16),
-              if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+              if (_error != null)
+                Text(_error!, style: const TextStyle(color: Colors.red)),
               ElevatedButton(
-                onPressed: _loading || _newEmail.isEmpty || _newEmail == widget.currentEmail
+                onPressed: _loading ||
+                        _newEmail.isEmpty ||
+                        _newEmail == widget.currentEmail
                     ? null
                     : _requestCode,
-                child: _loading ? const CircularProgressIndicator() : const Text('Send Verification Code'),
+                child: _loading
+                    ? const CircularProgressIndicator()
+                    : const Text('Send Verification Code'),
               ),
             ] else ...[
               Text('Enter 6-digit verification code sent to $_newEmail'),
               const SizedBox(height: 16),
               if (_timeLeft > 0)
-                Text('Code expires in ${_timeLeft ~/ 60}:${(_timeLeft % 60).toString().padLeft(2, '0')}',
+                Text(
+                    'Code expires in ${_timeLeft ~/ 60}:${(_timeLeft % 60).toString().padLeft(2, '0')}',
                     style: const TextStyle(fontSize: 12)),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(6, (i) => Container(
-                  width: 50,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  child: TextField(
-                    controller: _codeControllers[i],
-                    textAlign: TextAlign.center,
-                    maxLength: 1,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(counterText: ''),
-                    onChanged: (v) {
-                      if (v.length == 1 && i < 5) {
-                        FocusScope.of(context).nextFocus();
-                      }
-                      _code = _codeControllers.map((c) => c.text).join();
-                    },
-                  ),
-                )),
+                children: List.generate(
+                    6,
+                    (i) => Container(
+                          width: 50,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          child: TextField(
+                            controller: _codeControllers[i],
+                            textAlign: TextAlign.center,
+                            maxLength: 1,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(counterText: ''),
+                            onChanged: (v) {
+                              if (v.length == 1 && i < 5) {
+                                FocusScope.of(context).nextFocus();
+                              }
+                              _code =
+                                  _codeControllers.map((c) => c.text).join();
+                            },
+                          ),
+                        )),
               ),
               const SizedBox(height: 16),
-              if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-              if (_success != null) Text(_success!, style: const TextStyle(color: Colors.green)),
+              if (_error != null)
+                Text(_error!, style: const TextStyle(color: Colors.red)),
+              if (_success != null)
+                Text(_success!, style: const TextStyle(color: Colors.green)),
               ElevatedButton(
                 onPressed: _loading || _code.length != 6 ? null : _verifyCode,
-                child: _loading ? const CircularProgressIndicator() : const Text('Verify & Change Email'),
+                child: _loading
+                    ? const CircularProgressIndicator()
+                    : const Text('Verify & Change Email'),
               ),
               TextButton(
                 onPressed: () => setState(() => _step = 1),
