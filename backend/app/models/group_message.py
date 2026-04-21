@@ -1,5 +1,5 @@
 # app/models/group_message.py
-from sqlalchemy import Column, Enum, Boolean, DateTime, ForeignKey, Text, Integer, String
+from sqlalchemy import Column, Enum, Boolean, DateTime, ForeignKey, Text, Integer, String, JSON
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 from datetime import datetime, timezone
@@ -7,6 +7,7 @@ import enum
 import enum
 from sqlalchemy import Enum
 from app.models.group_message_seen import GroupMessageSeen
+from app.models.group_message_reaction import GroupMessageReaction
 
 def utcnow():
     return datetime.now(timezone.utc)
@@ -41,6 +42,9 @@ class GroupMessage(Base):
     voice_public_id = Column(String(255), nullable=True)
     parent_message_id = Column(Integer, ForeignKey("group_messages.id", ondelete="SET NULL"), nullable=True)
     forwarded_at = Column(DateTime(timezone=True), nullable=True)
+    is_pinned = Column(Boolean, default=False)
+    pinned_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    pinned_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     group = relationship("Group", back_populates="messages")
@@ -63,4 +67,14 @@ class GroupMessage(Base):
 
     # Replies from GroupMessageReply
     replies = relationship("GroupMessageReply", back_populates="message")
+    
+    pinned_by = relationship("User", foreign_keys=[pinned_by_id])
+    
+    reactions = relationship(
+        "GroupMessageReaction",
+        back_populates="message",
+        cascade="all, delete-orphan"
+    )
+    
+    reaction_summary = Column(JSON, nullable=True)
 

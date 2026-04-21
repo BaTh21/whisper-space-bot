@@ -41,7 +41,28 @@ def list_my_groups(
 
 @router.get("/{group_id}", response_model=GroupDetailsOut)
 def get_group_by_id(group_id: int, db: Session = Depends(get_db)):
-    return get_group(db, group_id)
+    group, pinned_message = get_group(db, group_id)
+
+    return {
+    "id": group.id,
+    "name": group.name,
+    "creator_id": group.creator_id,
+    "description": group.description,
+    "created_at": group.created_at,
+    "images": group.images,
+    "pinned_message": (
+        {
+            "id": pinned_message.id,
+            "content": pinned_message.content,
+            "message_type": pinned_message.message_type,
+            "sender_id": pinned_message.sender_id,
+            "pinned_by_id": pinned_message.pinned_by_id,
+            "pinned_by": pinned_message.pinned_by.username,
+            "pinned_at": pinned_message.pinned_at,
+        }
+        if pinned_message else None
+    ),
+}
 
 @router.patch("/{group_id}", response_model=GroupOut)
 def update_by_id(group_id: int,
@@ -80,7 +101,13 @@ async def get_group_messages_(
     if not exists_member(db, group_id, current_user.id):
         raise HTTPException(status_code=403, detail="Not a member of this group")
 
-    messages = get_group_messages(db, group_id, limit, offset)
+    messages = get_group_messages(
+        db,
+        group_id,
+        current_user.id,
+        limit,
+        offset
+    )
 
     message_ids, now = await mark_all_as_read(db, group_id, current_user.id)
 

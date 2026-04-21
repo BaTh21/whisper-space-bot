@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Literal
 from app.schemas.base import TimestampMixin
 from app.schemas.user import UserOut
+from app.models.group_message_reaction import ReactionType
 
 MessageType = Literal["text", "image", "file"]
 
@@ -28,12 +29,25 @@ class GroupOut(TimestampMixin):
     class Config:
         from_attributes = True
         
+class PinnedMessageOut(BaseModel):
+    id: int
+    content: Optional[str]
+    message_type: Optional[str]
+    sender_id: Optional[int]
+    pinned_by_id: Optional[int]
+    pinned_by: Optional[str]
+    pinned_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+        
 class GroupDetailsOut(TimestampMixin):
     id: int
     name: str
     creator_id: int
     description: Optional[str] = None
     images: Optional[List[ImageResponse]] = []
+    pinned_message: Optional[PinnedMessageOut] = None
     
     class Config:
         from_attributes = True
@@ -126,3 +140,12 @@ class GroupImageResponse(BaseModel):
     
     class Config:
         orm_mode = True
+
+class PinMessageRequest(BaseModel):
+    group_id: int
+    message_id: int
+    
+class ReactionRequest(BaseModel):
+    group_id: int
+    message_id: int
+    reaction: ReactionType

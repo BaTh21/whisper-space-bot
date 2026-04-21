@@ -4,6 +4,7 @@ from app.models.private_message import MessageType, PrivateMessage
 from app.models.group_message import GroupMessage
 from app.models.group_message_reply import GroupMessageReply
 from app.models.group_member import GroupMember
+from app.models.group_message_reaction import GroupMessageReaction
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import HTTPException,status
@@ -192,8 +193,8 @@ def create_group_message(
     
     return msg
 
-def get_group_messages(db: Session, group_id: int, limit=50, offset=0):
-    return (
+def get_group_messages(db: Session, group_id: int, user_id: int, limit=50, offset=0):
+    messages = (
         db.query(GroupMessage)
         .filter(GroupMessage.group_id == group_id)
         .options(
@@ -206,6 +207,21 @@ def get_group_messages(db: Session, group_id: int, limit=50, offset=0):
         .limit(limit)
         .all()
     )
+
+    message_ids = [m.id for m in messages]
+
+    user_reactions = db.query(GroupMessageReaction).filter(
+        GroupMessageReaction.message_id.in_(message_ids),
+        GroupMessageReaction.user_id == user_id
+    ).all()
+
+    reaction_map = {r.message_id: r.reaction for r in user_reactions}
+
+    for msg in messages:
+        msg.my_reaction = reaction_map.get(msg.id)
+        msg.reaction_summary = msg.reaction_summary or {}
+
+    return messages
         
 def edit_private_message(db: Session, message_id: int, user_id: int, new_content: str) -> PrivateMessage:
     try:

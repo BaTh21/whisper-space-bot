@@ -132,11 +132,13 @@ class MessageBubble extends StatelessWidget {
               constraints: BoxConstraints(maxWidth: maxWidth),
               child: Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: (msg.fileUrl != null) ? 0 : 8,
-                  vertical: (msg.fileUrl != null) ? 0 : 6,
+                  horizontal:
+                      (msg.type == 'video' && msg.type != 'image') ? 0 : 8,
+                  vertical:
+                      (msg.type == 'video' && msg.type != 'image') ? 0 : 6,
                 ),
                 decoration: BoxDecoration(
-                  color: (msg.fileUrl != null)
+                  color: (msg.type == 'video' || msg.type == 'image')
                       ? Colors.transparent
                       : isMe
                           ? Theme.of(context).primaryColor
@@ -159,7 +161,7 @@ class MessageBubble extends StatelessWidget {
                       _buildVoice(context),
                     if (msg.type == "text" && msg.content != null)
                       _buildText(context),
-                    if (msg.voiceUrl == null && msg.fileUrl == null)
+                    if (msg.type != 'video' && msg.type != 'image')
                       _buildTime(context),
                   ],
                 ),
@@ -264,54 +266,30 @@ class MessageBubble extends StatelessWidget {
             color: isMe ? Theme.of(context).primaryColor : Colors.grey.shade200,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.insert_drive_file, size: 30),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      fileName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isMe ? Colors.white : Colors.black87,
+                  Row(
+                    children: [
+                      const Icon(Icons.insert_drive_file, size: 30),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          fileName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isMe ? Colors.white : Colors.black87,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
+                  const SizedBox(height: 20),
                 ],
               ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatTime(msg.createdAt),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.white,
-                    ),
-                  ),
-                  if (isMe) ...[
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () {
-                        if ((msg.seenBy?.isNotEmpty ?? false)) {
-                          _showSeenUsers(context, msg.seenBy!);
-                        }
-                      },
-                      child: Icon(
-                        isSeen ? Icons.done_all : Icons.check,
-                        size: 14,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              if (isUploading) _uploadOverlay(),
             ],
           ),
         ),
@@ -352,48 +330,6 @@ class MessageBubble extends StatelessWidget {
               url: msg.voiceUrl!,
               isOwn: isMe,
             ),
-            if (isUploading) _uploadOverlay(),
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _formatTime(msg.createdAt),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (isMe) ...[
-                      const SizedBox(width: 4),
-                      GestureDetector(
-                        onTap: () {
-                          if ((msg.seenBy?.isNotEmpty ?? false)) {
-                            _showSeenUsers(context, msg.seenBy!);
-                          }
-                        },
-                        child: Icon(
-                          isSeen ? Icons.done_all : Icons.check,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -413,10 +349,15 @@ class MessageBubble extends StatelessWidget {
 
   Widget _buildTime(BuildContext context) {
     final isEdited = msg.updatedAt != null && msg.updatedAt != msg.createdAt;
+    final hasReactions = (msg.reactionSummary?.isNotEmpty ?? false);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (hasReactions) ...[
+          const SizedBox(width: 6),
+          _buildReactionPreview(),
+        ],
         Text(
           _formatTime(msg.createdAt),
           style: TextStyle(
@@ -451,6 +392,45 @@ class MessageBubble extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildReactionPreview() {
+    final reactions = msg.reactionSummary ?? {};
+
+    final totalCount = reactions.values.fold<int>(0, (a, b) => a + b);
+
+    final topReaction = reactions.entries.isNotEmpty
+        ? reactions.entries.reduce((a, b) => a.value > b.value ? a : b).key
+        : null;
+
+    return GestureDetector(
+      onTap: () {
+        if (msg.myReaction != null && onAction != null) {
+          onAction!("react_${msg.myReaction}", msg);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: isMe ? Colors.white24 : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (topReaction != null) Text(_emoji(topReaction)),
+            const SizedBox(width: 2),
+            Text(
+              '$totalCount',
+              style: TextStyle(
+                fontSize: 10,
+                color: isMe ? Colors.white : Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -661,10 +641,10 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _timeOverlay(BuildContext context) {
-
     return Positioned(
       bottom: 4,
-      right: 6,
+      right: isMe ? 6 : null,
+      left: isMe ? null : 6,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         decoration: BoxDecoration(
@@ -673,9 +653,7 @@ class MessageBubble extends StatelessWidget {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildTime(context)
-          ],
+          children: [_buildTime(context)],
         ),
       ),
     );
@@ -683,5 +661,24 @@ class MessageBubble extends StatelessWidget {
 
   String _formatTime(DateTime date) {
     return "${date.hour}:${date.minute.toString().padLeft(2, '0')}";
+  }
+
+  String _emoji(String type) {
+    switch (type) {
+      case 'like':
+        return '👍';
+      case 'love':
+        return '❤️';
+      case 'wow':
+        return '😮';
+      case 'haha':
+        return '😂';
+      case 'sad':
+        return '😢';
+      case 'angry':
+        return '😡';
+      default:
+        return '👍';
+    }
   }
 }

@@ -281,11 +281,7 @@ class ChatAPISource {
   }
 
   Future<GroupMessageModel> uploadVoice(
-    int groupId,
-    File file,
-    String tempId,
-    String? parentMessageId
-  ) async {
+      int groupId, File file, String tempId, String? parentMessageId) async {
     final uri = Uri.parse('$baseUrl/api/v1/messages/groups/$groupId/voice');
 
     final request = http.MultipartRequest('POST', uri);
@@ -337,6 +333,87 @@ class ChatAPISource {
       throw Exception('Failed to update file message: ${response.body}');
     }
   }
+
+  Future<GroupDetailsModel> pinMessage({
+    required int groupId,
+    required int messageId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/v1/messages/pin');
+
+    final response = await http.patch(
+      uri,
+      headers: {
+        ...await _authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "group_id": groupId,
+        "message_id": messageId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to pin message: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+    return GroupDetailsModel.fromJson(data);
+  }
+
+  Future<GroupDetailsModel> unPinMessage({
+    required int groupId,
+    required int messageId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/v1/messages/unpin');
+
+    final response = await http.patch(
+      uri,
+      headers: {
+        ...await _authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "group_id": groupId,
+        "message_id": messageId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to unpin message: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+    return GroupDetailsModel.fromJson(data);
+  }
+
+  Future<GroupMessageModel> toggleReaction({
+    required int groupId,
+    required int messageId,
+    required String reaction,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/v1/messages/reaction');
+
+    final response = await http.post(
+      uri,
+      headers: {
+        ...await _authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "group_id": groupId,
+        "message_id": messageId,
+        "reaction": reaction,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to toggle reaction: ${response.body}');
+    }
+
+    return GroupMessageModel.fromJson(jsonDecode(response.body));
+  }
+
+  //Private Chat
 
   Future<List<PrivateMessageModel>> getPrivateMessages({
     required int userId,
