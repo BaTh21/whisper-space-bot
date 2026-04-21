@@ -30,17 +30,7 @@ class VerificationScreenState extends State<VerificationScreen> {
   void initState() {
     super.initState();
     _startResendTimer();
-
-    for (int i = 0; i < _controllers.length; i++) {
-      _controllers[i].addListener(() {
-        if (_controllers[i].text.isNotEmpty && i < _controllers.length - 1) {
-          _focusNodes[i + 1].requestFocus();
-        }
-        if (_controllers[i].text.isEmpty && i > 0) {
-          _focusNodes[i - 1].requestFocus();
-        }
-      });
-    }
+    // Removed duplicate focus listeners – only onChanged handles navigation
   }
 
   @override
@@ -100,7 +90,7 @@ class VerificationScreenState extends State<VerificationScreen> {
 
   void _showSuccessDialog() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -180,7 +170,7 @@ class VerificationScreenState extends State<VerificationScreen> {
 
   void _showErrorDialog(String message) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -317,47 +307,53 @@ class VerificationScreenState extends State<VerificationScreen> {
 
                           const SizedBox(height: 25),
 
-                          // Code input
+                          // ✅ FIXED OTP INPUT – digits fully visible
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: List.generate(6, (index) {
-                              return SizedBox(
-                                width: 45,
-                                child: TextFormField(
-                                  controller: _controllers[index],
-                                  focusNode: _focusNodes[index],
-                                  textAlign: TextAlign.center,
-                                  keyboardType: TextInputType.number,
-                                  maxLength: 1,
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: textColor,
-                                  ),
-                                  decoration: InputDecoration(
-                                    counterText: '',
-                                    filled: true,
-                                    fillColor: inputFillColor,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                      borderSide: BorderSide.none,
+                              return Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  child: TextFormField(
+                                    controller: _controllers[index],
+                                    focusNode: _focusNodes[index],
+                                    textAlign: TextAlign.center,
+                                    keyboardType: TextInputType.number,
+                                    maxLength: 1,
+                                    style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: textColor,
                                     ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF6A11CB),
-                                        width: 2,
+                                    decoration: InputDecoration(
+                                      counterText: '',
+                                      filled: true,
+                                      fillColor: inputFillColor,
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                        horizontal: 0,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF6A11CB),
+                                          width: 2,
+                                        ),
                                       ),
                                     ),
+                                    onChanged: (value) {
+                                      if (value.isNotEmpty && index < 5) {
+                                        _focusNodes[index + 1].requestFocus();
+                                      } else if (value.isEmpty && index > 0) {
+                                        _focusNodes[index - 1].requestFocus();
+                                      }
+                                    },
                                   ),
-                                  onChanged: (value) {
-                                    if (value.isNotEmpty && index < 5) {
-                                      _focusNodes[index + 1].requestFocus();
-                                    }
-                                    if (value.isEmpty && index > 0) {
-                                      _focusNodes[index - 1].requestFocus();
-                                    }
-                                  },
                                 ),
                               );
                             }),
