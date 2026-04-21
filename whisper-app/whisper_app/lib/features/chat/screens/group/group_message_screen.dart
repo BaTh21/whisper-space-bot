@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
+import 'package:whisper_space_flutter/features/chat/model/group_model/group_details_model.dart';
 import 'package:whisper_space_flutter/features/websocket/group_websocket.dart';
 import 'package:whisper_space_flutter/features/chat/model/group_message_model/group_message_model.dart';
 import '../../chat_api_service.dart';
@@ -17,6 +18,7 @@ import './group_dialog//forward_dialog.dart';
 import 'package:whisper_space_flutter/features/chat/video_player.dart';
 import 'package:whisper_space_flutter/features/chat/screens/private/widgets/image_viewer.dart';
 import 'package:dio/dio.dart';
+import 'package:whisper_space_flutter/features/chat/model/group_model/user_model.dart';
 
 class GroupMessageScreen extends StatefulWidget {
   final int groupId;
@@ -25,13 +27,16 @@ class GroupMessageScreen extends StatefulWidget {
   final StorageService storageService;
   final ChatAPISource chatApi;
 
+  final GroupDetailsModel? initialGroup;
+
   const GroupMessageScreen(
       {super.key,
       required this.groupId,
       required this.currentUserId,
       required this.groupWebsocket,
       required this.storageService,
-      required this.chatApi});
+      required this.chatApi,
+      this.initialGroup});
 
   @override
   State<GroupMessageScreen> createState() => _GroupMessageScreenState();
@@ -45,6 +50,9 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   String? editingMessageId;
   String? replyingToMessageId;
   ParentMessageModel? replyingToMessage;
+  late GroupDetailsModel? group;
+  late List<UserModel>? members;
+  PinnedMessageModel? _pinnedMessage;
 
   final _recorder = AudioRecorder();
   bool _isRecording = false;
@@ -173,6 +181,8 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   @override
   void initState() {
     super.initState();
+    group = widget.initialGroup;
+    _pinnedMessage = widget.initialGroup?.pinnedMessage;
     _loadOldMessages();
 
     _scrollController.addListener(() {
@@ -202,6 +212,7 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     final action = data['action'];
 
     switch (action) {
+      case 'ping':
       case 'pong':
       case 'online_users':
         return;
@@ -300,6 +311,66 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
             return msg.copyWith(seenBy: updatedSeen);
           }).toList();
+        });
+        return;
+      case 'message_pinned':
+        final messageId = data['message_id'];
+
+        final msgIndex = _messages.indexWhere((m) => m.id == messageId);
+
+        if (msgIndex != -1) {
+          final msg = _messages[msgIndex];
+
+          setState(() {
+            _pinnedMessage = PinnedMessageModel(
+              id: msg.id,
+              content: msg.content,
+              messageType: msg.type,
+              senderId: msg.sender.id,
+              pinnedById: data['pinned_by_id'],
+              pinnedBy: data['pinned_by'],
+              pinnedAt: DateTime.tryParse(data['pinned_at'] ?? ''),
+            );
+          });
+        } else {
+          setState(() {
+            _pinnedMessage = PinnedMessageModel(
+              id: messageId,
+              content: 'Pinned message',
+              pinnedById: data['pinned_by_id'],
+              pinnedAt: DateTime.tryParse(data['pinned_at'] ?? ''),
+            );
+          });
+        }
+        return;
+
+      case 'message_unpinned':
+        setState(() {
+          _pinnedMessage = null;
+        });
+        return;
+
+      case 'message_reaction':
+        final int messageId = data['message_id'];
+        final int userId = data['user_id'];
+        final String reaction = data['reaction'];
+        final String status = data['status'];
+
+        final Map<String, int> summary = (data['reaction_summary'] as Map)
+            .map((k, v) => MapEntry(k.toString(), v as int));
+
+        setState(() {
+          final index = _messages.indexWhere((m) => m.id == messageId);
+          if (index == -1) return;
+
+          final old = _messages[index];
+
+          _messages[index] = old.copyWith(
+            reactionSummary: Map<String, int>.from(summary),
+            myReaction: userId == widget.currentUserId
+                ? (status == 'removed' ? null : reaction)
+                : old.myReaction,
+          );
         });
         return;
 
@@ -807,6 +878,12 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
   }
 
   void _handleBubbleAction(String action, dynamic msg) {
+    if (action.startsWith("react_")) {
+      final reaction = action.replaceFirst("react_", "");
+      _toggleReaction(msg, reaction);
+      return;
+    }
+
     switch (action) {
       case 'edit':
         _controller.text = msg.content ?? '';
@@ -844,9 +921,14 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
         _handleReplaceFile(msg);
         break;
       case 'pin':
+        _pinMessage(msg);
+        break;
       case 'react':
+        _showReactionPicker(context, msg);
+        break;
       case 'save':
         _saveMessage(msg);
+        break;
       case 'preview':
         _previewMessage(msg);
         break;
@@ -955,6 +1037,171 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
     );
   }
 
+  void _pinMessage(dynamic msg) async {
+    await widget.chatApi.pinMessage(groupId: widget.groupId, messageId: msg.id);
+  }
+
+  void _unpinMessage(int messageId) async {
+    await widget.chatApi
+        .unPinMessage(groupId: widget.groupId, messageId: messageId);
+  }
+
+  void _scrollToPinned(int messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+
+    if (index != -1) {
+      _scrollController.animateTo(
+        index * 80,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Widget _buildPinnedMessage() {
+    final pinned = _pinnedMessage;
+    if (pinned == null) return const SizedBox();
+
+    final icon = switch (pinned.messageType) {
+      'image' => Icons.image,
+      'video' => Icons.videocam,
+      'file' => Icons.insert_drive_file,
+      'voice' => Icons.mic,
+      _ => Icons.message,
+    };
+
+    final typeLabel = switch (pinned.messageType) {
+      'image' => 'Image',
+      'video' => 'Video',
+      'file' => 'File',
+      'voice' => 'Voice',
+      _ => pinned.content ?? '',
+    };
+
+    return GestureDetector(
+      onTap: () => _scrollToPinned(pinned.id),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        color: Colors.orange.shade100,
+        child: Row(
+          children: [
+            const Icon(Icons.push_pin, size: 18, color: Colors.orange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Pinned by ${widget.currentUserId == pinned.pinnedById ? 'You' : pinned.pinnedBy ?? 'Unknown'}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(icon, size: 14, color: Colors.orange),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          typeLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _unpinMessage(pinned.id),
+              child: const Icon(Icons.close, size: 18),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReactionPicker(BuildContext context, GroupMessageModel msg) {
+    final reactions = ["like", "love", "laugh", "wow", "sad", "angry"];
+
+    final icons = {
+      "like": Icons.thumb_up,
+      "love": Icons.favorite,
+      "laugh": Icons.sentiment_satisfied,
+      "wow": Icons.emoji_emotions,
+      "sad": Icons.sentiment_dissatisfied,
+      "angry": Icons.sentiment_very_dissatisfied,
+    };
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: reactions.map((r) {
+              final isSelected = msg.myReaction == r;
+
+              return GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleBubbleAction("react_$r", msg);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: isSelected
+                          ? Colors.blue.shade100
+                          : Colors.grey.shade200,
+                      child: Icon(
+                        icons[r],
+                        color: isSelected ? Colors.blue : Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      r,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isSelected ? Colors.blue : Colors.black,
+                      ),
+                    )
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  void _toggleReaction(GroupMessageModel msg, String reaction) async {
+    try {
+      await widget.chatApi.toggleReaction(
+        groupId: widget.groupId,
+        messageId: msg.id,
+        reaction: reaction,
+      );
+    } catch (e) {
+      print("Toggle reaction error: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -967,46 +1214,59 @@ class _GroupMessageScreenState extends State<GroupMessageScreen> {
 
     return Column(
       children: [
+        _buildPinnedMessage(),
         Expanded(
           child: ListView.builder(
             reverse: true,
             controller: _scrollController,
             itemCount: _messages.length + (_isLoadingMore ? 1 : 0),
             itemBuilder: (context, index) {
-              if (_isLoadingMore && index == _messages.length) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
+              try {
+                if (_isLoadingMore && index == _messages.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+
+                final msg = _messages[index];
+                final isMe = msg.sender.id == widget.currentUserId;
+                final bool isSeen = msg.seenBy?.any(
+                      (s) => s.user?.id != widget.currentUserId,
+                    ) ??
+                    false;
+                final isPinned = _pinnedMessage?.id == msg.id;
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isPinned ? Colors.orange.withOpacity(0.15) : null,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: MessageBubble(
+                    key: ValueKey(
+                      '${msg.id}-${msg.seenBy?.map((e) => e.user?.id).join(",")}',
+                    ),
+                    msg: msg,
+                    isMe: isMe,
+                    currentUserId: widget.currentUserId,
+                    isSeen: isSeen,
+                    repliedMessage: msg.parentMessage,
+                    onAction: _handleBubbleAction,
+                    isDownloading:
+                        _isDownloading && _downloadingMessageId == msg.id,
+                    progress: _progress,
                   ),
                 );
+              } catch (e, s) {
+                debugPrint("❌ ERROR AT INDEX: $index");
+                debugPrint(e.toString());
+                debugPrint(s.toString());
+                return const SizedBox();
               }
-
-              final msg = _messages[index];
-              final isMe = msg.sender.id == widget.currentUserId;
-              final bool isSeen = msg.seenBy?.any(
-                    (s) => s.user?.id != widget.currentUserId,
-                  ) ??
-                  false;
-
-              return Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: MessageBubble(
-                  key: ValueKey(
-                    '${msg.id}-${msg.seenBy?.map((e) => e.user?.id).join(",")}',
-                  ),
-                  msg: msg,
-                  isMe: isMe,
-                  currentUserId: widget.currentUserId,
-                  isSeen: isSeen,
-                  repliedMessage: msg.parentMessage,
-                  onAction: _handleBubbleAction,
-                  isDownloading:
-                      _isDownloading && _downloadingMessageId == msg.id,
-                  progress: _progress,
-                ),
-              );
             },
           ),
         ),

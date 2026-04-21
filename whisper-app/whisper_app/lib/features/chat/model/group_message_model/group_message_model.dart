@@ -11,8 +11,8 @@ class AuthorModel {
 
   factory AuthorModel.fromJson(Map<String, dynamic> json) {
     return AuthorModel(
-      id: json['id'],
-      username: json['username'],
+      id: json['id'] ?? 0,
+      username: json['username'] ?? 'Unknown',
       avatar: json['avatar_url'],
     );
   }
@@ -31,9 +31,11 @@ class SeenMessageModel {
 
   factory SeenMessageModel.fromJson(Map<String, dynamic> json) {
     return SeenMessageModel(
-      id: json['id'],
-      user: json['user'] != null ? AuthorModel.fromJson(json['user']) : null,
-      seenAt: DateTime.parse(json['seen_at']),
+      id: json['id'] ?? 0,
+      user: json['user'] is Map<String, dynamic>
+          ? AuthorModel.fromJson(json['user'])
+          : null,
+      seenAt: DateTime.tryParse(json['seen_at'] ?? '') ?? DateTime.now(),
     );
   }
 }
@@ -86,6 +88,8 @@ class GroupMessageModel {
   final ParentMessageModel? parentMessage;
   final String? type;
   final bool isUploading;
+  final Map<String, int>? reactionSummary;
+  final String? myReaction;
 
   GroupMessageModel(
       {required this.id,
@@ -103,7 +107,9 @@ class GroupMessageModel {
       this.tempId,
       this.parentMessage,
       this.type,
-      this.isUploading = false});
+      this.isUploading = false,
+      this.reactionSummary,
+      this.myReaction});
 
   /// Optimistic message (before server response)
   factory GroupMessageModel.temp({
@@ -141,14 +147,13 @@ class GroupMessageModel {
           : null,
       content: json['content'],
       callContent: json['call_content'],
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'])
-          : null,
+      createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updated_at'] ?? ''),
       fileUrl: json['file_url'],
       voiceUrl: json['voice_url'],
-      seenBy: json['seen_by'] != null
+      seenBy: (json['seen_by'] is List)
           ? (json['seen_by'] as List)
+              .whereType<Map<String, dynamic>>()
               .map((e) => SeenMessageModel.fromJson(e))
               .toList()
           : [],
@@ -158,6 +163,10 @@ class GroupMessageModel {
           : null,
       type: json['message_type'],
       isUploading: false,
+      reactionSummary: (json['reaction_summary'] is Map)
+          ? Map<String, int>.from(json['reaction_summary'])
+          : {},
+      myReaction: json['my_reaction'],
     );
   }
 
@@ -176,6 +185,8 @@ class GroupMessageModel {
     ParentMessageModel? parentMessage,
     bool? isUploading,
     AuthorModel? sender,
+    Map<String, int>? reactionSummary,
+    String? myReaction,
   }) {
     return GroupMessageModel(
       id: id ?? this.id,
@@ -194,6 +205,8 @@ class GroupMessageModel {
       parentMessage: parentMessage ?? this.parentMessage,
       type: type ?? this.type,
       isUploading: isUploading ?? this.isUploading,
+      reactionSummary: reactionSummary ?? this.reactionSummary,
+      myReaction: myReaction ?? this.myReaction,
     );
   }
 }

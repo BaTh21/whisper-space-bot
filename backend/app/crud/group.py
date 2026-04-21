@@ -28,6 +28,7 @@ from app.core.cloudinary import upload_to_cloudinary, delete_from_cloudinary, co
 
 from app.crud.activity import create_activity
 from app.models.activity import ActivityType
+from app.models.group_message import GroupMessage
 
 configure_cloudinary()
 
@@ -74,11 +75,21 @@ def get_user_groups(db: Session, user_id: int) -> List[Group]:
     
 def get_group(db: Session, group_id: int):
     group = db.query(Group).filter(Group.id == group_id).first()
+
     if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail="Group not found")
-        
-    return group
+        raise HTTPException(404, "Group not found")
+
+    pinned_message = (
+        db.query(GroupMessage)
+        .filter(
+            GroupMessage.group_id == group_id,
+            GroupMessage.is_pinned == True
+        )
+        .order_by(GroupMessage.pinned_at.desc())
+        .first()
+    )
+
+    return group, pinned_message
 
 def update_group(group_id: int, db: Session, group_data: GroupUpdate, current_user_id: int):
     

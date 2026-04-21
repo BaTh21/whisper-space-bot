@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -207,7 +206,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         currentUserId: _currentUserId!,
         groupWebsocket: groupWs!,
         storageService: widget.storageService,
-        chatApi: widget.chatApi
+        chatApi: widget.chatApi,
+        initialGroup: group,
       ),
     );
   }

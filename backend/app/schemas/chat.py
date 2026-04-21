@@ -5,6 +5,7 @@ from app.schemas.base import TimestampMixin
 from datetime import datetime, timezone
 from pydantic import validator, field_validator
 from pydantic import Field
+from typing import Dict
 
 from app.models.private_message import MessageType
 
@@ -146,6 +147,8 @@ class GroupMessageOut(BaseModel):
     message_type: str
     
     parent_message: Optional[ParentMessageResponse] = None
+    reaction_summary: Optional[Dict[str, int]] = {}
+    my_reaction: Optional[str] = None
 
     class Config:
         from_attributes = True

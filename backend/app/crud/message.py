@@ -7,12 +7,14 @@ from app.core.cloudinary import extract_public_id_from_url, upload_to_cloudinary
 from pathlib import Path
 import uuid
 from app.models.group_message_seen import GroupMessageSeen
+from app.models.group_message_reaction import GroupMessageReaction
 from app.services.websocket_manager import manager
 from app.helpers.to_utc_iso import to_local_iso
 from app.models.user import User
 import cloudinary
 import cloudinary.uploader
 import asyncio
+from collections import Counter
 
 configure_cloudinary()
 
@@ -583,3 +585,165 @@ async def mark_user_as_read_if_online(db: Session, current_user_id: int, group_i
             await manager.broadcast(chat_id, read_payload)
         except Exception as e:
             print(f"[Broadcast Error - read event] Group {group_id}: {e}")
+            
+async def pin_message(db, message_id: int, group_id: int, user_id: int):
+
+    message = db.query(GroupMessage).filter(
+        GroupMessage.id == message_id,
+        GroupMessage.group_id == group_id
+    ).first()
+
+    if not message:
+        raise HTTPException(404, "Message not found")
+
+    member = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == user_id
+    ).first()
+
+    if not member:
+        raise HTTPException(403, "Not a member")
+
+    # unpin old
+    db.query(GroupMessage).filter(
+        GroupMessage.group_id == group_id,
+        GroupMessage.is_pinned == True
+    ).update({
+        GroupMessage.is_pinned: False,
+        GroupMessage.pinned_by_id: None,
+        GroupMessage.pinned_at: None
+    })
+
+    message.is_pinned = True
+    message.pinned_by_id = user_id
+    message.pinned_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(message)
+    
+    chat_id = f"group_{group_id}"
+
+    payload = {
+        "action": "message_pinned",
+        "group_id": group_id,
+        "message_id": message.id,
+        "pinned_by_id": user_id,
+        "pinned_by": member.user.username,
+        "pinned_at": message.pinned_at.isoformat()
+    }
+
+    await manager.broadcast(chat_id, payload)
+
+    return message
+
+async def unpin_message(db, message_id: int, group_id: int, user_id: int):
+
+    message = db.query(GroupMessage).filter(
+        GroupMessage.id == message_id,
+        GroupMessage.group_id == group_id
+    ).first()
+
+    if not message:
+        raise HTTPException(404, "Message not found")
+
+    member = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == user_id
+    ).first()
+
+    if not member:
+        raise HTTPException(403, "Not a member")
+
+    if not message.is_pinned:
+        return message
+
+    message.is_pinned = False
+    message.pinned_by_id = None
+    message.pinned_at = None
+
+    db.commit()
+    db.refresh(message)
+    
+    chat_id = f"group_{group_id}"
+
+    payload = {
+        "action": "message_unpinned",
+        "group_id": group_id,
+        "message_id": message_id
+    }
+
+    await manager.broadcast(chat_id, payload)
+
+    return message
+
+async def add_or_update_reaction(
+    db: Session,
+    message_id: int,
+    user_id: int,
+    reaction: str
+):
+    existing = db.query(GroupMessageReaction).filter(
+        GroupMessageReaction.message_id == message_id,
+        GroupMessageReaction.user_id == user_id
+    ).first()
+
+    # REMOVE (toggle off)
+    if existing and existing.reaction == reaction:
+        db.delete(existing)
+        db.commit()
+
+        summary = update_reaction_summary(db, message_id)
+
+        return {
+            "status": "removed",
+            "reaction": reaction,
+            "reaction_summary": summary
+        }
+
+    # UPDATE
+    if existing:
+        existing.reaction = reaction
+        db.commit()
+
+        summary = update_reaction_summary(db, message_id)
+
+        return {
+            "status": "updated",
+            "reaction": reaction,
+            "reaction_summary": summary
+        }
+
+    # CREATE
+    new_reaction = GroupMessageReaction(
+        message_id=message_id,
+        user_id=user_id,
+        reaction=reaction
+    )
+    db.add(new_reaction)
+    db.commit()
+
+    summary = update_reaction_summary(db, message_id)
+
+    return {
+        "status": "created",
+        "reaction": reaction,
+        "reaction_summary": summary
+    }
+
+def update_reaction_summary(db: Session, message_id: int):
+    reactions = db.query(GroupMessageReaction).filter(
+        GroupMessageReaction.message_id == message_id
+    ).all()
+
+    counter = Counter([r.reaction for r in reactions])
+    summary = dict(counter)
+
+    message = db.query(GroupMessage).filter(
+        GroupMessage.id == message_id
+    ).first()
+
+    if message:
+        message.reaction_summary = summary
+        db.commit()
+
+    return summary
