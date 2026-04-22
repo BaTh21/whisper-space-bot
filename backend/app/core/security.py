@@ -61,12 +61,11 @@ def create_access_token(
     token_type: str = "access",
     scope: str | None = None
 ) -> str:
-    
-    expire = datetime.utcnow() + (
-        expires_delta
-        if expires_delta
-        else timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
-    )
+    # DEFAULT EXPIRY: 90 DAYS
+    if expires_delta is None:
+        expires_delta = timedelta(days=90)
+
+    expire = datetime.utcnow() + expires_delta
 
     payload = {
         "sub": str(user_id),
@@ -82,9 +81,13 @@ def create_access_token(
 
 def create_refresh_token(user_id: int) -> str:
     """
-    Create JWT refresh token
+    Create JWT refresh token.
+    You can also set this to 90 days if desired.
     """
-    expire = datetime.utcnow() + timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
+    # Example: refresh token also 90 days
+    expire = datetime.utcnow() + timedelta(days=90)
+    # Or keep your config value:
+    # expire = datetime.utcnow() + timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     payload = {
         "sub": str(user_id),
         "exp": expire,
@@ -98,7 +101,8 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Get current user from JWT token
+    Get current user from JWT token.
+    Token must be valid and not expired (90 days absolute expiry).
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -106,7 +110,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    # Verify token
+    # Verify token (checks expiration automatically)
     payload = verify_token(token)
     if not payload:
         raise credentials_exception
@@ -141,20 +145,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify a plain password against a hashed password
     """
-    # You should use a proper password hashing library like passlib
-    # For now, using a simple comparison (replace with actual hashing)
-    from passlib.context import CryptContext
-    
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     return pwd_context.verify(plain_password, hashed_password)
 
 def hash_password(password: str) -> str:
     """
     Hash a password
     """
-    from passlib.context import CryptContext
-    
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     return pwd_context.hash(password)
 
 # WebSocket-specific authentication
@@ -163,7 +159,8 @@ async def get_current_user_ws(
     db: Session = Depends(get_db)
 ) -> Optional[User]:
     """
-    Get current user from WebSocket connection
+    Get current user from WebSocket connection.
+    Token must be valid and not expired.
     """
     try:
         # Try to get token from query params first
@@ -184,7 +181,7 @@ async def get_current_user_ws(
         if not token:
             return None
         
-        # Verify token
+        # Verify token (checks expiration)
         payload = verify_token(token)
         if not payload:
             return None
