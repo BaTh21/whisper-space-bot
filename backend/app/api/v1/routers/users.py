@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.schemas.user import UserOut, UserUpdate, AvatarUploadResponse
+from app.schemas.user import UserOut, UserUpdate, AvatarUploadResponse, UsernameUpdate
 from app.crud.user import remove_avatar, search, update, get_friend_suggestions, update_avatar
 from app.models.user import User
 from app.schemas.user import UserOut, UserUpdate
@@ -107,3 +107,17 @@ def get_user_by_id(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return UserOut.from_orm(user)
+
+@router.put("/username", response_model=UserOut)
+def update_username(
+    username_data: UsernameUpdate,  # make sure UsernameUpdate is imported
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    existing_user = db.query(User).filter(User.username == username_data.username).first()
+    if existing_user and existing_user.id != current_user.id:
+        raise HTTPException(status_code=409, detail="Username already taken")
+    current_user.username = username_data.username
+    db.commit()
+    db.refresh(current_user)
+    return UserOut.from_orm(current_user)

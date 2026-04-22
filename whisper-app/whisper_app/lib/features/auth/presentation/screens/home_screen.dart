@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -20,10 +19,173 @@ import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_
     as notes;
 import 'package:whisper_space_flutter/features/settings/screens/settings_screen.dart';
 import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
-
 import 'login_screen.dart';
 import 'providers/auth_provider.dart';
 
+// ===================== REUSABLE PROFILE IMAGE PICKER =====================
+class ProfileImagePicker extends StatefulWidget {
+  final String? currentImageUrl;
+  final Function(String?) onImageChanged;
+  final bool isUploading;
+
+  const ProfileImagePicker({
+    Key? key,
+    this.currentImageUrl,
+    required this.onImageChanged,
+    this.isUploading = false,
+  }) : super(key: key);
+
+  @override
+  State<ProfileImagePicker> createState() => _ProfileImagePickerState();
+}
+
+class _ProfileImagePickerState extends State<ProfileImagePicker> {
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _showImagePickerOptions() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF6C63FF)),
+              title: const Text('Take a Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Color(0xFF6C63FF)),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            if (widget.currentImageUrl != null && widget.currentImageUrl!.isNotEmpty) ...[
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Remove Current Photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onImageChanged(null);
+                },
+              ),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (pickedFile != null) {
+        widget.onImageChanged(pickedFile.path);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking image: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.isUploading ? null : _showImagePickerOptions,
+      child: Stack(
+        children: [
+          CircleAvatar(
+            radius: 50,
+            backgroundColor: const Color(0xFF6C63FF),
+            backgroundImage: widget.currentImageUrl != null && widget.currentImageUrl!.isNotEmpty
+                ? (widget.currentImageUrl!.startsWith('http')
+                    ? NetworkImage(widget.currentImageUrl!)
+                    : FileImage(File(widget.currentImageUrl!)) as ImageProvider)
+                : null,
+            child: widget.currentImageUrl == null || widget.currentImageUrl!.isEmpty
+                ? const Text(
+                    'U',
+                    style: TextStyle(
+                      fontSize: 40,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                : null,
+          ),
+          if (!widget.isUploading)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6C63FF),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 2,
+                  ),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(6),
+                  child: Icon(
+                    Icons.camera_alt,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          if (widget.isUploading)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ===================== HOME SCREEN =====================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -79,9 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _currentUserId = user.id;
         });
-
         _initializeScreens();
-
         final feedProvider = Provider.of<FeedProvider>(context, listen: false);
         feedProvider.setCurrentUserId(user.id);
       }
@@ -91,9 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _initServicesAndLoad() async {
     final storageService = StorageService();
     await storageService.init();
-
     inboxApi = InboxAPISource(storageService: storageService);
-
     _loadData();
   }
 
@@ -123,7 +281,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateToEditProfile() {
-    // Navigate to edit profile screen
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Edit profile feature coming soon'),
@@ -131,7 +288,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +308,6 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         elevation: 0,
         actions: [
-          // Inbox Button
           IconButton(
             tooltip: 'Inbox',
             onPressed: () async {
@@ -225,9 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBottomNavBar() {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDarkMode = themeProvider.isDarkMode;
-
-    final primaryColor =
-        isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB);
+    final primaryColor = isDarkMode ? const Color(0xFF00BCD4) : const Color(0xFF6A11CB);
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -253,8 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: NavigationBar(
             height: 70,
-            backgroundColor:
-                isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+            backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
             elevation: 10,
             selectedIndex: _selectedIndex,
             indicatorColor: primaryColor.withOpacity(0.15),
@@ -266,42 +418,27 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             destinations: [
               NavigationDestination(
-                icon: Icon(
-                  Icons.home_outlined,
-                  color: isDarkMode ? Colors.white70 : Colors.grey,
-                ),
+                icon: Icon(Icons.home_outlined, color: isDarkMode ? Colors.white70 : Colors.grey),
                 selectedIcon: Icon(Icons.home, color: primaryColor),
                 label: 'Feed',
               ),
               NavigationDestination(
-                icon: Icon(
-                  Icons.chat_bubble_outline,
-                  color: isDarkMode ? Colors.white70 : Colors.grey,
-                ),
+                icon: Icon(Icons.chat_bubble_outline, color: isDarkMode ? Colors.white70 : Colors.grey),
                 selectedIcon: Icon(Icons.chat_bubble, color: primaryColor),
                 label: 'Messages',
               ),
               NavigationDestination(
-                icon: Icon(
-                  Icons.group_outlined,
-                  color: isDarkMode ? Colors.white70 : Colors.grey,
-                ),
+                icon: Icon(Icons.group_outlined, color: isDarkMode ? Colors.white70 : Colors.grey),
                 selectedIcon: Icon(Icons.group, color: primaryColor),
                 label: 'Friends',
               ),
               NavigationDestination(
-                icon: Icon(
-                  Icons.note_outlined,
-                  color: isDarkMode ? Colors.white70 : Colors.grey,
-                ),
+                icon: Icon(Icons.note_outlined, color: isDarkMode ? Colors.white70 : Colors.grey),
                 selectedIcon: Icon(Icons.note, color: primaryColor),
                 label: 'Notes',
               ),
               NavigationDestination(
-                icon: Icon(
-                  Icons.person_outlined,
-                  color: isDarkMode ? Colors.white70 : Colors.grey,
-                ),
+                icon: Icon(Icons.person_outlined, color: isDarkMode ? Colors.white70 : Colors.grey),
                 selectedIcon: Icon(Icons.person, color: primaryColor),
                 label: 'Profile',
               ),
@@ -310,44 +447,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _showLogoutDialog() async {
-    final shouldLogout = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Logout'),
-            content: const Text('Are you sure you want to logout?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text(
-                  'Logout',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
-    if (shouldLogout && mounted) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.logout();
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const LoginScreen(),
-          ),
-        );
-      }
-    }
   }
 }
 
@@ -370,7 +469,6 @@ class _FeedTabState extends State<FeedTab> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCurrentUser();
       _loadUserGroups();
@@ -383,10 +481,7 @@ class _FeedTabState extends State<FeedTab> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
     if (user != null) {
-      setState(() {
-        _currentUserId = user.id;
-      });
-
+      setState(() => _currentUserId = user.id);
       final feedProvider = Provider.of<FeedProvider>(context, listen: false);
       feedProvider.setCurrentUserId(user.id);
     }
@@ -394,16 +489,10 @@ class _FeedTabState extends State<FeedTab> {
 
   Future<void> _loadUserGroups() async {
     if (!mounted) return;
-
     try {
-      final feedApiService =
-          Provider.of<FeedApiService>(context, listen: false);
+      final feedApiService = Provider.of<FeedApiService>(context, listen: false);
       final groups = await feedApiService.getUserGroups();
-      if (mounted) {
-        setState(() {
-          _availableGroups = groups;
-        });
-      }
+      if (mounted) setState(() => _availableGroups = groups);
     } catch (e) {
       print('Failed to load groups: $e');
     }
@@ -411,24 +500,18 @@ class _FeedTabState extends State<FeedTab> {
 
   Future<void> _initializeFeed() async {
     if (!mounted) return;
-
     try {
       final feedProvider = Provider.of<FeedProvider>(context, listen: false);
       await feedProvider.loadInitialFeed();
-      if (mounted) {
-        setState(() => _isInitialized = true);
-      }
+      if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
       print('Failed to initialize feed: $e');
-      if (mounted) {
-        setState(() => _isInitialized = true);
-      }
+      if (mounted) setState(() => _isInitialized = true);
     }
   }
 
   void _onScroll() {
     if (!mounted) return;
-
     final currentScroll = _scrollController.position.pixels;
     if (currentScroll > 100 && _showCreateButton) {
       setState(() => _showCreateButton = false);
@@ -459,7 +542,6 @@ class _FeedTabState extends State<FeedTab> {
             ),
           );
         }
-
         if (feedProvider.error != null && feedProvider.diaries.isEmpty) {
           return Center(
             child: Column(
@@ -487,7 +569,6 @@ class _FeedTabState extends State<FeedTab> {
             ),
           );
         }
-
         return Stack(
           children: [
             RefreshIndicator(
@@ -510,8 +591,7 @@ class _FeedTabState extends State<FeedTab> {
                           ),
                           const SizedBox(height: 20),
                           ElevatedButton(
-                            onPressed: () =>
-                                _navigateToCreateDiary(feedProvider),
+                            onPressed: () => _navigateToCreateDiary(feedProvider),
                             child: const Text('Create First Diary'),
                           ),
                         ],
@@ -524,20 +604,14 @@ class _FeedTabState extends State<FeedTab> {
                       itemBuilder: (context, index) {
                         final diary = feedProvider.diaries[index];
                         final isOwner = diary.author.id == _currentUserId;
-
                         return DiaryCard(
                           diary: diary,
                           onLike: () => _handleLike(feedProvider, diary.id),
-                          onFavorite: () =>
-                              _handleFavorite(feedProvider, diary.id),
-                          onComment:
-                              (diaryId, content, parentId, replyToUserId) =>
-                                  _handleComment(feedProvider, diaryId, content,
-                                      parentId, replyToUserId),
-                          onEdit: (diaryToEdit) => _handleEditDiary(
-                              context, feedProvider, diaryToEdit),
-                          onDelete: (diaryId) => _handleDeleteDiary(
-                              context, feedProvider, diaryId),
+                          onFavorite: () => _handleFavorite(feedProvider, diary.id),
+                          onComment: (diaryId, content, parentId, replyToUserId) =>
+                              _handleComment(feedProvider, diaryId, content, parentId, replyToUserId),
+                          onEdit: (diaryToEdit) => _handleEditDiary(context, feedProvider, diaryToEdit),
+                          onDelete: (diaryId) => _handleDeleteDiary(context, feedProvider, diaryId),
                           isOwner: isOwner,
                         );
                       },
@@ -560,9 +634,7 @@ class _FeedTabState extends State<FeedTab> {
   void _handleFavorite(FeedProvider feedProvider, int diaryId) async {
     try {
       final diary = feedProvider.diaries.firstWhere((d) => d.id == diaryId);
-      final isCurrentlyFavorited =
-          diary.favoritedUserIds.contains(_currentUserId);
-
+      final isCurrentlyFavorited = diary.favoritedUserIds.contains(_currentUserId);
       if (isCurrentlyFavorited) {
         await feedProvider.removeFromFavorites(diaryId);
         _showSuccessSnackBar('Removed from favorites');
@@ -590,8 +662,7 @@ class _FeedTabState extends State<FeedTab> {
     }
   }
 
-  void _handleEditDiary(
-      BuildContext context, FeedProvider provider, DiaryModel diary) async {
+  void _handleEditDiary(BuildContext context, FeedProvider provider, DiaryModel diary) async {
     try {
       final result = await Navigator.push<DiaryModel?>(
         context,
@@ -600,7 +671,7 @@ class _FeedTabState extends State<FeedTab> {
             diary: diary,
             onUpdate: (updatedDiary) async {
               try {
-                final result = await provider.updateDiary(
+                return await provider.updateDiary(
                   diaryId: updatedDiary.id,
                   title: updatedDiary.title,
                   content: updatedDiary.content,
@@ -609,7 +680,6 @@ class _FeedTabState extends State<FeedTab> {
                   imageUrls: updatedDiary.images,
                   videoUrls: updatedDiary.videos,
                 );
-                return result;
               } catch (e) {
                 rethrow;
               }
@@ -618,60 +688,37 @@ class _FeedTabState extends State<FeedTab> {
           ),
         ),
       );
-
-      if (result != null && mounted) {
-        _showSuccessSnackBar('Diary updated successfully!');
-      }
+      if (result != null && mounted) _showSuccessSnackBar('Diary updated successfully!');
     } catch (e) {
       _showErrorSnackBar('Failed to edit diary: $e');
     }
   }
 
-  void _handleDeleteDiary(
-      BuildContext context, FeedProvider feedProvider, int diaryId) async {
+  void _handleDeleteDiary(BuildContext context, FeedProvider feedProvider, int diaryId) async {
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Delete Diary'),
-            content: const Text('Are you sure you want to delete this diary? '
-                'This action cannot be undone.'),
+            content: const Text('Are you sure you want to delete this diary? This action cannot be undone.'),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
             ],
           ),
         ) ??
         false;
-
     if (confirmed) {
       try {
         await feedProvider.deleteDiary(diaryId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Diary deleted successfully'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
+            const SnackBar(content: Text('Diary deleted successfully'), backgroundColor: Colors.green),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete diary: $e'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
+            SnackBar(content: Text('Failed to delete diary: $e'), backgroundColor: Colors.red),
           );
         }
       }
@@ -680,7 +727,6 @@ class _FeedTabState extends State<FeedTab> {
 
   void _navigateToCreateDiary(FeedProvider feedProvider) {
     final feedApiService = Provider.of<FeedApiService>(context, listen: false);
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -689,13 +735,8 @@ class _FeedTabState extends State<FeedTab> {
           onDiaryCreated: (DiaryModel diary) {
             feedProvider.diaries.insert(0, diary);
             _showSuccessSnackBar('Created: "${diary.title}"');
-
             if (_scrollController.hasClients) {
-              _scrollController.animateTo(
-                0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
+              _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
             }
           },
         ),
@@ -706,11 +747,7 @@ class _FeedTabState extends State<FeedTab> {
   void _showSuccessSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.green, duration: const Duration(seconds: 2)),
       );
     }
   }
@@ -718,11 +755,7 @@ class _FeedTabState extends State<FeedTab> {
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
       );
     }
   }
@@ -739,53 +772,29 @@ class _RightSlidePageRoute extends PageRouteBuilder {
             final begin = const Offset(1.0, 0.0);
             final end = Offset.zero;
             final curve = Curves.easeInOut;
-            final tween =
-                Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            return SlideTransition(
-              position: animation.drive(tween),
-              child: child,
-            );
+            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            return SlideTransition(position: animation.drive(tween), child: child);
           },
         );
 }
 
 class MessagesTab extends StatelessWidget {
   const MessagesTab({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return const ChatScreen();
-  }
+  Widget build(BuildContext context) => const ChatScreen();
 }
 
 class FriendsTab extends StatelessWidget {
   const FriendsTab({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return const FriendScreen();
-  }
+  Widget build(BuildContext context) => const FriendScreen();
 }
 
-class NotesTab extends StatelessWidget {
-  const NotesTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const notes.NotesTab();
-  }
-}
-
-// ============ PROFILE TAB ============
+// ============ PROFILE TAB (with username edit & reusable image picker) ============
 class ProfileTab extends StatefulWidget {
   final int? userId;
   final VoidCallback? onEditProfile;
-
-  const ProfileTab({
-    super.key,
-    this.userId,
-    this.onEditProfile,
-  });
+  const ProfileTab({super.key, this.userId, this.onEditProfile});
 
   @override
   State<ProfileTab> createState() => _ProfileTabState();
@@ -812,35 +821,23 @@ class _ProfileTabState extends State<ProfileTab> {
   Future<void> _initServices() async {
     final storageService = StorageService();
     await storageService.init();
-
     const String baseUrl = 'http://10.0.2.2:8000/api/v1/avatars';
     _imageUploadService = ImageUploadService(baseUrl: baseUrl);
   }
 
   Future<void> _loadUserStats() async {
     setState(() => _isLoadingStats = true);
-
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final feedProvider = Provider.of<FeedProvider>(context, listen: false);
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-
       final currentUser = authProvider.currentUser;
-
       if (currentUser != null) {
-        final userPosts = feedProvider.diaries
-            .where((diary) => diary.author.id == currentUser.id)
-            .length;
-
+        final userPosts = feedProvider.diaries.where((diary) => diary.author.id == currentUser.id).length;
         final userNotes = notesProvider.notes.length;
-
         int totalLikes = 0;
-        final userDiaries = feedProvider.diaries
-            .where((diary) => diary.author.id == currentUser.id);
-        for (var diary in userDiaries) {
-          totalLikes += diary.likes.length;
-        }
-
+        final userDiaries = feedProvider.diaries.where((diary) => diary.author.id == currentUser.id);
+        for (var diary in userDiaries) totalLikes += diary.likes.length;
         if (mounted) {
           setState(() {
             _postsCount = userPosts;
@@ -866,35 +863,22 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> _uploadProfileImage(File imageFile) async {
     setState(() => _isUploadingImage = true);
-
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final token = await _getToken();
-
-      final avatarUrl =
-          await _imageUploadService.uploadProfileImage(imageFile, token);
-
+      final avatarUrl = await _imageUploadService.uploadProfileImage(imageFile, token);
       if (avatarUrl != null && mounted) {
         await authProvider.updateProfileImage(avatarUrl);
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile picture updated successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
+            const SnackBar(content: Text('Profile picture updated successfully!'), backgroundColor: Colors.green),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to upload image: $e'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
+          SnackBar(content: Text('Failed to upload image: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -907,51 +891,31 @@ class _ProfileTabState extends State<ProfileTab> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Profile Picture'),
-        content:
-            const Text('Are you sure you want to remove your profile picture?'),
+        content: const Text('Are you sure you want to remove your profile picture?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
-
     if (confirm == true && mounted) {
       setState(() => _isUploadingImage = true);
-
       try {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
         final token = await _getToken();
-
         final success = await _imageUploadService.deleteProfileImage(token);
-
         if (success && mounted) {
           await authProvider.removeProfileImage();
-
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Profile picture removed'),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 2),
-              ),
+              const SnackBar(content: Text('Profile picture removed'), backgroundColor: Colors.orange),
             );
           }
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to remove image: $e'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
+            SnackBar(content: Text('Failed to remove image: $e'), backgroundColor: Colors.red),
           );
         }
       } finally {
@@ -966,12 +930,55 @@ class _ProfileTabState extends State<ProfileTab> {
     return storageService.getToken() ?? '';
   }
 
+  // --------------------- USERNAME EDIT ---------------------
+  Future<void> _editUsername() async {
+  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final currentUsername = authProvider.currentUser?.username ?? '';
+  final controller = TextEditingController(text: currentUsername);
+  final newUsername = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Edit Username'),
+      content: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          labelText: 'Username',
+          hintText: 'Enter new username',
+        ),
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  if (newUsername != null && newUsername.isNotEmpty && newUsername != currentUsername) {
+    try {
+      await authProvider.updateUsername(newUsername);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Username updated successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update username: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+}
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         final user = authProvider.currentUser;
-
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -982,90 +989,35 @@ class _ProfileTabState extends State<ProfileTab> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      // Profile picture with tap gesture
-                      GestureDetector(
-                        onTap: _showImagePickerOptions,
-                        child: Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 50,
-                              backgroundColor: const Color(0xFF6C63FF),
-                              backgroundImage: user?.avatarUrl != null &&
-                                      user!.avatarUrl!.isNotEmpty
-                                  ? (user.avatarUrl!.startsWith('http')
-                                      ? NetworkImage(user.avatarUrl!)
-                                      : FileImage(File(user.avatarUrl!))
-                                          as ImageProvider)
-                                  : null,
-                              child: user?.avatarUrl == null ||
-                                      user!.avatarUrl!.isEmpty
-                                  ? Text(
-                                      user?.username.isNotEmpty == true
-                                          ? user!.username[0].toUpperCase()
-                                          : 'U',
-                                      style: const TextStyle(
-                                        fontSize: 40,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            if (!_isUploadingImage)
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF6C63FF),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(6),
-                                    child: Icon(
-                                      Icons.camera_alt,
-                                      size: 18,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (_isUploadingImage)
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Color.fromRGBO(0, 0, 0, 0.5),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Center(
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+                      // Reusable ProfileImagePicker
+                      ProfileImagePicker(
+                        currentImageUrl: user?.avatarUrl,
+                        onImageChanged: _handleImageChange,
+                        isUploading: _isUploadingImage,
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        user?.username ?? 'User',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                      // Editable username (tap to edit)
+                      GestureDetector(
+                        onTap: _editUsername,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              user?.username ?? 'User',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.edit, size: 18, color: Colors.grey),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         user?.email ?? '',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
+                        style: const TextStyle(fontSize: 16, color: Colors.grey),
                       ),
                       if (user?.bio != null && user!.bio!.isNotEmpty) ...[
                         const SizedBox(height: 12),
@@ -1086,31 +1038,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         ),
                       ],
-
-                      TextButton.icon(
-                        onPressed: _isUploadingImage
-                            ? null
-                            : () => _handleImageChange(null),
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          size: 16,
-                          color: Colors.red,
-                        ),
-                        label: const Text(
-                          'Remove Photo',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.red,
-                          ),
-                        ),
-                        style: TextButton.styleFrom(
-                          minimumSize: Size.zero,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                        ),
-                      ),
+                      // Remove photo button is already inside ProfileImagePicker
                     ],
                   ),
                 ),
@@ -1120,24 +1048,14 @@ class _ProfileTabState extends State<ProfileTab> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: _isLoadingStats
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: CircularProgressIndicator(),
-                          ),
-                        )
+                      ? const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _StatItem(
-                                value: _postsCount.toString(), label: 'Posts'),
-                            _StatItem(
-                                value: _friendsCount.toString(),
-                                label: 'Friends'),
-                            _StatItem(
-                                value: _notesCount.toString(), label: 'Notes'),
-                            _StatItem(
-                                value: _likesCount.toString(), label: 'Likes'),
+                            _StatItem(value: _postsCount.toString(), label: 'Posts'),
+                            _StatItem(value: _friendsCount.toString(), label: 'Friends'),
+                            _StatItem(value: _notesCount.toString(), label: 'Notes'),
+                            _StatItem(value: _likesCount.toString(), label: 'Likes'),
                           ],
                         ),
                 ),
@@ -1147,11 +1065,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 child: Column(
                   children: [
                     _buildMenuItem(Icons.settings, 'Settings', () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const SettingsScreen()),
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
                     }),
                   ],
                 ),
@@ -1161,15 +1075,10 @@ class _ProfileTabState extends State<ProfileTab> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    final authProvider =
-                        Provider.of<AuthProvider>(context, listen: false);
+                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
                     await authProvider.logout();
                     if (mounted) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const LoginScreen()),
-                      );
+                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
                     }
                   },
                   icon: const Icon(Icons.logout),
@@ -1187,67 +1096,6 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  void _showImagePickerOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Color(0xFF6C63FF)),
-              title: const Text('Take a Photo'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImageFromSource(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.photo_library, color: Color(0xFF6C63FF)),
-              title: const Text('Choose from Gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImageFromSource(ImageSource.gallery);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickImageFromSource(ImageSource source) async {
-    final imagePicker = ImagePicker();
-    try {
-      final XFile? pickedFile = await imagePicker.pickImage(
-        source: source,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-      );
-      if (pickedFile != null && mounted) {
-        await _uploadProfileImage(File(pickedFile.path));
-      }
-    } catch (e) {
-      debugPrint('Error picking image: $e');
-    }
-  }
-
   Widget _buildMenuItem(IconData icon, String title, VoidCallback onTap) {
     return ListTile(
       leading: Icon(icon, color: const Color(0xFF6C63FF)),
@@ -1261,26 +1109,14 @@ class _ProfileTabState extends State<ProfileTab> {
 class _StatItem extends StatelessWidget {
   final String value;
   final String label;
-
   const _StatItem({required this.value, required this.label});
-
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF6C63FF),
-          ),
-        ),
+        Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF6C63FF))),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
   }

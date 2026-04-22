@@ -16,13 +16,13 @@ class AuthService {
   AuthService({
     required this.storageService,
     String? baseUrl,
-  }) : baseUrl = baseUrl ?? ApiConstants.baseUrl,
-       _dio = Dio(BaseOptions(
-         baseUrl: baseUrl ?? ApiConstants.baseUrl,
-         headers: ApiConstants.defaultHeaders,
-         connectTimeout: const Duration(seconds: 30),
-         receiveTimeout: const Duration(seconds: 30),
-       )) {
+  })  : baseUrl = baseUrl ?? ApiConstants.baseUrl,
+        _dio = Dio(BaseOptions(
+          baseUrl: baseUrl ?? ApiConstants.baseUrl,
+          headers: ApiConstants.defaultHeaders,
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+        )) {
     // Add token interceptor
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
@@ -44,7 +44,8 @@ class AuthService {
       final response = await http.post(
         url,
         headers: ApiConstants.formLoginHeaders,
-        body: 'username=${Uri.encodeComponent(email)}&password=${Uri.encodeComponent(password)}',
+        body:
+            'username=${Uri.encodeComponent(email)}&password=${Uri.encodeComponent(password)}',
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -71,13 +72,17 @@ class AuthService {
       final error = jsonDecode(response.body);
       String errorMessage;
       if (response.statusCode == 401) {
-        return LoginResponse.error(message: 'Invalid email or password. Please try again.');
+        return LoginResponse.error(
+            message: 'Invalid email or password. Please try again.');
       } else if (response.statusCode == 404) {
-        return LoginResponse.error(message: 'User not found. Please check your email.');
+        return LoginResponse.error(
+            message: 'User not found. Please check your email.');
       } else if (response.statusCode == 403) {
-        return LoginResponse.error(message: 'Account not verified. Please verify your email first.');
+        return LoginResponse.error(
+            message: 'Account not verified. Please verify your email first.');
       } else if (response.statusCode == 422) {
-        return LoginResponse.error(message: 'Invalid input format. Please check your information.');
+        return LoginResponse.error(
+            message: 'Invalid input format. Please check your information.');
       }
       if (error is Map<String, dynamic>) {
         if (error.containsKey('detail')) {
@@ -103,7 +108,8 @@ class AuthService {
     }
   }
 
-  Future<RegisterResponse> register(String username, String email, String password) async {
+  Future<RegisterResponse> register(
+      String username, String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl${ApiConstants.register}'),
@@ -118,16 +124,20 @@ class AuthService {
         final data = jsonDecode(response.body);
         await storageService.saveUserEmail(email);
         return RegisterResponse.success(
-          message: data['msg'] ?? 'Registration successful! Please check your email for verification code.',
+          message: data['msg'] ??
+              'Registration successful! Please check your email for verification code.',
           email: email,
         );
       } else if (response.statusCode == 409) {
-        return RegisterResponse.error(message: 'Email or username already exists.');
+        return RegisterResponse.error(
+            message: 'Email or username already exists.');
       } else {
-        return RegisterResponse.error(message: 'Registration failed. Please try again.');
+        return RegisterResponse.error(
+            message: 'Registration failed. Please try again.');
       }
     } catch (e) {
-      return RegisterResponse.error(message: 'Network error. Please check your internet connection.');
+      return RegisterResponse.error(
+          message: 'Network error. Please check your internet connection.');
     }
   }
 
@@ -146,10 +156,12 @@ class AuthService {
         await storageService.setLoggedIn(true);
         return VerifyResponse.success(token: token);
       } else {
-        return VerifyResponse.error(message: 'Invalid or expired verification code.');
+        return VerifyResponse.error(
+            message: 'Invalid or expired verification code.');
       }
     } catch (e) {
-      return VerifyResponse.error(message: 'Network error. Please check your internet connection.');
+      return VerifyResponse.error(
+          message: 'Network error. Please check your internet connection.');
     }
   }
 
@@ -161,12 +173,15 @@ class AuthService {
         body: jsonEncode({'email': email}),
       );
       if (response.statusCode == 200) {
-        return ForgotPasswordResponse.success(message: 'If the email is registered, a reset code has been sent.');
+        return ForgotPasswordResponse.success(
+            message: 'If the email is registered, a reset code has been sent.');
       } else {
-        return ForgotPasswordResponse.error(message: 'Failed to process request. Please try again.');
+        return ForgotPasswordResponse.error(
+            message: 'Failed to process request. Please try again.');
       }
     } catch (e) {
-      return ForgotPasswordResponse.error(message: 'Network error. Please check your internet connection.');
+      return ForgotPasswordResponse.error(
+          message: 'Network error. Please check your internet connection.');
     }
   }
 
@@ -202,13 +217,25 @@ class AuthService {
         body: jsonEncode({'email': email}),
       );
       if (response.statusCode == 200) {
-        return ResendVerificationResponse.success(message: 'Verification code sent successfully.');
+        return ResendVerificationResponse.success(
+            message: 'Verification code sent successfully.');
       } else {
-        return ResendVerificationResponse.error(message: 'Failed to resend verification code.');
+        return ResendVerificationResponse.error(
+            message: 'Failed to resend verification code.');
       }
     } catch (e) {
-      return ResendVerificationResponse.error(message: 'Network error. Please check your internet connection.');
+      return ResendVerificationResponse.error(
+          message: 'Network error. Please check your internet connection.');
     }
+  }
+
+  Future<void> updateUsername(String newUsername) async {
+    final response = await dio.put(
+      '/api/v1/users/me',
+      data: {'username': newUsername},
+    );
+    if (response.statusCode != 200)
+      throw Exception('Failed to update username');
   }
 }
 
@@ -219,8 +246,10 @@ class LoginResponse {
   final User? user;
   final Token? token;
   LoginResponse({required this.success, this.message, this.user, this.token});
-  factory LoginResponse.success({required User user, required Token token}) => LoginResponse(success: true, user: user, token: token);
-  factory LoginResponse.error({required String message}) => LoginResponse(success: false, message: message);
+  factory LoginResponse.success({required User user, required Token token}) =>
+      LoginResponse(success: true, user: user, token: token);
+  factory LoginResponse.error({required String message}) =>
+      LoginResponse(success: false, message: message);
 }
 
 class RegisterResponse {
@@ -228,8 +257,10 @@ class RegisterResponse {
   final String? message;
   final String? email;
   RegisterResponse({required this.success, this.message, this.email});
-  factory RegisterResponse.success({String? message, String? email}) => RegisterResponse(success: true, message: message, email: email);
-  factory RegisterResponse.error({required String message}) => RegisterResponse(success: false, message: message);
+  factory RegisterResponse.success({String? message, String? email}) =>
+      RegisterResponse(success: true, message: message, email: email);
+  factory RegisterResponse.error({required String message}) =>
+      RegisterResponse(success: false, message: message);
 }
 
 class VerifyResponse {
@@ -237,22 +268,28 @@ class VerifyResponse {
   final String? message;
   final Token? token;
   VerifyResponse({required this.success, this.message, this.token});
-  factory VerifyResponse.success({required Token token}) => VerifyResponse(success: true, token: token);
-  factory VerifyResponse.error({required String message}) => VerifyResponse(success: false, message: message);
+  factory VerifyResponse.success({required Token token}) =>
+      VerifyResponse(success: true, token: token);
+  factory VerifyResponse.error({required String message}) =>
+      VerifyResponse(success: false, message: message);
 }
 
 class ForgotPasswordResponse {
   final bool success;
   final String? message;
   ForgotPasswordResponse({required this.success, this.message});
-  factory ForgotPasswordResponse.success({String? message}) => ForgotPasswordResponse(success: true, message: message);
-  factory ForgotPasswordResponse.error({required String message}) => ForgotPasswordResponse(success: false, message: message);
+  factory ForgotPasswordResponse.success({String? message}) =>
+      ForgotPasswordResponse(success: true, message: message);
+  factory ForgotPasswordResponse.error({required String message}) =>
+      ForgotPasswordResponse(success: false, message: message);
 }
 
 class ResendVerificationResponse {
   final bool success;
   final String? message;
   ResendVerificationResponse({required this.success, this.message});
-  factory ResendVerificationResponse.success({String? message}) => ResendVerificationResponse(success: true, message: message);
-  factory ResendVerificationResponse.error({required String message}) => ResendVerificationResponse(success: false, message: message);
+  factory ResendVerificationResponse.success({String? message}) =>
+      ResendVerificationResponse(success: true, message: message);
+  factory ResendVerificationResponse.error({required String message}) =>
+      ResendVerificationResponse(success: false, message: message);
 }

@@ -8,26 +8,26 @@ import '../../../data/models/user_model.dart';
 class AuthProvider extends ChangeNotifier {
   final AuthService authService;
   final StorageService storageService;
-  
+
   User? _currentUser;
   bool _isLoading = false;
   String? _error;
-  
+
   AuthProvider({
     required this.authService,
     required this.storageService,
   }) {
     _loadUserFromStorage();
   }
-  
+
   User? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get error => _error;
   String? get savedEmail => storageService.getUserEmail();
-  
+
   // Guaranteed non-null because authService.dio is final and initialized
   Dio get dio => authService.dio;
-  
+
   Future<void> _loadUserFromStorage() async {
     if (storageService.isLoggedIn()) {
       final userData = storageService.getUserData();
@@ -41,7 +41,7 @@ class AuthProvider extends ChangeNotifier {
       }
     }
   }
-  
+
   Future<LoginResponse> login(String email, String password) async {
     _isLoading = true;
     _error = null;
@@ -63,8 +63,9 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
-  Future<RegisterResponse> register(String username, String email, String password) async {
+
+  Future<RegisterResponse> register(
+      String username, String email, String password) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -82,7 +83,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<VerifyResponse> verifyEmail(String email, String code) async {
     _isLoading = true;
     _error = null;
@@ -90,7 +91,8 @@ class AuthProvider extends ChangeNotifier {
     try {
       final result = await authService.verifyEmail(email, code);
       if (result.success) {
-        final user = await authService.getCurrentUser(result.token!.accessToken);
+        final user =
+            await authService.getCurrentUser(result.token!.accessToken);
         _currentUser = user;
         await storageService.saveUserData(user.toJson());
       } else {
@@ -105,7 +107,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<ForgotPasswordResponse> forgotPassword(String email) async {
     _isLoading = true;
     _error = null;
@@ -124,7 +126,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<ResendVerificationResponse> resendVerification(String email) async {
     _isLoading = true;
     _error = null;
@@ -143,7 +145,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<void> logout() async {
     _isLoading = true;
     notifyListeners();
@@ -158,7 +160,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<void> updateProfileImage(String imageUrl) async {
     if (_currentUser != null) {
       _currentUser = _currentUser!.copyWith(avatarUrl: imageUrl);
@@ -174,4 +176,22 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+Future<void> updateUsername(String newUsername) async {
+  if (_currentUser == null) return;
+  _isLoading = true;
+  notifyListeners();
+  try {
+    await authService.updateUsername(newUsername);
+    _currentUser = _currentUser!.copyWith(username: newUsername);
+    await storageService.saveUserData(_currentUser!.toJson());
+    _error = null;
+  } catch (e) {
+    _error = 'Failed to update username: $e';
+    rethrow;
+  } finally {
+    _isLoading = false;
+    notifyListeners();
+  }
+}
 }
