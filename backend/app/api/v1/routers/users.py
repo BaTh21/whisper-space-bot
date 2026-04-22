@@ -1,7 +1,7 @@
 import traceback
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
@@ -22,10 +22,21 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.put("/me", response_model=UserOut)
 def update_me(
-    user_in: UserUpdate, 
-    db: Session = Depends(get_db), 
+    user_in: UserUpdate,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # 1. If the username is being updated, check for conflicts
+    if user_in.username is not None and user_in.username != current_user.username:
+        existing_user = db.query(User).filter(User.username == user_in.username).first()
+        if existing_user:
+            # Provide a clear conflict error
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username is already taken"
+            )
+
+    # 2. Perform the update if no conflict
     updated = update(db, current_user, user_in)
     return UserOut.from_orm(updated)
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,7 @@ import 'package:whisper_space_flutter/features/notes/presentation/screens/notes_
     as notes;
 import 'package:whisper_space_flutter/features/settings/screens/settings_screen.dart';
 import 'package:whisper_space_flutter/shared/widgets/diary_card.dart';
+
 import 'login_screen.dart';
 import 'providers/auth_provider.dart';
 
@@ -29,11 +31,11 @@ class ProfileImagePicker extends StatefulWidget {
   final bool isUploading;
 
   const ProfileImagePicker({
-    Key? key,
+    super.key,
     this.currentImageUrl,
     required this.onImageChanged,
     this.isUploading = false,
-  }) : super(key: key);
+  });
 
   @override
   State<ProfileImagePicker> createState() => _ProfileImagePickerState();
@@ -108,12 +110,14 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
         widget.onImageChanged(pickedFile.path);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error picking image: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -169,7 +173,7 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: const Center(
@@ -389,8 +393,8 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Theme(
           data: Theme.of(context).copyWith(
             navigationBarTheme: NavigationBarThemeData(
-              labelTextStyle: MaterialStateProperty.resolveWith((states) {
-                if (states.contains(MaterialState.selected)) {
+              labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
                   return TextStyle(
                     color: primaryColor,
                     fontWeight: FontWeight.w600,
@@ -409,7 +413,7 @@ class _HomeScreenState extends State<HomeScreen> {
             backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
             elevation: 10,
             selectedIndex: _selectedIndex,
-            indicatorColor: primaryColor.withOpacity(0.15),
+            indicatorColor: primaryColor.withValues(alpha: 0.15),
             labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
             onDestinationSelected: (index) {
               setState(() {
@@ -494,7 +498,7 @@ class _FeedTabState extends State<FeedTab> {
       final groups = await feedApiService.getUserGroups();
       if (mounted) setState(() => _availableGroups = groups);
     } catch (e) {
-      print('Failed to load groups: $e');
+      debugPrint('Failed to load groups: $e');
     }
   }
 
@@ -505,7 +509,7 @@ class _FeedTabState extends State<FeedTab> {
       await feedProvider.loadInitialFeed();
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
-      print('Failed to initialize feed: $e');
+      debugPrint('Failed to initialize feed: $e');
       if (mounted) setState(() => _isInitialized = true);
     }
   }
@@ -807,6 +811,7 @@ class _ProfileTabState extends State<ProfileTab> {
   int _likesCount = 0;
   bool _isLoadingStats = true;
   bool _isUploadingImage = false;
+  bool _isUpdatingUsername = false; // NEW: for username update loading
   late ImageUploadService _imageUploadService;
 
   @override
@@ -837,7 +842,9 @@ class _ProfileTabState extends State<ProfileTab> {
         final userNotes = notesProvider.notes.length;
         int totalLikes = 0;
         final userDiaries = feedProvider.diaries.where((diary) => diary.author.id == currentUser.id);
-        for (var diary in userDiaries) totalLikes += diary.likes.length;
+        for (var diary in userDiaries) {
+          totalLikes += diary.likes.length;
+        }
         if (mounted) {
           setState(() {
             _postsCount = userPosts;
@@ -932,47 +939,109 @@ class _ProfileTabState extends State<ProfileTab> {
 
   // --------------------- USERNAME EDIT ---------------------
   Future<void> _editUsername() async {
-  final authProvider = Provider.of<AuthProvider>(context, listen: false);
-  final currentUsername = authProvider.currentUser?.username ?? '';
-  final controller = TextEditingController(text: currentUsername);
-  final newUsername = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Edit Username'),
-      content: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          labelText: 'Username',
-          hintText: 'Enter new username',
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUsername = authProvider.currentUser?.username ?? '';
+    final controller = TextEditingController(text: currentUsername);
+    final newUsername = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Username'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Username',
+            hintText: 'Enter new username',
+            helperText: 'Only letters, numbers, and underscores',
+          ),
+          autofocus: true,
         ),
-        autofocus: true,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, controller.text.trim()),
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  );
-  if (newUsername != null && newUsername.isNotEmpty && newUsername != currentUsername) {
+    );
+    if (newUsername == null || newUsername.isEmpty || newUsername == currentUsername) return;
+
+    setState(() => _isUpdatingUsername = true);
+
     try {
       await authProvider.updateUsername(newUsername);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Username updated successfully')),
+          const SnackBar(content: Text('Username updated successfully'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update username: $e'), backgroundColor: Colors.red),
+      if (!mounted) return;
+      final errorString = e.toString();
+      if (errorString.contains('409') ||
+          errorString.contains('already taken') ||
+          errorString.contains('Username is already taken')) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                SizedBox(width: 8),
+                Text('Username Unavailable'),
+              ],
+            ),
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'The username you entered is already taken.',
+                  style: TextStyle(fontSize: 16),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'Please choose a different username.',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Try Again'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red, size: 28),
+                SizedBox(width: 8),
+                Text('Update Failed'),
+              ],
+            ),
+            content: Text(
+              'An error occurred while updating your username.\n\nError: $e',
+              style: const TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isUpdatingUsername = false);
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -989,16 +1058,15 @@ class _ProfileTabState extends State<ProfileTab> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      // Reusable ProfileImagePicker
                       ProfileImagePicker(
                         currentImageUrl: user?.avatarUrl,
                         onImageChanged: _handleImageChange,
                         isUploading: _isUploadingImage,
                       ),
                       const SizedBox(height: 16),
-                      // Editable username (tap to edit)
+                      // Editable username with loading indicator
                       GestureDetector(
-                        onTap: _editUsername,
+                        onTap: _isUpdatingUsername ? null : _editUsername,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -1010,7 +1078,14 @@ class _ProfileTabState extends State<ProfileTab> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            const Icon(Icons.edit, size: 18, color: Colors.grey),
+                            if (_isUpdatingUsername)
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            else
+                              const Icon(Icons.edit, size: 18, color: Colors.grey),
                           ],
                         ),
                       ),
@@ -1038,7 +1113,6 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         ),
                       ],
-                      // Remove photo button is already inside ProfileImagePicker
                     ],
                   ),
                 ),
