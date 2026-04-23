@@ -3,15 +3,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-
 class ProfileImagePicker extends StatefulWidget {
   final String? currentImageUrl;
+  final String? username; // 👈 NEW: to show first letter instead of 'U'
   final Function(String?) onImageChanged;
   final bool isUploading;
 
   const ProfileImagePicker({
     Key? key,
     this.currentImageUrl,
+    this.username,
     required this.onImageChanged,
     this.isUploading = false,
   }) : super(key: key);
@@ -22,7 +23,7 @@ class ProfileImagePicker extends StatefulWidget {
 
 class _ProfileImagePickerState extends State<ProfileImagePicker> {
   final ImagePicker _picker = ImagePicker();
-  
+
   Future<void> _showImagePickerOptions() async {
     showModalBottomSheet(
       context: context,
@@ -85,17 +86,18 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
         maxHeight: 1024,
         imageQuality: 85,
       );
-      
       if (pickedFile != null) {
         widget.onImageChanged(pickedFile.path);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error picking image: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -114,9 +116,11 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
                     : FileImage(File(widget.currentImageUrl!)) as ImageProvider)
                 : null,
             child: widget.currentImageUrl == null || widget.currentImageUrl!.isEmpty
-                ? const Text(
-                    'U',
-                    style: TextStyle(
+                ? Text(
+                    widget.username?.isNotEmpty == true
+                        ? widget.username![0].toUpperCase()
+                        : 'U',
+                    style: const TextStyle(
                       fontSize: 40,
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -151,7 +155,7 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5), // ✅ fixed deprecated
                   shape: BoxShape.circle,
                 ),
                 child: const Center(

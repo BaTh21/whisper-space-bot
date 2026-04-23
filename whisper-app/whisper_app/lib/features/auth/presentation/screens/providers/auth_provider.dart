@@ -194,4 +194,11 @@ Future<void> updateUsername(String newUsername) async {
     notifyListeners();
   }
 }
+Future<void> reloadUserFromStorage() async {
+  final userData = storageService.getUserData();
+  if (userData != null) {
+    _currentUser = User.fromJson(userData);
+    notifyListeners();
+  }
+}
 }

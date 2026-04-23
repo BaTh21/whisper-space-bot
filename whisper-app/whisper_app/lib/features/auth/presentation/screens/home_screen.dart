@@ -27,12 +27,14 @@ import 'providers/auth_provider.dart';
 // ===================== REUSABLE PROFILE IMAGE PICKER =====================
 class ProfileImagePicker extends StatefulWidget {
   final String? currentImageUrl;
+  final String? username;
   final Function(String?) onImageChanged;
   final bool isUploading;
 
   const ProfileImagePicker({
     super.key,
     this.currentImageUrl,
+    this.username,
     required this.onImageChanged,
     this.isUploading = false,
   });
@@ -136,9 +138,11 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
                     : FileImage(File(widget.currentImageUrl!)) as ImageProvider)
                 : null,
             child: widget.currentImageUrl == null || widget.currentImageUrl!.isEmpty
-                ? const Text(
-                    'U',
-                    style: TextStyle(
+                ? Text(
+                    widget.username?.isNotEmpty == true
+                        ? widget.username![0].toUpperCase()
+                        : 'U',
+                    style: const TextStyle(
                       fontSize: 40,
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -302,9 +306,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDarkMode = themeProvider.isDarkMode;
 
     return Scaffold(
       appBar: AppBar(
@@ -794,7 +795,7 @@ class FriendsTab extends StatelessWidget {
   Widget build(BuildContext context) => const FriendScreen();
 }
 
-// ============ PROFILE TAB (with username edit & reusable image picker) ============
+// ============ PROFILE TAB (PERFECT VERSION) ============
 class ProfileTab extends StatefulWidget {
   final int? userId;
   final VoidCallback? onEditProfile;
@@ -811,7 +812,7 @@ class _ProfileTabState extends State<ProfileTab> {
   int _likesCount = 0;
   bool _isLoadingStats = true;
   bool _isUploadingImage = false;
-  bool _isUpdatingUsername = false; // NEW: for username update loading
+  bool _isUpdatingUsername = false;
   late ImageUploadService _imageUploadService;
 
   @override
@@ -894,6 +895,18 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _removeProfileImage() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.currentUser;
+
+    if (user?.avatarUrl == null || user!.avatarUrl!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No profile picture to remove'), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -905,29 +918,31 @@ class _ProfileTabState extends State<ProfileTab> {
         ],
       ),
     );
-    if (confirm == true && mounted) {
-      setState(() => _isUploadingImage = true);
-      try {
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        final token = await _getToken();
-        final success = await _imageUploadService.deleteProfileImage(token);
-        if (success && mounted) {
-          await authProvider.removeProfileImage();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Profile picture removed'), backgroundColor: Colors.orange),
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to remove image: $e'), backgroundColor: Colors.red),
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _isUploadingImage = false);
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isUploadingImage = true);
+    try {
+      final token = await _getToken();
+      if (token.isEmpty) throw Exception('No authentication token');
+
+      final success = await _imageUploadService.deleteProfileImage(token);
+      if (success && mounted) {
+        await authProvider.removeProfileImage();
+        setState(() {}); // Force immediate UI rebuild
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile picture removed'), backgroundColor: Colors.orange),
+        );
+      } else {
+        throw Exception('Deletion failed');
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove image: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingImage = false);
     }
   }
 
@@ -937,7 +952,6 @@ class _ProfileTabState extends State<ProfileTab> {
     return storageService.getToken() ?? '';
   }
 
-  // --------------------- USERNAME EDIT ---------------------
   Future<void> _editUsername() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUsername = authProvider.currentUser?.username ?? '';
@@ -1060,11 +1074,11 @@ class _ProfileTabState extends State<ProfileTab> {
                     children: [
                       ProfileImagePicker(
                         currentImageUrl: user?.avatarUrl,
+                        username: user?.username,
                         onImageChanged: _handleImageChange,
                         isUploading: _isUploadingImage,
                       ),
                       const SizedBox(height: 16),
-                      // Editable username with loading indicator
                       GestureDetector(
                         onTap: _isUpdatingUsername ? null : _editUsername,
                         child: Row(
@@ -1113,6 +1127,20 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         ),
                       ],
+                      if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: TextButton.icon(
+                            onPressed: _isUploadingImage ? null : _removeProfileImage,
+                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            label: const Text('Remove Photo', style: TextStyle(color: Colors.red)),
+                            style: TextButton.styleFrom(
+                              minimumSize: Size.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
