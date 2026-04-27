@@ -15,19 +15,9 @@ from sqlalchemy import text
 from sqlalchemy import or_, and_
 from app.crud.activity import create_activity
 from app.models.activity import Activity, ActivityType
-from app.schemas.friend import FriendResponse
+from app.schemas.friend import FriendResponse, FriendDetailsResponse
 
 router = APIRouter()
-
-# ==================== HEALTH CHECK ====================
-@router.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "ok",
-        "message": "Friends API is working",
-        "timestamp": datetime.utcnow().isoformat()
-    }
     
 def get_any_friendship(db: Session, user1: int, user2: int):
     return db.query(Friend).filter(

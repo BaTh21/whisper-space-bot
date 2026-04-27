@@ -10,12 +10,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.crud.chat import create_private_message, edit_private_message, build_reply_preview, build_message_out, mark_message_as_read
+from app.crud.chat import create_private_message, edit_private_message, build_reply_preview, build_message_out, mark_message_as_read, toggle_pin, set_reaction, get_pinned_message, build_reactions
 from app.crud.friend import is_blocked, is_blocked_by, is_friend
 from app.models.private_message import MessageType, PrivateMessage
 from app.models.user import User
 from app.schemas.chat import (MarkMessagesAsReadRequest, MarkMessagesAsReadResponse, ChatListItem,
-                             MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview)
+                             MessageCreate, MessageOut, MessageSeenByUser, ReplyPreview, ReactionRequest)
 from app.services.websocket_manager import manager
 from app.utils.chat_helpers import _chat_id, extract_public_id_from_url
 from app.core.cloudinary import upload_voice_message
@@ -24,8 +24,10 @@ from app.crud.friend import get_friends
 from sqlalchemy import or_, and_
 from app.crud.group import get_user_groups
 from app.models.group_message import GroupMessage
+from app.models.message_reaction import MessageReaction
 from datetime import timezone
 from app.crud.message import is_user_online
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
@@ -162,6 +164,7 @@ async def get_private_chat(
             joinedload(PrivateMessage.receiver),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.receiver),
+            selectinload(PrivateMessage.reactions),
         )
         .filter(
             ((PrivateMessage.sender_id == current_user.id) & (PrivateMessage.receiver_id == friend_id)) |
@@ -248,7 +251,6 @@ async def send_voice_message(
         full_msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
             joinedload(PrivateMessage.reply_to).joinedload(PrivateMessage.sender),
         ).filter(PrivateMessage.id == msg.id).first()
 
@@ -375,7 +377,6 @@ async def send_media_message(
         full_msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user)
         ).filter(PrivateMessage.id == msg.id).first()
 
         chat_id = _chat_id(current_user.id, friend_id)
@@ -610,7 +611,6 @@ async def edit_message(
         full_msg = db.query(PrivateMessage).options(
             joinedload(PrivateMessage.sender),
             joinedload(PrivateMessage.receiver),
-            joinedload(PrivateMessage.seen_statuses).joinedload(MessageSeenStatus.user),
         ).filter(PrivateMessage.id == msg.id).first()
 
         if not full_msg:
@@ -652,3 +652,23 @@ async def edit_message(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to edit message: {str(e)}")
+
+@router.post("/private/{message_id}/pin")
+async def pin_message(message_id: int,
+                db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    
+    return await toggle_pin(db, message_id, current_user.id)
+
+@router.get("/private/{user_id}/pin")
+def get_pinned_message_(user_id: int,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)
+                       ):
+    return get_pinned_message(db, user_id, current_user.id)
+
+@router.post("/private/reaction")
+async def reaction_message(request: ReactionRequest,
+                     db: Session = Depends(get_db),
+                     current: User = Depends(get_current_user)):
+    return await set_reaction(db, request.message_id, current.id, request.emoji)

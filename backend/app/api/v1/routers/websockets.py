@@ -461,6 +461,7 @@ async def websocket_group_chat(
 ):
     
     db = next(get_db())
+    disconnected = False
     try:
         current_user = await get_current_user_ws(websocket, db)
         if not current_user:
@@ -637,16 +638,13 @@ async def websocket_group_chat(
                     
         except WebSocketDisconnect:
             manager.disconnect(chat_id, websocket, user_id=current_user.id)
-            
-        except Exception as e:
-            traceback.print_exc()
-            print(f"[WS Error] {e}")
-            await websocket.close(code=1011, reason="Server error")
+            disconnected = True
 
     except Exception as e:
         traceback.print_exc()
         print(f"[WS Error] {e}")
         await websocket.close(code=1011, reason="Server error")
+
     finally:
         if 'heartbeat_task' in locals():
             heartbeat_task.cancel()
@@ -654,7 +652,10 @@ async def websocket_group_chat(
                 await heartbeat_task
             except asyncio.CancelledError:
                 pass
-        manager.disconnect(chat_id, websocket, user_id=current_user.id)
+
+        if not disconnected:
+            manager.disconnect(chat_id, websocket, user_id=current_user.id)
+
         db.close()
         
     

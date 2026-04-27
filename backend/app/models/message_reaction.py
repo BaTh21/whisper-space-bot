@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from sqlalchemy.sql import func
@@ -14,9 +14,10 @@ class MessageReaction(Base):
     emoji = Column(String(10), nullable=False)  # Emoji character (supports up to 10 chars for complex emojis)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    __table_args__ = (
+        UniqueConstraint("message_id", "user_id", "emoji", name="unique_reaction_per_user"),
+    )
+    
     # Relationships
     message = relationship("PrivateMessage", back_populates="reactions")
     user = relationship("User", back_populates="message_reactions")
-    
-    def __repr__(self):
-        return f"<MessageReaction {self.id}: {self.emoji} on message {self.message_id} by user {self.user_id}>"

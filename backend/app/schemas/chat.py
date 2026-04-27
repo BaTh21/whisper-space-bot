@@ -52,6 +52,11 @@ class MessageSeenByUser(BaseModel):
     avatar_url: Optional[str] = None
     seen_at: str
     
+class ReactionGroup(BaseModel):
+    emoji: str
+    count: int
+    user_ids: list[int]
+    
 class ReplyPreview(BaseModel):
     id: int
     sender_username: str
@@ -83,7 +88,7 @@ class MessageOut(TimestampMixin):
     receiver_username: Optional[str] = None
     voice_duration: Optional[float] = None  # ADDED
     file_size: Optional[int] = None  # ADDED
-    # seen_by: List[MessageSeenByUser] = Field(default_factory=list)
+    reactions: list[ReactionGroup] = []
     
 class AuthorResponse(BaseModel):
     id: int
@@ -161,4 +166,8 @@ class ChatListItem(BaseModel):
     last_message: Optional[str]
     updated_at: datetime
     creator: Optional[AuthorResponse] = None
+    
+class ReactionRequest(BaseModel):
+    message_id: int
+    emoji: str
 

@@ -24,7 +24,6 @@ class PrivateMessage(Base):
     read_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
-    # updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
     edited_at = Column(DateTime(timezone=True), nullable=True)
     reply_to_id = Column(Integer, ForeignKey("private_messages.id", ondelete="SET NULL"), nullable=True)
     is_forwarded = Column(Boolean, default=False)
@@ -33,6 +32,9 @@ class PrivateMessage(Base):
     voice_duration = Column(Float, nullable=True)
     file_size = Column(Integer, nullable=True)  
     forwarded_from_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    is_pinned = Column(Boolean, default=False)
+    pinned_at = Column(DateTime(timezone=True), nullable=True)
+    pinned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # FIXED: Self-referencing relationship for replies
     reply_to = relationship(
@@ -50,3 +52,9 @@ class PrivateMessage(Base):
                          back_populates="message", 
                          cascade="all, delete-orphan",
                          lazy="selectin") 
+    
+    pinned_by_user = relationship(
+        "User",
+        foreign_keys=[pinned_by],
+        backref="pinned_messages"
+    )

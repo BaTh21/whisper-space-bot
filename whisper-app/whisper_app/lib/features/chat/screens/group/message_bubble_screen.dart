@@ -421,13 +421,14 @@ class MessageBubble extends StatelessWidget {
           children: [
             if (topReaction != null) Text(_emoji(topReaction)),
             const SizedBox(width: 2),
-            Text(
-              '$totalCount',
-              style: TextStyle(
-                fontSize: 10,
-                color: isMe ? Colors.white : Colors.black,
+            if (totalCount > 1)
+              Text(
+                '$totalCount',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isMe ? Colors.white : Colors.black,
+                ),
               ),
-            ),
           ],
         ),
       ),

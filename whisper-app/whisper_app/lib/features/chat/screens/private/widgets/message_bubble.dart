@@ -97,28 +97,16 @@ class _MessageBubbleState extends State<MessageBubble> {
     }
   }
 
-  void _pinMessage() => ScaffoldMessenger.of(context)
-      .showSnackBar(const SnackBar(content: Text('Message pinned')));
+  void _pinMessage() {
+    if (widget.onAction != null) {
+      widget.onAction!("pin", widget.message);
+    }
+  }
 
   void _showReactions() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        content: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: ['👍', '❤️', '😂', '😮', '😢', '😡'].map((emoji) {
-            return GestureDetector(
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Reacted with $emoji')));
-              },
-              child: Text(emoji, style: const TextStyle(fontSize: 28)),
-            );
-          }).toList(),
-        ),
-      ),
-    );
+    if (widget.onAction != null) {
+      widget.onAction!("react", widget.message);
+    }
   }
 
   void _forwardMessage() {
@@ -283,6 +271,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  if (widget.message.hasReactions) _buildReactions(),
                                   Text(
                                     widget.message.isEdited
                                         ? "${_formatTime(widget.message.createdAt)} (edited)"
@@ -334,6 +323,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (widget.message.hasReactions) _buildReactions(),
                             Text(
                               widget.message.isEdited
                                   ? "${_formatTime(widget.message.createdAt)} (edited)"
@@ -838,6 +828,48 @@ class _MessageBubbleState extends State<MessageBubble> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildReactions() {
+    final reactions = widget.message.reactions;
+
+    if (reactions.isEmpty) return const SizedBox();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      margin: const EdgeInsets.only(right: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 3,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: reactions.map((r) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(r.emoji, style: const TextStyle(fontSize: 12)),
+                if (r.count > 1) ...[
+                  const SizedBox(width: 2),
+                  Text(
+                    '${r.count}',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ]
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
