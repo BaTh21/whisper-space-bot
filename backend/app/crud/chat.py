@@ -5,6 +5,7 @@ from app.models.group_message import GroupMessage
 from app.models.group_message_reply import GroupMessageReply
 from app.models.group_member import GroupMember
 from app.models.group_message_reaction import GroupMessageReaction
+from app.models.message_reaction import MessageReaction
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import HTTPException,status
@@ -14,6 +15,7 @@ from fastapi import HTTPException
 from app.schemas.chat import MessageCreate
 from app.crud.friend import get_friends
 import asyncio
+from collections import defaultdict
 
 from app.models.user import User
 from sqlalchemy import or_, and_
@@ -360,6 +362,7 @@ def build_message_out(
 
         voice_duration=msg.voice_duration,
         file_size=msg.file_size,
+        reactions=build_reactions(msg.reactions),
     )
 
 async def auto_end_call(chat_id: str, db):
@@ -415,4 +418,167 @@ async def mark_message_as_read(db: Session, user_id: int, chat_id: int):
             "reader_id": user_id
         }
     )
+    
+async def toggle_pin(db: Session, message_id: int, user_id: int):
+    message = db.query(PrivateMessage).filter_by(id=message_id).first()
 
+    if not message:
+        return {"error": "Message not found"}
+
+    if user_id not in [message.sender_id, message.receiver_id]:
+        return {"error": "Not authorized"}
+
+    friend_id = (
+        message.receiver_id if message.sender_id == user_id
+        else message.sender_id
+    )
+
+    chat_id = f"private_{min(user_id, friend_id)}_{max(user_id, friend_id)}"
+
+    if message.is_pinned and message.pinned_by == user_id:
+        message.is_pinned = False
+        message.pinned_by = None
+        message.pinned_at = None
+        db.commit()
+
+        await manager.broadcast(chat_id, {
+            "type": "message_unpinned",
+            "id": message_id,
+        })
+
+        return {"status": "unpinned"}
+
+    message.is_pinned = True
+    message.pinned_by = user_id
+    message.pinned_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(message)
+
+    sender = message.sender
+    pinned_by_user = message.pinned_by_user
+
+    payload = {
+        "type": "message_pinned",
+        "id": message.id,
+        "content": message.content,
+        "message_type": message.message_type.value,
+        "sender": {
+            "id": sender.id,
+            "username": sender.username,
+            "avatar_url": sender.avatar_url,
+        } if sender else None,
+        "pinned_at": message.pinned_at.isoformat(),
+        "pinned_by_user": {
+            "id": pinned_by_user.id,
+            "username": pinned_by_user.username,
+            "avatar_url": pinned_by_user.avatar_url,
+        } if pinned_by_user else None,
+    }
+
+    await manager.broadcast(chat_id, payload)
+
+    return {"status": "pinned"}
+
+def get_pinned_message(db: Session, user_id: int, current_user_id: int):
+    if current_user_id == user_id:
+        raise HTTPException(status_code=400, detail="Invalid conversation")
+
+    message = db.query(PrivateMessage).filter(
+        (
+            (PrivateMessage.sender_id == current_user_id) &
+            (PrivateMessage.receiver_id == user_id)
+        ) |
+        (
+            (PrivateMessage.sender_id == user_id) &
+            (PrivateMessage.receiver_id == current_user_id)
+        ),
+        PrivateMessage.is_pinned.is_(True)
+    ).order_by(PrivateMessage.pinned_at.desc()).first()
+
+    if not message:
+        return {"message": None}
+
+    sender = message.sender
+    pinned_by_user = message.pinned_by_user
+
+    return {
+        "id": message.id,
+        "content": message.content,
+        "message_type": message.message_type.value,
+        "sender": {
+            "id": sender.id,
+            "username": sender.username,
+            "avatar_url": sender.avatar_url,
+        } if sender else None,
+
+        "pinned_at": message.pinned_at,
+
+        "pinned_by_user": {
+            "id": pinned_by_user.id,
+            "username": pinned_by_user.username,
+            "avatar_url": pinned_by_user.avatar_url,
+        } if pinned_by_user else None,
+    }
+
+async def set_reaction(db: Session, message_id: int, user_id: int, emoji: str):
+    reaction = db.query(MessageReaction).filter_by(
+        message_id=message_id,
+        user_id=user_id
+    ).first()
+
+    if reaction:
+        reaction.emoji = emoji
+    else:
+        reaction = MessageReaction(
+            message_id=message_id,
+            user_id=user_id,
+            emoji=emoji
+        )
+        db.add(reaction)
+
+    db.commit()
+    db.refresh(reaction)
+
+    message = db.query(PrivateMessage).filter_by(id=message_id).first()
+
+    if not message:
+        return {"error": "Message not found"}
+
+    friend_id = (
+        message.receiver_id if message.sender_id == user_id
+        else message.sender_id
+    )
+
+    chat_id = f"private_{min(user_id, friend_id)}_{max(user_id, friend_id)}"
+
+    reactions = build_reactions(message.reactions)
+
+    payload = {
+        "type": "reaction_updated",
+        "message_id": message_id,
+        "reactions": reactions,
+    }
+
+    await manager.broadcast(chat_id, payload)
+
+    return {"status": "set", "emoji": emoji}
+
+def build_reactions(reactions):
+    if not reactions:
+        return []
+
+    grouped = defaultdict(lambda: {"count": 0, "user_ids": []})
+
+    for r in reactions:
+        grouped[r.emoji]["count"] += 1
+        grouped[r.emoji]["user_ids"].append(r.user_id)
+
+    return [
+        {
+            "emoji": emoji,
+            "count": data["count"],
+            "user_ids": data["user_ids"],
+        }
+        for emoji, data in grouped.items()
+    ]

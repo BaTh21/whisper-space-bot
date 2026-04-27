@@ -7,7 +7,6 @@ import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
-import 'package:whisper_space_flutter/features/auth/data/models/user_model.dart';
 
 import '../../chat_api_service.dart';
 import '../../model/private_message_model/private_message_model.dart';
@@ -20,6 +19,7 @@ import 'package:awesome_emoji_picker/awesome_emoji_picker.dart';
 
 import 'package:whisper_space_flutter/features/websocket/private_websocket.dart';
 import 'package:whisper_space_flutter/features/chat/screens/group/group_dialog/forward_dialog.dart';
+import 'package:whisper_space_flutter/features/chat/model/pin_model/pinned_message_model.dart';
 import 'package:file_picker/file_picker.dart';
 
 enum MessageType { text, image, video, voice, file }
@@ -51,7 +51,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   List<PrivateMessageModel> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
-  User? _userDetails;
   int? _currentUserId;
 
   final ImagePicker _imagePicker = ImagePicker();
@@ -67,6 +66,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
   late PrivateWebsocket _ws;
   PrivateMessageModel? _editingMessage;
   PrivateMessageModel? _replyingMessage;
+  PinnedMessageModel? _pinnedMessage;
 
   @override
   void initState() {
@@ -96,8 +96,8 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     storageService = StorageService();
     await storageService.init();
     chatApi = ChatAPISource(storageService: storageService);
-    await _loadUserDetails();
     await _loadMessages();
+    _loadPinnedMessage();
 
     _ws = PrivateWebsocket(
         friendId: widget.userId, storageService: storageService);
@@ -114,11 +114,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
         });
       }
     });
-  }
-
-  Future<void> _loadUserDetails() async {
-    final user = await chatApi.getUserDetails(widget.userId);
-    if (mounted) setState(() => _userDetails = user);
   }
 
   Future<void> _loadMessages() async {
@@ -139,6 +134,15 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
       print(stack);
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _loadPinnedMessage() async {
+    final pinnedMessage = await chatApi.getPinnedMessage(widget.userId);
+    setState(() {
+      _pinnedMessage = pinnedMessage;
+    });
+
+    print("pinned message $pinnedMessage");
   }
 
   void _stopPlayback() {
@@ -547,6 +551,31 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
               return msg;
             }).toList();
           });
+        } else if (type == 'message_pinned') {
+          final pinned = PinnedMessageModel.fromJson(data);
+
+          setState(() {
+            _pinnedMessage = pinned;
+          });
+        } else if (type == 'message_unpinned') {
+          setState(() {
+            _pinnedMessage = null;
+          });
+        } else if (type == 'reaction_updated') {
+          final messageId = data['message_id'];
+          final reactionsJson = data['reactions'] as List<dynamic>? ?? [];
+
+          final reactions =
+              reactionsJson.map((e) => Reaction.fromJson(e)).toList();
+
+          setState(() {
+            _messages = _messages.map((msg) {
+              if (msg.id == messageId) {
+                return msg.copyWith(reactions: reactions);
+              }
+              return msg;
+            }).toList();
+          });
         }
       });
     } catch (e) {
@@ -671,6 +700,58 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
     }
   }
 
+  Future<void> _pinMessage(dynamic msg) async {
+    await chatApi.pinPrivateMessage(msg.id);
+  }
+
+  Future<void> _showReactEmoji(PrivateMessageModel msg) async {
+    final emojis = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+    final selectedEmoji = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: emojis.map((emoji) {
+              return GestureDetector(
+                onTap: () => Navigator.pop(context, emoji),
+                child: Text(
+                  emoji,
+                  style: const TextStyle(fontSize: 28),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+
+    if (selectedEmoji != null) {
+      await chatApi.reactPrivateMessage(
+        messageId: msg.id,
+        emoji: selectedEmoji,
+      );
+    }
+  }
+
+  void _scrollToPinned(int messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+
+    _scrollController.animateTo(
+      index * 80.0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -711,20 +792,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                         ? Text(widget.userName[0].toUpperCase())
                         : null,
                   ),
-                  if (_userDetails?.isOnline == true)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        height: 10,
-                        width: 10,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                      ),
-                    ),
                 ],
               ),
               const SizedBox(width: 10),
@@ -732,15 +799,6 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(widget.userName),
-                  if (_userDetails != null)
-                    Text(
-                      _userDetails!.isOnline ? 'Online' : 'Offline',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color:
-                            _userDetails!.isOnline ? Colors.green : Colors.grey,
-                      ),
-                    ),
                 ],
               ),
             ],
@@ -751,6 +809,7 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                _buildPinnedMessage(),
                 Expanded(
                   child: ListView.builder(
                     controller: _scrollController,
@@ -787,6 +846,10 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                             _showForwardDialog(message);
                           } else if (action == 'replace') {
                             _replaceMessage(msg);
+                          } else if (action == 'pin') {
+                            _pinMessage(msg);
+                          } else if (action == 'react') {
+                            _showReactEmoji(msg);
                           }
                         },
                       );
@@ -796,6 +859,79 @@ class _PrivateChatScreenState extends State<PrivateChatScreen> {
                 _buildInput(isDark, bg),
               ],
             ),
+    );
+  }
+
+  Widget _buildPinnedMessage() {
+    final pinned = _pinnedMessage;
+    if (pinned == null) {
+      return const SizedBox.shrink();
+    }
+
+    final msg = pinned;
+
+    final icon = switch (msg.messageType) {
+      'image' => Icons.image,
+      'video' => Icons.videocam,
+      'file' => Icons.insert_drive_file,
+      'voice' => Icons.mic,
+      _ => Icons.message,
+    };
+
+    final typeLabel = switch (msg.messageType) {
+      'image' => 'Image',
+      'video' => 'Video',
+      'file' => 'File',
+      'voice' => 'Voice',
+      _ => msg.content,
+    };
+
+    return GestureDetector(
+      onTap: () => _scrollToPinned(msg.id),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        color: Colors.orange.shade100,
+        child: Row(
+          children: [
+            const Icon(Icons.push_pin, size: 18, color: Colors.orange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Pinned by ${_currentUserId == pinned.pinnedByUser?.id ? 'You' : pinned.pinnedByUser?.id ?? 'Unknown'}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(icon, size: 14, color: Colors.orange),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          typeLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _pinMessage(msg),
+              child: const Icon(Icons.close, size: 18),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

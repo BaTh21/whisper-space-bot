@@ -1,12 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:whisper_space_flutter/core/constants/api_constants.dart';
 import 'package:whisper_space_flutter/core/services/storage_service.dart';
-import 'package:whisper_space_flutter/features/auth/data/models/user_model.dart';
 import 'package:whisper_space_flutter/features/chat/model/private_message_model/private_message_model.dart';
+import 'package:whisper_space_flutter/features/chat/model/pin_model/pinned_message_model.dart' as pin;
 
 import '../chat/model/chat_model/chat_list_model.dart';
 import '../chat/model/group_message_model/group_message_model.dart';
@@ -566,19 +565,6 @@ class ChatAPISource {
     }
   }
 
-  Future<User> getUserDetails(int userId) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/v1/users/$userId'),
-      headers: await _authHeaders(),
-    );
-
-    if (response.statusCode == 200) {
-      return User.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('Failed to load user details: ${response.statusCode}');
-    }
-  }
-
   Future<PrivateMessageModel> editPrivateMessage({
     required int messageId,
     required String newContent,
@@ -623,17 +609,52 @@ class ChatAPISource {
     }
   }
 
-  Future<PrivateMessageModel> getReplyContext(int messageId) async {
-    final response = await http.get(
-      Uri.parse(
-          '$baseUrl/api/v1/chats/private/message/$messageId/reply-context'),
+  Future<pin.PinnedMessageModel> pinPrivateMessage(int messageId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/chats/private/$messageId/pin'),
       headers: await _authHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return pin.PinnedMessageModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to pin message: ${response.statusCode}');
+    }
+  }
+
+  Future<pin.PinnedMessageModel> getPinnedMessage(int userId) async{
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/chats/private/$userId/pin'),
+      headers: await _authHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return pin.PinnedMessageModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Failed to pin message: ${response.statusCode}');
+    }
+  }
+
+  Future<PrivateMessageModel> reactPrivateMessage({
+    required int messageId,
+    required String emoji,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/chats/private/reaction'),
+      headers: {
+        ...(await _authHeaders()),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'message_id': messageId,
+        'emoji': emoji,
+      }),
     );
 
     if (response.statusCode == 200) {
       return PrivateMessageModel.fromJson(jsonDecode(response.body));
     } else {
-      throw Exception('Failed to get reply context: ${response.statusCode}');
+      throw Exception('Failed to react message: ${response.body}');
     }
   }
 }

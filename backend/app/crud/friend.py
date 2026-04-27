@@ -3,7 +3,10 @@ from typing import Optional, List
 from app.models.friend import Friend, FriendshipStatus
 from app.models.user import User
 from app.services.websocket_manager import manager
-
+from app.crud.user import get_by_id
+from fastapi import HTTPException, status
+from sqlalchemy import and_, or_
+from app.models.private_message import MessageType, PrivateMessage
 
 def create(db: Session, user_id: int, friend_id: int, status: str = "pending") -> Friend:
     # Check if friendship already exists before creating
@@ -28,6 +31,14 @@ def create(db: Session, user_id: int, friend_id: int, status: str = "pending") -
     db.refresh(friendship)
     return friendship
 
+def get_pinned_message(db: Session, user1_id: int, user2_id: int):
+    return db.query(PrivateMessage).filter(
+        or_(
+            and_(PrivateMessage.sender_id == user1_id, PrivateMessage.receiver_id == user2_id),
+            and_(PrivateMessage.sender_id == user2_id, PrivateMessage.receiver_id == user1_id),
+        ),
+        PrivateMessage.is_pinned == True
+    ).first()
 
 def get_pending(db: Session, requester_id: int, receiver_id: int) -> Optional[Friend]:
     return db.query(Friend).filter(
