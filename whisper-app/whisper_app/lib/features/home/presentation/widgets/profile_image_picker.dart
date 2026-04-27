@@ -1,3 +1,4 @@
+// lib/features/home/presentation/widgets/profile_image_picker.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,17 +6,17 @@ import 'package:image_picker/image_picker.dart';
 
 class ProfileImagePicker extends StatefulWidget {
   final String? currentImageUrl;
-  final String? username; // 👈 NEW: to show first letter instead of 'U'
+  final String? username;
   final Function(String?) onImageChanged;
   final bool isUploading;
 
   const ProfileImagePicker({
-    Key? key,
+    super.key,
     this.currentImageUrl,
     this.username,
     required this.onImageChanged,
     this.isUploading = false,
-  }) : super(key: key);
+  });
 
   @override
   State<ProfileImagePicker> createState() => _ProfileImagePickerState();
@@ -155,7 +156,7 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.5), // ✅ fixed deprecated
+                  color: Colors.black.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: const Center(
