@@ -257,8 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initServicesAndLoad() async {
-    final storageService = StorageService();
-    await storageService.init();
+    final storageService = context.read<StorageService>();
     inboxApi = InboxAPISource(storageService: storageService);
     _loadData();
   }
@@ -795,7 +794,7 @@ class FriendsTab extends StatelessWidget {
   Widget build(BuildContext context) => const FriendScreen();
 }
 
-// ============ PROFILE TAB (PERFECT VERSION) ============
+// ============ PROFILE TAB (FIXED VERSION) ============
 class ProfileTab extends StatefulWidget {
   final int? userId;
   final VoidCallback? onEditProfile;
@@ -807,7 +806,7 @@ class ProfileTab extends StatefulWidget {
 
 class _ProfileTabState extends State<ProfileTab> {
   int _postsCount = 0;
-  int _friendsCount = 0;
+  final int _friendsCount = 0; // made final – update later if needed
   int _notesCount = 0;
   int _likesCount = 0;
   bool _isLoadingStats = true;
@@ -825,10 +824,9 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _initServices() async {
-    final storageService = StorageService();
-    await storageService.init();
     const String baseUrl = 'http://10.0.2.2:8000/api/v1/avatars';
     _imageUploadService = ImageUploadService(baseUrl: baseUrl);
+    // storageService is not needed because _getToken uses context.read<StorageService>()
   }
 
   Future<void> _loadUserStats() async {
@@ -894,6 +892,22 @@ class _ProfileTabState extends State<ProfileTab> {
     }
   }
 
+  Future<void> _evictAvatarCache(String? url) async {
+    if (url != null && url.isNotEmpty && url.startsWith('http')) {
+      await NetworkImage(url).evict();
+    }
+  }
+
+  void _clearImageCache() {
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+  }
+
+  Future<String> _getToken() async {
+    final storage = context.read<StorageService>();
+    return storage.getToken() ?? '';
+  }
+
   Future<void> _removeProfileImage() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
@@ -918,7 +932,8 @@ class _ProfileTabState extends State<ProfileTab> {
         ],
       ),
     );
-    if (confirm != true || !mounted) return;
+    if (confirm != true) return;
+    if (!mounted) return;
 
     setState(() => _isUploadingImage = true);
     try {
@@ -926,12 +941,23 @@ class _ProfileTabState extends State<ProfileTab> {
       if (token.isEmpty) throw Exception('No authentication token');
 
       final success = await _imageUploadService.deleteProfileImage(token);
-      if (success && mounted) {
-        await authProvider.removeProfileImage();
-        setState(() {}); // Force immediate UI rebuild
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile picture removed'), backgroundColor: Colors.orange),
-        );
+      if (!mounted) return;
+      if (success) {
+        final updatedUser = await authProvider.refreshCurrentUser();
+        if (updatedUser == null) {
+          await authProvider.removeProfileImage();
+        }
+
+        _clearImageCache();
+        await _evictAvatarCache(user.avatarUrl);
+
+        if (mounted) setState(() {});
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile picture removed'), backgroundColor: Colors.green),
+          );
+        }
       } else {
         throw Exception('Deletion failed');
       }
@@ -944,12 +970,6 @@ class _ProfileTabState extends State<ProfileTab> {
     } finally {
       if (mounted) setState(() => _isUploadingImage = false);
     }
-  }
-
-  Future<String> _getToken() async {
-    final storageService = StorageService();
-    await storageService.init();
-    return storageService.getToken() ?? '';
   }
 
   Future<void> _editUsername() async {
@@ -1073,6 +1093,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   child: Column(
                     children: [
                       ProfileImagePicker(
+                        key: ValueKey(user?.avatarUrl ?? 'no_avatar'),
                         currentImageUrl: user?.avatarUrl,
                         username: user?.username,
                         onImageChanged: _handleImageChange,

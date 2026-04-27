@@ -194,11 +194,22 @@ Future<void> updateUsername(String newUsername) async {
     notifyListeners();
   }
 }
-Future<void> reloadUserFromStorage() async {
-  final userData = storageService.getUserData();
-  if (userData != null) {
-    _currentUser = User.fromJson(userData);
-    notifyListeners();
+
+Future<User?> refreshCurrentUser() async {
+  final token = storageService.getToken();
+  if (token == null) return null;
+  try {
+    final user = await authService.getCurrentUser(token);
+    if (user != null) {
+      _currentUser = user;
+      await storageService.saveUserData(user.toJson());
+      notifyListeners();
+      return user;
+    }
+  } catch (e) {
+    debugPrint('Failed to refresh user: $e');
   }
+  return null;
 }
+
 }
